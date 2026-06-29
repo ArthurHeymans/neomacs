@@ -67,10 +67,8 @@ fn oracle_prop_adt_min_max_stack() {
     (fmakunbound 'neovm--adt-mms-top)
     (fmakunbound 'neovm--adt-mms-min)
     (fmakunbound 'neovm--adt-mms-max)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((9 1 9) (1 1 7) (7 3 7) (3 3 5))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((9 1 9) (1 1 7) (7 3 7) (3 3 5))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -157,10 +155,8 @@ fn oracle_prop_adt_deque() {
     (fmakunbound 'neovm--adt-dq-pop-back)
     (fmakunbound 'neovm--adt-dq-to-list)
     (fmakunbound 'neovm--adt-dq-size)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3 4) 4 1 4 (2 3) 2)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 2 3 4) 4 1 4 (2 3) 2)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -268,12 +264,10 @@ fn oracle_prop_adt_bst_ordered_map() {
     (fmakunbound 'neovm--adt-bst-delete)
     (fmakunbound 'neovm--adt-bst-inorder)
     (fmakunbound 'neovm--adt-bst-range)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 . \"one\") (2 . \"two\") (3 . \"three\") (4 . \"four\") (5 . \"five\") (6 . \"six\") (7 . \"seven\") (8 . \"eight\") (9 . \"nine\")) \"five\" nil ((3 . \"three\") (4 . \"four\") (5 . \"five\") (6 . \"six\") (7 . \"seven\")) ((1 . \"one\") (2 . \"two\") (3 . \"three\") (4 . \"four\") (6 . \"six\") (7 . \"seven\") (8 . \"eight\") (9 . \"nine\")) nil \"THREE\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 . \"one\") (2 . \"two\") (3 . \"three\") (4 . \"four\") (5 . \"five\") (6 . \"six\") (7 . \"seven\") (8 . \"eight\") (9 . \"nine\")) \"five\" nil ((3 . \"three\") (4 . \"four\") (5 . \"five\") (6 . \"six\") (7 . \"seven\")) ((1 . \"one\") (2 . \"two\") (3 . \"three\") (4 . \"four\") (6 . \"six\") (7 . \"seven\") (8 . \"eight\") (9 . \"nine\")) nil \"THREE\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -350,12 +344,10 @@ fn oracle_prop_adt_multimap() {
     (fmakunbound 'neovm--adt-mm-keys)
     (fmakunbound 'neovm--adt-mm-count)
     (fmakunbound 'neovm--adt-mm-total-values)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"elisp\" \"python\" \"rust\") (\"intro-to-elisp\" \"testing-patterns\") 3 6 (\"intro-to-elisp\" \"testing-patterns\") 2 (\"elisp\" \"rust\") 4)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"elisp\" \"python\" \"rust\") (\"intro-to-elisp\" \"testing-patterns\") 3 6 (\"intro-to-elisp\" \"testing-patterns\") 2 (\"elisp\" \"rust\") 4)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -431,10 +423,8 @@ fn oracle_prop_adt_circular_buffer() {
     (fmakunbound 'neovm--adt-cb-to-list)
     (fmakunbound 'neovm--adt-cb-full-p)
     (fmakunbound 'neovm--adt-cb-count)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((a b c) nil 3 (a b c d) t (c d e f) c f)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((a b c) nil 3 (a b c d) t (c d e f) c f)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -487,10 +477,8 @@ fn oracle_prop_adt_persistent_list() {
                  (eq (nthcdr 1 orig) (nthcdr 1 mod1))  ;; no: both rebuilt
                  (equal (nthcdr 1 orig) (nthcdr 1 mod2))  ;; content equal
                  (length mod3)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable update-nth)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable update-nth)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -586,10 +574,8 @@ fn oracle_prop_adt_union_find() {
     (fmakunbound 'neovm--adt-uf-union)
     (fmakunbound 'neovm--adt-uf-connected)
     (fmakunbound 'neovm--adt-uf-components)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (8 4 t nil 2 t nil 1 t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (8 4 t nil 2 t nil 1 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -670,10 +656,8 @@ fn oracle_prop_adt_interval_tree() {
     (fmakunbound 'neovm--adt-it-overlaps)
     (fmakunbound 'neovm--adt-it-point-query)
     (fmakunbound 'neovm--adt-it-count)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (5 (\"e\" \"a\" \"b\" \"c\") (\"e\" \"a\" \"b\") (\"e\" \"d\") (\"e\") nil ((0 20 \"e\") (1 5 \"a\") (3 8 \"b\") (6 10 \"c\") (12 15 \"d\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (5 (\"e\" \"a\" \"b\" \"c\") (\"e\" \"a\" \"b\") (\"e\" \"d\") (\"e\") nil ((0 20 \"e\") (1 5 \"a\") (3 8 \"b\") (6 10 \"c\") (12 15 \"d\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

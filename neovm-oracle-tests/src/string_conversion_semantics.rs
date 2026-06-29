@@ -25,12 +25,10 @@ fn oracle_prop_gnu_string_to_list_vector_byte_and_property_edges() {
    (string-to-list nul)
    (string-to-vector nul)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((233 97) (bold bold) [233 97] nil (195 169) [195 169] (97 0 98) [97 0 98])""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((233 97) (bold bold) [233 97] nil (195 169) [195 169] (97 0 98) [97 0 98])""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -79,10 +77,8 @@ fn oracle_string_make_multibyte_unibyte_identity_copy_and_low_byte_edges() {
        (string-make-unibyte nil)
      (error err))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-function unibyte-string-p)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-function unibyte-string-p)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -125,12 +121,10 @@ fn oracle_byte_to_string_unibyte_boundaries_and_errors() {
      (byte-to-string nil)
    (error (list (car err) (cdr err)))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"\\0\" 1 1 nil 0) (\"A\" 1 1 nil 65) (1 1 nil 255 \"\\377\") (error (\"Invalid byte\")) (error (\"Invalid byte\")) (wrong-type-argument (fixnump 1.0)) (wrong-type-argument (fixnump nil)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"\\0\" 1 1 nil 0) (\"A\" 1 1 nil 65) (1 1 nil 255 \"\\377\") (error (\"Invalid byte\")) (error (\"Invalid byte\")) (wrong-type-argument (fixnump 1.0)) (wrong-type-argument (fixnump nil)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -178,10 +172,8 @@ fn oracle_string_as_vs_to_multibyte_utf8_byte_sequence_edges() {
    (let ((s (unibyte-string 65 66)))
      (eq s (string-as-unibyte s)))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((nil t 1 2 (233)) (nil t 2 4 (4194243 4194217)) (t 2 3 (4194243 40)) (t 2 4 (4194176 4194303)) (nil nil) t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((nil t 1 2 (233)) (nil t 2 4 (4194243 4194217)) (t 2 3 (4194243 40)) (t 2 4 (4194176 4194303)) (nil nil) t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

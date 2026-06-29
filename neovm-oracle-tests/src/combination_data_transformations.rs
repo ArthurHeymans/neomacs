@@ -56,12 +56,10 @@ fn oracle_prop_dt_alist_to_xml_like() {
                                    (hobby . "reading")
                                    (hobby . "chess")))))
                       (funcall to-xml data 0)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK \"<person>\n  <name>Alice</name>\n  <age>30</age>\n  <address>\n    <city>Wonderland</city>\n    <zip>12345</zip>\n  </address>\n  <hobbies>\n    <hobby>reading</hobby>\n    <hobby>chess</hobby>\n  </hobbies>\n</person>\n\"""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK \"<person>\n  <name>Alice</name>\n  <age>30</age>\n  <address>\n    <city>Wonderland</city>\n    <zip>12345</zip>\n  </address>\n  <hobbies>\n    <hobby>reading</hobby>\n    <hobby>chess</hobby>\n  </hobbies>\n</person>\n\"""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -113,12 +111,10 @@ fn oracle_prop_dt_table_pivot() {
                         cols
                         ;; Round-trip should give back original
                         (equal back rows))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((name \"Alice\" \"Bob\" \"Carol\") (score 90 75 85) (grade \"A\" \"B\" \"A\")) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((name \"Alice\" \"Bob\" \"Carol\") (score 90 75 85) (grade \"A\" \"B\" \"A\")) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -171,12 +167,10 @@ fn oracle_prop_dt_normalization_pipeline() {
                                 (funcall normalize-record r
                                          trim-whitespace validate-email-like))
                               records)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((name . \"Alice\") (email . \"alice@example.com\") (valid . t) (role . \"admin\")) ((name . \"Bob\") (email . \"bob-at-example\") (valid) (role . \"user\")) ((name . \"Carol\") (email . \"carol@test.org\") (valid . t) (role . \"unknown\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((name . \"Alice\") (email . \"alice@example.com\") (valid . t) (role . \"admin\")) ((name . \"Bob\") (email . \"bob-at-example\") (valid) (role . \"user\")) ((name . \"Carol\") (email . \"carol@test.org\") (valid . t) (role . \"unknown\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -228,12 +222,10 @@ fn oracle_prop_dt_merge_join_data_sources() {
                         (length (nth 2 (car joined)))
                         ;; Group-by result for user 1
                         (gethash 1 grouped))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 \"Alice\" (\"Book\" \"Pen\")) (2 \"Bob\" (\"Laptop\")) (3 \"Carol\" (\"Phone\")) (4 \"Dave\" nil)) nil 2 (\"Book\" \"Pen\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 \"Alice\" (\"Book\" \"Pen\")) (2 \"Bob\" (\"Laptop\")) (3 \"Carol\" (\"Phone\")) (4 \"Dave\" nil)) nil 2 (\"Book\" \"Pen\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -298,12 +290,10 @@ fn oracle_prop_dt_hierarchical_flatten_reconstruct() {
                           (cdr (assoc "root/data/name" flat))
                           (cdr (assoc "root/data/items/count" flat))
                           (cdr (assoc "root/data/items/total" flat))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"root/config/debug\" . t) (\"root/config/level\" . 3) (\"root/data/name\" . \"test\") (\"root/data/items/count\" . 5) (\"root/data/items/total\" . 100)) 5 t 3 \"test\" 5 100)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"root/config/debug\" . t) (\"root/config/level\" . 3) (\"root/data/name\" . \"test\") (\"root/data/items/count\" . 5) (\"root/data/items/total\" . 100)) 5 t 3 \"test\" 5 100)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -384,10 +374,8 @@ fn oracle_prop_dt_etl_pipeline() {
                           ;; Summary sorted by department name
                           (sort summary
                                 (lambda (a b) (string< (car a) (car b))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (5 ((\"Engineering\" (count . 3) (total . 273000) (avg . 91000)) (\"Sales\" (count . 2) (total . 135000) (avg . 67500))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (5 ((\"Engineering\" (count . 3) (total . 273000) (avg . 91000)) (\"Sales\" (count . 2) (total . 135000) (avg . 67500))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

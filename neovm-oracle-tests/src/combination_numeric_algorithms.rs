@@ -48,12 +48,10 @@ fn oracle_prop_numalgo_extended_gcd_lcm() {
                         results))))
         (nreverse results))
     (fmakunbound 'neovm--test-egcd)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((48 . 18) 6 t 144) ((100 . 75) 25 t 300) ((35 . 15) 5 t 105) ((252 . 105) 21 t 1260) ((17 . 13) 1 t 221) ((1071 . 462) 21 t 23562))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((48 . 18) 6 t 144) ((100 . 75) 25 t 300) ((35 . 15) 5 t 105) ((252 . 105) 21 t 1260) ((17 . 13) 1 t 221) ((1071 . 462) 21 t 23562))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -92,12 +90,10 @@ fn oracle_prop_numalgo_newton_sqrt() {
                         results))))
         (nreverse results))
     (fmakunbound 'neovm--test-newton-sqrt)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((2.0 t t) (3.0 t t) (4.0 t t) (9.0 t t) (25.0 t t) (144.0 t t) (2.0 t t) (0.01 t t) (10000.0 t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((2.0 t t) (3.0 t t) (4.0 t t) (9.0 t t) (25.0 t t) (144.0 t t) (2.0 t t) (0.01 t t) (10000.0 t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,12 +145,10 @@ fn oracle_prop_numalgo_horner_polynomial() {
         (nreverse results))
     (fmakunbound 'neovm--test-horner)
     (fmakunbound 'neovm--test-poly-naive)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((-3.0 t) (-1.0 t) (0.0 t) (1.0 t) (2.0 t) (3.0 t) (5.0 t) (10.0 t) (x4+1 -2.0 t) (x4+1 -1.0 t) (x4+1 0.0 t) (x4+1 1.0 t) (x4+1 2.0 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((-3.0 t) (-1.0 t) (0.0 t) (1.0 t) (2.0 t) (3.0 t) (5.0 t) (10.0 t) (x4+1 -2.0 t) (x4+1 -1.0 t) (x4+1 0.0 t) (x4+1 1.0 t) (x4+1 2.0 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -229,10 +223,8 @@ fn oracle_prop_numalgo_statistics() {
     (fmakunbound 'neovm--test-variance)
     (fmakunbound 'neovm--test-stddev)
     (fmakunbound 'neovm--test-median)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((t 15.5) (t t t 4.5) (t t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((t 15.5) (t t t 4.5) (t t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -306,10 +298,8 @@ fn oracle_prop_numalgo_matrix_determinant() {
     (fmakunbound 'neovm--test-mat-ref)
     (fmakunbound 'neovm--test-minor)
     (fmakunbound 'neovm--test-det)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (-2 -306 1 0 30 30)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (-2 -306 1 0 30 30)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -368,10 +358,8 @@ fn oracle_prop_numalgo_bisection_root_finding() {
             (list (< (abs fval) 1e-8)
                   (< (cdr result) 100)))))
     (fmakunbound 'neovm--test-bisect)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((t t) (t t) (t t) (t t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((t t) (t t) (t t) (t t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -437,12 +425,10 @@ fn oracle_prop_numalgo_fibonacci_matrix() {
     (fmakunbound 'neovm--test-mat2-pow)
     (fmakunbound 'neovm--test-fib-mat)
     (fmakunbound 'neovm--test-fib-simple)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 0 t) (1 1 t) (2 1 t) (3 2 t) (5 5 t) (8 21 t) (10 55 t) (15 610 t) (20 6765 t) (25 75025 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 0 t) (1 1 t) (2 1 t) (3 2 t) (5 5 t) (8 21 t) (10 55 t) (15 610 t) (20 6765 t) (25 75025 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -491,8 +477,6 @@ fn oracle_prop_numalgo_gradient_descent() {
                   (< (cdr result) 5000)))))
     (fmakunbound 'neovm--test-deriv)
     (fmakunbound 'neovm--test-gd)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((t t) (t t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((t t) (t t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

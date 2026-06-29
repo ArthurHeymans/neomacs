@@ -8,6 +8,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx71_kbd_parse_various_key_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"\u{18}\u{6}\" [134217848] [134217729] \"\\r\" [f1] [M-down] \"\u{3}\u{3}\" [21 134217848] \"\u{8}k\" [134217788] [134217790])""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -24,15 +27,16 @@ fn div_cx71_kbd_parse_various_key_strings() {
           (kbd "M->"))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (\"\u{18}\u{6}\" [134217848] [134217729] \"\\r\" [f1] [M-down] \"\u{3}\u{3}\" [21 134217848] \"\u{8}k\" [134217788] [134217790])""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx71_key_description_canonical_forms() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"C-x C-f\" \"C-x C-f\" \"C-x C-f\" \"a\" \"<return>\" \"C-x\" \"M-x\" \"C-M-a\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -45,15 +49,15 @@ fn div_cx71_key_description_canonical_forms() {
  (single-key-description '(meta ?x))
  (single-key-description '(control meta ?a)))
 "##,
-        expect_test::expect![[
-            r#""OK (\"C-x C-f\" \"C-x C-f\" \"C-x C-f\" \"a\" \"<return>\" \"C-x\" \"M-x\" \"C-M-a\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx71_event_modifiers_and_basic_event_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (nil (control) nil nil nil (control) 97 a nil return)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -68,13 +72,14 @@ fn div_cx71_event_modifiers_and_basic_event_p() {
  (event-basic-type 'C-M-a)
  (event-basic-type 'return))
 "##,
-        expect_test::expect![[r#""OK (nil (control) nil nil nil (control) 97 a nil return)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx71_make_keymap_and_define_key_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (neo-cx71-cmd-a neo-cx71-cmd-b nil ([3 1]) 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))
@@ -88,13 +93,14 @@ fn div_cx71_make_keymap_and_define_key_lookup() {
         (where-is-internal 'neo-cx71-cmd-a map)
         (length map)))
 "##,
-        expect_test::expect![[r#""OK (neo-cx71-cmd-a neo-cx71-cmd-b nil ([3 1]) 2)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx71_keymap_prefix_command_nesting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t inner-a inner-b inner-a nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((outer (make-sparse-keymap))
@@ -109,13 +115,14 @@ fn div_cx71_keymap_prefix_command_nesting() {
         (lookup-key outer (kbd "C-c a"))
         (lookup-key outer (kbd "C-c x"))))
 "##,
-        expect_test::expect![[r#""OK (t t inner-a inner-b inner-a nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx71_define_prefix_command_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable neo-cx71-map-var)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((state nil))
@@ -128,13 +135,14 @@ fn div_cx71_define_prefix_command_state() {
         (lookup-key 'neo-cx71-prefix-cmd "a")
         (lookup-key 'neo-cx71-prefix-cmd "b")))
 "##,
-        expect_test::expect![[r#""ERR (void-variable neo-cx71-map-var)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx71_where_is_internal_with_remapping() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil neo-cx71-new)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))
@@ -143,13 +151,14 @@ fn div_cx71_where_is_internal_with_remapping() {
         (where-is-internal 'neo-cx71-old map)
         (lookup-key map [remap neo-cx71-old])))
 "##,
-        expect_test::expect![[r#""OK (nil nil neo-cx71-new)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx71_mouse_event_structure_decomposition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function posn-make)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((mouse-event (list 'mouse-1
@@ -163,13 +172,14 @@ fn div_cx71_mouse_event_structure_decomposition() {
         (posn-window (event-start mouse-event))
         (posn-point (event-start mouse-event))))
 "##,
-        expect_test::expect![[r#""ERR (void-function posn-make)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx71_key_translation_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ([24])""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -179,13 +189,16 @@ fn div_cx71_key_translation_table() {
       (list (lookup-key tbl [?\C-a])))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK ([24])""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx71_keymap_lookup_through_minor_mode_maps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((neo-cx71-minor keymap (3 keymap (3 . neo-cx71-minor-cmd))) neo-cx71-minor-cmd nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))
@@ -195,15 +208,14 @@ fn div_cx71_keymap_lookup_through_minor_mode_maps() {
           (lookup-key map (kbd "C-c C-c"))
           (lookup-key map (kbd "C-c C-x")))))
 "##,
-        expect_test::expect![[
-            r#""OK ((neo-cx71-minor keymap (3 keymap (3 . neo-cx71-minor-cmd))) neo-cx71-minor-cmd nil)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx71_accessible_keymaps_and_map_keymap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((97 . cmd-a) (98 . cmd-b))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))
@@ -215,13 +227,14 @@ fn div_cx71_accessible_keymaps_and_map_keymap() {
                       (string< (prin1-to-string (car a))
                                (prin1-to-string (car b)))))))
 "##,
-        expect_test::expect![[r#""OK ((97 . cmd-a) (98 . cmd-b))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx71_commandp_functionp_subrp_and_indirect_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil t t t t (closure (t) nil :result) t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((sym (defalias 'neo-cx71-alias (lambda () "doc" :result))))
@@ -235,6 +248,6 @@ fn div_cx71_commandp_functionp_subrp_and_indirect_function() {
         (fboundp 'car)
         (fboundp 'undefined-neo-cx71)))
 "##,
-        expect_test::expect![[r#""OK (t nil t t t t (closure (t) nil :result) t nil)""#]],
+        expect,
     );
 }

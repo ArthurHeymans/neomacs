@@ -25,10 +25,8 @@ fn oracle_with_demoted_errors_macro_rewrite_edges() {
   (with-demoted-errors)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -54,10 +52,8 @@ fn oracle_warning_wrapper_interpreter_values_and_expansion() {
                    (+ 3 4)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((b a) (b a) (d c b a) (d c b a) (progn (list 1 2) (+ 3 4)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((b a) (b a) (d c b a) (d c b a) (progn (list 1 2) (+ 3 4)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

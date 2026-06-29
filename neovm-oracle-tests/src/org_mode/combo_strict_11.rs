@@ -13,6 +13,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn strict_sparse_tree_case_fold() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 19 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -33,13 +34,14 @@ fn strict_sparse_tree_case_fold() {
                                       (lambda (h) (substring-no-properties (org-element-property :raw-value h))))) r)
         (org-remove-occur-highlights)
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 19 25)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_at_table_item_position_sensitive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 27 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -68,13 +70,16 @@ fn strict_at_table_item_position_sensitive() {
         (goto-char (point-min))
         (push (list :on-property (org-at-property-p)) r)
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 27 25)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_get_heading_all_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:0 \"TODO [#A] Task :work:urgent:\") (:1-t \"TODO [#A] Task\") (:2-tt \"[#A] Task\") (:3-ttt \"Task\") (:4-tttt \"Task\") (:tags-only \"TODO [#A] Task :work:urgent:\") (:todo+tags \"TODO Task :work:urgent:\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -98,15 +103,14 @@ fn strict_get_heading_all_args() {
        ;; just todo+tags
        (list :todo+tags (org-get-heading nil nil t t))
        ))))"##,
-        expect_test::expect![[
-            r#""OK ((:0 \"TODO [#A] Task :work:urgent:\") (:1-t \"TODO [#A] Task\") (:2-tt \"[#A] Task\") (:3-ttt \"Task\") (:4-tttt \"Task\") (:tags-only \"TODO [#A] Task :work:urgent:\") (:todo+tags \"TODO Task :work:urgent:\"))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn strict_toggle_pretty_entities_unicode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable before)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -137,13 +141,14 @@ fn strict_toggle_pretty_entities_unicode() {
           ;; entity names
           (push (list :entity-names (mapcar (lambda (e) (org-element-property :name e)) entities)) r))
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (void-variable before)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_cjk_heading_regexp_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 17 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -162,13 +167,14 @@ fn strict_cjk_heading_regexp_match() {
                 r))
         (push (list :count (length r)) r)
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 17 25)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_match_any_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument stringp 104)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -188,13 +194,14 @@ fn strict_match_any_p() {
    ;; case insensitive
    (let ((case-fold-search t))
      (list :case-insensitive (org-match-any-p "Hello" "hello"))))))"##,
-        expect_test::expect![[r#""ERR (wrong-type-argument stringp 104)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_re_property_extraction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 13 49)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -209,13 +216,16 @@ fn strict_re_property_extraction() {
                                         :not-string))
                                      (t :not-bound))))
         (t (list :org-re-property :not-bound)))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 13 49)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_find_exact_headline_in_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:found-banana nil) (:found-date nil) (:not-found nil) (:found-top t))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -238,15 +248,14 @@ fn strict_find_exact_headline_in_buffer() {
        (list :not-found (org-find-exact-headline-in-buffer "Fig"))
        ;; heading with todo keyword should also be found
        (list :found-top (and (org-find-exact-headline-in-buffer "Apple") t))))))"##,
-        expect_test::expect![[
-            r#""OK ((:found-banana nil) (:found-date nil) (:not-found nil) (:found-top t))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn strict_get_level_face() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 14 53)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -262,13 +271,14 @@ fn strict_get_level_face() {
    ;; org-level-1 exists
    (list :level1-face-exists (facep 'org-level-1))
    (list :level2-face-exists (facep 'org-level-2)))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 14 53)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_find_invisible_foreground() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 12 47)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -282,13 +292,14 @@ fn strict_find_invisible_foreground() {
      (error :error))
    ;; check face existence
    (list :org-hide-exists (facep 'org-hide)))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 12 47)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_clock_in_with_logging() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 22 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -312,13 +323,14 @@ fn strict_clock_in_with_logging() {
         (push (list :logbook-count (length (org-element-map (org-element-parse-buffer) 'drawer
                                              (lambda (d) (when (equal "LOGBOOK" (org-element-property :drawer-name d)) d))))) r)
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 22 25)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_todo_dependencies_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (search-failed \"** TODO Child\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -350,6 +362,6 @@ fn strict_todo_dependencies_cycle() {
         (push (list :final-states (org-map-entries (lambda () (list (org-get-heading t t t t)
                                                                     (org-get-todo-state))))) r)
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (search-failed \"** TODO Child\")""#]],
+        expect,
     );
 }

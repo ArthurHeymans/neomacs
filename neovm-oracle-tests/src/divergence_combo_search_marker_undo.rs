@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_markers_after_regex_replace_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""VAL:20 VAL:40 VAL:60 ENDOK (\"VAL:20 VAL:40 VAL:60 END\" 1 8 21 21)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"NUM:10 NUM:20 NUM:30 END\")
@@ -20,9 +23,7 @@ fn divergence_markers_after_regex_replace_chain() {
     (list (buffer-string)
           (marker-position m1) (marker-position m2) (marker-position m3)
           (point)))) ",
-        expect_test::expect![[
-            r#""VAL:20 VAL:40 VAL:60 ENDOK (\"VAL:20 VAL:40 VAL:60 END\" 1 8 21 21)""#
-        ]],
+        expect,
     );
 }
 
@@ -30,6 +31,7 @@ fn divergence_markers_after_regex_replace_chain() {
 fn divergence_undo_marker_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""123CDEERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDE\")
@@ -44,7 +46,7 @@ fn divergence_undo_marker_restore() {
       (let ((p2 (marker-position m)))
         (primitive-undo 1 buffer-undo-list)
         (list p1 p2 (marker-position m) (buffer-string)))))) ",
-        expect_test::expect![[r#""123CDEERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -52,6 +54,8 @@ fn divergence_undo_marker_restore() {
 fn divergence_match_data_with_markers_swap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""foo-bar-baz-quxOK ((\"foo\" nil) \"foo\" \"bar\" 1 8)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"foo-bar-baz-qux\")
@@ -66,7 +70,7 @@ fn divergence_match_data_with_markers_swap() {
       (list new-match
             (match-string 1) (match-string 2)
             (match-beginning 0) (match-end 0))))) ",
-        expect_test::expect![[r#""foo-bar-baz-quxOK ((\"foo\" nil) \"foo\" \"bar\" 1 8)""#]],
+        expect,
     );
 }
 
@@ -74,6 +78,9 @@ fn divergence_match_data_with_markers_swap() {
 fn divergence_narrowed_search_replace_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""AAA-XXXX-XXXX-XXXD-EEEEOK ((\"XXXX-XXXX-XXX\" 14) \"AAA-XXXX-XXXX-XXXD-EEEE\" 14)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"AAA-BBBB-CCCC-DDDD-EEEE\")
@@ -86,9 +93,7 @@ fn divergence_narrowed_search_replace_markers() {
     (let ((result (list (buffer-string) (marker-position m))))
       (widen)
       (list result (buffer-string) (marker-position m))))) ",
-        expect_test::expect![[
-            r#""AAA-XXXX-XXXX-XXXD-EEEEOK ((\"XXXX-XXXX-XXX\" 14) \"AAA-XXXX-XXXX-XXXD-EEEE\" 14)""#
-        ]],
+        expect,
     );
 }
 
@@ -96,6 +101,9 @@ fn divergence_narrowed_search_replace_markers() {
 fn divergence_multiline_backref_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""start\nline1 NUM=420\nline2 NUM=990\nendOK (2 \"start\nline1 NUM=420\nline2 NUM=990\nend\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"start\\nline1 VALUE=42\\nline2 VALUE=99\\nend\")
@@ -105,9 +113,7 @@ fn divergence_multiline_backref_replace() {
       (cl-incf count)
       (replace-match (format \"NUM=%d\" (* 10 (string-to-number (match-string 1)))) t))
     (list count (buffer-string)))) ",
-        expect_test::expect![[
-            r#""start\nline1 NUM=420\nline2 NUM=990\nendOK (2 \"start\nline1 NUM=420\nline2 NUM=990\nend\")""#
-        ]],
+        expect,
     );
 }
 
@@ -115,6 +121,7 @@ fn divergence_multiline_backref_replace() {
 fn divergence_save_excursion_restriction_marker_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""BBB-CCC-DDD-OK ((12 9 12) \"BBB-CCC-DDD-\" 9 5 17)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"AAA-BBB-CCC-DDD-EEE\")
@@ -132,7 +139,7 @@ fn divergence_save_excursion_restriction_marker_combo() {
             (buffer-string)
             (marker-position m)
             (point-min) (point-max))))) ",
-        expect_test::expect![[r#""BBB-CCC-DDD-OK ((12 9 12) \"BBB-CCC-DDD-\" 9 5 17)""#]],
+        expect,
     );
 }
 
@@ -140,6 +147,7 @@ fn divergence_save_excursion_restriction_marker_combo() {
 fn divergence_kill_yank_marker_preservation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCGHIJDEFOK (\"ABCGHIJ\" \"ABCGHIJDEF\" 4 4 4 4)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
@@ -156,7 +164,7 @@ fn divergence_kill_yank_marker_preservation() {
       (yank)
       (list s1 (buffer-string) p1 p2
             (marker-position m1) (marker-position m2))))) ",
-        expect_test::expect![[r#""ABCGHIJDEFOK (\"ABCGHIJ\" \"ABCGHIJDEF\" 4 4 4 4)""#]],
+        expect,
     );
 }
 
@@ -164,6 +172,7 @@ fn divergence_kill_yank_marker_preservation() {
 fn divergence_marker_insertion_type_behavior() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABXYZCDEOK (6 3 t nil \"ABXYZCDE\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDE\")
@@ -179,7 +188,7 @@ fn divergence_marker_insertion_type_behavior() {
           (marker-insertion-type m1)
           (marker-insertion-type m2)
           (buffer-string)))) ",
-        expect_test::expect![[r#""ABXYZCDEOK (6 3 t nil \"ABXYZCDE\")""#]],
+        expect,
     );
 }
 
@@ -187,6 +196,7 @@ fn divergence_marker_insertion_type_behavior() {
 fn divergence_regex_word_boundaries_multiline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""hello world\nfoo bar\nbaz quxOK nil""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"hello world\\nfoo bar\\nbaz qux\")
@@ -194,13 +204,14 @@ fn divergence_regex_word_boundaries_multiline() {
     (goto-char 1)
     (while (re-search-forward \"\\\\\\\\<\\\\([a-z]+\\\\)\\\\\\\\>\" nil t)
       (push (list (match-string 1) (match-beginning 0) (line-number-at-pos (match-beginning 0))) matches))
-    (nreverse matches))) ", expect_test::expect![[r#""hello world\nfoo bar\nbaz quxOK nil""#]]);
+    (nreverse matches))) ", expect);
 }
 
 #[test]
 fn divergence_overlay_dont_track_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCD123EFGHIJOK (8 3 10 \"ABCD123EFGHIJ\" tracked)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
@@ -214,6 +225,6 @@ fn divergence_overlay_dont_track_markers() {
           (overlay-start ov) (overlay-end ov)
           (buffer-string)
           (overlay-get ov 'test)))) ",
-        expect_test::expect![[r#""ABCD123EFGHIJOK (8 3 10 \"ABCD123EFGHIJ\" tracked)""#]],
+        expect,
     );
 }

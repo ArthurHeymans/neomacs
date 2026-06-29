@@ -45,10 +45,8 @@ fn oracle_prop_subr_arity_core_builtins() {
   (subr-arity (symbol-function 'substring))
   (subr-arity (symbol-function 'nth))
   (subr-arity (symbol-function 'make-string)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (wrong-type-argument subrp null)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument subrp null)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -90,12 +88,10 @@ fn oracle_prop_subr_arity_cons_cell_structure() {
         (funcall 'neovm--sa-validate 'format)
         (funcall 'neovm--sa-validate 'make-vector))
     (fmakunbound 'neovm--sa-validate)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((car t t t t t 1 1) (cons t t t t t 2 2) (+ t t t t t 0 many) (list t t t t t 0 many) (mapcar t t t t t 2 2) (substring t t t t t 1 3) (format t t t t t 1 many) (make-vector t t t t t 2 2))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((car t t t t t 1 1) (cons t t t t t 2 2) (+ t t t t t 0 many) (list t t t t t 0 many) (mapcar t t t t t 2 2) (substring t t t t t 1 3) (format t t t t t 1 many) (make-vector t t t t t 2 2))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -134,12 +130,10 @@ fn oracle_prop_subrp_on_various_types() {
         (subrp 'car)  ;; symbol, not the function itself
         (subrp '+))   ;; symbol, not the function
     (fmakunbound 'neovm--sa-test-lambda)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t t t t nil nil nil nil nil nil nil nil nil nil nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t t t t nil nil nil nil nil nil nil nil nil nil nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -183,12 +177,10 @@ fn oracle_prop_subr_arity_rest_many() {
           (concat "a" "b" "c" "d")))    ;; 4 args
     (fmakunbound 'neovm--sa-check-rest)
     (makunbound 'neovm--sa-rest-fns)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((+ 0 t) (- 0 t) (* 0 t) (list 0 t) (vector 0 t) (concat 0 t) (append 0 t) (format 1 t) (message 1 t)) 0 1 3 15 nil (a) (a b c d e f g) \"\" \"abcd\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((+ 0 t) (- 0 t) (* 0 t) (list 0 t) (vector 0 t) (concat 0 t) (append 0 t) (format 1 t) (message 1 t)) 0 1 3 15 nil (a) (a b c d e f g) \"\" \"abcd\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -232,12 +224,10 @@ fn oracle_prop_subr_arity_optional() {
         (assoc 'a '((a . 1) (b . 2)))
         (assoc "x" '(("x" . 1) ("y" . 2)) 'string=))
     (fmakunbound 'neovm--sa-opt-info)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((substring 1 3 2 t) (nth 2 2 0 nil) (make-string 2 3 1 t) (assoc 2 3 1 t) \"ello\" \"el\" \"xxxxx\" (a . 1) (\"x\" . 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((substring 1 3 2 t) (nth 2 2 0 nil) (make-string 2 3 1 t) (assoc 2 3 1 t) \"ello\" \"el\" \"xxxxx\" (a . 1) (\"x\" . 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -346,12 +336,10 @@ fn oracle_prop_subr_arity_introspection_system() {
     (fmakunbound 'neovm--sa-classify)
     (fmakunbound 'neovm--sa-safe-call)
     (fmakunbound 'neovm--sa-registry)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((car fixed 1 1) (cdr fixed 1 1) (cons fixed 2 2) (+ variadic 0 many) (* variadic 0 many) (list variadic 0 many) (length fixed 1 1) (concat variadic 0 many) (substring optional 1 3) (nth fixed 2 2) (mapcar fixed 2 2) (append variadic 0 many)) ((car cdr cons length nth mapcar) (+ * list concat append) (substring)) (ok 1) (ok (a)) (ok 15) (ok 0) (ok (a b c)) (ok 5) (6 5 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((car fixed 1 1) (cdr fixed 1 1) (cons fixed 2 2) (+ variadic 0 many) (* variadic 0 many) (list variadic 0 many) (length fixed 1 1) (concat variadic 0 many) (substring optional 1 3) (nth fixed 2 2) (mapcar fixed 2 2) (append variadic 0 many)) ((car cdr cons length nth mapcar) (+ * list concat append) (substring)) (ok 1) (ok (a)) (ok 15) (ok 0) (ok (a b c)) (ok 5) (6 5 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -398,8 +386,6 @@ fn oracle_prop_subr_arity_comparison_arithmetic_logic() {
                 (setq all-fixed nil))))
           all-fixed))
     (fmakunbound 'neovm--sa-arity-pair)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (wrong-type-argument subrp null)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument subrp null)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

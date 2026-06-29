@@ -22,10 +22,8 @@ fn oracle_prop_search_backward_basic_literal() {
           ;; Search again to find earlier "the"
           (let ((pos2 (search-backward "the" nil t)))
             (list pos2 (buffer-substring pos2 (+ pos2 3)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (32 32 \"the\" (1 \"the\"))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (32 32 \"the\" (1 \"the\"))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -52,10 +50,8 @@ fn oracle_prop_search_backward_with_bound() {
          ;; Bound past everything -- should return nil
          (too-tight (search-backward "marker" (1- pos-max) t)))
     (list last-marker bounded tight-bound too-tight)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (27 27 nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (27 27 nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -85,10 +81,8 @@ fn oracle_prop_search_backward_noerror_variants() {
                   r2                           ;; error caught
                   r3                           ;; successful search position
                   (point))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil t caught-error 6 6)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil t caught-error 6 6)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -113,10 +107,8 @@ fn oracle_prop_search_backward_count() {
         (c-big (progn (goto-char (point-max))
                        (search-backward "x" nil t 100))))
     (list c1 c4 c-big)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((22 \"xh\") (13 \"xe\") nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((22 \"xh\") (13 \"xe\") nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -150,12 +142,10 @@ fn oracle_prop_search_backward_vs_re_search_backward() {
            (list 'literal-bracket lit-bracket)
            (list 'regex-bracket regex-bracket)
            (= lit-bracket regex-bracket)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((literal-dollar 10) (regex-dollar 10) t (literal-bracket 36) (regex-bracket 36) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((literal-dollar 10) (regex-dollar 10) t (literal-bracket 36) (regex-bracket 36) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -192,10 +182,9 @@ fn oracle_prop_search_backward_multiple_consecutive() {
             (setq sections (cons (list name section-start lines) sections)))
           (goto-char section-start))))
     sections))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((\"INTRO\" 1 2) (\"BODY\" 61 3) (\"END\" 130 1))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((\"INTRO\" 1 2) (\"BODY\" 61 3) (\"END\" 130 1))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -282,10 +271,8 @@ rotate=true"))
            (cdr (assoc "workers" (cdr (assoc "server" parsed))))
            (cdr (assoc "level" (cdr (assoc "logging" parsed)))))))
     (fmakunbound 'neovm--test-parse-config-backward)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (3 (\"database\" \"server\" \"logging\") ((\"database\" . 5) (\"server\" . 4) (\"logging\" . 4)) \"5432\" \"4\" \"info\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (3 (\"database\" \"server\" \"logging\") ((\"database\" . 5) (\"server\" . 4) (\"logging\" . 4)) \"5432\" \"4\" \"info\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

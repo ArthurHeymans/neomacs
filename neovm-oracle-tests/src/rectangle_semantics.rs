@@ -25,12 +25,10 @@ fn oracle_prop_rectangle_extract_delete_and_bounds() {
       (list extracted bounds deleted after-delete (point)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"cde\" \"234\" \"   \") ((3 . 6) (10 . 13) (17 . 20)) (\"cde\" \"234\" \"   \") \"abf\n015\nxy\n\" 11)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"cde\" \"234\" \"   \") ((3 . 6) (10 . 13) (17 . 20)) (\"cde\" \"234\" \"   \") \"abf\n015\nxy\n\" 11)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -67,12 +65,10 @@ fn oracle_prop_rectangle_fill_open_clear_string_insert() {
        (buffer-string)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"ab  c\nx   \n12  345\n\" \"a   ef\n0   45\n\" \"aXXef\n0XX45\n\" \"ab|cdef\n01|2345\n\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"ab  c\nx   \n12  345\n\" \"a   ef\n0   45\n\" \"aXXef\n0XX45\n\" \"ab|cdef\n01|2345\n\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -98,12 +94,10 @@ fn oracle_prop_rectangle_tabs_short_lines_and_dimensions() {
            (buffer-string)))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"       b\" \"hort    \" \"       z\") (8 . 3) (1 . 1) (9 . 3) \"acd\ns\n \n\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"       b\" \"hort    \" \"       z\") (8 . 3) (1 . 1) (9 . 3) \"acd\ns\n \n\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -130,10 +124,8 @@ fn oracle_prop_rectangle_insert_number_and_intersection() {
    (rectangle-intersect-p '(0 . 0) '(2 . 2) '(2 . 0) '(1 . 1))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"leAAft\nriBBBBght\n  C\" 3 21) \"[07] aaa\n[08] bbb\n[09] ccc\n\" t nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"leAAft\nriBBBBght\n  C\" 3 21) \"[07] aaa\n[08] bbb\n[09] ccc\n\" t nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

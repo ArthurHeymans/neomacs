@@ -48,12 +48,10 @@ fn oracle_prop_text_analysis_word_frequency() {
                       (setq h (cons (car entry) h))))
                   (sort h #'string<))))
     (list top5 total unique most-freq hapax)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"the\" . 8) (\"cat\" . 3) (\"dog\" . 2) (\"rat\" . 2) (\"from\" . 1)) 23 12 (\"the\" . 8) (\"and\" \"ate\" \"chased\" \"from\" \"mat\" \"on\" \"ran\" \"sat\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"the\" . 8) (\"cat\" . 3) (\"dog\" . 2) (\"rat\" . 2) (\"from\" . 1)) 23 12 (\"the\" . 8) (\"and\" \"ate\" \"chased\" \"from\" \"mat\" \"on\" \"ran\" \"sat\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -128,10 +126,8 @@ fn oracle_prop_text_analysis_readability_score() {
         ;; Flesch score should be between 0 and 100 for normal text
         (> flesch 0)
         (< flesch 120)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (4 35 48 t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (4 35 48 t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -194,12 +190,10 @@ fn oracle_prop_text_analysis_extractive_summary() {
                   (setq has-any t)))
               (unless has-any (setq all-have-terms nil))))
           all-have-terms)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (8 3 (\"Lisp is the extension language of Emacs.\" \"Users can customize Emacs with Elisp.\" \"Emacs is a powerful text editor.\") (\"It supports many programming languages.\" \"Frames contain one or more windows.\" \"Keybindings map keys to commands.\") t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (8 3 (\"Lisp is the extension language of Emacs.\" \"Users can customize Emacs with Elisp.\" \"Emacs is a powerful text editor.\") (\"It supports many programming languages.\" \"Frames contain one or more windows.\" \"Keybindings map keys to commands.\") t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -268,12 +262,10 @@ fn oracle_prop_text_analysis_ngrams() {
        (length bigram-freq)
        ;; Unique trigram count
        (length trigram-freq)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (10 9 ((\"the cat\" . 2) (\"the fish\" . 1) (\"ate the\" . 1)) ((\"ate the fish\" . 1) (\"cat ate the\" . 1) (\"the cat ate\" . 1)) 9 9)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (10 9 ((\"the cat\" . 2) (\"the fish\" . 1) (\"ate the\" . 1)) ((\"ate the fish\" . 1) (\"cat ate the\" . 1) (\"the cat ate\" . 1)) 9 9)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -325,12 +317,10 @@ fn oracle_prop_text_analysis_concordance() {
      be-contexts
      ;; Total word count
      (length words))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (9 (0 4 10 13) (1 5 11) (\"be\" \"is\" \"to\") (\"exist\" \"not\" \"or\" \"question\" \"that\" \"the\") ((\"to\" \"be\" \"or\") (\"to\" \"be\" \"that\") (\"to\" \"be\" \"is\")) 15)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (9 (0 4 10 13) (1 5 11) (\"be\" \"is\" \"to\") (\"exist\" \"not\" \"or\" \"question\" \"that\" \"the\") ((\"to\" \"be\" \"or\") (\"to\" \"be\" \"that\") (\"to\" \"be\" \"is\")) 15)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -394,10 +384,8 @@ fn oracle_prop_text_analysis_markov_chain() {
      unique-count
      expected-pairs
      (= total-trans expected-pairs))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"ate\" (\"the\" . 1)) (\"cat\" (\"ran\" . 1) (\"ate\" . 1) (\"sat\" . 1)) (\"dog\" (\"ran\" . 1) (\"sat\" . 1)) (\"ran\" (\"the\" . 1)) (\"sat\" (\"the\" . 2)) (\"the\" (\"cat\" . 3) (\"dog\" . 2))) ((\"ate\" \"the\" . 1) (\"cat\" \"ran\" . 1) (\"dog\" \"ran\" . 1) (\"ran\" \"the\" . 1) (\"sat\" \"the\" . 2) (\"the\" \"cat\" . 3)) 14 6 14 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"ate\" (\"the\" . 1)) (\"cat\" (\"ran\" . 1) (\"ate\" . 1) (\"sat\" . 1)) (\"dog\" (\"ran\" . 1) (\"sat\" . 1)) (\"ran\" (\"the\" . 1)) (\"sat\" (\"the\" . 2)) (\"the\" (\"cat\" . 3) (\"dog\" . 2))) ((\"ate\" \"the\" . 1) (\"cat\" \"ran\" . 1) (\"dog\" \"ran\" . 1) (\"ran\" \"the\" . 1) (\"sat\" \"the\" . 2) (\"the\" \"cat\" . 3)) 14 6 14 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

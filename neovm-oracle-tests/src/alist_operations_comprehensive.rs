@@ -44,12 +44,10 @@ fn oracle_prop_assoc_test_param_comprehensive() {
                             (lambda (key elt) (eq elt key)))
                      ;; nil testfn falls back to equal
                      (assoc "HELLO" str-alist nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((2.0 . \"two\") (2.0 . \"two\") (\"HELLO\" . 1) nil (\"HELLO\" . 1) (\"BAR\" . 4) nil (banana . yellow) nil (\"HELLO\" . 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((2.0 . \"two\") (2.0 . \"two\") (\"HELLO\" . 1) nil (\"HELLO\" . 1) (\"BAR\" . 4) nil (banana . yellow) nil (\"HELLO\" . 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -90,12 +88,10 @@ fn oracle_prop_rassoc_rassq_various_value_types() {
                      (rassq t alist-mixed)
                      (rassoc 0 alist-mixed)
                      (rassoc "" alist-mixed)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((a . 1) (b . 2) nil (a . 1) (d . 3) (x 1 2 3) (y 4 5 6) nil nil (p . [1 2]) (q . [3 4]) nil (m) (m) (n . t) (n . t) (o . 0) (p . \"\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((a . 1) (b . 2) nil (a . 1) (d . 3) (x 1 2 3) (y 4 5 6) nil nil (p . [1 2]) (q . [3 4]) nil (m) (m) (n . t) (n . t) (o . 0) (p . \"\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -136,12 +132,10 @@ fn oracle_prop_alist_get_all_params() {
                         (alist-get "name" str-al nil nil #'string-equal-ignore-case)
                         (alist-get "age" str-al nil nil #'string-equal-ignore-case)
                         (alist-get "missing" str-al 'nope nil #'equal)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Alice\" 30 (a b c) nil \"fallback\" 42 (default list) nil nil nil nil \"Alice\" t (\"Bob\" \"Bob\" 25 nope))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Alice\" 30 (a b c) nil \"fallback\" 42 (default list) nil nil nil nil \"Alice\" t (\"Bob\" \"Bob\" 25 nope))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -189,12 +183,10 @@ fn oracle_prop_copy_alist_deep_shallow_semantics() {
                             (mixed-copy (copy-alist mixed)))
                        (list (equal mixed mixed-copy)
                              (eq (nth 1 mixed) (nth 1 mixed-copy))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (nil nil nil t t t ((1 2 3) replaced) ([999 20] [999 20]) nil t (t t))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (nil nil nil t t t ((1 2 3) replaced) ([999 20] [999 20]) nil t (t t))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -260,12 +252,10 @@ fn oracle_prop_nested_alist_construction_and_queries() {
                                   (seq-find (lambda (r)
                                               (= 2 (cdr (assq 'id r))))
                                             db))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Boston\" \"02139\" \"Carol\" (\"Alice\" \"Carol\") ((\"Alice\" . 91) (\"Bob\" . 84) (\"Carol\" . 98)) \"Bob\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Boston\" \"02139\" \"Carol\" (\"Alice\" \"Carol\") ((\"Alice\" . 91) (\"Bob\" . 84) (\"Carol\" . 98)) \"Bob\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -313,12 +303,10 @@ fn oracle_prop_alist_ordered_map_semantics() {
                        (nreverse order))
                      ;; Keys in alist order (with duplicates)
                      (mapcar #'car al)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((x . 10) 4 (10 1) (2 nil (y . 2) (z . 3)) (x y z) (x z y x))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((x . 10) 4 (10 1) (2 nil (y . 2) (z . 3)) (x y z) (x z y x))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -372,12 +360,10 @@ fn oracle_prop_alist_merge_update_diff() {
                                                            (cdr pair))
                                                      changed)))))
                            (nreverse changed))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"red\" 14 nil \"yes\" t 2 \"sans\" \"red\" ((newkey . \"yes\")) ((color \"blue\" \"red\") (size 12 14) (bold nil t) (font \"mono\" \"sans\") (indent 4 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"red\" 14 nil \"yes\" t 2 \"sans\" \"red\" ((newkey . \"yes\")) ((color \"blue\" \"red\") (size 12 14) (bold nil t) (font \"mono\" \"sans\") (indent 4 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -423,12 +409,10 @@ fn oracle_prop_alist_multimap_grouping() {
                              (unless (member (cdr pair) uniq)
                                (setq uniq (cons (cdr pair) uniq))))
                            (sort (nreverse uniq) #'string<))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((mon \"meeting\" \"lunch\" \"standup\") (thu \"retro\") (tue \"code\" \"review\" \"deploy\") (wed \"deploy\" \"test\")) ((mon . 3) (thu . 1) (tue . 3) (wed . 2)) (mon tue) ((mon . \"meeting\") (mon . \"lunch\") (mon . \"standup\") (thu . \"retro\") (tue . \"code\") (tue . \"review\") (tue . \"deploy\") (wed . \"deploy\") (wed . \"test\")) (\"code\" \"deploy\" \"lunch\" \"meeting\" \"retro\" \"review\" \"standup\" \"test\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((mon \"meeting\" \"lunch\" \"standup\") (thu \"retro\") (tue \"code\" \"review\" \"deploy\") (wed \"deploy\" \"test\")) ((mon . 3) (thu . 1) (tue . 3) (wed . 2)) (mon tue) ((mon . \"meeting\") (mon . \"lunch\") (mon . \"standup\") (thu . \"retro\") (tue . \"code\") (tue . \"review\") (tue . \"deploy\") (wed . \"deploy\") (wed . \"test\")) (\"code\" \"deploy\" \"lunch\" \"meeting\" \"retro\" \"review\" \"standup\" \"test\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -480,12 +464,10 @@ fn oracle_prop_alist_bidirectional_map_inversion() {
                              (setq unique nil))
                            (setq vals (cdr vals)))
                          unique))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (((1 a d) (2 b) (3 c) (4 e)) (a d) (e) ((1 . a) (2 . b) (3 . c) (1 . d) (4 . e)) (5 5 5) nil)""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (((1 a d) (2 b) (3 c) (4 e)) (a d) (e) ((1 . a) (2 . b) (3 . c) (1 . d) (4 . e)) (5 5 5) nil)""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -519,12 +501,10 @@ fn oracle_prop_alist_setf_surgery() {
                              (alist-get 'first al3)
                              (alist-get 'second al3)
                              (alist-get 'third al3)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (((a . 1) (b . 20) (c . 3)) ((d . 40) (a . 1) (b . 20) (c . 3)) ((d . 40) (a) (b . 20) (c . 3)) ((x . 10) (z . 30)) (((third . 3) (second . 22) (first . 1)) 1 22 3))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (((a . 1) (b . 20) (c . 3)) ((d . 40) (a . 1) (b . 20) (c . 3)) ((d . 40) (a) (b . 20) (c . 3)) ((x . 10) (z . 30)) (((third . 3) (second . 22) (first . 1)) 1 22 3))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -565,10 +545,8 @@ fn oracle_prop_assoc_string_case_patterns() {
                         (assoc-string "Key" dupes)
                         (assoc-string "key" dupes t)
                         (assoc-string "KEY" dupes)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"Content-Type\" . \"text/html\") nil (\"Content-Type\" . \"text/html\") (\"content-length\" . \"1234\") (\"AUTHORIZATION\" . \"Bearer xyz\") nil nil (\"text/html\" \"foo\" \"*/*\") ((\"Key\" . \"first\") (\"Key\" . \"first\") (\"KEY\" . \"second\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"Content-Type\" . \"text/html\") nil (\"Content-Type\" . \"text/html\") (\"content-length\" . \"1234\") (\"AUTHORIZATION\" . \"Bearer xyz\") nil nil (\"text/html\" \"foo\" \"*/*\") ((\"Key\" . \"first\") (\"Key\" . \"first\") (\"KEY\" . \"second\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

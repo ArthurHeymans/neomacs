@@ -11,6 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf29_attach() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -19,7 +20,7 @@ fn uf29_attach() {
   (condition-case nil
       (org-attach)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -30,6 +31,7 @@ fn uf29_attach() {
 #[test]
 fn uf29_attach_new() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -38,7 +40,7 @@ fn uf29_attach_new() {
   (condition-case nil
       (org-attach-new "test.txt")
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -49,6 +51,7 @@ fn uf29_attach_new() {
 #[test]
 fn uf29_attach_attach() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-file "/tmp/attach-test.txt"
   (insert "test content"))
@@ -59,7 +62,7 @@ fn uf29_attach_attach() {
   (condition-case nil
       (org-attach-attach "/tmp/attach-test.txt")
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -70,6 +73,7 @@ fn uf29_attach_attach() {
 #[test]
 fn uf29_attach_open() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -78,7 +82,7 @@ fn uf29_attach_open() {
   (condition-case nil
       (org-attach-open)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -89,6 +93,7 @@ fn uf29_attach_open() {
 #[test]
 fn uf29_attach_reveal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -97,7 +102,7 @@ fn uf29_attach_reveal() {
   (condition-case nil
       (org-attach-reveal)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -108,6 +113,7 @@ fn uf29_attach_reveal() {
 #[test]
 fn uf29_attach_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -116,7 +122,7 @@ fn uf29_attach_delete() {
   (condition-case nil
       (org-attach-delete-all)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -127,6 +133,7 @@ fn uf29_attach_delete() {
 #[test]
 fn uf29_attach_dir() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -136,7 +143,7 @@ fn uf29_attach_dir() {
       (org-attach-set-directory "/tmp/attach")
     (error nil))
   (org-entry-get nil "ATTACH_DIR"))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -147,6 +154,7 @@ fn uf29_attach_dir() {
 #[test]
 fn uf29_attach_unset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -156,7 +164,7 @@ fn uf29_attach_unset() {
       (org-attach-unset-directory)
     (error nil))
   (org-entry-get nil "ATTACH_DIR"))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -167,6 +175,7 @@ fn uf29_attach_unset() {
 #[test]
 fn uf29_attach_get_dir() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -175,7 +184,7 @@ fn uf29_attach_get_dir() {
   (condition-case nil
       (org-attach-get-directory)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -186,6 +195,7 @@ fn uf29_attach_get_dir() {
 #[test]
 fn uf29_attach_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -194,7 +204,7 @@ fn uf29_attach_list() {
   (condition-case nil
       (org-attach-file-list)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -205,6 +215,7 @@ fn uf29_attach_list() {
 #[test]
 fn uf29_attach_url() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -213,7 +224,7 @@ fn uf29_attach_url() {
   (condition-case nil
       (org-attach-url "http://example.com/test.txt")
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -224,6 +235,7 @@ fn uf29_attach_url() {
 #[test]
 fn uf29_attach_emacs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -232,7 +244,7 @@ fn uf29_attach_emacs() {
   (condition-case nil
       (org-attach-attach-in-emacs "/tmp/test.txt")
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -243,6 +255,7 @@ fn uf29_attach_emacs() {
 #[test]
 fn uf29_checklist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((on \"a\") (off \"b\") (on \"c\") (off \"d\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -252,7 +265,7 @@ fn uf29_checklist() {
                       (org-trim (buffer-substring-no-properties
                                   (org-element-property :contents-begin i)
                                   (org-element-property :contents-end i)))))))"##,
-        expect_test::expect![[r#""OK ((on \"a\") (off \"b\") (on \"c\") (off \"d\"))""#]],
+        expect,
     );
 }
 
@@ -263,6 +276,7 @@ fn uf29_checklist() {
 #[test]
 fn uf29_check_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"- a\n- [ ] b\n- [-] c\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -270,7 +284,7 @@ fn uf29_check_toggle() {
   (goto-char (point-min))
   (org-toggle-checkbox '(4))
   (buffer-string))"##,
-        expect_test::expect![[r#""OK \"- a\n- [ ] b\n- [-] c\"""#]],
+        expect,
     );
 }
 
@@ -281,6 +295,7 @@ fn uf29_check_toggle() {
 #[test]
 fn uf29_check_reset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"* T\n- [ ] a\n- [ ] b\n- [ ] c\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -288,7 +303,7 @@ fn uf29_check_reset() {
   (goto-char (point-min))
   (org-reset-checkbox-state-subtree)
   (buffer-string))"##,
-        expect_test::expect![[r#""OK \"* T\n- [ ] a\n- [ ] b\n- [ ] c\"""#]],
+        expect,
     );
 }
 
@@ -299,6 +314,7 @@ fn uf29_check_reset() {
 #[test]
 fn uf29_depend() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -307,7 +323,7 @@ fn uf29_depend() {
   (condition-case nil
       (org-depend-trigger-todo "DONE" '("A" "B"))
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -318,6 +334,7 @@ fn uf29_depend() {
 #[test]
 fn uf29_notify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -326,7 +343,7 @@ fn uf29_notify() {
   (condition-case nil
       (org-notify)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -337,11 +354,12 @@ fn uf29_notify() {
 #[test]
 fn uf29_notify_add() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-notify-add "test" '(:time "1h" :period "10m" :title "Test"))
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -352,6 +370,7 @@ fn uf29_notify_add() {
 #[test]
 fn uf29_drill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -359,7 +378,7 @@ fn uf29_drill() {
   (condition-case nil
       (org-drill)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -370,6 +389,7 @@ fn uf29_drill() {
 #[test]
 fn uf29_drill_entry() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -378,7 +398,7 @@ fn uf29_drill_entry() {
   (condition-case nil
       (org-drill-entry)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -389,11 +409,12 @@ fn uf29_drill_entry() {
 #[test]
 fn uf29_drill_resume() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-drill-resume)
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -404,6 +425,7 @@ fn uf29_drill_resume() {
 #[test]
 fn uf29_drill_tree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -412,7 +434,7 @@ fn uf29_drill_tree() {
   (condition-case nil
       (org-drill-tree)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -423,6 +445,7 @@ fn uf29_drill_tree() {
 #[test]
 fn uf29_drill_maple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -431,6 +454,6 @@ fn uf29_drill_maple() {
   (condition-case nil
       (org-drill-maple-tree)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

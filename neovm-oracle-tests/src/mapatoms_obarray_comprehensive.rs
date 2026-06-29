@@ -41,12 +41,10 @@ fn oracle_prop_mapatoms_collect_by_prefix() {
           (length all-syms)
           ;; Verify no spurious symbols
           (= (length all-syms) 6))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"neovm--moc-beta-one-9912\" \"neovm--moc-beta-three-9912\" \"neovm--moc-beta-two-9912\") 6 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"neovm--moc-beta-one-9912\" \"neovm--moc-beta-three-9912\" \"neovm--moc-beta-two-9912\") 6 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -84,12 +82,10 @@ fn oracle_prop_mapatoms_set_plist_properties() {
             (cl-every (lambda (pair)
                         (= (cdr pair) (length (car pair))))
                       sorted)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"neovm--moc-sp-a-8834\" . 20) (\"neovm--moc-sp-ab-8834\" . 21) (\"neovm--moc-sp-abc-8834\" . 22) (\"neovm--moc-sp-abcd-8834\" . 23)) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"neovm--moc-sp-a-8834\" . 20) (\"neovm--moc-sp-ab-8834\" . 21) (\"neovm--moc-sp-abc-8834\" . 22) (\"neovm--moc-sp-abcd-8834\" . 23)) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -128,10 +124,8 @@ fn oracle_prop_mapatoms_count_filter_accumulate() {
           total-len
           ;; Verify count matches what we interned
           (= count 8))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (8 (\"neovm--moc-cf-xyzwvuts-3301\") 188 t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (8 (\"neovm--moc-cf-xyzwvuts-3301\") 188 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -171,12 +165,10 @@ fn oracle_prop_mapatoms_intern_unintern_cycle() {
           (not (null (intern-soft "neovm--moc-iu-f-5541" ob)))
           ;; Count should be 5 (a, b-new, c, e, f)
           (= (length names) 5))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"neovm--moc-iu-a-5541\" \"neovm--moc-iu-b-5541\" \"neovm--moc-iu-c-5541\" \"neovm--moc-iu-e-5541\" \"neovm--moc-iu-f-5541\") t t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"neovm--moc-iu-a-5541\" \"neovm--moc-iu-b-5541\" \"neovm--moc-iu-c-5541\" \"neovm--moc-iu-e-5541\" \"neovm--moc-iu-f-5541\") t t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -206,12 +198,10 @@ fn oracle_prop_mapatoms_nested_obarrays() {
                 ob))
     (list (sort all-names #'string<)
           (= (length all-names) 6))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"neovm--moc-no-p-2201\" \"neovm--moc-no-q-2201\" \"neovm--moc-no-r-2201\" \"neovm--moc-no-s-2201\" \"neovm--moc-no-t-2201\" \"neovm--moc-no-u-2201\") t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"neovm--moc-no-p-2201\" \"neovm--moc-no-q-2201\" \"neovm--moc-no-r-2201\" \"neovm--moc-no-s-2201\" \"neovm--moc-no-t-2201\" \"neovm--moc-no-u-2201\") t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -248,10 +238,8 @@ fn oracle_prop_mapatoms_intern_soft_edge_cases() {
                       (equal (symbol-name new-sym)
                              "neovm--moc-ise-x-7712") ; same name
                       )))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -296,7 +284,8 @@ fn oracle_prop_mapatoms_obarray_size_collision_stress() {
                 (= (length collected) (length kept))
                 (equal (sort (copy-sequence collected) #'string<)
                        (sort (copy-sequence kept) #'string<))))))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t t)""#]]);
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -332,12 +321,10 @@ fn oracle_prop_mapatoms_with_condition_case() {
       (list (sort successes #'string<)
             (sort errors #'string<)
             (= (+ (length successes) (length errors)) 4)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"neovm--moc-cc-a-6623\" \"neovm--moc-cc-c-6623\") (\"neovm--moc-cc-b-6623\" \"neovm--moc-cc-d-6623\") t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"neovm--moc-cc-a-6623\" \"neovm--moc-cc-c-6623\") (\"neovm--moc-cc-b-6623\" \"neovm--moc-cc-d-6623\") t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -381,12 +368,10 @@ fn oracle_prop_mapatoms_build_dependency_graph() {
                 (setq in-degrees (cons (cons dep 1) in-degrees))))))
         (list sorted
               (sort in-degrees (lambda (a b) (string< (car a) (car b)))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"neovm--moc-dg-a-1192\" \"neovm--moc-dg-b-1192\" \"neovm--moc-dg-c-1192\") (\"neovm--moc-dg-b-1192\" \"neovm--moc-dg-c-1192\") (\"neovm--moc-dg-c-1192\") (\"neovm--moc-dg-d-1192\" \"neovm--moc-dg-a-1192\" \"neovm--moc-dg-b-1192\")) ((\"neovm--moc-dg-a-1192\" . 1) (\"neovm--moc-dg-b-1192\" . 2) (\"neovm--moc-dg-c-1192\" . 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"neovm--moc-dg-a-1192\" \"neovm--moc-dg-b-1192\" \"neovm--moc-dg-c-1192\") (\"neovm--moc-dg-b-1192\" \"neovm--moc-dg-c-1192\") (\"neovm--moc-dg-c-1192\") (\"neovm--moc-dg-d-1192\" \"neovm--moc-dg-a-1192\" \"neovm--moc-dg-b-1192\")) ((\"neovm--moc-dg-a-1192\" . 1) (\"neovm--moc-dg-b-1192\" . 2) (\"neovm--moc-dg-c-1192\" . 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -426,12 +411,10 @@ fn oracle_prop_mapatoms_collect_callable() {
       (fmakunbound s1)
       (fmakunbound s3)
       (fmakunbound s5))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"neovm--moc-callable-a-3344\" \"neovm--moc-callable-c-3344\" \"neovm--moc-callable-e-3344\") (\"neovm--moc-callable-b-3344\" \"neovm--moc-callable-d-3344\") t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"neovm--moc-callable-a-3344\" \"neovm--moc-callable-c-3344\" \"neovm--moc-callable-e-3344\") (\"neovm--moc-callable-b-3344\" \"neovm--moc-callable-d-3344\") t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -477,10 +460,8 @@ fn oracle_prop_mapatoms_name_statistics() {
     (list min-len max-len count
           ;; Sort char frequencies by char for determinism
           (sort char-freq (lambda (a b) (< (car a) (car b)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (23 28 7 ((97 . 2) (98 . 2) (99 . 2) (100 . 1)))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (23 28 7 ((97 . 2) (98 . 2) (99 . 2) (100 . 1)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -533,12 +514,10 @@ fn oracle_prop_mapatoms_value_transform_pipeline() {
                   ob)
         (list (sort after-double (lambda (a b) (string< (car a) (car b))))
               (sort final-vals (lambda (a b) (string< (car a) (car b)))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"neovm--moc-vt-a-9981\" . 6) (\"neovm--moc-vt-b-9981\" . 14) (\"neovm--moc-vt-c-9981\" . 30) (\"neovm--moc-vt-d-9981\" . 40) (\"neovm--moc-vt-e-9981\" . 2)) ((\"neovm--moc-vt-a-9981\" . 256) (\"neovm--moc-vt-b-9981\" . 576) (\"neovm--moc-vt-c-9981\" . 1600) (\"neovm--moc-vt-d-9981\" . 2500) (\"neovm--moc-vt-e-9981\" . 144)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"neovm--moc-vt-a-9981\" . 6) (\"neovm--moc-vt-b-9981\" . 14) (\"neovm--moc-vt-c-9981\" . 30) (\"neovm--moc-vt-d-9981\" . 40) (\"neovm--moc-vt-e-9981\" . 2)) ((\"neovm--moc-vt-a-9981\" . 256) (\"neovm--moc-vt-b-9981\" . 576) (\"neovm--moc-vt-c-9981\" . 1600) (\"neovm--moc-vt-d-9981\" . 2500) (\"neovm--moc-vt-e-9981\" . 144)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -583,12 +562,10 @@ fn oracle_prop_mapatoms_cross_obarray_movement() {
             (sort dest-names #'string<)
             (= (length source-names) 2)
             (= (length dest-names) 3)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"neovm--moc-cam-keep-a-7782\" \"neovm--moc-cam-keep-c-7782\") (\"neovm--moc-cam-move-b-7782\" \"neovm--moc-cam-move-d-7782\" \"neovm--moc-cam-move-e-7782\") t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"neovm--moc-cam-keep-a-7782\" \"neovm--moc-cam-keep-c-7782\") (\"neovm--moc-cam-move-b-7782\" \"neovm--moc-cam-move-d-7782\" \"neovm--moc-cam-move-e-7782\") t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -626,10 +603,8 @@ fn oracle_prop_mapatoms_empty_and_singleton() {
               (= empty-count 0)
               (equal single-names '("neovm--moc-es-only-3998"))
               (= ghost-count 0))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 (\"neovm--moc-es-only-3998\") 0 t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 (\"neovm--moc-es-only-3998\") 0 t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -672,12 +647,10 @@ fn oracle_prop_mapatoms_reverse_index() {
         (sort sorted-index
               (lambda (a b) (string< (symbol-name (car a))
                                      (symbol-name (car b)))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:blue \"neovm--moc-ri-b-2234\" \"neovm--moc-ri-e-2234\") (:green \"neovm--moc-ri-d-2234\" \"neovm--moc-ri-g-2234\") (:red \"neovm--moc-ri-a-2234\" \"neovm--moc-ri-c-2234\" \"neovm--moc-ri-f-2234\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:blue \"neovm--moc-ri-b-2234\" \"neovm--moc-ri-e-2234\") (:green \"neovm--moc-ri-d-2234\" \"neovm--moc-ri-g-2234\") (:red \"neovm--moc-ri-a-2234\" \"neovm--moc-ri-c-2234\" \"neovm--moc-ri-f-2234\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -718,10 +691,8 @@ fn oracle_prop_mapatoms_chain_computation() {
                ((eq op '*) (setq result (* result operand)))
                ((eq op '-) (setq result (- result operand))))))
           (list sorted result))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"neovm--moc-ch-01-5512\" + . 10) (\"neovm--moc-ch-02-5512\" * . 3) (\"neovm--moc-ch-03-5512\" + . 5) (\"neovm--moc-ch-04-5512\" * . 2) (\"neovm--moc-ch-05-5512\" - . 7)) 63)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"neovm--moc-ch-01-5512\" + . 10) (\"neovm--moc-ch-02-5512\" * . 3) (\"neovm--moc-ch-03-5512\" + . 5) (\"neovm--moc-ch-04-5512\" * . 2) (\"neovm--moc-ch-05-5512\" - . 7)) 63)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

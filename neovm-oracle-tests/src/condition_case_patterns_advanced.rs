@@ -39,12 +39,10 @@ fn oracle_prop_ccpat_adv_exhaustive_error_symbols() {
   ;; error: generic signal
   (condition-case e (signal 'error '("custom message"))
     (error (list 'generic (car e) (cadr e)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((arith arith-error) (wta wrong-type-argument) (void-var void-variable) (void-fn void-function) (wna wrong-number-of-arguments) (setconst setting-constant) (aoor args-out-of-range) (generic error \"custom message\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((arith arith-error) (wta wrong-type-argument) (void-var void-variable) (void-fn void-function) (wna wrong-number-of-arguments) (setconst setting-constant) (aoor args-out-of-range) (generic error \"custom message\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -77,10 +75,9 @@ fn oracle_prop_ccpat_adv_handler_priority() {
     (arith-error 'arith-no)
     (wrong-type-argument 'wta-no)
     (error 'generic-caught)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (arith-first generic-catches-all wta-yes generic-caught)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (arith-first generic-catches-all wta-yes generic-caught)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -110,12 +107,10 @@ fn oracle_prop_ccpat_adv_default_handler_t() {
   (condition-case e (signal 'file-error '("test"))
     (arith-error 'arith-no)
     (t (list 't-caught (car e)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((caught-by-t arith-error) (caught-wta wrong-type-argument) (caught-custom error \"Invalid error symbol\") specific-wins (t-caught file-error))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((caught-by-t arith-error) (caught-wta wrong-type-argument) (caught-custom error \"Invalid error symbol\") specific-wins (t-caught file-error))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -155,10 +150,9 @@ fn oracle_prop_ccpat_adv_nested_different_types() {
              (file-error
               (list 'outer-caught-file (cadr outer-err))))))
       (list r1 r2))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (outer-caught-arith (outer-caught-file \"no such file\"))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (outer-caught-arith (outer-caught-file \"no such file\"))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -197,12 +191,10 @@ fn oracle_prop_ccpat_adv_retry_logic() {
     (list 'attempts attempt
           'final final-result
           'log (nreverse results))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (attempts 3 final (success 3) log ((retry 1 \"attempt 1 failed\") (retry 2 \"attempt 2 failed\") (success 3)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (attempts 3 final (success 3) log ((retry 1 \"attempt 1 failed\") (retry 2 \"attempt 2 failed\") (success 3)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -243,12 +235,10 @@ fn oracle_prop_ccpat_adv_error_classification_dispatch() {
            (funcall safe-eval '(substring "ab" 5 10))    ;; args-out-of-range
            (funcall safe-eval '(signal 'my-err '("x"))))))  ;; generic error
   results)"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ok 3) (math-error recovery-zero 0) (type-error recovery-nil nil) (unbound-error recovery-default unset) (fn-error recovery-identity (neovm--ccpa-nofn 1)) (range-error recovery-empty \"\") (unknown-error error (\"Invalid error symbol\" my-err)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ok 3) (math-error recovery-zero 0) (type-error recovery-nil nil) (unbound-error recovery-default unset) (fn-error recovery-identity (neovm--ccpa-nofn 1)) (range-error recovery-empty \"\") (unknown-error error (\"Invalid error symbol\" my-err)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -294,12 +284,10 @@ fn oracle_prop_ccpat_adv_error_chain_unwinding() {
     (fmakunbound 'neovm--ccpa-level3)
     (fmakunbound 'neovm--ccpa-level2)
     (fmakunbound 'neovm--ccpa-level1)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (10 (level1-caught \"level2 wrapped: division by zero at level 3\") (direct-catch \"division by zero at level 3\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (10 (level1-caught \"level2 wrapped: division by zero at level 3\") (direct-catch \"division by zero at level 3\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -338,10 +326,8 @@ fn oracle_prop_ccpat_adv_no_error_passthrough() {
     (wrong-type-argument 'no)
     (void-variable 'no)
     (error 'no)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (42 205 (done (a b c)) nil 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (42 205 (done (a b c)) nil 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -379,12 +365,10 @@ fn oracle_prop_ccpat_adv_error_data_extraction() {
   (condition-case e (aref [1 2 3] 99)
     (args-out-of-range
      (list (car e) (length e)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((arith-error 1) (wrong-type-argument listp 42 3) (void-variable neovm--ccpa-novar-extract 2) (error 5 \"msg\" extra1 extra2 42) (args-out-of-range 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((arith-error 1) (wrong-type-argument listp 42 3) (void-variable neovm--ccpa-novar-extract 2) (error 5 \"msg\" extra1 extra2 42) (args-out-of-range 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -409,9 +393,7 @@ fn oracle_prop_ccpat_adv_cleanup_ordering_with_unwind() {
      (setq execution-order (cons 'handler execution-order))
      ;; Return the full execution order
      (nreverse execution-order))))"#;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (body cleanup handler)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (body cleanup handler)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(body cleanup handler)", &o, &n);
 }

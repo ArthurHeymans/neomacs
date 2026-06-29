@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_r2_syntax_error_handling_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil scan-error scan-error nil nil)""#]];
     // Divergence surfaced 2026-06-27 (up-list error handling):
     // GNU Emacs: OK (nil nil scan-error scan-error nil nil)
     // Neomacs:   OK (nil nil other-error other-error nil nil)
@@ -29,13 +30,14 @@ fn div_r2_syntax_error_handling_deep() {
         (condition-case err (forward-sexp 99) (scan-error (car err)) (error 'other-error))
         (condition-case err (backward-sexp 99) (scan-error (car err)) (error 'other-error))))
 "##,
-        expect_test::expect![[r#""OK (nil nil scan-error scan-error nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_r2_scan_sexps_error_handling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil 4 8)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -46,6 +48,6 @@ fn div_r2_scan_sexps_error_handling() {
         (scan-sexps 1 1)
         (scan-sexps 1 2)))
 "##,
-        expect_test::expect![[r#""OK (nil nil 4 8)""#]],
+        expect,
     );
 }

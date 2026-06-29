@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx87_eieio_generic_method_dispatch_parent_then_child() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:base :derived neo-cx87-base neo-cx87-derived)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -25,13 +26,14 @@ fn div_cx87_eieio_generic_method_dispatch_parent_then_child() {
               (class-of b) (class-of d))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:base :derived neo-cx87-base neo-cx87-derived)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx87_eieio_generic_method_redefinition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:first :second)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -46,13 +48,14 @@ fn div_cx87_eieio_generic_method_redefinition() {
           (list first second))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:first :second)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx87_eieio_no_applicable_method_handler() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:other-error cl-no-applicable-method)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -67,13 +70,14 @@ fn div_cx87_eieio_no_applicable_method_handler() {
           (error (list :other-error (car err))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:other-error cl-no-applicable-method)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx87_eieio_slot_unbound_method_handler() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t unbound)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -86,13 +90,14 @@ fn div_cx87_eieio_slot_unbound_method_handler() {
               (condition-case err (slot-value inst 'x) (error (cons :err (car err)))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t unbound)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx87_cl_defstruct_with_read_only_and_named() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t 99 \"alpha\" (:err . error))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx87-vec (:type vector) :named)
@@ -104,13 +109,14 @@ fn div_cx87_cl_defstruct_with_read_only_and_named() {
         (neo-cx87-vec-name r)
         (condition-case e (setf (neo-cx87-vec-val r) 100) (error (cons :err (car e))))))
 "##,
-        expect_test::expect![[r#""OK (t 99 \"alpha\" (:err . error))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx87_cl_defstruct_conc_name_prefix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 2 3 100 100)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx87-rec (:conc-name neo-cx87-r-))
@@ -122,13 +128,14 @@ fn div_cx87_cl_defstruct_conc_name_prefix() {
         (setf (neo-cx87-r-a r) 100)
         (neo-cx87-r-a r)))
 "##,
-        expect_test::expect![[r#""OK (1 2 3 100 100)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx87_cl_defstruct_constructor_and_copier() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 2 nil 1 2 3 3 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx87-cust
@@ -144,13 +151,14 @@ fn div_cx87_cl_defstruct_constructor_and_copier() {
         (neo-cx87-cust-z c)
         (eq r2 c)))
 "##,
-        expect_test::expect![[r#""OK (1 2 nil 1 2 3 3 nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx87_eieio_make_instance_with_keyword_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 1 1 2 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -167,13 +175,16 @@ fn div_cx87_eieio_make_instance_with_keyword_args() {
             (slot-value (make-instance 'neo-cx87-mk :a 1 :b 2 :c 3) 'c)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (0 1 1 2 3)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx87_eieio_class_parents_and_children() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (nil (#s(eieio--class neo-cx87-root nil (#s(eieio--class eieio-default-superclass \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" (#s(built-in-class record \"Abstract type of objects with slots.\" (#s(built-in-class atom \"Abstract supertype of anything but cons cells.\" (#s(built-in-class t \"Abstract supertype of everything.\" nil nil nil nil)) nil nil nil)) nil nil nil)) [] #s(hash-table test eq) (neo-cx87-root neo-cx87-mk neo-cx87-su neo-cx87-na neo-cx87-red neo-cx87-base) nil [] [] #s(#4) (:custom-groups nil :documentation \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" :abstract t))) [] #s(hash-table test eq) (neo-cx87-mid) nil [] [] #s(#2) (:custom-groups nil))) (#s(eieio--class neo-cx87-mid nil (#s(eieio--class neo-cx87-root nil (#s(eieio--class eieio-default-superclass \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" (#s(built-in-class record \"Abstract type of objects with slots.\" (#s(built-in-class atom \"Abstract supertype of anything but cons cells.\" (#s(built-in-class t \"Abstract supertype of everything.\" nil nil nil nil)) nil nil nil)) nil nil nil)) [] #s(hash-table test eq) (neo-cx87-root neo-cx87-mk neo-cx87-su neo-cx87-na neo-cx87-red neo-cx87-base) nil [] [] #s(#6) (:custom-groups nil :documentation \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" :abstract t))) [] #s(hash-table test eq) (neo-cx87-mid) nil [] [] #s(#4) (:custom-groups nil))) [] #s(hash-table test eq) (neo-cx87-leaf) nil [] [] #s(#2) (:custom-groups nil))) (neo-cx87-mid) nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -189,15 +200,14 @@ fn div_cx87_eieio_class_parents_and_children() {
             (eieio-class-children 'neo-cx87-leaf)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (nil (#s(eieio--class neo-cx87-root nil (#s(eieio--class eieio-default-superclass \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" (#s(built-in-class record \"Abstract type of objects with slots.\" (#s(built-in-class atom \"Abstract supertype of anything but cons cells.\" (#s(built-in-class t \"Abstract supertype of everything.\" nil nil nil nil)) nil nil nil)) nil nil nil)) [] #s(hash-table test eq) (neo-cx87-root neo-cx87-mk neo-cx87-su neo-cx87-na neo-cx87-red neo-cx87-base) nil [] [] #s(#4) (:custom-groups nil :documentation \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" :abstract t))) [] #s(hash-table test eq) (neo-cx87-mid) nil [] [] #s(#2) (:custom-groups nil))) (#s(eieio--class neo-cx87-mid nil (#s(eieio--class neo-cx87-root nil (#s(eieio--class eieio-default-superclass \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" (#s(built-in-class record \"Abstract type of objects with slots.\" (#s(built-in-class atom \"Abstract supertype of anything but cons cells.\" (#s(built-in-class t \"Abstract supertype of everything.\" nil nil nil nil)) nil nil nil)) nil nil nil)) [] #s(hash-table test eq) (neo-cx87-root neo-cx87-mk neo-cx87-su neo-cx87-na neo-cx87-red neo-cx87-base) nil [] [] #s(#6) (:custom-groups nil :documentation \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" :abstract t))) [] #s(hash-table test eq) (neo-cx87-mid) nil [] [] #s(#4) (:custom-groups nil))) [] #s(hash-table test eq) (neo-cx87-leaf) nil [] [] #s(#2) (:custom-groups nil))) (neo-cx87-mid) nil)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx87_eieio_class_p_object_p_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -213,13 +223,16 @@ fn div_cx87_eieio_class_p_object_p_predicates() {
               (cl-typep inst 'integer))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored error)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx87_eieio_with_cl_print_object_and_circle_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r##""OK (\"#s(neo-cx87-pc (a b c))\" \"#s(neo-cx87-pc (a b c))\" \"#s(neo-cx87-pc (a b c))\" \"#s(neo-cx87-pc (a b c))\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -239,15 +252,14 @@ fn div_cx87_eieio_with_cl_print_object_and_circle_mega() {
               (format "%s" inst))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r##""OK (\"#s(neo-cx87-pc (a b c))\" \"#s(neo-cx87-pc (a b c))\" \"#s(neo-cx87-pc (a b c))\" \"#s(neo-cx87-pc (a b c))\")""##
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx87_eieio_method_combination_plus_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -262,13 +274,14 @@ fn div_cx87_eieio_method_combination_plus_dispatch() {
         (neo-cx87-call inst)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored error)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx87_eieio_dispatch_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored cl-no-primary-method)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -300,6 +313,6 @@ fn div_cx87_eieio_dispatch_with_marker_overlay_undo_narrow_mega() {
                     (text-properties-at 1)))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored cl-no-primary-method)""#]],
+        expect,
     );
 }

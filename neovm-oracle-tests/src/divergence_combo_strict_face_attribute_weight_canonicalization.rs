@@ -11,6 +11,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_q6_face_attribute_weight_set_and_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((normal . normal) (bold . bold) (heavy . heavy) (light . light) (ultra-bold . ultra-bold) (semi-bold . semi-bold) (medium . medium))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (result)
@@ -20,15 +23,15 @@ fn div_q6_face_attribute_weight_set_and_read() {
     (push (cons w (face-attribute 'probe-wt-face-q6 :weight nil 'default)) result))
   (nreverse result))
 "##,
-        expect_test::expect![[
-            r#""OK ((normal . normal) (bold . bold) (heavy . heavy) (light . light) (ultra-bold . ultra-bold) (semi-bold . semi-bold) (medium . medium))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_q6_face_attribute_slant_set_and_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((normal . normal) (italic . italic) (oblique . oblique))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (result)
@@ -38,13 +41,14 @@ fn div_q6_face_attribute_slant_set_and_read() {
     (push (cons s (face-attribute 'probe-slant-face-q6 :slant nil 'default)) result))
   (nreverse result))
 "##,
-        expect_test::expect![[r#""OK ((normal . normal) (italic . italic) (oblique . oblique))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_q6_face_attribute_numeric_weight() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument symbolp 100)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (result)
@@ -54,6 +58,6 @@ fn div_q6_face_attribute_numeric_weight() {
     (push (cons w (face-attribute 'probe-numwt-face-q6 :weight nil 'default)) result))
   (nreverse result))
 "##,
-        expect_test::expect![[r#""ERR (wrong-type-argument symbolp 100)""#]],
+        expect,
     );
 }

@@ -98,12 +98,10 @@ fn oracle_prop_event_system_on_off_emit() {
     (fmakunbound 'neovm--test-es-emit)
     (makunbound 'neovm--test-es-listeners)
     (makunbound 'neovm--test-es-log)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"LOG click: (x 100 y)\" 3 x) 3 (\"LOG click: (a b)\" a) 2 (\"KEY: Enter\") nil 6 ((logger click \"LOG click: (x 100 y)\") (counter click 3) (echo click x) (logger click \"LOG click: (a b)\") (echo click a) (key-handler keydown \"KEY: Enter\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"LOG click: (x 100 y)\" 3 x) 3 (\"LOG click: (a b)\" a) 2 (\"KEY: Enter\") nil 6 ((logger click \"LOG click: (x 100 y)\") (counter click 3) (echo click x) (logger click \"LOG click: (a b)\") (echo click a) (key-handler keydown \"KEY: Enter\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -195,12 +193,10 @@ fn oracle_prop_event_system_priority_listeners() {
     (fmakunbound 'neovm--test-ep-on)
     (fmakunbound 'neovm--test-ep-emit)
     (makunbound 'neovm--test-ep-listeners)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((rate-limit auth handler logging metrics) ((rate-limit 5 (pass rate-limit)) (auth 10 (pass auth)) (handler 30 \"200 OK: /api/users\") (logging 50 \"LOG: GET /api/users\") (metrics 99 (metric \"GET\"))) ((rate-limit 5 (pass rate-limit)) (auth 10 (fail auth)) (handler 30 \"200 OK: /api/admin\") (logging 50 \"LOG: POST /api/admin\") (metrics 99 (metric \"POST\"))) ((rate-limit 5 (blocked rate-limit)) (auth 10 (pass auth)) (handler 30 \"200 OK: /api/data\") (logging 50 \"LOG: GET /api/data\") (metrics 99 (metric \"GET\"))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((rate-limit auth handler logging metrics) ((rate-limit 5 (pass rate-limit)) (auth 10 (pass auth)) (handler 30 \"200 OK: /api/users\") (logging 50 \"LOG: GET /api/users\") (metrics 99 (metric \"GET\"))) ((rate-limit 5 (pass rate-limit)) (auth 10 (fail auth)) (handler 30 \"200 OK: /api/admin\") (logging 50 \"LOG: POST /api/admin\") (metrics 99 (metric \"POST\"))) ((rate-limit 5 (blocked rate-limit)) (auth 10 (pass auth)) (handler 30 \"200 OK: /api/data\") (logging 50 \"LOG: GET /api/data\") (metrics 99 (metric \"GET\"))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -277,12 +273,10 @@ fn oracle_prop_event_system_once_listeners() {
     (fmakunbound 'neovm--test-eo-emit)
     (makunbound 'neovm--test-eo-listeners)
     (makunbound 'neovm--test-eo-results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((persistent \"persistent: msg1\") (init-once \"init: msg1\") (setup-once \"setup: msg1\")) 2 ((persistent \"persistent: msg2\")) 2 ((persistent \"persistent: msg3\")) ((error-handler \"error: boom\")) 2)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((persistent \"persistent: msg1\") (init-once \"init: msg1\") (setup-once \"setup: msg1\")) 2 ((persistent \"persistent: msg2\")) 2 ((persistent \"persistent: msg3\")) ((error-handler \"error: boom\")) 2)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -356,12 +350,10 @@ fn oracle_prop_event_system_bubbling_stop_propagation() {
           (funcall 'neovm--test-eb-bubble panel "normal")))
     (fmakunbound 'neovm--test-eb-make-node)
     (fmakunbound 'neovm--test-eb-bubble)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:trace ((icon \"icon touched: click\") (button \"button clicked: click\") (panel \"panel passed click\") (panel \"panel-logger: click\") (root \"root handled click\")) :stopped nil) (:trace ((icon \"icon touched: restricted\") (button \"button clicked: restricted\") (panel \"panel blocked restricted\")) :stopped t) (:trace ((button \"button clicked: tap\") (panel \"panel passed tap\") (panel \"panel-logger: tap\") (root \"root handled tap\")) :stopped nil) (:trace ((root \"root handled resize\")) :stopped nil) (:trace ((panel \"panel passed normal\") (panel \"panel-logger: normal\") (root \"root handled normal\")) :stopped nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:trace ((icon \"icon touched: click\") (button \"button clicked: click\") (panel \"panel passed click\") (panel \"panel-logger: click\") (root \"root handled click\")) :stopped nil) (:trace ((icon \"icon touched: restricted\") (button \"button clicked: restricted\") (panel \"panel blocked restricted\")) :stopped t) (:trace ((button \"button clicked: tap\") (panel \"panel passed tap\") (panel \"panel-logger: tap\") (root \"root handled tap\")) :stopped nil) (:trace ((root \"root handled resize\")) :stopped nil) (:trace ((panel \"panel passed normal\") (panel \"panel-logger: normal\") (root \"root handled normal\")) :stopped nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -436,12 +428,10 @@ fn oracle_prop_event_system_wildcard_listeners() {
     (fmakunbound 'neovm--test-ew-on)
     (fmakunbound 'neovm--test-ew-emit)
     (makunbound 'neovm--test-ew-listeners)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((click-handler \"click: (x 100 y 200)\") (audit-log \"AUDIT[click]: (x 100 y 200)\") (metrics (metric click))) 3 ((key-handler \"key: (key \\\"Enter\\\")\") (audit-log \"AUDIT[keypress]: (key \\\"Enter\\\")\") (metrics (metric keypress))) 3 ((audit-log \"AUDIT[scroll]: (delta 50)\") (metrics (metric scroll))) 2)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((click-handler \"click: (x 100 y 200)\") (audit-log \"AUDIT[click]: (x 100 y 200)\") (metrics (metric click))) 3 ((key-handler \"key: (key \\\"Enter\\\")\") (audit-log \"AUDIT[keypress]: (key \\\"Enter\\\")\") (metrics (metric keypress))) 3 ((audit-log \"AUDIT[scroll]: (delta 50)\") (metrics (metric scroll))) 2)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -541,12 +531,10 @@ fn oracle_prop_event_system_history_replay() {
     (fmakunbound 'neovm--test-eh-replay)
     (makunbound 'neovm--test-eh-listeners)
     (makunbound 'neovm--test-eh-history)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (4 ((auth-v1 \"v1-auth: alice\")) ((billing-v1 \"v1-bill: $50\")) ((auth-v1 \"v1-auth: bob\")) ((billing-v1 \"v1-bill: $120\")) ((login ((auth-v2 \"v2-auth: user=alice\"))) (purchase ((billing-v2 \"v2-bill: amount=50\"))) (login ((auth-v2 \"v2-auth: user=bob\"))) (purchase ((billing-v2 \"v2-bill: amount=120\")))) 4)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (4 ((auth-v1 \"v1-auth: alice\")) ((billing-v1 \"v1-bill: $50\")) ((auth-v1 \"v1-auth: bob\")) ((billing-v1 \"v1-bill: $120\")) ((login ((auth-v2 \"v2-auth: user=alice\"))) (purchase ((billing-v2 \"v2-bill: amount=50\"))) (login ((auth-v2 \"v2-auth: user=bob\"))) (purchase ((billing-v2 \"v2-bill: amount=120\")))) 4)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -654,10 +642,8 @@ fn oracle_prop_event_system_async_queue() {
     (makunbound 'neovm--test-eq-queue)
     (makunbound 'neovm--test-eq-handlers)
     (makunbound 'neovm--test-eq-processed)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (7 0 7 ((:event (:type order :id \"O1\" :amount 100) :results ((:type invoice :order-id \"O1\" :total 100))) (:event (:type order :id \"O2\" :amount 250) :results ((:type invoice :order-id \"O2\" :total 250))) (:event (:type refund :id \"R1\" :amount 50) :results (\"REFUND: $50 for R1\")) (:event (:type invoice :order-id \"O1\" :total 100) :results ((:type notification :msg \"Invoice for order O1: $100\"))) (:event (:type invoice :order-id \"O2\" :total 250) :results ((:type notification :msg \"Invoice for order O2: $250\"))) (:event (:type notification :msg \"Invoice for order O1: $100\") :results (\"SENT: Invoice for order O1: $100\")) (:event (:type notification :msg \"Invoice for order O2: $250\") :results (\"SENT: Invoice for order O2: $250\"))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (7 0 7 ((:event (:type order :id \"O1\" :amount 100) :results ((:type invoice :order-id \"O1\" :total 100))) (:event (:type order :id \"O2\" :amount 250) :results ((:type invoice :order-id \"O2\" :total 250))) (:event (:type refund :id \"R1\" :amount 50) :results (\"REFUND: $50 for R1\")) (:event (:type invoice :order-id \"O1\" :total 100) :results ((:type notification :msg \"Invoice for order O1: $100\"))) (:event (:type invoice :order-id \"O2\" :total 250) :results ((:type notification :msg \"Invoice for order O2: $250\"))) (:event (:type notification :msg \"Invoice for order O1: $100\") :results (\"SENT: Invoice for order O1: $100\")) (:event (:type notification :msg \"Invoice for order O2: $250\") :results (\"SENT: Invoice for order O2: $250\"))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

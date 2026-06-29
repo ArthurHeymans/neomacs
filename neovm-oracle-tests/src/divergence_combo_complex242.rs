@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx242_minibuffer_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'read-from-minibuffer)
@@ -21,37 +22,42 @@ fn div_cx242_minibuffer_availability() {
       (fboundp 'read-variable)
       (fboundp 'read-function))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t t t t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx242_minibuffer_depth_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (>= (minibuffer-depth) 0)
       (integerp (minibuffer-depth)))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx242_enable_recursive_minibuffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'enable-recursive-minibuffers)
       (booleanp enable-recursive-minibuffers))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx242_minibuffer_window_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-type-argument bufferp #<window 2 on  *Minibuf-0*>)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((mw (minibuffer-window)))
@@ -59,27 +65,27 @@ fn div_cx242_minibuffer_window_query() {
         (minibufferp mw)
         (window-minibuffer-p mw)))
 "##,
-        expect_test::expect![[
-            r#""ERR (wrong-type-argument bufferp #<window 2 on  *Minibuf-0*>)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx242_active_minibuffer_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (windowp (active-minibuffer-window))
       (eq (active-minibuffer-window) (minibuffer-window)))
 "##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx242_minibuffer_history_variables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'minibuffer-history)
@@ -91,13 +97,14 @@ fn div_cx242_minibuffer_history_variables() {
       (boundp 'search-ring)
       (boundp 'regexp-search-ring))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx242_minibuffer_prompt_setup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -109,13 +116,14 @@ fn div_cx242_minibuffer_prompt_setup() {
           (boundp 'minibuffer-electric-default-map))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx242_minibuffer_completion_helpers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'minibuffer-completion-help)
@@ -124,13 +132,14 @@ fn div_cx242_minibuffer_completion_helpers() {
       (fboundp 'minibuffer-completion-confirm)
       (boundp 'completion-show-commit-message))
 "##,
-        expect_test::expect![[r#""OK (t t t nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx242_minibuffer_keymap_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'minibuffer-local-map)
@@ -140,13 +149,16 @@ fn div_cx242_minibuffer_keymap_query() {
       (keymapp minibuffer-local-map)
       (keymapp minibuffer-local-completion-map))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx242_minibuffer_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-type-argument bufferp #<window 2 on  *Minibuf-0*>)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((mw (minibuffer-window)))
@@ -174,8 +186,6 @@ fn div_cx242_minibuffer_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[
-            r#""ERR (wrong-type-argument bufferp #<window 2 on  *Minibuf-0*>)""#
-        ]],
+        expect,
     );
 }

@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eleven_marker_overlay_textprop_buflocal_clone_narrow_setf_replace_undo_multi_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "e1a"))
@@ -91,7 +92,7 @@ fn combo_eleven_marker_overlay_textprop_buflocal_clone_narrow_setf_replace_undo_
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
+        expect,
     );
 }
 
@@ -99,6 +100,7 @@ fn combo_eleven_marker_overlay_textprop_buflocal_clone_narrow_setf_replace_undo_
 fn combo_eleven_multi_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "e2a"))
@@ -192,7 +194,7 @@ fn combo_eleven_multi_overlay_undo() {
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
+        expect,
     );
 }
 
@@ -200,6 +202,7 @@ fn combo_eleven_multi_overlay_undo() {
 fn combo_eleven_textprop_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "e3a"))
@@ -287,7 +290,7 @@ fn combo_eleven_textprop_replace_undo() {
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
+        expect,
     );
 }
 
@@ -295,6 +298,7 @@ fn combo_eleven_textprop_replace_undo() {
 fn combo_eleven_setf_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "e4a"))
@@ -378,7 +382,7 @@ fn combo_eleven_setf_replace_undo() {
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
+        expect,
     );
 }
 
@@ -386,6 +390,7 @@ fn combo_eleven_setf_replace_undo() {
 fn combo_eleven_replace_setf_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "e5a"))
@@ -473,6 +478,6 @@ fn combo_eleven_replace_setf_undo() {
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
+        expect,
     );
 }

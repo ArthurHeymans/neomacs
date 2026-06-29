@@ -39,7 +39,8 @@ fn oracle_prop_save_excursion_nested_independent_point_preservation() {
             (list (point) (= (point) p1))))
         ;; after outermost restore, back to 5
         (list (point) (= (point) p0))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (5 t)""#]]);
+    let expect = expect_test::expect![[r#""OK (5 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -85,10 +86,9 @@ fn oracle_prop_save_excursion_buffer_switch_set_buffer() {
         (kill-buffer buf-a)
         (kill-buffer buf-b)
         (kill-buffer buf-c)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"neovm--se-comp-A\" 3 \"neovm--se-comp-A\" 3 t t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (\"neovm--se-comp-A\" 3 \"neovm--se-comp-A\" 3 t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -126,10 +126,8 @@ fn oracle_prop_save_excursion_with_save_restriction_interleaved() {
         (list (point) (= (point) outer-pt)
               (point-min) (= (point-min) outer-min)
               (point-max) (= (point-max) outer-max))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (10 t 5 t 25 t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (10 t 5 t 25 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -178,12 +176,10 @@ fn oracle_prop_save_excursion_insert_point_adjustment() {
                           result-before after-before
                           result-after after-after
                           result-at after-at)))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (6 \"01XXX23456789\" 9 \"0123456YYY789\" 6 \"01234ZZZ56789\" 6)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (6 \"01XXX23456789\" 9 \"0123456YYY789\" 6 \"01234ZZZ56789\" 6)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +222,8 @@ fn oracle_prop_save_excursion_delete_region_clamp() {
                         (buffer-string))
                       (point))))
             (list r1 r2 r3)))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (6 5 5)""#]]);
+    let expect = expect_test::expect![[r#""OK (6 5 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -269,10 +266,8 @@ fn oracle_prop_save_excursion_marker_interaction() {
                   (marker-position m4)
                   (marker-buffer m4)
                   (= (marker-position m4) 8))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (13 13 18 23 8 #<killed buffer> t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (13 13 18 23 8 #<killed buffer> t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -328,12 +323,10 @@ fn oracle_prop_save_excursion_error_recovery() {
                        ;; outer save-excursion body continues
                        (list (point)))))
                 (list r1 pt1 r2 pt2 r3 (point))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((caught \"test error inside\" 5) 10 (outer-caught \"outer catch\") 10 (15) 10)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((caught \"test error inside\" 5) 10 (outer-caught \"outer catch\") 10 (15) 10)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -387,12 +380,10 @@ fn oracle_prop_save_excursion_multi_buffer_complex() {
         (kill-buffer buf-src)
         (kill-buffer buf-dst)
         (kill-buffer buf-log)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"neovm--se-src\" 1 (\"word1\" \"word2\" \"word3\" \"word4\" \"word5\") \"DESTINATION:  word1 word2 word3 word4 word5\" \"LOG: found:word1 found:word2 found:word3 found:word4 found:word5\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"neovm--se-src\" 1 (\"word1\" \"word2\" \"word3\" \"word4\" \"word5\") \"DESTINATION:  word1 word2 word3 word4 word5\" \"LOG: found:word1 found:word2 found:word3 found:word4 found:word5\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -427,10 +418,9 @@ fn oracle_prop_save_excursion_loop_repeated_entry() {
               count
               (nreverse positions)
               (buffer-string))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (7 5 (5 7 7 7 7) \"XXXXX XXXXX XXXXX XXXXX XXXXX fff\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (7 5 (5 7 7 7 7) \"XXXXX XXXXX XXXXX XXXXX XXXXX fff\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -466,8 +456,6 @@ fn oracle_prop_save_excursion_widen_inside_narrow() {
               (point-min) (= (point-min) narrow-min)
               (point-max) (= (point-max) narrow-max)
               (buffer-substring (point-min) (point-max)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (8 t 7 t 19 t \"LINE2\nLINE3\n\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (8 t 7 t 19 t \"LINE2\nLINE3\n\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

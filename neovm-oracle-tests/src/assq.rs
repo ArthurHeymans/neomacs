@@ -10,16 +10,14 @@ use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_assq_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle_found, neovm_found) = crate::common::eval_oracle_and_neovm_expect(
-        "(assq 'b '((a . 1) (b . 2)))",
-        expect_test::expect![[r#""OK (b . 2)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (b . 2)""#]];
+    let (oracle_found, neovm_found) =
+        crate::common::eval_oracle_and_neovm_expect("(assq 'b '((a . 1) (b . 2)))", expect);
     assert_ok_eq("(b . 2)", &oracle_found, &neovm_found);
 
-    let (oracle_missing, neovm_missing) = crate::common::eval_oracle_and_neovm_expect(
-        "(assq 'z '((a . 1) (b . 2)))",
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (oracle_missing, neovm_missing) =
+        crate::common::eval_oracle_and_neovm_expect("(assq 'z '((a . 1) (b . 2)))", expect);
     assert_ok_eq("nil", &oracle_missing, &neovm_missing);
 }
 
@@ -27,10 +25,8 @@ fn oracle_prop_assq_basics() {
 fn oracle_prop_assq_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(assq 'a 1)",
-        expect_test::expect![[r#""ERR (wrong-type-argument listp 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp 1)""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect("(assq 'a 1)", expect);
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 

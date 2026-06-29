@@ -9,6 +9,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx328_cl_loop_accumulators_full_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (31 3 9 1 (9 1 16 1 25 81 4 36) (3 3 1 1 4 4 1 1 5 5 9 9 2 2 6 6) (3 3 1 1 4 4 1 1 5 5 9 9 2 2 6 6))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((nums '(3 1 4 1 5 9 2 6)))
@@ -20,15 +23,16 @@ fn div_cx328_cl_loop_accumulators_full_matrix() {
         (cl-loop for n in nums append (list n n))
         (cl-loop for n in nums nconc (list n n))))
 "##,
-        expect_test::expect![[
-            r#""OK (31 3 9 1 (9 1 16 1 25 81 4 36) (3 3 1 1 4 4 1 1 5 5 9 9 2 2 6 6) (3 3 1 1 4 4 1 1 5 5 9 9 2 2 6 6))""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx328_cl_loop_iteration_variants_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Expected a ‘for’ preposition, found in-string\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-loop for i from 1 to 5 collect i)
@@ -40,15 +44,15 @@ fn div_cx328_cl_loop_iteration_variants_all() {
       (cl-loop for i in-string "abc" collect i)
       (cl-loop for i across [10 20 30] collect i))
 "##,
-        expect_test::expect![[
-            r#""ERR (error \"Expected a ‘for’ preposition, found in-string\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx328_cl_loop_conditional_clauses_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((2 4 6) (4 5 6) (1 3 5) (:evens (2 4 6) :odds (1 3 5)))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((nums '(1 2 3 4 5 6)))
@@ -60,13 +64,14 @@ fn div_cx328_cl_loop_conditional_clauses_all() {
                  else collect n into odds
                  finally (return (list :evens evens :odds odds)))))
 "##,
-        expect_test::expect![[r#""OK ((2 4 6) (4 5 6) (1 3 5) (:evens (2 4 6) :odds (1 3 5)))""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx328_cl_loop_finally_initially_side_effects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function return)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (trace)
@@ -79,13 +84,14 @@ fn div_cx328_cl_loop_finally_initially_side_effects() {
                (return :done))
     trace))
 "##,
-        expect_test::expect![[r#""ERR (void-function return)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx328_cl_loop_always_never_thereis() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil t nil 6 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-loop for n in '(2 4 6 8) always (cl-evenp n))
@@ -95,13 +101,16 @@ fn div_cx328_cl_loop_always_never_thereis() {
       (cl-loop for n in '(1 3 5 6 7) thereis (and (cl-evenp n) n))
       (cl-loop for n in '(1 3 5) thereis (and (cl-evenp n) n)))
 "##,
-        expect_test::expect![[r#""OK (t nil t nil 6 nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx328_cl_loop_hash_iteration_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"alpha\" \"beta\" \"gamma\") 6 ((\"alpha\" . 1) (\"beta\" . 2) (\"gamma\" . 3)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
@@ -114,15 +123,14 @@ fn div_cx328_cl_loop_hash_iteration_all() {
                        collect (cons k v))
               (lambda (a b) (string< (car a) (car b))))))
 "##,
-        expect_test::expect![[
-            r#""OK ((\"alpha\" \"beta\" \"gamma\") 6 ((\"alpha\" . 1) (\"beta\" . 2) (\"gamma\" . 3)))""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx328_cl_loop_while_until_termination() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((0 1 2 3 4) (0 1 2 3 4) (1 2 3 4) :stopped)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-loop for i from 0 while (< i 5) collect i)
@@ -133,13 +141,16 @@ fn div_cx328_cl_loop_while_until_termination() {
                when (= i 5) return :stopped
                finally (return :done)))
 "##,
-        expect_test::expect![[r#""OK ((0 1 2 3 4) (0 1 2 3 4) (1 2 3 4) :stopped)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx328_cl_loop_destructuring_with_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (((1 \"a\") (2 \"b\") (3 \"c\") (4 \"d\") (5 \"e\")) (:total 5 :indices (1 2 3)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data '(((1 . "a") (2 . "b")) ((3 . "c")) ((4 . "d") (5 . "e")))))
@@ -151,28 +162,28 @@ fn div_cx328_cl_loop_destructuring_with_nested() {
                  collect i into indices
                  finally (return (list :total total :indices indices)))))
 "##,
-        expect_test::expect![[
-            r#""OK (((1 \"a\") (2 \"b\") (3 \"c\") (4 \"d\") (5 \"e\")) (:total 5 :indices (1 2 3)))""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx328_cl_loop_multiple_for_clauses_parallel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((11 22 33) (10 20 30) (10 110 210))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-loop for x in '(1 2 3) for y in '(10 20 30) collect (+ x y))
       (cl-loop for x in '(1 2 3) for y = (* x 10) collect y)
       (cl-loop for x in '(1 2 3) for y = (* x 10) then (+ y 100) collect y))
 "##,
-        expect_test::expect![[r#""OK ((11 22 33) (10 20 30) (10 110 210))""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx328_cl_loop_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
@@ -201,6 +212,6 @@ fn div_cx328_cl_loop_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     )
 }

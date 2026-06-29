@@ -47,12 +47,10 @@ fn oracle_prop_eq_eql_equal_all_types() {
    (list (eq [1 2] [1 2]) (equal [1 2] [1 2])
          (let ((v [1 2])) (eq v v))
          (equal [] []))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t t t t nil) (t t t t t) (t t t nil nil) (nil t t t) (nil t t t) (nil t t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t t t t nil) (t t t t t) (t t t nil nil) (nil t t t) (nil t t t) (nil t t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -90,10 +88,8 @@ fn oracle_prop_equal_deeply_nested() {
    (equal '(()) '(()))
    (equal '(nil) '(nil))
    (equal '((nil)) '((nil)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil t nil t nil t t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil t nil t nil t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -128,10 +124,8 @@ fn oracle_prop_string_equal_vs_equal() {
   (string-equal "abc" "ab")
   ;; Symbols that look like numbers
   (string-equal '42 "42"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (wrong-type-argument stringp 42)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument stringp 42)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -161,10 +155,9 @@ fn oracle_prop_numeric_eq_vs_equal_sign() {
   ;; Arithmetic results
   (= (+ 1 2) 3) (= (* 2 3) 6)
   (eql (+ 1 2) 3) (eql (+ 1.0 2.0) 3.0))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t nil nil t t t nil t t t t t t t t t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (t t t t t t t nil nil t t t nil t t t t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -198,10 +191,8 @@ fn oracle_prop_compare_strings_all_params() {
   (compare-strings "abc" 0 0 "xyz" 0 0)
   ;; Overlapping range results
   (compare-strings "abcdef" 0 3 "abxdef" 0 3))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t -3 t t t -3 3 t t -3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t -3 t t t -3 3 t t -3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -228,10 +219,8 @@ fn oracle_prop_compare_strings_ignore_case() {
   (compare-strings "HELLO WORLD" nil nil "hello world" nil nil t)
   ;; Partial match with case folding
   (compare-strings "FoObAr" 0 3 "fOo" nil nil t))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (-1 t t -1 -3 1 t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (-1 t t -1 -3 1 t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -294,12 +283,10 @@ fn oracle_prop_custom_deep_equal() {
                               (if (funcall 'neovm--deep-eq a b) t nil)))))
                 test-cases))
     (fmakunbound 'neovm--deep-eq)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t t t) (nil nil t) (t t t) (t t t) (t t t) (t t t) (t t t) (t t t) (nil nil t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t t t) (nil nil t) (t t t) (t t t) (t t t) (t t t) (t t t) (t t t) (nil nil t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -339,10 +326,8 @@ fn oracle_prop_sort_stability_via_equal() {
         (equal (sort (mapcar 'cdr (copy-sequence sorted))
                      (lambda (a b) (string< (symbol-name a) (symbol-name b))))
                '(a b c d e f g))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 . a) (1 . c) (1 . g) (2 . d) (2 . f) (3 . b) (3 . e)) (a c g) (d f) (b e) t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 . a) (1 . c) (1 . g) (2 . d) (2 . f) (3 . b) (3 . e)) (a c g) (d f) (b e) t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

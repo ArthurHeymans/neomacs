@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx278_eieio_4_level_inheritance_call_next_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -31,13 +32,16 @@ fn div_cx278_eieio_4_level_inheritance_call_next_method() {
             (neo-cx278-chain (make-instance 'neo-cx278-l1))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx278_eieio_around_override_before_after() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:result (:around-enter :before :primary :after :around-exit))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -62,15 +66,14 @@ fn div_cx278_eieio_around_override_before_after() {
           (list r (nreverse calls)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (:result (:around-enter :before :primary :after :around-exit))""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx278_eieio_method_combination_max_and_min() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -89,13 +92,14 @@ fn div_cx278_eieio_method_combination_max_and_min() {
             (neo-cx278-minc (make-instance 'neo-cx278-mm))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored error)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx278_eieio_cl_no_primary_method_handling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:caught-no-primary)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -112,13 +116,14 @@ fn div_cx278_eieio_cl_no_primary_method_handling() {
           (error (list :caught-other (car err))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:caught-no-primary)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx278_eieio_eql_specializer_with_integer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:the-answer :the-keyword :default :default)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -134,13 +139,14 @@ fn div_cx278_eieio_eql_specializer_with_integer() {
             (neo-cx278-eqli 99)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:the-answer :the-keyword :default :default)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx278_eieio_with_slots_access_and_mutation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable e)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -157,13 +163,14 @@ fn div_cx278_eieio_with_slots_access_and_mutation() {
               (slot-value inst 'x))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""ERR (void-variable e)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx278_eieio_class_allocated_slot_shared() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 5 1 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -181,13 +188,14 @@ fn div_cx278_eieio_class_allocated_slot_shared() {
               (slot-value b 'id))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (5 5 1 2)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx278_eieio_initialize_instance_after_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK :init-ran""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -201,13 +209,14 @@ fn div_cx278_eieio_initialize_instance_after_method() {
         (slot-value inst 'computed)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK :init-ran""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx278_eieio_print_object_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -225,13 +234,14 @@ fn div_cx278_eieio_print_object_override() {
               (format "%s" inst))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx278_eieio_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -270,6 +280,6 @@ fn div_cx278_eieio_with_marker_overlay_undo_narrow_mega() {
                       (text-properties-at 1))))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     )
 }

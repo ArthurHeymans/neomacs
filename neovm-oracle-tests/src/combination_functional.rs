@@ -33,7 +33,8 @@ fn oracle_prop_functional_compose_chain() {
                     (list (funcall add1-then-double 3)
                           (funcall double-then-square 3)
                           (funcall triple-compose 3))))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (8 36 64)""#]]);
+    let expect = expect_test::expect![[r#""OK (8 36 64)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -52,7 +53,8 @@ fn oracle_prop_functional_partial_application() {
                       (list (funcall add5 10)
                             (funcall add5 0)
                             (funcall mul-by-2-3 7)))))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (15 5 42)""#]]);
+    let expect = expect_test::expect![[r#""OK (15 5 42)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -68,7 +70,8 @@ fn oracle_prop_functional_flip() {
                           (rdiv (funcall flip div)))
                       (list (funcall rsub 3 10)
                             (funcall rdiv 2 10)))))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (7 5)""#]]);
+    let expect = expect_test::expect![[r#""OK (7 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -96,10 +99,8 @@ fn oracle_prop_functional_foldl() {
                     ;; Max
                     (funcall foldl (lambda (a b) (if (> a b) a b))
                              0 '(3 1 4 1 5 9 2 6))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (15 120 (d c b a) 9)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (15 120 (d c b a) 9)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -125,10 +126,8 @@ fn oracle_prop_functional_foldr() {
                  (lambda (x acc) (- x acc))
                  0 '(1 2 3)))
     (fmakunbound 'neovm--test-foldr)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3 4 5) 2)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 2 3 4 5) 2)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -160,10 +159,9 @@ fn oracle_prop_functional_filter_partition() {
                       (funcall partition #'evenp nums)
                       (funcall filter-fn
                                (lambda (x) (> x 5)) nums))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((2 4 6 8 10) ((2 4 6 8 10) (1 3 5 7 9)) (6 7 8 9 10))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((2 4 6 8 10) ((2 4 6 8 10) (1 3 5 7 9)) (6 7 8 9 10))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -192,10 +190,8 @@ fn oracle_prop_functional_group_by() {
                   (funcall group-by
                            (lambda (x) (% x 3))
                            '(1 2 3 4 5 6 7 8 9)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((0 3 6 9) (1 1 4 7) (2 2 5 8))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((0 3 6 9) (1 1 4 7) (2 2 5 8))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -234,12 +230,10 @@ fn oracle_prop_functional_pipeline() {
                                (nreverse result))))
                         (sort filtered
                               (lambda (a b) (> (cdr a) (cdr b)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"Dave\" . 95) (\"Bob\" . 92) (\"Eve\" . 88) (\"Alice\" . 85))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"Dave\" . 95) (\"Bob\" . 92) (\"Eve\" . 88) (\"Alice\" . 85))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -274,10 +268,8 @@ fn oracle_prop_functional_memoize() {
                             (r4 (funcall expensive 3))
                             (r5 (funcall expensive 5)))
                         (list r1 r2 r3 r4 r5 call-count)))))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (125 125 27 27 125 2)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (125 125 27 27 125 2)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(125 125 27 27 125 2)", &o, &n);
 }
 
@@ -310,12 +302,10 @@ fn oracle_prop_functional_mapcat() {
                     (funcall mapcat
                              (lambda (s) (split-string s \" \"))
                              '(\"hello world\" \"foo bar baz\"))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 1 2 1 2 3) (\"hello\" \"world\" \"foo\" \"bar\" \"baz\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 1 2 1 2 3) (\"hello\" \"world\" \"foo\" \"bar\" \"baz\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -337,10 +327,9 @@ fn oracle_prop_functional_scan() {
                     (funcall scan #'* 1 '(1 2 3 4 5))
                     ;; Running max
                     (funcall scan #'max 0 '(3 1 4 1 5 9 2 6))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((0 1 3 6 10 15) (1 1 2 6 24 120) (0 3 3 4 4 5 9 9 9))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((0 1 3 6 10 15) (1 1 2 6 24 120) (0 3 3 4 4 5 9 9 9))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -392,10 +381,8 @@ fn oracle_prop_functional_data_processing_dsl() {
                                                (lambda (r)
                                                  (> (cdr (assq 'age r)) 27))
                                                dataset)))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((name . dave) (score . 95)) ((name . alice) (score . 85)) ((name . carol) (score . 78)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((name . dave) (score . 95)) ((name . alice) (score . 85)) ((name . carol) (score . 78)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

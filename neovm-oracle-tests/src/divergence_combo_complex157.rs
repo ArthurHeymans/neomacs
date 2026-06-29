@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx157_erc_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -17,13 +18,14 @@ fn div_cx157_erc_availability() {
             (boundp 'erc-port)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx157_rcirc_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -34,13 +36,14 @@ fn div_cx157_rcirc_availability() {
             (boundp 'rcirc-default-nick)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx157_notifications_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -50,13 +53,14 @@ fn div_cx157_notifications_availability() {
             (fboundp 'notifications-get-capabilities)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx157_tracking_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored file-missing)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -66,13 +70,14 @@ fn div_cx157_tracking_availability() {
             (boundp 'tracking-buffers)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored file-missing)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx157_erc_fill_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -82,13 +87,14 @@ fn div_cx157_erc_fill_availability() {
             (boundp 'erc-fill-column)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx157_erc_track_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -98,13 +104,14 @@ fn div_cx157_erc_track_availability() {
             (boundp 'erc-track-exclude)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx157_erc_autojoin_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -114,13 +121,14 @@ fn div_cx157_erc_autojoin_availability() {
             (boundp 'erc-autojoin-channels-alist)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx157_erc_log_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -130,13 +138,14 @@ fn div_cx157_erc_log_availability() {
             (boundp 'erc-log-channels-directory)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx157_erc_sasl_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -144,13 +153,14 @@ fn div_cx157_erc_sasl_availability() {
           (fboundp 'erc-sasl-mode))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx157_erc_services_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -160,13 +170,14 @@ fn div_cx157_erc_services_availability() {
             (boundp 'erc-nickserv-passwords)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx157_erc_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -192,6 +203,6 @@ fn div_cx157_erc_with_marker_overlay_undo_narrow_mega() {
                 (text-properties-at 1)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     );
 }

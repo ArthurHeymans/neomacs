@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_hashtable_objects_as_values_with_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function ht-entry-val)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ht-entry ()
@@ -72,7 +73,7 @@ fn combo_eieio_hashtable_objects_as_values_with_edit() {
               (overlay-start ov) (overlay-end ov)
               my-ht-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function ht-entry-val)""#]],
+        expect,
     );
 }
 
@@ -80,6 +81,7 @@ fn combo_eieio_hashtable_objects_as_values_with_edit() {
 fn combo_eieio_hashtable_sxhash_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass hashable-obj ()
@@ -142,7 +144,7 @@ fn combo_eieio_hashtable_sxhash_objects() {
               (overlay-start ov) (overlay-end ov)
               my-ho-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -150,6 +152,7 @@ fn combo_eieio_hashtable_sxhash_objects() {
 fn combo_eieio_hashtable_with_marker_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass marker-entry ()
@@ -213,7 +216,7 @@ fn combo_eieio_hashtable_with_marker_tracking() {
               (overlay-start ov) (overlay-end ov)
               my-me-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -221,6 +224,7 @@ fn combo_eieio_hashtable_with_marker_tracking() {
 fn combo_eieio_hashtable_clrhash_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass clr-entry ()
@@ -274,7 +278,7 @@ fn combo_eieio_hashtable_clrhash_with_undo() {
               (overlay-start ov) (overlay-end ov)
               my-ce-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -282,6 +286,7 @@ fn combo_eieio_hashtable_clrhash_with_undo() {
 fn combo_eieio_hashtable_copy_table_with_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass cpy-entry ()
@@ -339,6 +344,6 @@ fn combo_eieio_hashtable_copy_table_with_objects() {
               (overlay-start ov) (overlay-end ov)
               my-cpe-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

@@ -9,6 +9,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_r0_indent_rigidly_and_horiz_space() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"   line1\n   line2\n   line3\n\" \"  hello   world  \")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer
@@ -21,15 +24,14 @@ fn div_r0_indent_rigidly_and_horiz_space() {
         (delete-horizontal-space)
         (buffer-string)))
 "##,
-        expect_test::expect![[
-            r#""OK (\"   line1\n   line2\n   line3\n\" \"  hello   world  \")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_r0_kill_word_and_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\" three four\" \"one two \")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer
@@ -43,13 +45,14 @@ fn div_r0_kill_word_and_backward() {
         (backward-kill-word 2)
         (buffer-string)))
 "##,
-        expect_test::expect![[r#""OK (\" three four\" \"one two \")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_r0_indent_pp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function indent-pp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -59,6 +62,6 @@ fn div_r0_indent_pp() {
   (indent-pp)
   (buffer-string))
 "##,
-        expect_test::expect![[r#""ERR (void-function indent-pp)""#]],
+        expect,
     );
 }

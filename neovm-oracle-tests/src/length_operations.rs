@@ -17,7 +17,8 @@ fn oracle_prop_length_list() {
                         (length '(a))
                         (length '(a b c))
                         (length '(1 2 3 4 5 6 7 8 9 10)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (0 1 3 10)""#]]);
+    let expect = expect_test::expect![[r#""OK (0 1 3 10)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -28,7 +29,8 @@ fn oracle_prop_length_string() {
                         (length "hello")
                         (length "café")
                         (length "日本語"))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (0 5 4 3)""#]]);
+    let expect = expect_test::expect![[r#""OK (0 5 4 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -38,7 +40,8 @@ fn oracle_prop_length_vector() {
     let form = r#"(list (length [])
                         (length [1 2 3])
                         (length (make-vector 100 0)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (0 3 100)""#]]);
+    let expect = expect_test::expect![[r#""OK (0 3 100)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -63,10 +66,8 @@ fn oracle_length_and_sequencep_vectorlike_boundaries() {
    (sequencep bv)
    (length bv)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t 4194304 nil 3 nil 3 t 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t 4194304 nil 3 nil 3 t 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -95,10 +96,9 @@ fn oracle_length_comparison_vectorlike_and_error_boundaries() {
      (length> '(a b . c) 1)
    (error (list (car err) (cdr err)))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t (wrong-type-argument (sequencep 42)) t t t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (t t t (wrong-type-argument (sequencep 42)) t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +114,8 @@ fn oracle_prop_safe_length_normal() {
                         (safe-length '(1 2 3 4 5))
                         (safe-length "not a list")
                         (safe-length 42))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (0 3 5 0 0)""#]]);
+    let expect = expect_test::expect![[r#""OK (0 3 5 0 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -125,7 +126,8 @@ fn oracle_prop_safe_length_dotted() {
     let form = r#"(list (safe-length '(a . b))
                         (safe-length '(a b . c))
                         (safe-length '(1 2 3 . 4)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (1 2 3)""#]]);
+    let expect = expect_test::expect![[r#""OK (1 2 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -144,10 +146,8 @@ fn oracle_prop_proper_list_p() {
                         (proper-list-p 42)
                         (proper-list-p "string")
                         (proper-list-p [vector]))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 3 1 nil nil nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 3 1 nil nil nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -163,7 +163,8 @@ fn oracle_prop_string_bytes() {
                         (string-bytes "café")
                         (string-bytes "日本語")
                         (string-bytes "\x00\x01\x02"))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (0 5 5 9 3)""#]]);
+    let expect = expect_test::expect![[r#""OK (0 5 5 9 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -179,10 +180,8 @@ fn oracle_prop_string_bytes_vs_length() {
                           (> (string-bytes cjk) (length cjk))
                           (- (string-bytes multi) (length multi))
                           (- (string-bytes cjk) (length cjk))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t 2 12)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t 2 12)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -196,7 +195,8 @@ fn oracle_prop_string_width_basic() {
     let form = r#"(list (string-width "")
                         (string-width "hello")
                         (string-width "café"))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (0 5 4)""#]]);
+    let expect = expect_test::expect![[r#""OK (0 5 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -207,7 +207,8 @@ fn oracle_prop_string_width_cjk() {
     let form = r#"(list (string-width "日本語")
                         (string-width "Abc")
                         (string-width "A日B本C語"))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (6 3 9)""#]]);
+    let expect = expect_test::expect![[r#""OK (6 3 9)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -238,10 +239,8 @@ fn oracle_prop_length_string_statistics() {
                       (list total-chars total-bytes total-width
                             max-len min-len
                             (length strings))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (18 25 21 5 0 6)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (18 25 21 5 0 6)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -266,12 +265,10 @@ fn oracle_prop_length_group_by() {
                       ;; Sort by length
                       (sort groups
                             (lambda (a b) (< (car a) (car b))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 \"a\" \"f\") (2 \"bb\" \"cc\" \"ee\" \"hh\") (3 \"ddd\" \"ggg\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 \"a\" \"f\") (2 \"bb\" \"cc\" \"ee\" \"hh\") (3 \"ddd\" \"ggg\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -310,12 +307,10 @@ fn oracle_prop_proper_list_filter_pipeline() {
                       (list (nreverse proper)
                             (nreverse improper)
                             (nreverse non-list))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((nil 0) ((a b c) 3) ((1 2 3 4) 4) ((single) 1)) (((x . y) 1) ((p q . r) 2)) (42 \"str\" [vec]))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((nil 0) ((a b c) 3) ((1 2 3 4) 4) ((single) 1)) (((x . y) 1) ((p q . r) 2)) (42 \"str\" [vec]))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -357,10 +352,8 @@ fn oracle_prop_string_width_column_format() {
                              (setq i (1+ i)))
                            (mapconcat #'identity (nreverse parts) " | ")))
                        entries)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Name  | Age | City  \" \"Alice | 30  | Boston\" \"Bob   | 25  | NYC   \")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Name  | Age | City  \" \"Alice | 30  | Boston\" \"Bob   | 25  | NYC   \")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

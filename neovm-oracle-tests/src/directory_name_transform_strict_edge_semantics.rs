@@ -45,12 +45,10 @@ fn oracle_directory_name_transform_root_and_empty_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"./\" \"./\" \"a/\" \"a/\" \"/\" \"//\" \"///\" \"\" \".\" \"a\" \"a\" \"a\" \"/\" \"//\" \"/\" nil nil nil t t t (wrong-number-of-arguments (file-name-as-directory 0)) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"./\" \"./\" \"a/\" \"a/\" \"/\" \"//\" \"///\" \"\" \".\" \"a\" \"a\" \"a\" \"/\" \"//\" \"/\" nil nil nil t t t (wrong-number-of-arguments (file-name-as-directory 0)) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -78,12 +76,10 @@ fn oracle_directory_name_transform_handler_result_contract_edges() {
     (fmakunbound 'neomacs--oracle-directory-name-bad-handler)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((error (\"Invalid handler in ‘file-name-handler-alist’\")) (error (\"Invalid handler in ‘file-name-handler-alist’\")) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((error (\"Invalid handler in ‘file-name-handler-alist’\")) (error (\"Invalid handler in ‘file-name-handler-alist’\")) nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -110,10 +106,8 @@ fn oracle_unhandled_file_name_directory_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"./\" \"./\" \"plain/\" \"plain/\" \"/\" \"//\" \"///\" \"/tmp/file/\" \"/tmp/no-handler/\" (wrong-number-of-arguments (unhandled-file-name-directory 0)) (wrong-type-argument (stringp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"./\" \"./\" \"plain/\" \"plain/\" \"/\" \"//\" \"///\" \"/tmp/file/\" \"/tmp/no-handler/\" (wrong-number-of-arguments (unhandled-file-name-directory 0)) (wrong-type-argument (stringp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

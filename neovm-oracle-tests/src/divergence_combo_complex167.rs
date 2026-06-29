@@ -8,6 +8,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx167_parse_partial_sexp_through_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((1 1 8 nil nil nil 0 nil nil (1) nil) (1 1 12 34 nil nil 0 nil 17 (1) nil) (0 nil 1 nil nil nil 0 nil nil nil nil) 34 17)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -18,15 +21,16 @@ fn div_cx167_parse_partial_sexp_through_string() {
         (nth 3 (parse-partial-sexp 1 30))
         (nth 8 (parse-partial-sexp 1 30))))
 "##,
-        expect_test::expect![[
-            r#""OK ((1 1 8 nil nil nil 0 nil nil (1) nil) (1 1 12 34 nil nil 0 nil 17 (1) nil) (0 nil 1 nil nil nil 0 nil nil nil nil) 34 17)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx167_parse_partial_sexp_with_comments() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((1 1 13 nil nil nil 0 nil nil (1) nil) nil (0 nil 29 nil nil nil 0 nil nil nil nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -35,15 +39,14 @@ fn div_cx167_parse_partial_sexp_with_comments() {
         (nth 4 (parse-partial-sexp 1 15))
         (parse-partial-sexp 1 30)))
 "##,
-        expect_test::expect![[
-            r#""OK ((1 1 13 nil nil nil 0 nil nil (1) nil) nil (0 nil 29 nil nil nil 0 nil nil nil nil))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx167_scan_lists_nested_depth() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (scan-error \"Unbalanced parentheses\" 1 31)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -55,13 +58,14 @@ fn div_cx167_scan_lists_nested_depth() {
         (scan-lists (point) 1 3)
         (scan-lists (point) -1 0)))
 "##,
-        expect_test::expect![[r#""ERR (scan-error \"Unbalanced parentheses\" 1 31)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx167_scan_sexps_paren_jump() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (14 16 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -71,13 +75,14 @@ fn div_cx167_scan_sexps_paren_jump() {
         (scan-sexps (point) 2)
         (scan-sexps (point) 3)))
 "##,
-        expect_test::expect![[r#""OK (14 16 nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx167_forward_list_navigate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (4 8 12)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -93,13 +98,14 @@ fn div_cx167_forward_list_navigate() {
             (list p1 p2 (point)))))
     (error (list :error (car e)))))
 "##,
-        expect_test::expect![[r#""OK (4 8 12)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx167_backward_list_navigate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (9 5 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -115,13 +121,14 @@ fn div_cx167_backward_list_navigate() {
             (list p1 p2 (point)))))
     (error (list :error (car e)))))
 "##,
-        expect_test::expect![[r#""OK (9 5 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx167_up_list_navigate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (16 19 22)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -137,13 +144,14 @@ fn div_cx167_up_list_navigate() {
             (list p1 p2 (point)))))
     (error (list :error (car e)))))
 "##,
-        expect_test::expect![[r#""OK (16 19 22)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx167_down_list_navigate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 5 8)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -159,13 +167,14 @@ fn div_cx167_down_list_navigate() {
             (list p1 p2 (point)))))
     (error (list :error (car e)))))
 "##,
-        expect_test::expect![[r#""OK (2 5 8)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx167_parse_partial_sexp_in_string_with_braces() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((0 nil 1 34 nil nil 0 nil 8 nil nil) 34 8)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -174,13 +183,14 @@ fn div_cx167_parse_partial_sexp_in_string_with_braces() {
         (nth 3 (parse-partial-sexp 1 25))
         (nth 8 (parse-partial-sexp 1 25))))
 "##,
-        expect_test::expect![[r#""OK ((0 nil 1 34 nil nil 0 nil 8 nil nil) 34 8)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx167_syntax_ppss_cached() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 1 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -190,13 +200,14 @@ fn div_cx167_syntax_ppss_cached() {
         (syntax-ppss 30)
         (syntax-ppss 45)))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 1 45)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx167_parse_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 1 30)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -221,6 +232,6 @@ fn div_cx167_parse_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1)))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 1 30)""#]],
+        expect,
     );
 }

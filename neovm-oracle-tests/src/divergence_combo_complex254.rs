@@ -8,6 +8,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx254_dir_locals_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (nil /tmp/nix-shell.XcUf3d/neo-cx254-dirlocalsrEwVmD/.dir-locals.el)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((dir (make-temp-file "neo-cx254-dirlocals" t))
@@ -22,15 +25,14 @@ fn div_cx254_dir_locals_read() {
         (list (consp result) result))
     (error (progn (delete-directory dir t) (list :errored (car e))))))
 "##,
-        expect_test::expect![[
-            r#""OK (nil /tmp/nix-shell.XcUf3d/neo-cx254-dirlocalsrEwVmD/.dir-locals.el)""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx254_dir_locals_find() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -41,13 +43,14 @@ fn div_cx254_dir_locals_find() {
           (boundp 'enable-remote-dir-variables))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx254_project_root_finding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -69,13 +72,14 @@ fn div_cx254_project_root_finding() {
                   (when (consp proj) (cdr proj))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx254_vc_backend_detection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -88,13 +92,14 @@ fn div_cx254_vc_backend_detection() {
             (boundp 'vc-follow-symlinks)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx254_compilation_mode_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -108,13 +113,14 @@ fn div_cx254_compilation_mode_navigation() {
             (boundp 'compilation-auto-jump-to-first-error)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx254_flymake_diagnostics_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -128,13 +134,14 @@ fn div_cx254_flymake_diagnostics_availability() {
             (boundp 'flymake-no-changes-timeout)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx254_flymake_diagnostic_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -145,13 +152,14 @@ fn div_cx254_flymake_diagnostic_functions() {
           (boundp 'flymake-diagnostic-functions))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx254_next_error_navigation_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'next-error)
@@ -161,13 +169,14 @@ fn div_cx254_next_error_navigation_availability() {
       (boundp 'next-error-recenter)
       (boundp 'next-error-hook))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx254_project_files_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -179,13 +188,14 @@ fn div_cx254_project_files_query() {
             (boundp 'project-vc-extra-root-markers)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx254_project_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -216,6 +226,6 @@ fn div_cx254_project_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     )
 }

@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_empty_string_boundary_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t 0 t 0 0 t \"\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (string= \"\" \"\")
@@ -19,7 +20,7 @@ fn divergence_empty_string_boundary_ops() {
   (not (string-empty-p \"a\"))
   (substring \"hello\" 0 0)
   (string= (substring \"hello\" 0 0) \"\")) ",
-        expect_test::expect![[r#""OK (t t t 0 t 0 0 t \"\" t)""#]],
+        expect,
     );
 }
 
@@ -27,6 +28,8 @@ fn divergence_empty_string_boundary_ops() {
 fn divergence_nil_args_to_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""OK (0 nil (1 2) (1 2) nil nil nil nil nil nil nil nil \"\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (length nil)
@@ -42,7 +45,7 @@ fn divergence_nil_args_to_functions() {
   (member 1 nil)
   (mapcar #'1+ nil)
   (concat)) ",
-        expect_test::expect![[r#""OK (0 nil (1 2) (1 2) nil nil nil nil nil nil nil nil \"\")""#]],
+        expect,
     );
 }
 
@@ -50,6 +53,7 @@ fn divergence_nil_args_to_functions() {
 fn divergence_numeric_boundary_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (= (expt 2 63) 9223372036854775808)
@@ -63,7 +67,7 @@ fn divergence_numeric_boundary_values() {
   (not (zerop -1))
   (= (max 1 2 3) 3)
   (= (min -1 -2 -3) -3)) ",
-        expect_test::expect![[r#""OK (t t t t t t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -71,6 +75,7 @@ fn divergence_numeric_boundary_values() {
 fn divergence_buffer_empty_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (= (point-min) 1)
@@ -82,7 +87,7 @@ fn divergence_buffer_empty_boundary() {
   (= (line-number-at-pos) 1)
   (string= (buffer-name) \"*scratch*\")
   (buffer-modified-p)) ",
-        expect_test::expect![[r#""OK (t t t t t t t nil nil)""#]],
+        expect,
     );
 }
 
@@ -90,6 +95,7 @@ fn divergence_buffer_empty_boundary() {
 fn divergence_string_multibyte_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((empty \"\")
         (single \"x\")
@@ -104,7 +110,7 @@ fn divergence_string_multibyte_boundary() {
         (string= (substring mb 0 1) mb)
         (multibyte-string-p mb)
         (not (multibyte-string-p single)))) ",
-        expect_test::expect![[r#""OK (t t t t t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -112,6 +118,7 @@ fn divergence_string_multibyte_boundary() {
 fn divergence_symbol_nil_t_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t nil nil t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (null nil)
@@ -126,7 +133,7 @@ fn divergence_symbol_nil_t_boundary() {
   (eq nil nil)
   (eq t t)
   (not (eq nil t))) ",
-        expect_test::expect![[r#""OK (t t nil nil t t t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -134,6 +141,7 @@ fn divergence_symbol_nil_t_boundary() {
 fn divergence_regex_empty_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"abc\")
@@ -144,7 +152,7 @@ fn divergence_regex_empty_match() {
             (match-beginning 0) (match-end 0)
             (match-string 0)
             (buffer-string)))) ",
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -152,6 +160,7 @@ fn divergence_regex_empty_match() {
 fn divergence_hash_table_empty_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (0 t t t t nil equal)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((ht (make-hash-table :test 'equal)))
   (list (hash-table-count ht)
@@ -161,7 +170,7 @@ fn divergence_hash_table_empty_ops() {
         (eq (gethash \"key\" ht 'missing) 'missing)
         (maphash (lambda (k v) (list k v)) ht)
         (hash-table-test ht))) ",
-        expect_test::expect![[r#""OK (0 t t t t nil equal)""#]],
+        expect,
     );
 }
 
@@ -169,6 +178,7 @@ fn divergence_hash_table_empty_ops() {
 fn divergence_vector_empty_and_single() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (0 1 42 t 1 2 [42] [42 1 2] nil (42) t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((v0 [])
         (v1 [42])
@@ -183,7 +193,7 @@ fn divergence_vector_empty_and_single() {
         (append v0 nil)
         (append v1 nil)
         (equal (append v1 nil) '(42)))) ",
-        expect_test::expect![[r#""OK (0 1 42 t 1 2 [42] [42 1 2] nil (42) t)""#]],
+        expect,
     );
 }
 
@@ -191,6 +201,7 @@ fn divergence_vector_empty_and_single() {
 fn divergence_char_boundary_codepoints() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (= ?A 65)
@@ -203,6 +214,6 @@ fn divergence_char_boundary_codepoints() {
   (char-or-string-p \"A\")
   (not (char-or-string-p 65))
   (= (char-after ?A) 65)) ",
-        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
+        expect,
     );
 }

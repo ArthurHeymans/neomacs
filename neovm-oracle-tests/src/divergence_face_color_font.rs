@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_face_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'face-attribute)
@@ -15,7 +16,7 @@ fn divergence_face_attributes() {
   (fboundp 'face-foreground)
   (fboundp 'face-background)
   (fboundp 'face-font)) "#,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -23,6 +24,7 @@ fn divergence_face_attributes() {
 fn divergence_face_underline_box() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'set-face-underline)
@@ -31,7 +33,7 @@ fn divergence_face_underline_box() {
   (fboundp 'face-inverse-video-p)
   (fboundp 'set-face-inverse-video)
   (fboundp 'face-stipple)) "#,
-        expect_test::expect![[r#""OK (t t nil t t t)""#]],
+        expect,
     );
 }
 
@@ -39,6 +41,7 @@ fn divergence_face_underline_box() {
 fn divergence_face_realized() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'face-id)
@@ -47,7 +50,7 @@ fn divergence_face_realized() {
   (fboundp 'list-faces-display)
   (fboundp 'describe-face)
   (fboundp 'face-list)) "#,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -55,6 +58,7 @@ fn divergence_face_realized() {
 fn divergence_color_names() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'color-name-to-hex)
@@ -63,7 +67,7 @@ fn divergence_color_names() {
   (fboundp 'defined-colors)
   (fboundp 'color-supported-p)
   (listp (defined-colors))) "#,
-        expect_test::expect![[r#""OK (nil t t t t t)""#]],
+        expect,
     );
 }
 
@@ -71,6 +75,7 @@ fn divergence_color_names() {
 fn divergence_color_rgb_hsv() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'color-rgb-to-hsv)
@@ -78,7 +83,7 @@ fn divergence_color_rgb_hsv() {
   (fboundp 'color-complement-hex)
   (fboundp 'color-gradient)
   (fboundp 'color-distance)) "#,
-        expect_test::expect![[r#""OK (nil nil nil nil t)""#]],
+        expect,
     );
 }
 
@@ -86,6 +91,7 @@ fn divergence_color_rgb_hsv() {
 fn divergence_font_spec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'font-spec)
@@ -94,7 +100,7 @@ fn divergence_font_spec() {
   (fboundp 'font-xlfd-name)
   (fboundp 'list-fonts)
   (fboundp 'list-families)) "#,
-        expect_test::expect![[r#""OK (t t t t t nil)""#]],
+        expect,
     );
 }
 
@@ -102,6 +108,7 @@ fn divergence_font_spec() {
 fn divergence_font_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil nil nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'font-match)
@@ -109,7 +116,7 @@ fn divergence_font_match() {
   (fboundp 'font-close)
   (fboundp 'font-info)
   (fboundp 'font-at)) "#,
-        expect_test::expect![[r#""OK (nil nil nil t t)""#]],
+        expect,
     );
 }
 
@@ -117,6 +124,7 @@ fn divergence_font_match() {
 fn divergence_cursor_face() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t (t box hollow bar hbar nil) t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'cursor-type)
@@ -124,7 +132,7 @@ fn divergence_cursor_face() {
   (boundp 'blink-cursor-blinks)
   (boundp 'blink-cursor-interval)
   (boundp 'blink-cursor-delay)) "#,
-        expect_test::expect![[r#""OK (t (t box hollow bar hbar nil) t t t)""#]],
+        expect,
     );
 }
 
@@ -132,13 +140,14 @@ fn divergence_cursor_face() {
 fn divergence_mouse_face() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'mouse-highlight)
   (boundp 'mouse-yank-at-point)
   (boundp 'focus-follows-mouse)
   (booleanp focus-follows-mouse)) "#,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -146,6 +155,7 @@ fn divergence_mouse_face() {
 fn divergence_theme_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'custom-theme-set-faces)
@@ -153,6 +163,6 @@ fn divergence_theme_functions() {
   (fboundp 'custom-declare-theme)
   (fboundp 'custom-check-theme)
   (fboundp 'custom-theme-p)) "#,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }

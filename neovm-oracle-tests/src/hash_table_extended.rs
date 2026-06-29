@@ -39,10 +39,9 @@ fn oracle_prop_hash_table_full_keyword_args() {
                      (hash-table-count h-equal)
                      (gethash "hello" h-equal)
                      (gethash '(1 2 3) h-equal)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (eq 2 eql 2 answer float-answer equal 2 world triple)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (eq 2 eql 2 answer float-answer equal 2 world triple)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -79,10 +78,8 @@ fn oracle_prop_hash_table_count_size_test_after_mutations() {
                             (gethash "key-5" h)    ; was overwritten
                             (gethash "key-15" h))) ; original value
                   )"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((20 20 15 15) equal nil 500 150)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((20 20 15 15) equal nil 500 150)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -119,12 +116,10 @@ fn oracle_prop_hash_table_copy_shallow_semantics() {
                        (gethash "nums" h2)
                        ;; Tests are preserved
                        (eq (hash-table-test h1) (hash-table-test h2)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (3 3 nil only-in-h2 (\"a\" \"b\" \"c\") nil (999 2 3) (999 2 3) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (3 3 nil only-in-h2 (\"a\" \"b\" \"c\") nil (999 2 3) (999 2 3) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -156,10 +151,8 @@ fn oracle_prop_hash_table_clrhash_verify_empty() {
                                 mapped
                                 (hash-table-count h)
                                 (gethash 'new-key h))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (50 \"val-25\" 0 nil nil 1 new-val)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (50 \"val-25\" 0 nil nil 1 new-val)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -202,12 +195,10 @@ fn oracle_prop_hash_table_maphash_transform() {
                                                             #'string<))
                                                result)))))
                       (nreverse result)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((A \"Alice\" \"Carol\" \"Grace\") (B \"Bob\" \"Eve\" \"Frank\") (C \"Dave\") (D \"Heidi\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((A \"Alice\" \"Carol\" \"Grace\") (B \"Bob\" \"Eve\" \"Frank\") (C \"Dave\") (D \"Heidi\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -240,12 +231,10 @@ fn oracle_prop_hash_table_frequency_counter_complex_keys() {
                                   (and (= (cdr a) (cdr b))
                                        (string< (format "%S" (car a))
                                                 (format "%S" (car b)))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((a b) . 4) ((b c) . 3) ((c a) . 2) ((b d) . 1) ((c d) . 1) ((d a) . 1) ((d e) . 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((a b) . 4) ((b c) . 3) ((c a) . 2) ((b d) . 1) ((c d) . 1) ((d a) . 1) ((d e) . 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -277,10 +266,9 @@ fn oracle_user_hash_function_cannot_mutate_same_table() {
    (nreverse log)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((error \"hash table test modifies table\") 0 (outer))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((error \"hash table test modifies table\") 0 (outer))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -315,10 +303,9 @@ fn oracle_user_hash_function_cannot_mutate_same_table_during_gethash() {
           (car log))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((error \"hash table test modifies table\") 0 1 seed)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((error \"hash table test modifies table\") 0 1 seed)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -349,12 +336,10 @@ fn oracle_user_compare_function_cannot_mutate_same_table() {
    (nreverse log)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""ERR (error \"hash table test modifies table\" #s(hash-table test neomacs-oracle-mutating-compare data (first one)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""ERR (error \"hash table test modifies table\" #s(hash-table test neomacs-oracle-mutating-compare data (first one)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -403,12 +388,10 @@ fn oracle_prop_hash_table_nested() {
                                              stats))))
                        company)
                       (sort stats (lambda (a b) (string< (car a) (car b))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"Engineering\" 3 360000 120000 \"Carol\" 130000) (\"Marketing\" 2 185000 92500 \"Eve\" 95000) (\"Sales\" 3 265000 88333 \"Heidi\" 92000))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"Engineering\" 3 360000 120000 \"Carol\" 130000) (\"Marketing\" 2 185000 92500 \"Eve\" 95000) (\"Sales\" 3 265000 88333 \"Heidi\" 92000))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -453,12 +436,10 @@ fn oracle_prop_hash_table_alist_interconversion() {
                                   (dolist (pair sorted)
                                     (puthash (car pair) (cdr pair) h2))
                                   (= (hash-table-count h) (hash-table-count h2))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (5 (\"version\" . \"2.0.0\") (\"deps\" . 6) nil (\"new-field\" . added) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (5 (\"version\" . \"2.0.0\") (\"deps\" . 6) nil (\"new-field\" . added) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -499,8 +480,7 @@ fn oracle_prop_hash_table_set_operations() {
                               (list (sort inter #'<)
                                     (sort union-list #'<)
                                     (sort diff #'<))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((5 6 7 8) (1 2 3 4 5 6 7 8 9 10 11 12) (1 2 3 4))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((5 6 7 8) (1 2 3 4 5 6 7 8 9 10 11 12) (1 2 3 4))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

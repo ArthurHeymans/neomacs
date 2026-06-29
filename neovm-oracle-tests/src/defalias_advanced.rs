@@ -25,7 +25,8 @@ fn oracle_prop_defalias_basic_alias() {
         (funcall 'neovm--da-add)
         (fboundp 'neovm--da-add))
     (fmakunbound 'neovm--da-add)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (6 30 0 t)""#]]);
+    let expect = expect_test::expect![[r#""OK (6 30 0 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -50,7 +51,8 @@ fn oracle_prop_defalias_with_docstring() {
         ;; The docstring should be accessible
         (stringp (documentation 'neovm--da-documented)))
     (fmakunbound 'neovm--da-documented)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (7 300 t t)""#]]);
+    let expect = expect_test::expect![[r#""OK (7 300 t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +73,8 @@ fn oracle_prop_defalias_overwrite_existing() {
           (let ((r3 (funcall 'neovm--da-overwrite 5)))
             (list r1 r2 r3))))
     (fmakunbound 'neovm--da-overwrite)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (10 50 4)""#]]);
+    let expect = expect_test::expect![[r#""OK (10 50 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -101,12 +104,10 @@ fn oracle_prop_defalias_to_lambda_complex() {
         ;; Use mapcar with the defalias'd function
         (mapcar 'neovm--da-classify '(-100 -1 0 1 9 10 99 100 1000)))
     (fmakunbound 'neovm--da-classify)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (negative zero small medium large (negative negative zero small small medium medium large large))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (negative zero small medium large (negative negative zero small small medium medium large large))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -143,10 +144,8 @@ fn oracle_prop_defalias_chain() {
     (fmakunbound 'neovm--da-a)
     (fmakunbound 'neovm--da-b)
     (fmakunbound 'neovm--da-c)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (105 105 105 t t t t 1998)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (105 105 105 t t t t 1998)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -175,10 +174,8 @@ fn oracle_prop_defalias_symbol_function_introspection() {
             (funcall 'neovm--da-intr-copy 'hello 'world))))
     (fmakunbound 'neovm--da-intr)
     (fmakunbound 'neovm--da-intr-copy)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((x . y) t t nil (hello . world))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((x . y) t t nil (hello . world))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -213,10 +210,8 @@ fn oracle_prop_defalias_fboundp_fmakunbound_lifecycle() {
     (fmakunbound 'neovm--da-lc)
     (setq results (cons (fboundp 'neovm--da-lc) results))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil t alive nil caught-void resurrected nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil t alive nil caught-void resurrected nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -286,12 +281,10 @@ fn oracle_prop_defalias_dispatch_table() {
     (fmakunbound 'neovm--dispatch-length)
     (fmakunbound 'neovm--dispatch-run)
     (makunbound 'neovm--dispatch-table)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ok \"Hello, Alice!\") (ok \"BOB!!!\") (ok \"scamE\") (ok \"7\") (error \"unknown command: dance\") (error \"handler not callable\") (ok \"WHISPER: charlie\") ((ok \"Hello, X!\") (ok \"cba\") (ok \"2\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ok \"Hello, Alice!\") (ok \"BOB!!!\") (ok \"scamE\") (ok \"7\") (error \"unknown command: dance\") (error \"handler not callable\") (ok \"WHISPER: charlie\") ((ok \"Hello, X!\") (ok \"cba\") (ok \"2\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -352,8 +345,7 @@ fn oracle_prop_defalias_predicate_composition() {
     (fmakunbound 'neovm--pred-even)
     (fmakunbound 'neovm--pred-pos-even)
     (fmakunbound 'neovm--pred-neg-or-even)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((2 4 6) (-4 -3 -2 -1 0 2 4 6) (nil nil t) (nil t nil t))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((2 4 6) (-4 -3 -2 -1 0 2 4 6) (nil nil t) (nil t nil t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

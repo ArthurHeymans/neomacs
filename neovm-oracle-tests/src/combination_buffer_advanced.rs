@@ -53,10 +53,8 @@ fn oracle_prop_bufadv_binary_search_sorted_lines() {
           (funcall 'neovm--buf-bsearch 10)
           (funcall 'neovm--buf-bsearch 95)))
     (fmakunbound 'neovm--buf-bsearch)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 10 20 nil nil 2 19)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 10 20 nil nil 2 19)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -112,10 +110,8 @@ fn oracle_prop_bufadv_longest_common_subsequence() {
         (funcall 'neovm--lcs "ABC" "ABC")
         (funcall 'neovm--lcs "ABC" "DEF"))
     (fmakunbound 'neovm--lcs)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"BDAB\" \"GTAB\" \"\" \"ABC\" \"\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"BDAB\" \"GTAB\" \"\" \"ABC\" \"\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -182,10 +178,8 @@ fn oracle_prop_bufadv_multi_buffer_aggregation() {
                       (kill-buffer buf-a)
                       (kill-buffer buf-b)
                       (kill-buffer buf-c)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK \"total=45\nmax=iota:9\ncount=9\n\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"total=45\nmax=iota:9\ncount=9\n\"""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -241,12 +235,10 @@ fn oracle_prop_bufadv_fixed_width_records() {
                           avg-age
                           (car max-score-rec)
                           (mapcar #'car sorted)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (5 30 \"Dave\" (\"Dave\" \"Bob\" \"Eve\" \"Alice\" \"Carol\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (5 30 \"Dave\" (\"Dave\" \"Bob\" \"Eve\" \"Alice\" \"Carol\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -320,10 +312,8 @@ fn oracle_prop_bufadv_circular_buffer_simulation() {
     (fmakunbound 'neovm--ring-push)
     (fmakunbound 'neovm--ring-pop)
     (fmakunbound 'neovm--ring-to-list)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((3 4 5 6 7) 3 4 (5 6 7) (6 7 100 200 300))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((3 4 5 6 7) 3 4 (5 6 7) (6 7 100 200 300))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -378,8 +368,6 @@ fn oracle_prop_bufadv_run_length_encoding() {
               (string= d2 s2)))
     (fmakunbound 'neovm--rle-encode)
     (fmakunbound 'neovm--rle-decode)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"3A3B2C5D1E6F2G1H1I4J\" t \"1A1B1C1D1E\" t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"3A3B2C5D1E6F2G1H1I4J\" t \"1A1B1C1D1E\" t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

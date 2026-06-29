@@ -34,10 +34,8 @@ fn oracle_libxml_parse_region_validates_region_before_base_url_like_gnu() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-type-argument (integer-or-marker-p \"x\")) (args-out-of-range 3 t 99 100) (wrong-type-argument (integer-or-marker-p \"x\")) (wrong-type-argument (stringp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-type-argument (integer-or-marker-p \"x\")) (args-out-of-range 3 t 99 100) (wrong-type-argument (integer-or-marker-p \"x\")) (wrong-type-argument (stringp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

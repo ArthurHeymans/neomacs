@@ -54,12 +54,10 @@ fn oracle_prop_keymap_ext_multi_level_prefix_with_parent() {
     ;; Prefix sub-keymaps are themselves keymaps
     (keymapp (lookup-key local (kbd "C-x")))
     (keymapp (lookup-key local (kbd "C-c")))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (mode-quit local-save base-find mode-compile mode-kill local-run base-save nil t t t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (mode-quit local-save base-find mode-compile mode-kill local-run base-save nil t t t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -103,12 +101,10 @@ fn oracle_prop_keymap_ext_copy_prefix_independence() {
       ;; Both still keymaps
       (keymapp orig)
       (keymapp copy))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (new-find orig-save new-buf orig-compile nil orig-a orig-find orig-save nil copy-compile copy-kill copy-a t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (new-find orig-save new-buf orig-compile nil orig-a orig-find orig-save nil copy-compile copy-kill copy-a t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -156,12 +152,10 @@ fn oracle_prop_keymap_ext_define_key_formats() {
     ;; Unbound
     (lookup-key m [f3])
     (lookup-key m [?z])))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""ERR (error \"Key sequence <f1> a starts with non-prefix key <f1>\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Key sequence <f1> a starts with non-prefix key <f1>\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -213,12 +207,10 @@ fn oracle_prop_keymap_ext_reparenting() {
           ;; parent chain verification
           (null (keymap-parent child))
           (eq (keymap-parent parent) gp2))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (gp1-a gp1-b nil parent-d child-e gp2-a nil gp2-c parent-d child-e nil nil child-e t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (gp1-a gp1-b nil parent-d child-e gp2-a nil gp2-c parent-d child-e nil nil child-e t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -256,10 +248,8 @@ fn oracle_prop_keymap_ext_full_keymap_char_table() {
       ;; Prefix
       (lookup-key full (kbd "C-c C-t"))
       (keymapp (lookup-key full (kbd "C-c"))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t cmd-a cmd-b cmd-z nil cmd-f5 cmd-cc-ct t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t cmd-a cmd-b cmd-z nil cmd-f5 cmd-cc-ct t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -293,10 +283,8 @@ fn oracle_prop_keymap_ext_lookup_key_too_long() {
     (lookup-key m [?z])
     ;; Unbound prefix continuation: C-x C-z is nil (C-x exists but C-z doesn't)
     (lookup-key m [24 26])))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (cmd-a 1 1 cmd-find (t 2) nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (cmd-a 1 1 cmd-find (t 2) nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -357,10 +345,8 @@ fn oracle_prop_keymap_ext_mode_system() {
       (length global-km)
       (length prog-km)
       (length my-km))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (minor-override-compile minor-special my-test prog-run my-debug global-keyboard-quit global-exit global-help prog-lint nil 5 8 11)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (minor-override-compile minor-special my-test prog-run my-debug global-keyboard-quit global-exit global-help prog-lint nil 5 8 11)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

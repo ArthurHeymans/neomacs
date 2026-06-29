@@ -8,6 +8,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx69_regex_groups_and_backrefs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (0 0 19 0 5 6 11 12 15 \"hello world foo bar\" \"hello\" \"world\" \"foo\" \"bar\" (0 19 0 5 6 11 12 15 16 19))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "hello world foo bar"))
@@ -23,15 +26,14 @@ fn div_cx69_regex_groups_and_backrefs() {
         (match-string 4 s)
         (match-data)))
 "##,
-        expect_test::expect![[
-            r#""OK (0 0 19 0 5 6 11 12 15 \"hello world foo bar\" \"hello\" \"world\" \"foo\" \"bar\" (0 19 0 5 6 11 12 15 16 19))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx69_backreference_match_word_repeat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 \"hello\" nil 0 \"123\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -41,13 +43,16 @@ fn div_cx69_backreference_match_word_repeat() {
  (string-match "\\([0-9]+\\)-\\1" "123-123")
  (match-string 1 "123-123"))
 "##,
-        expect_test::expect![[r#""OK (0 \"hello\" nil 0 \"123\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx69_char_class_syntax_classes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"a\" \"abc\" \"123\" \" \" \"!!!\" \"var_123\" \"abcXYZ\" \"abcXYZ\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (pat-and-str)
@@ -65,15 +70,14 @@ fn div_cx69_char_class_syntax_classes() {
           ("[[:upper:]]+" "abcXYZ")
           ("[[:lower:]]+" "abcXYZ")))
 "##,
-        expect_test::expect![[
-            r#""OK (\"a\" \"abc\" \"123\" \" \" \"!!!\" \"var_123\" \"abcXYZ\" \"abcXYZ\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx69_case_fold_search_vs_case_fold_in_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 0 0 0 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "Hello WORLD foo"))
@@ -84,13 +88,14 @@ fn div_cx69_case_fold_search_vs_case_fold_in_pattern() {
    (let ((case-fold-search nil)) (string-match "\\Chello" s) (match-beginning 0))
    (let ((case-fold-search t))   (string-match "WORLD" s) (match-beginning 0))))
 "##,
-        expect_test::expect![[r#""OK (0 0 0 0 6)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx69_multibyte_ranges_in_char_class() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (6 \"世界\" 12 \"é\" 17 \"123\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "hello 世界 café 世界 123"))
@@ -101,13 +106,16 @@ fn div_cx69_multibyte_ranges_in_char_class() {
         (string-match "[0-9]+" s)
         (match-string 0 s)))
 "##,
-        expect_test::expect![[r#""OK (6 \"世界\" 12 \"é\" 17 \"123\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx69_regexp_opt_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"\\\\(?:ap\\\\(?:ple\\\\|ricot\\\\)\\\\|b\\\\(?:anana\\\\|erry\\\\)\\\\|cherry\\\\)\" \"\\\\<\\\\(ap\\\\(?:ple\\\\|ricot\\\\)\\\\|b\\\\(?:anana\\\\|erry\\\\)\\\\|cherry\\\\)\\\\>\" \"\\\\_<\\\\(ap\\\\(?:ple\\\\|ricot\\\\)\\\\|b\\\\(?:anana\\\\|erry\\\\)\\\\|cherry\\\\)\\\\_>\" 7 \"apple\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((words '("apple" "apricot" "banana" "berry" "cherry")))
@@ -118,15 +126,16 @@ fn div_cx69_regexp_opt_variants() {
           (string-match opt-none "I love apple pie")
           (match-string 0 "I love apple pie"))))
 "##,
-        expect_test::expect![[
-            r#""OK (\"\\\\(?:ap\\\\(?:ple\\\\|ricot\\\\)\\\\|b\\\\(?:anana\\\\|erry\\\\)\\\\|cherry\\\\)\" \"\\\\<\\\\(ap\\\\(?:ple\\\\|ricot\\\\)\\\\|b\\\\(?:anana\\\\|erry\\\\)\\\\|cherry\\\\)\\\\>\" \"\\\\_<\\\\(ap\\\\(?:ple\\\\|ricot\\\\)\\\\|b\\\\(?:anana\\\\|erry\\\\)\\\\|cherry\\\\)\\\\_>\" 7 \"apple\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx69_regexp_quote_special_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"\\\\.\" 0 \".\") (\"\\\\+\" 0 \"+\") (\"\\\\*\" 0 \"*\") (\"\\\\?\" 0 \"?\") (\"(\" 0 \"(\") (\")\" 0 \")\") (\"\\\\[\" 0 \"[\") (\"]\" 0 \"]\") (\"{\" 0 \"{\") (\"}\" 0 \"}\") (\"|\" 0 \"|\") (\"\\\\^\" 0 \"^\") (\"\\\\$\" 0 \"$\") (\"\\\\\\\\\" 0 \"\\\\\") (\"a\\\\.b\\\\*c\\\\?\" 0 \"a.b*c?\") (\"12\\\\+34\" 0 \"12+34\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (s)
@@ -135,15 +144,14 @@ fn div_cx69_regexp_quote_special_chars() {
         '("." "+" "*" "?" "(" ")" "[" "]" "{" "}" "|"
           "^" "$" "\\" "a.b*c?" "12+34"))
 "##,
-        expect_test::expect![[
-            r#""OK ((\"\\\\.\" 0 \".\") (\"\\\\+\" 0 \"+\") (\"\\\\*\" 0 \"*\") (\"\\\\?\" 0 \"?\") (\"(\" 0 \"(\") (\")\" 0 \")\") (\"\\\\[\" 0 \"[\") (\"]\" 0 \"]\") (\"{\" 0 \"{\") (\"}\" 0 \"}\") (\"|\" 0 \"|\") (\"\\\\^\" 0 \"^\") (\"\\\\$\" 0 \"$\") (\"\\\\\\\\\" 0 \"\\\\\") (\"a\\\\.b\\\\*c\\\\?\" 0 \"a.b*c?\") (\"12\\\\+34\" 0 \"12+34\"))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx69_looking_at_and_re_search_forward_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t \"alpha\" 10 \"123\" 5 \"a\" 10 10)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -158,13 +166,14 @@ fn div_cx69_looking_at_and_re_search_forward_backward() {
         (re-search-forward "[0-9]+" nil t)
         (point)))
 "##,
-        expect_test::expect![[r#""OK (t \"alpha\" 10 \"123\" 5 \"a\" 10 10)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx69_match_data_save_and_restore_with_set_match_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 0 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (saved)
@@ -179,13 +188,14 @@ fn div_cx69_match_data_save_and_restore_with_set_match_data() {
           (match-string 2)
           (match-string 3))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 0 5)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx69_skip_chars_forward_backward_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (4 9 10 15 16 19)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -204,13 +214,14 @@ fn div_cx69_skip_chars_forward_backward_syntax() {
             (skip-syntax-forward "w")
             (list p1 p2 p3 p4 p5 (point))))))))
 "##,
-        expect_test::expect![[r#""OK (4 9 10 15 16 19)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx69_replace_match_with_backref_substitution() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"third second first\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -220,13 +231,14 @@ fn div_cx69_replace_match_with_backref_substitution() {
   (replace-match "\\3 \\2 \\1")
   (buffer-string))
 "##,
-        expect_test::expect![[r#""OK \"third second first\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx69_replace_regexp_in_buffer_global() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"let foo = bar;\nlet baz = qux;\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -236,13 +248,14 @@ fn div_cx69_replace_regexp_in_buffer_global() {
     (replace-match "let \\1 = \\2;"))
   (buffer-string))
 "##,
-        expect_test::expect![[r#""OK \"let foo = bar;\nlet baz = qux;\n\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx69_regex_match_replace_marker_overlay_narrow_undo_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -273,6 +286,6 @@ fn div_cx69_regex_match_replace_marker_overlay_narrow_undo_mega() {
             (text-properties-at 1)
             (point-min) (point-max)))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

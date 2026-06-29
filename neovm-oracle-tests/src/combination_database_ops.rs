@@ -88,12 +88,10 @@ fn oracle_prop_db_ops_insert_select_where_project() {
     (fmakunbound 'neovm--db-select)
     (makunbound 'neovm--db-tables)
     (makunbound 'neovm--db-next-ids)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (6 (((name . \"Alice\") (salary . 90000)) ((name . \"Charlie\") (salary . 95000)) ((name . \"Eve\") (salary . 85000))) (((name . \"Alice\") (dept . \"Engineering\")) ((name . \"Charlie\") (dept . \"Engineering\")) ((name . \"Eve\") (dept . \"Engineering\"))) (((name . \"Alice\")) ((name . \"Bob\")) ((name . \"Charlie\")) ((name . \"Diana\")) ((name . \"Eve\")) ((name . \"Frank\"))) (((name . \"Alice\") (salary . 90000)) ((name . \"Charlie\") (salary . 95000))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (6 (((name . \"Alice\") (salary . 90000)) ((name . \"Charlie\") (salary . 95000)) ((name . \"Eve\") (salary . 85000))) (((name . \"Alice\") (dept . \"Engineering\")) ((name . \"Charlie\") (dept . \"Engineering\")) ((name . \"Eve\") (dept . \"Engineering\"))) (((name . \"Alice\")) ((name . \"Bob\")) ((name . \"Charlie\")) ((name . \"Diana\")) ((name . \"Eve\")) ((name . \"Frank\"))) (((name . \"Alice\") (salary . 90000)) ((name . \"Charlie\") (salary . 95000))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -168,12 +166,10 @@ fn oracle_prop_db_ops_update_delete() {
           (length table-after-delete)
           ;; Final table names
           (mapcar (lambda (row) (cdr (assq 'name row))) table-after-delete))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (2 (\"Charlie\" \"Eve\") 0 5 (\"Alice\" \"Bob\" \"Charlie\" \"Diana\" \"Eve\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (2 (\"Charlie\" \"Eve\") 0 5 (\"Alice\" \"Bob\" \"Charlie\" \"Diana\" \"Eve\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -237,12 +233,10 @@ fn oracle_prop_db_ops_order_by() {
               (funcall order-by-multi table
                        (list (cons 'dept #'string<)
                              (cons 'name #'string<)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"Alice\" \"Bob\" \"Charlie\" \"Diana\" \"Eve\") ((\"Bob\" 95000) (\"Alice\" 90000) (\"Eve\" 85000) (\"Charlie\" 80000) (\"Diana\" 70000)) ((\"A\" \"Alice\" 90000) (\"A\" \"Eve\" 85000) (\"A\" \"Diana\" 70000) (\"B\" \"Bob\" 95000) (\"B\" \"Charlie\" 80000)) ((\"A\" \"Alice\") (\"A\" \"Diana\") (\"A\" \"Eve\") (\"B\" \"Bob\") (\"B\" \"Charlie\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"Alice\" \"Bob\" \"Charlie\" \"Diana\" \"Eve\") ((\"Bob\" 95000) (\"Alice\" 90000) (\"Eve\" 85000) (\"Charlie\" 80000) (\"Diana\" 70000)) ((\"A\" \"Alice\" 90000) (\"A\" \"Eve\" 85000) (\"A\" \"Diana\" 70000) (\"B\" \"Bob\" 95000) (\"B\" \"Charlie\" 80000)) ((\"A\" \"Alice\") (\"A\" \"Diana\") (\"A\" \"Eve\") (\"B\" \"Bob\") (\"B\" \"Charlie\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -331,12 +325,10 @@ fn oracle_prop_db_ops_group_by_aggregation() {
           (list
             (sort results (lambda (a b) (string< (car a) (car b))))
             (sort region-results (lambda (a b) (string< (car a) (car b))))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"Doohickey\" (count . 2) (sum-amt . 170) (avg-amt . 85) (max-amt . 90) (min-qty . 7)) (\"Gadget\" (count . 3) (sum-amt . 750) (avg-amt . 250) (max-amt . 300) (min-qty . 2)) (\"Widget\" (count . 4) (sum-amt . 550) (avg-amt . 137) (max-amt . 180) (min-qty . 3))) ((\"East\" (count . 5) (total . 850)) (\"West\" (count . 4) (total . 620))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"Doohickey\" (count . 2) (sum-amt . 170) (avg-amt . 85) (max-amt . 90) (min-qty . 7)) (\"Gadget\" (count . 3) (sum-amt . 750) (avg-amt . 250) (max-amt . 300) (min-qty . 2)) (\"Widget\" (count . 4) (sum-amt . 550) (avg-amt . 137) (max-amt . 180) (min-qty . 3))) ((\"East\" (count . 5) (total . 850)) (\"West\" (count . 4) (total . 620))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -408,12 +400,10 @@ fn oracle_prop_db_ops_inner_join() {
                                    (cdr (assq 'proj-name r))))
                  emp-dept-proj)
          (lambda (a b) (string< (car a) (car b))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"Alice\" \"Engineering\") (\"Bob\" \"Sales\") (\"Charlie\" \"Engineering\") (\"Diana\" \"Marketing\") (\"Eve\" \"Sales\")) 5 ((\"Engineering\" \"Beta\") (\"Engineering\" \"Alpha\") (\"Sales\" \"Gamma\") (\"Marketing\" \"Delta\")) ((\"Alice\" \"Engineering\" \"Beta\") (\"Alice\" \"Engineering\" \"Alpha\") (\"Bob\" \"Sales\" \"Gamma\") (\"Charlie\" \"Engineering\" \"Beta\") (\"Charlie\" \"Engineering\" \"Alpha\") (\"Diana\" \"Marketing\" \"Delta\") (\"Eve\" \"Sales\" \"Gamma\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"Alice\" \"Engineering\") (\"Bob\" \"Sales\") (\"Charlie\" \"Engineering\") (\"Diana\" \"Marketing\") (\"Eve\" \"Sales\")) 5 ((\"Engineering\" \"Beta\") (\"Engineering\" \"Alpha\") (\"Sales\" \"Gamma\") (\"Marketing\" \"Delta\")) ((\"Alice\" \"Engineering\" \"Beta\") (\"Alice\" \"Engineering\" \"Alpha\") (\"Bob\" \"Sales\" \"Gamma\") (\"Charlie\" \"Engineering\" \"Beta\") (\"Charlie\" \"Engineering\" \"Alpha\") (\"Diana\" \"Marketing\" \"Delta\") (\"Eve\" \"Sales\" \"Gamma\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -539,12 +529,10 @@ fn oracle_prop_db_ops_full_query_pipeline() {
       (funcall query-pipeline orders nil 'product
                '((max-amt max amount) (min-amt min amount) (avg-amt avg amount))
                'product #'string< nil))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((((customer . \"Bob\") (total . 620) (num-orders . 3)) ((customer . \"Alice\") (total . 580) (num-orders . 4)) ((customer . \"Diana\") (total . 400) (num-orders . 1)) ((customer . \"Charlie\") (total . 225) (num-orders . 2))) (((customer . \"Diana\") (total . 400) (cnt . 1)) ((customer . \"Bob\") (total . 300) (cnt . 1)) ((customer . \"Alice\") (total . 250) (cnt . 2)) ((customer . \"Charlie\") (total . 175) (cnt . 1))) ((\"Diana\" 400) (\"Bob\" 300) (\"Alice\" 250)) (((product . \"A\") (max-amt . 400) (min-amt . 100) (avg-amt . 225)) ((product . \"B\") (max-amt . 250) (min-amt . 200) (avg-amt . 225)) ((product . \"C\") (max-amt . 120) (min-amt . 50) (avg-amt . 83))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((((customer . \"Bob\") (total . 620) (num-orders . 3)) ((customer . \"Alice\") (total . 580) (num-orders . 4)) ((customer . \"Diana\") (total . 400) (num-orders . 1)) ((customer . \"Charlie\") (total . 225) (num-orders . 2))) (((customer . \"Diana\") (total . 400) (cnt . 1)) ((customer . \"Bob\") (total . 300) (cnt . 1)) ((customer . \"Alice\") (total . 250) (cnt . 2)) ((customer . \"Charlie\") (total . 175) (cnt . 1))) ((\"Diana\" 400) (\"Bob\" 300) (\"Alice\" 250)) (((product . \"A\") (max-amt . 400) (min-amt . 100) (avg-amt . 225)) ((product . \"B\") (max-amt . 250) (min-amt . 200) (avg-amt . 225)) ((product . \"C\") (max-amt . 120) (min-amt . 50) (avg-amt . 83))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -608,12 +596,10 @@ fn oracle_prop_db_ops_having_clause() {
         (list
           (sort all-results (lambda (a b) (string< (car a) (car b))))
           (sort results (lambda (a b) (string< (car a) (car b)))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"A001\" (net . 900)) (\"A002\" (net . 350)) (\"A003\" (net . 950))) ((\"A001\" (credits . 1000) (debits . 100) (net . 900) (txn-count . 4)) (\"A003\" (credits . 1000) (debits . 50) (net . 950) (txn-count . 2))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"A001\" (net . 900)) (\"A002\" (net . 350)) (\"A003\" (net . 950))) ((\"A001\" (credits . 1000) (debits . 100) (net . 900) (txn-count . 4)) (\"A003\" (credits . 1000) (debits . 50) (net . 950) (txn-count . 2))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -687,10 +673,8 @@ fn oracle_prop_db_ops_subquery_pattern() {
             (lambda (a b) (if (equal (cadr a) (cadr b))
                               (< (caddr a) (caddr b))
                             (string< (cadr a) (cadr b))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"Desk\" \"Furniture\" 500 300) (\"Laptop\" \"Electronics\" 1200 866) (\"Textbook\" \"Books\" 80 52)) ((\"Electronics\" . 1200)) ((\"Textbook\" \"Books\" 1) (\"Novel\" \"Books\" 2) (\"Laptop\" \"Electronics\" 1) (\"Phone\" \"Electronics\" 2) (\"Tablet\" \"Electronics\" 3) (\"Desk\" \"Furniture\" 1) (\"Chair\" \"Furniture\" 2) (\"Lamp\" \"Furniture\" 3)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"Desk\" \"Furniture\" 500 300) (\"Laptop\" \"Electronics\" 1200 866) (\"Textbook\" \"Books\" 80 52)) ((\"Electronics\" . 1200)) ((\"Textbook\" \"Books\" 1) (\"Novel\" \"Books\" 2) (\"Laptop\" \"Electronics\" 1) (\"Phone\" \"Electronics\" 2) (\"Tablet\" \"Electronics\" 3) (\"Desk\" \"Furniture\" 1) (\"Chair\" \"Furniture\" 2) (\"Lamp\" \"Furniture\" 3)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

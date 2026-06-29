@@ -120,12 +120,10 @@ fn oracle_prop_theorem_prover_cnf_conversion() {
     (fmakunbound 'neovm--tp-nnf)
     (fmakunbound 'neovm--tp-distribute)
     (fmakunbound 'neovm--tp-to-cnf)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((or (not P) Q) (and (or (not P) Q) (or (not Q) P)) (or (not P) (not Q)) (and (not P) (not Q)) nil (and (or Q (not P)) (or R (not P))) (and (or B A) (or C A)) (and (or nil (or nil (not P))) (or (not Q) (or nil (not P)))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((or (not P) Q) (and (or (not P) Q) (or (not Q) P)) (or (not P) (not Q)) (and (not P) (not Q)) nil (and (or Q (not P)) (or R (not P))) (and (or B A) (or C A)) (and (or nil (or nil (not P))) (or (not Q) (or nil (not P)))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -226,10 +224,9 @@ fn oracle_prop_theorem_prover_unification() {
     (fmakunbound 'neovm--tp-walk)
     (fmakunbound 'neovm--tp-unify)
     (fmakunbound 'neovm--tp-apply-subst)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (fail fail fail fail nil fail fail (h 120 121) fail fail)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (fail fail fail fail nil fail fail (h 120 121) fail fail)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -310,10 +307,8 @@ fn oracle_prop_theorem_prover_resolution() {
     (fmakunbound 'neovm--tp-resolve)
     (fmakunbound 'neovm--tp-tautology-p)
     (fmakunbound 'neovm--tp-all-resolvents)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (2 (2 3) nil (1 3 4) t nil ((2 3)) nil (2 3 4))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 (2 3) nil (1 3 4) t nil ((2 3)) nil (2 3 4))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -395,12 +390,10 @@ fn oracle_prop_theorem_prover_unit_propagation() {
     (fmakunbound 'neovm--tp-propagate-unit)
     (fmakunbound 'neovm--tp-find-units)
     (fmakunbound 'neovm--tp-unit-propagate)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((3) (2 3)) (1 -4) (nil (1 2 3 4)) ((nil) (1 -1)) (((1 2) (3 4) (-1 -3)) nil) (nil (1 2 3 4)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((3) (2 3)) (1 -4) (nil (1 2 3 4)) ((nil) (1 -1)) (((1 2) (3 4) (-1 -3)) nil) (nil (1 2 3 4)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -502,10 +495,8 @@ fn oracle_prop_theorem_prover_dpll() {
     (fmakunbound 'neovm--tp-find-units)
     (fmakunbound 'neovm--tp-variables)
     (fmakunbound 'neovm--tp-dpll)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2) nil t (1) t nil (1 2 3 4))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 2) nil t (1) t nil (1 2 3 4))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -592,10 +583,8 @@ fn oracle_prop_theorem_prover_skolemization() {
     (fmakunbound 'neovm--tp-fresh-skolem)
     (fmakunbound 'neovm--tp-skolemize)
     (fmakunbound 'neovm--tp-subst-term)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp 120)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp 120)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -683,10 +672,8 @@ fn oracle_prop_theorem_prover_paramodulation() {
     (fmakunbound 'neovm--tp-subterms)
     (fmakunbound 'neovm--tp-paramodulate)
     (fmakunbound 'neovm--tp-demodulate)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((f c b) (f (g x) x) ((f (g a) b) (g a) a b) ((P b)) ((Q c (g c)) (Q c (g c))) (g b c) z (a) (P (f a)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((f c b) (f (g x) x) ((f (g a) b) (g a) a b) ((P b)) ((Q c (g c)) (Q c (g c))) (g b c) z (a) (P (f a)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

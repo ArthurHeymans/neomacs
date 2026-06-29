@@ -5,6 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_table_named_formula_constants_recalc_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (user-error \"Unknown field: Tax\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -23,7 +24,7 @@ fn org_table_named_formula_constants_recalc_combo() {
     (list (org-table-formula-substitute-names "$Net*$tax+$fee")
           (buffer-substring-no-properties
            (point-min) (point-max)))))"##,
-        expect_test::expect![[r#""ERR (user-error \"Unknown field: Tax\")""#]],
+        expect,
     );
 }
 
@@ -31,6 +32,7 @@ fn org_table_named_formula_constants_recalc_combo() {
 fn org_table_iterate_dependency_formula_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable org-table-iterate-max)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -48,7 +50,7 @@ fn org_table_iterate_dependency_formula_combo() {
     (list org-table-iterate-max
           (buffer-substring-no-properties
            (point-min) (point-max)))))"##,
-        expect_test::expect![[r#""ERR (void-variable org-table-iterate-max)""#]],
+        expect,
     );
 }
 
@@ -56,6 +58,9 @@ fn org_table_iterate_dependency_formula_combo() {
 fn org_table_field_replace_and_formula_rewrite_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (\" 2 \" \"| A | B | C |\n|---+---+---|\n| 1 | 5 | 6 |\n| 3 | 4 | 7 |\n#+TBLFM: $3=$1+$2\n\" \"| A | C |\n|---+---|\n| 1 | 6 |\n| 3 | 7 |\n#+TBLFM: $2=$1+$INVALID\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -81,9 +86,7 @@ fn org_table_field_replace_and_formula_rewrite_combo() {
               after-recalc
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
-        expect_test::expect![[
-            r#""OK (\" 2 \" \"| A | B | C |\n|---+---+---|\n| 1 | 5 | 6 |\n| 3 | 4 | 7 |\n#+TBLFM: $3=$1+$2\n\" \"| A | C |\n|---+---|\n| 1 | 6 |\n| 3 | 7 |\n#+TBLFM: $2=$1+$INVALID\n\")""#
-        ]],
+        expect,
     );
 }
 
@@ -91,6 +94,9 @@ fn org_table_field_replace_and_formula_rewrite_combo() {
 fn org_table_remote_named_range_hline_total_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK (#(\"2\" 0 1 (face org-table)) (#(\"3\" 0 1 (face org-table)) #(\"1\" 0 1 (face org-table)) #(\"7\" 0 1 (face org-table)) #(\"4\" 0 1 (face org-table)) #(\"2\" 0 1 (face org-table)) #(\"22\" 0 2 (face org-table))) \"#+NAME: rates\n| Kind | Rate |\n|------+------|\n| base |    2 |\n| rush |    5 |\n\n#+NAME: jobs\n| Job | Hours | Fee | Total |\n|-----+-------+-----+-------|\n| A   |     3 |   1 |     7 |\n| B   |     4 |   2 |    22 |\n| Sum |       |     |    29 |\n#+TBLFM: @2$4=$2*remote(rates,@2$2)+$3::@3$4=$2*remote(rates,@3$2)+$3::@4$4=vsum(@2$4..@3$4)\n\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -118,9 +124,7 @@ fn org_table_remote_named_range_hline_total_combo() {
           (org-table-get-remote-range "jobs" "@2$2..@3$4")
           (buffer-substring-no-properties
            (point-min) (point-max)))))"##,
-        expect_test::expect![[
-            r##""OK (#(\"2\" 0 1 (face org-table)) (#(\"3\" 0 1 (face org-table)) #(\"1\" 0 1 (face org-table)) #(\"7\" 0 1 (face org-table)) #(\"4\" 0 1 (face org-table)) #(\"2\" 0 1 (face org-table)) #(\"22\" 0 2 (face org-table))) \"#+NAME: rates\n| Kind | Rate |\n|------+------|\n| base |    2 |\n| rush |    5 |\n\n#+NAME: jobs\n| Job | Hours | Fee | Total |\n|-----+-------+-----+-------|\n| A   |     3 |   1 |     7 |\n| B   |     4 |   2 |    22 |\n| Sum |       |     |    29 |\n#+TBLFM: @2$4=$2*remote(rates,@2$2)+$3::@3$4=$2*remote(rates,@3$2)+$3::@4$4=vsum(@2$4..@3$4)\n\")""##
-        ]],
+        expect,
     );
 }
 
@@ -128,6 +132,7 @@ fn org_table_remote_named_range_hline_total_combo() {
 fn org_table_formula_reference_conversion_and_current_field_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (user-error \"Unknown field: Line\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -157,7 +162,7 @@ fn org_table_formula_reference_conversion_and_current_field_combo() {
             (org-table-formula-substitute-names "$Line=$Qty*$Price")
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
-        expect_test::expect![[r#""ERR (user-error \"Unknown field: Line\")""#]],
+        expect,
     );
 }
 
@@ -165,6 +170,7 @@ fn org_table_formula_reference_conversion_and_current_field_combo() {
 fn org_table_rectangle_cut_paste_sum_wrap_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -202,7 +208,7 @@ fn org_table_rectangle_cut_paste_sum_wrap_combo() {
                   (current-kill 0 t)
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -210,6 +216,7 @@ fn org_table_rectangle_cut_paste_sum_wrap_combo() {
 fn org_table_create_convert_export_import_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 40 34)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -251,7 +258,7 @@ fn org_table_create_convert_export_import_combo() {
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 40 34)""#]],
+        expect,
     );
 }
 
@@ -259,6 +266,7 @@ fn org_table_create_convert_export_import_combo() {
 fn org_table_row_column_cell_motion_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -297,7 +305,7 @@ fn org_table_row_column_cell_motion_combo() {
               (org-table-to-lisp)
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -305,6 +313,7 @@ fn org_table_row_column_cell_motion_combo() {
 fn org_table_column_width_shrink_expand_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -349,7 +358,7 @@ fn org_table_column_width_shrink_expand_combo() {
                 expanded
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -357,6 +366,7 @@ fn org_table_column_width_shrink_expand_combo() {
 fn org_table_hline_formula_sort_recalc_lifecycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -405,7 +415,7 @@ fn org_table_hline_formula_sort_recalc_lifecycle_combo() {
               (org-table-to-lisp)
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -413,6 +423,7 @@ fn org_table_hline_formula_sort_recalc_lifecycle_combo() {
 fn org_table_sort_transpose_formula_metadata_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -462,7 +473,7 @@ fn org_table_sort_transpose_formula_metadata_combo() {
                 (org-table-formula-substitute-names "$Total=vsum($Jan..$Mar)")
                 (org-table-convert-refs-to-rc "B3..E4")
                 (org-table-convert-refs-to-an "@3$2..@4$5"))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -470,6 +481,9 @@ fn org_table_sort_transpose_formula_metadata_combo() {
 fn org_table_marked_duration_lisp_create_columns_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK (\"| Mark | Task  | Estimate | Spent |  Remain | Owner |                 |\n|------+-------+----------+-------+---------+-------+-----------------|\n| #    | Alpha |     2:30 |  1:15 |   01:15 | ann   | Alpha:ann:01:15 |\n|      | Beta  |     1:10 |  0:40 | stale-b | bob   |                 |\n| #    | Gamma |     3:00 |  2:20 |   00:40 | cy    | Gamma:cy:00:40  |\n#+TBLFM: $5=$3-$4;U::$7='(concat $2 \\\":\\\" $6 \\\":\\\" $5)\n\" ((\"$5\" . \"$3-$4;U\") (\"$7\" . \"'(concat $2 \\\":\\\" $6 \\\":\\\" $5)\")) #(\" Gamma:cy:00:40  \" 0 1 (face org-table rear-nonsticky t display (space :relative-width 1)) 1 15 (face org-table) 15 16 (face org-table) 16 17 (face org-table display (space :relative-width 1.001))) \"$7\" (2 3 4 5) \"| Mark | Task  | Estimate | Spent | Remain | Owner |                 |\n|------+-------+----------+-------+--------+-------+-----------------|\n| #    | Alpha |     2:30 |  1:15 |  01:15 | ann   | Alpha:ann:01:15 |\n|      | Beta  |     1:10 |  0:10 |  01:00 | bob   | Beta:bob:01:00  |\n| #    | Gamma |     3:00 |  2:20 |  00:40 | cy    | Gamma:cy:00:40  |\n#+TBLFM: $5=$3-$4;U::$7='(concat $2 \\\":\\\" $6 \\\":\\\" $5)\n\" ((\"$5\" . \"$3-$4;U\") (\"$7\" . \"'(concat $2 \\\":\\\" $6 \\\":\\\" $5)\")) 7 #(\" Beta:bob:01:00  \" 0 1 (face org-table rear-nonsticky t display (space :relative-width 1)) 1 15 (face org-table) 15 16 (face org-table) 16 17 (face org-table display (space :relative-width 1.001))) ((#(\"Mark\" 0 4 (face org-table)) #(\"Task\" 0 4 (face org-table)) #(\"Estimate\" 0 8 (face org-table)) #(\"Spent\" 0 5 (face org-table)) #(\"Remain\" 0 6 (face org-table)) #(\"Owner\" 0 5 (face org-table)) \"\") hline (#(\"#\" 0 1 (face org-formula)) #(\"Alpha\" 0 5 (face org-table)) #(\"2:30\" 0 4 (face org-table)) #(\"1:15\" 0 4 (face org-table)) #(\"01:15\" 0 5 (face org-table)) #(\"ann\" 0 3 (face org-table)) #(\"Alpha:ann:01:15\" 0 15 (face org-table))) (\"\" #(\"Beta\" 0 4 (face org-table)) #(\"1:10\" 0 4 (face org-table)) #(\"0:10\" 0 4 (face org-table)) #(\"01:00\" 0 5 (face org-table)) #(\"bob\" 0 3 (face org-table)) #(\"Beta:bob:01:00\" 0 14 (face org-table))) (#(\"#\" 0 1 (face org-formula)) #(\"Gamma\" 0 5 (face org-table)) #(\"3:00\" 0 4 (face org-table)) #(\"2:20\" 0 4 (face org-table)) #(\"00:40\" 0 5 (face org-table)) #(\"cy\" 0 2 (face org-table)) #(\"Gamma:cy:00:40\" 0 14 (face org-table)))))""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -520,9 +534,7 @@ fn org_table_marked_duration_lisp_create_columns_combo() {
                 (org-table-current-column)
                 (org-table-get-field)
                 (org-table-to-lisp)))))))"##,
-        expect_test::expect![[
-            r##""OK (\"| Mark | Task  | Estimate | Spent |  Remain | Owner |                 |\n|------+-------+----------+-------+---------+-------+-----------------|\n| #    | Alpha |     2:30 |  1:15 |   01:15 | ann   | Alpha:ann:01:15 |\n|      | Beta  |     1:10 |  0:40 | stale-b | bob   |                 |\n| #    | Gamma |     3:00 |  2:20 |   00:40 | cy    | Gamma:cy:00:40  |\n#+TBLFM: $5=$3-$4;U::$7='(concat $2 \\\":\\\" $6 \\\":\\\" $5)\n\" ((\"$5\" . \"$3-$4;U\") (\"$7\" . \"'(concat $2 \\\":\\\" $6 \\\":\\\" $5)\")) #(\" Gamma:cy:00:40  \" 0 1 (face org-table rear-nonsticky t display (space :relative-width 1)) 1 15 (face org-table) 15 16 (face org-table) 16 17 (face org-table display (space :relative-width 1.001))) \"$7\" (2 3 4 5) \"| Mark | Task  | Estimate | Spent | Remain | Owner |                 |\n|------+-------+----------+-------+--------+-------+-----------------|\n| #    | Alpha |     2:30 |  1:15 |  01:15 | ann   | Alpha:ann:01:15 |\n|      | Beta  |     1:10 |  0:10 |  01:00 | bob   | Beta:bob:01:00  |\n| #    | Gamma |     3:00 |  2:20 |  00:40 | cy    | Gamma:cy:00:40  |\n#+TBLFM: $5=$3-$4;U::$7='(concat $2 \\\":\\\" $6 \\\":\\\" $5)\n\" ((\"$5\" . \"$3-$4;U\") (\"$7\" . \"'(concat $2 \\\":\\\" $6 \\\":\\\" $5)\")) 7 #(\" Beta:bob:01:00  \" 0 1 (face org-table rear-nonsticky t display (space :relative-width 1)) 1 15 (face org-table) 15 16 (face org-table) 16 17 (face org-table display (space :relative-width 1.001))) ((#(\"Mark\" 0 4 (face org-table)) #(\"Task\" 0 4 (face org-table)) #(\"Estimate\" 0 8 (face org-table)) #(\"Spent\" 0 5 (face org-table)) #(\"Remain\" 0 6 (face org-table)) #(\"Owner\" 0 5 (face org-table)) \"\") hline (#(\"#\" 0 1 (face org-formula)) #(\"Alpha\" 0 5 (face org-table)) #(\"2:30\" 0 4 (face org-table)) #(\"1:15\" 0 4 (face org-table)) #(\"01:15\" 0 5 (face org-table)) #(\"ann\" 0 3 (face org-table)) #(\"Alpha:ann:01:15\" 0 15 (face org-table))) (\"\" #(\"Beta\" 0 4 (face org-table)) #(\"1:10\" 0 4 (face org-table)) #(\"0:10\" 0 4 (face org-table)) #(\"01:00\" 0 5 (face org-table)) #(\"bob\" 0 3 (face org-table)) #(\"Beta:bob:01:00\" 0 14 (face org-table))) (#(\"#\" 0 1 (face org-formula)) #(\"Gamma\" 0 5 (face org-table)) #(\"3:00\" 0 4 (face org-table)) #(\"2:20\" 0 4 (face org-table)) #(\"00:40\" 0 5 (face org-table)) #(\"cy\" 0 2 (face org-table)) #(\"Gamma:cy:00:40\" 0 14 (face org-table)))))""##
-        ]],
+        expect,
     );
 }
 
@@ -530,6 +542,7 @@ fn org_table_marked_duration_lisp_create_columns_combo() {
 fn org_table_structural_edit_formula_metadata_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (user-error \"Unknown field: Total\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -612,7 +625,7 @@ fn org_table_structural_edit_formula_metadata_combo() {
                     (org-table-convert-refs-to-an "@3$2..@5$4")
                     (org-table-to-lisp)
                     after-delete-hline))))))))"##,
-        expect_test::expect![[r#""ERR (user-error \"Unknown field: Total\")""#]],
+        expect,
     );
 }
 
@@ -620,6 +633,7 @@ fn org_table_structural_edit_formula_metadata_combo() {
 fn org_table_hline_constants_range_property_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (user-error \"Not at a table\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -690,7 +704,7 @@ fn org_table_hline_constants_range_property_combo() {
               after-edit
               stored-edit
               (org-table-to-lisp))))))"##,
-        expect_test::expect![[r#""ERR (user-error \"Not at a table\")""#]],
+        expect,
     );
 }
 
@@ -698,6 +712,7 @@ fn org_table_hline_constants_range_property_combo() {
 fn org_table_named_remote_debug_structural_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (user-error \"Not at a table\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -784,7 +799,7 @@ fn org_table_named_remote_debug_structural_combo() {
                 after-edit
                 stored-edit
                 (org-table-to-lisp)))))))"##,
-        expect_test::expect![[r#""ERR (user-error \"Not at a table\")""#]],
+        expect,
     );
 }
 
@@ -792,6 +807,7 @@ fn org_table_named_remote_debug_structural_combo() {
 fn org_table_shrink_coordinates_formula_lifecycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (user-error \"Unknown field: Total\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -889,7 +905,7 @@ fn org_table_shrink_coordinates_formula_lifecycle_combo() {
              "$Total=$Count*$Price")
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
-        expect_test::expect![[r#""ERR (user-error \"Unknown field: Total\")""#]],
+        expect,
     );
 }
 
@@ -897,6 +913,7 @@ fn org_table_shrink_coordinates_formula_lifecycle_combo() {
 fn org_table_rectangle_transpose_sort_shape_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (user-error \"Not at a table\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -990,7 +1007,7 @@ fn org_table_rectangle_transpose_sort_shape_combo() {
             range-summary
             after-transpose
             (org-table-to-lisp)))))"##,
-        expect_test::expect![[r#""ERR (user-error \"Not at a table\")""#]],
+        expect,
     );
 }
 
@@ -998,6 +1015,7 @@ fn org_table_rectangle_transpose_sort_shape_combo() {
 fn org_table_navigation_copydown_formula_edit_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (user-error \"Unknown field: Remain\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1112,7 +1130,7 @@ fn org_table_navigation_copydown_formula_edit_combo() {
               formula-summary
               after-formula
               final-summary)))))"##,
-        expect_test::expect![[r#""ERR (user-error \"Unknown field: Remain\")""#]],
+        expect,
     );
 }
 
@@ -1120,6 +1138,9 @@ fn org_table_navigation_copydown_formula_edit_combo() {
 fn org_table_cross_ref_edit_recalc_lisp_dump_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK (\"#+NAME: prices\n| Item     | Unit | Qty | Subtotal |\n|----------+------+-----+----------|\n| Apples   |  2.5 |   4 |      10. |\n| Bananas  |  1.8 |   6 |     10.8 |\n| Cherries |  5.0 |   2 |      10. |\n|----------+------+-----+----------|\n| Total    |      |     |     30.8 |\n#+TBLFM: @2$4=$2*$3::@3$4=$2*$3::@4$4=$2*$3::@>$4=vsum(@2..@-1)\n\n#+NAME: summary\n| Category | Amount |\n|----------+--------|\n| Fruit    |   30.8 |\n| Tax      |   3.08 |\n| Grand    |  33.88 |\n#+TBLFM: @2$2=remote(prices,@>$4)::@3$2=@2$2*0.1;%.2f::@4$2=@2$2+@3$2;%.2f\n\" ((#(\"Item\" 0 4 (face org-table)) #(\"Unit\" 0 4 (face org-table)) #(\"Qty\" 0 3 (face org-table)) #(\"Subtotal\" 0 8 (face org-table))) hline (#(\"Apples\" 0 6 (face org-table)) #(\"2.5\" 0 3 (face org-table)) #(\"4\" 0 1 (face org-table)) #(\"10.\" 0 3 (face org-table))) (#(\"Bananas\" 0 7 (face org-table)) #(\"1.8\" 0 3 (face org-table)) #(\"6\" 0 1 (face org-table)) #(\"10.8\" 0 4 (face org-table))) (#(\"Cherries\" 0 8 (face org-table)) #(\"5.0\" 0 3 (face org-table)) #(\"2\" 0 1 (face org-table)) #(\"10.\" 0 3 (face org-table))) hline (#(\"Total\" 0 5 (face org-table)) \"\" \"\" #(\"30.8\" 0 4 (face org-table)))) ((#(\"Category\" 0 8 (face org-table)) #(\"Amount\" 0 6 (face org-table))) hline (#(\"Fruit\" 0 5 (face org-table)) #(\"30.8\" 0 4 (face org-table))) (#(\"Tax\" 0 3 (face org-table)) #(\"3.08\" 0 4 (face org-table))) (#(\"Grand\" 0 5 (face org-table)) #(\"33.88\" 0 5 (face org-table)))) \"#+NAME: prices\n| Item     | Unit | Qty | Subtotal |\n|----------+------+-----+----------|\n| Apples   |  2.5 |   4 |      10. |\n| Bananas  |  1.8 |  10 |      18. |\n| Cherries |  5.0 |   2 |      10. |\n|----------+------+-----+----------|\n| Total    |      |     |      38. |\n#+TBLFM: @2$4=$2*$3::@3$4=$2*$3::@4$4=$2*$3::@>$4=vsum(@2..@-1)\n\n#+NAME: summary\n| Category | Amount |\n|----------+--------|\n| Fruit    |    38. |\n| Tax      |   3.80 |\n| Grand    |  41.80 |\n#+TBLFM: @2$2=remote(prices,@>$4)::@3$2=@2$2*0.1;%.2f::@4$2=@2$2+@3$2;%.2f\n\" ((#(\"Item\" 0 4 (face org-table)) #(\"Unit\" 0 4 (face org-table)) #(\"Qty\" 0 3 (face org-table)) #(\"Subtotal\" 0 8 (face org-table))) hline (#(\"Apples\" 0 6 (face org-table)) #(\"2.5\" 0 3 (face org-table)) #(\"4\" 0 1 (face org-table)) #(\"10.\" 0 3 (face org-table))) (#(\"Bananas\" 0 7 (face org-table)) #(\"1.8\" 0 3 (face org-table)) #(\"10\" 0 2 (face org-table)) #(\"18.\" 0 3 (face org-table))) (#(\"Cherries\" 0 8 (face org-table)) #(\"5.0\" 0 3 (face org-table)) #(\"2\" 0 1 (face org-table)) #(\"10.\" 0 3 (face org-table))) hline (#(\"Total\" 0 5 (face org-table)) \"\" \"\" #(\"38.\" 0 3 (face org-table)))) ((#(\"Category\" 0 8 (face org-table)) #(\"Amount\" 0 6 (face org-table))) hline (#(\"Fruit\" 0 5 (face org-table)) #(\"38.\" 0 3 (face org-table))) (#(\"Tax\" 0 3 (face org-table)) #(\"3.80\" 0 4 (face org-table))) (#(\"Grand\" 0 5 (face org-table)) #(\"41.80\" 0 5 (face org-table)))) (((\"@2$4\" . \"$2*$3\") (\"@3$4\" . \"$2*$3\") (\"@4$4\" . \"$2*$3\") (\"@>$4\" . \"vsum(@2..@-1)\")) ((\"@2$2\" . \"remote(prices,@>$4)\") (\"@3$2\" . \"@2$2*0.1;%.2f\") (\"@4$2\" . \"@2$2+@3$2;%.2f\"))))""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1190,9 +1211,7 @@ fn org_table_cross_ref_edit_recalc_lisp_dump_combo() {
               prices-after-edit-lisp
               summary-after-edit-lisp
               stored-formulas)))))"##,
-        expect_test::expect![[
-            r##""OK (\"#+NAME: prices\n| Item     | Unit | Qty | Subtotal |\n|----------+------+-----+----------|\n| Apples   |  2.5 |   4 |      10. |\n| Bananas  |  1.8 |   6 |     10.8 |\n| Cherries |  5.0 |   2 |      10. |\n|----------+------+-----+----------|\n| Total    |      |     |     30.8 |\n#+TBLFM: @2$4=$2*$3::@3$4=$2*$3::@4$4=$2*$3::@>$4=vsum(@2..@-1)\n\n#+NAME: summary\n| Category | Amount |\n|----------+--------|\n| Fruit    |   30.8 |\n| Tax      |   3.08 |\n| Grand    |  33.88 |\n#+TBLFM: @2$2=remote(prices,@>$4)::@3$2=@2$2*0.1;%.2f::@4$2=@2$2+@3$2;%.2f\n\" ((#(\"Item\" 0 4 (face org-table)) #(\"Unit\" 0 4 (face org-table)) #(\"Qty\" 0 3 (face org-table)) #(\"Subtotal\" 0 8 (face org-table))) hline (#(\"Apples\" 0 6 (face org-table)) #(\"2.5\" 0 3 (face org-table)) #(\"4\" 0 1 (face org-table)) #(\"10.\" 0 3 (face org-table))) (#(\"Bananas\" 0 7 (face org-table)) #(\"1.8\" 0 3 (face org-table)) #(\"6\" 0 1 (face org-table)) #(\"10.8\" 0 4 (face org-table))) (#(\"Cherries\" 0 8 (face org-table)) #(\"5.0\" 0 3 (face org-table)) #(\"2\" 0 1 (face org-table)) #(\"10.\" 0 3 (face org-table))) hline (#(\"Total\" 0 5 (face org-table)) \"\" \"\" #(\"30.8\" 0 4 (face org-table)))) ((#(\"Category\" 0 8 (face org-table)) #(\"Amount\" 0 6 (face org-table))) hline (#(\"Fruit\" 0 5 (face org-table)) #(\"30.8\" 0 4 (face org-table))) (#(\"Tax\" 0 3 (face org-table)) #(\"3.08\" 0 4 (face org-table))) (#(\"Grand\" 0 5 (face org-table)) #(\"33.88\" 0 5 (face org-table)))) \"#+NAME: prices\n| Item     | Unit | Qty | Subtotal |\n|----------+------+-----+----------|\n| Apples   |  2.5 |   4 |      10. |\n| Bananas  |  1.8 |  10 |      18. |\n| Cherries |  5.0 |   2 |      10. |\n|----------+------+-----+----------|\n| Total    |      |     |      38. |\n#+TBLFM: @2$4=$2*$3::@3$4=$2*$3::@4$4=$2*$3::@>$4=vsum(@2..@-1)\n\n#+NAME: summary\n| Category | Amount |\n|----------+--------|\n| Fruit    |    38. |\n| Tax      |   3.80 |\n| Grand    |  41.80 |\n#+TBLFM: @2$2=remote(prices,@>$4)::@3$2=@2$2*0.1;%.2f::@4$2=@2$2+@3$2;%.2f\n\" ((#(\"Item\" 0 4 (face org-table)) #(\"Unit\" 0 4 (face org-table)) #(\"Qty\" 0 3 (face org-table)) #(\"Subtotal\" 0 8 (face org-table))) hline (#(\"Apples\" 0 6 (face org-table)) #(\"2.5\" 0 3 (face org-table)) #(\"4\" 0 1 (face org-table)) #(\"10.\" 0 3 (face org-table))) (#(\"Bananas\" 0 7 (face org-table)) #(\"1.8\" 0 3 (face org-table)) #(\"10\" 0 2 (face org-table)) #(\"18.\" 0 3 (face org-table))) (#(\"Cherries\" 0 8 (face org-table)) #(\"5.0\" 0 3 (face org-table)) #(\"2\" 0 1 (face org-table)) #(\"10.\" 0 3 (face org-table))) hline (#(\"Total\" 0 5 (face org-table)) \"\" \"\" #(\"38.\" 0 3 (face org-table)))) ((#(\"Category\" 0 8 (face org-table)) #(\"Amount\" 0 6 (face org-table))) hline (#(\"Fruit\" 0 5 (face org-table)) #(\"38.\" 0 3 (face org-table))) (#(\"Tax\" 0 3 (face org-table)) #(\"3.80\" 0 4 (face org-table))) (#(\"Grand\" 0 5 (face org-table)) #(\"41.80\" 0 5 (face org-table)))) (((\"@2$4\" . \"$2*$3\") (\"@3$4\" . \"$2*$3\") (\"@4$4\" . \"$2*$3\") (\"@>$4\" . \"vsum(@2..@-1)\")) ((\"@2$2\" . \"remote(prices,@>$4)\") (\"@3$2\" . \"@2$2*0.1;%.2f\") (\"@4$2\" . \"@2$2+@3$2;%.2f\"))))""##
-        ]],
+        expect,
     );
 }
 
@@ -1200,6 +1219,9 @@ fn org_table_cross_ref_edit_recalc_lisp_dump_combo() {
 fn org_table_field_edit_recalc_range_dump_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (\"| Item   | Price | Qty | Total |\n|--------+-------+-----+-------|\n| Apple  |   2.5 |   4 |   10. |\n| Banana |   1.8 |   6 |  10.8 |\n| Cherry |   5.0 |   2 |   10. |\n|--------+-------+-----+-------|\n| Total  |       |     |  30.8 |\n#+TBLFM: @2$4=$2*$3::@3$4=$2*$3::@4$4=$2*$3::@>$4=vsum(@2..@-1)\n\" ((#(\"Item\" 0 4 (face org-table)) #(\"Price\" 0 5 (face org-table)) #(\"Qty\" 0 3 (face org-table)) #(\"Total\" 0 5 (face org-table))) hline (#(\"Apple\" 0 5 (face org-table)) #(\"2.5\" 0 3 (face org-table)) #(\"4\" 0 1 (face org-table)) #(\"10.\" 0 3 (face org-table))) (#(\"Banana\" 0 6 (face org-table)) #(\"1.8\" 0 3 (face org-table)) #(\"6\" 0 1 (face org-table)) #(\"10.8\" 0 4 (face org-table))) (#(\"Cherry\" 0 6 (face org-table)) #(\"5.0\" 0 3 (face org-table)) #(\"2\" 0 1 (face org-table)) #(\"10.\" 0 3 (face org-table))) hline (#(\"Total\" 0 5 (face org-table)) \"\" \"\" #(\"30.8\" 0 4 (face org-table)))) #(\"   10. \" 0 1 (face org-table rear-nonsticky t display (space :relative-width 1)) 1 3 (face org-table) 3 6 (face org-table) 6 7 (face org-table display (space :relative-width 1.001))) #(\"  10.8 \" 0 1 (face org-table rear-nonsticky t display (space :relative-width 1)) 1 2 (face org-table) 2 6 (face org-table) 6 7 (face org-table display (space :relative-width 1.001))) \"\" \"| Item   | Price | Qty | Total |\n|--------+-------+-----+-------|\n| Apple  |   2.5 |   4 |   10. |\n| Banana |   1.8 |  10 |   18. |\n| Cherry |   5.0 |   2 |   10. |\n|--------+-------+-----+-------|\n| Total  |       |     |   38. |\n#+TBLFM: @2$4=$2*$3::@3$4=$2*$3::@4$4=$2*$3::@>$4=vsum(@2..@-1)\n\" #(\"   18. \" 0 1 (face org-table rear-nonsticky t display (space :relative-width 1)) 1 3 (face org-table) 3 6 (face org-table) 6 7 (face org-table display (space :relative-width 1.001))) \"\" ((\"@2$4\" . \"$2*$3\") (\"@3$4\" . \"$2*$3\") (\"@4$4\" . \"$2*$3\") (\"@>$4\" . \"vsum(@2..@-1)\")))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1269,9 +1291,7 @@ fn org_table_field_edit_recalc_range_dump_deep_state_combo() {
               banana-after
               total-after
                stored)))))"##,
-        expect_test::expect![[
-            r#""OK (\"| Item   | Price | Qty | Total |\n|--------+-------+-----+-------|\n| Apple  |   2.5 |   4 |   10. |\n| Banana |   1.8 |   6 |  10.8 |\n| Cherry |   5.0 |   2 |   10. |\n|--------+-------+-----+-------|\n| Total  |       |     |  30.8 |\n#+TBLFM: @2$4=$2*$3::@3$4=$2*$3::@4$4=$2*$3::@>$4=vsum(@2..@-1)\n\" ((#(\"Item\" 0 4 (face org-table)) #(\"Price\" 0 5 (face org-table)) #(\"Qty\" 0 3 (face org-table)) #(\"Total\" 0 5 (face org-table))) hline (#(\"Apple\" 0 5 (face org-table)) #(\"2.5\" 0 3 (face org-table)) #(\"4\" 0 1 (face org-table)) #(\"10.\" 0 3 (face org-table))) (#(\"Banana\" 0 6 (face org-table)) #(\"1.8\" 0 3 (face org-table)) #(\"6\" 0 1 (face org-table)) #(\"10.8\" 0 4 (face org-table))) (#(\"Cherry\" 0 6 (face org-table)) #(\"5.0\" 0 3 (face org-table)) #(\"2\" 0 1 (face org-table)) #(\"10.\" 0 3 (face org-table))) hline (#(\"Total\" 0 5 (face org-table)) \"\" \"\" #(\"30.8\" 0 4 (face org-table)))) #(\"   10. \" 0 1 (face org-table rear-nonsticky t display (space :relative-width 1)) 1 3 (face org-table) 3 6 (face org-table) 6 7 (face org-table display (space :relative-width 1.001))) #(\"  10.8 \" 0 1 (face org-table rear-nonsticky t display (space :relative-width 1)) 1 2 (face org-table) 2 6 (face org-table) 6 7 (face org-table display (space :relative-width 1.001))) \"\" \"| Item   | Price | Qty | Total |\n|--------+-------+-----+-------|\n| Apple  |   2.5 |   4 |   10. |\n| Banana |   1.8 |  10 |   18. |\n| Cherry |   5.0 |   2 |   10. |\n|--------+-------+-----+-------|\n| Total  |       |     |   38. |\n#+TBLFM: @2$4=$2*$3::@3$4=$2*$3::@4$4=$2*$3::@>$4=vsum(@2..@-1)\n\" #(\"   18. \" 0 1 (face org-table rear-nonsticky t display (space :relative-width 1)) 1 3 (face org-table) 3 6 (face org-table) 6 7 (face org-table display (space :relative-width 1.001))) \"\" ((\"@2$4\" . \"$2*$3\") (\"@3$4\" . \"$2*$3\") (\"@4$4\" . \"$2*$3\") (\"@>$4\" . \"vsum(@2..@-1)\")))""#
-        ]],
+        expect,
     );
 }
 
@@ -1279,6 +1299,9 @@ fn org_table_field_edit_recalc_range_dump_deep_state_combo() {
 fn org_table_sort_region_hline_formula_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (nil ((#(\"Name\" 0 4 (face org-table)) #(\"Score\" 0 5 (face org-table))) hline (#(\"Alice\" 0 5 (face org-table)) #(\"95\" 0 2 (face org-table))) (#(\"Bob\" 0 3 (face org-table)) #(\"85\" 0 2 (face org-table))) (#(\"Charlie\" 0 7 (face org-table)) #(\"70\" 0 2 (face org-table))) hline (#(\"Avg\" 0 3 (face org-table)) \"\")) ((#(\"Name\" 0 4 (face org-table)) #(\"Score\" 0 5 (face org-table))) hline (#(\"Alice\" 0 5 (face org-table)) #(\"95\" 0 2 (face org-table))) (#(\"Bob\" 0 3 (face org-table)) #(\"85\" 0 2 (face org-table))) (#(\"Charlie\" 0 7 (face org-table)) #(\"70\" 0 2 (face org-table))) hline (#(\"Avg\" 0 3 (face org-table)) \"\")) ((#(\"Name\" 0 4 (face org-table)) #(\"Score\" 0 5 (face org-table))) hline (#(\"Alice\" 0 5 (face org-table)) #(\"95\" 0 2 (face org-table))) (#(\"Bob\" 0 3 (face org-table)) #(\"85\" 0 2 (face org-table))) (#(\"Charlie\" 0 7 (face org-table)) #(\"70\" 0 2 (face org-table))) hline (#(\"Avg\" 0 3 (face org-table)) #(\"83.333333\" 0 9 (face org-table)))) #(\" 83.333333 \" 0 1 (face org-table rear-nonsticky t display (space :relative-width 1)) 1 10 (face org-table) 10 11 (face org-table display (space :relative-width 1.001))) \"| Name    |     Score |\n|---------+-----------|\n| Alice   |        95 |\n| Bob     |        85 |\n| Charlie |        70 |\n|---------+-----------|\n| Avg     | 83.333333 |\n#+TBLFM: @>$2=vmean(@2..@-1)\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1329,9 +1352,7 @@ fn org_table_sort_region_hline_formula_deep_state_combo() {
                   recalc-lisp
                   avg-val
                   after-recalc)))))))"##,
-        expect_test::expect![[
-            r#""OK (nil ((#(\"Name\" 0 4 (face org-table)) #(\"Score\" 0 5 (face org-table))) hline (#(\"Alice\" 0 5 (face org-table)) #(\"95\" 0 2 (face org-table))) (#(\"Bob\" 0 3 (face org-table)) #(\"85\" 0 2 (face org-table))) (#(\"Charlie\" 0 7 (face org-table)) #(\"70\" 0 2 (face org-table))) hline (#(\"Avg\" 0 3 (face org-table)) \"\")) ((#(\"Name\" 0 4 (face org-table)) #(\"Score\" 0 5 (face org-table))) hline (#(\"Alice\" 0 5 (face org-table)) #(\"95\" 0 2 (face org-table))) (#(\"Bob\" 0 3 (face org-table)) #(\"85\" 0 2 (face org-table))) (#(\"Charlie\" 0 7 (face org-table)) #(\"70\" 0 2 (face org-table))) hline (#(\"Avg\" 0 3 (face org-table)) \"\")) ((#(\"Name\" 0 4 (face org-table)) #(\"Score\" 0 5 (face org-table))) hline (#(\"Alice\" 0 5 (face org-table)) #(\"95\" 0 2 (face org-table))) (#(\"Bob\" 0 3 (face org-table)) #(\"85\" 0 2 (face org-table))) (#(\"Charlie\" 0 7 (face org-table)) #(\"70\" 0 2 (face org-table))) hline (#(\"Avg\" 0 3 (face org-table)) #(\"83.333333\" 0 9 (face org-table)))) #(\" 83.333333 \" 0 1 (face org-table rear-nonsticky t display (space :relative-width 1)) 1 10 (face org-table) 10 11 (face org-table display (space :relative-width 1.001))) \"| Name    |     Score |\n|---------+-----------|\n| Alice   |        95 |\n| Bob     |        85 |\n| Charlie |        70 |\n|---------+-----------|\n| Avg     | 83.333333 |\n#+TBLFM: @>$2=vmean(@2..@-1)\n\")""#
-        ]],
+        expect,
     );
 }
 
@@ -1339,6 +1360,9 @@ fn org_table_sort_region_hline_formula_deep_state_combo() {
 fn org_table_formula_multi_col_sort_recalc_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (nil ((#(\"Name\" 0 4 (face org-table)) #(\"Q1\" 0 2 (face org-table)) #(\"Q2\" 0 2 (face org-table)) #(\"Q3\" 0 2 (face org-table)) #(\"Total\" 0 5 (face org-table))) hline (#(\"Eve\" 0 3 (face org-table)) #(\"30\" 0 2 (face org-table)) #(\"40\" 0 2 (face org-table)) #(\"50\" 0 2 (face org-table)) #(\"120\" 0 3 (face org-table))) (#(\"Alice\" 0 5 (face org-table)) #(\"80\" 0 2 (face org-table)) #(\"90\" 0 2 (face org-table)) #(\"70\" 0 2 (face org-table)) #(\"240\" 0 3 (face org-table))) (#(\"Dave\" 0 4 (face org-table)) #(\"50\" 0 2 (face org-table)) #(\"60\" 0 2 (face org-table)) #(\"40\" 0 2 (face org-table)) #(\"150\" 0 3 (face org-table))) (#(\"Bob\" 0 3 (face org-table)) #(\"90\" 0 2 (face org-table)) #(\"85\" 0 2 (face org-table)) #(\"95\" 0 2 (face org-table)) #(\"270\" 0 3 (face org-table))) (#(\"Carol\" 0 5 (face org-table)) #(\"70\" 0 2 (face org-table)) #(\"75\" 0 2 (face org-table)) #(\"80\" 0 2 (face org-table)) #(\"225\" 0 3 (face org-table)))) ((#(\"Name\" 0 4 (face org-table)) #(\"Q1\" 0 2 (face org-table)) #(\"Q2\" 0 2 (face org-table)) #(\"Q3\" 0 2 (face org-table)) #(\"Total\" 0 5 (face org-table))) hline (#(\"Eve\" 0 3 (face org-table)) #(\"30\" 0 2 (face org-table)) #(\"40\" 0 2 (face org-table)) #(\"50\" 0 2 (face org-table)) #(\"120\" 0 3 (face org-table))) (#(\"Alice\" 0 5 (face org-table)) #(\"80\" 0 2 (face org-table)) #(\"90\" 0 2 (face org-table)) #(\"70\" 0 2 (face org-table)) #(\"240\" 0 3 (face org-table))) (#(\"Dave\" 0 4 (face org-table)) #(\"50\" 0 2 (face org-table)) #(\"60\" 0 2 (face org-table)) #(\"40\" 0 2 (face org-table)) #(\"150\" 0 3 (face org-table))) (#(\"Bob\" 0 3 (face org-table)) #(\"95\" 0 2 (face org-table)) #(\"85\" 0 2 (face org-table)) #(\"95\" 0 2 (face org-table)) #(\"275\" 0 3 (face org-table))) (#(\"Carol\" 0 5 (face org-table)) #(\"70\" 0 2 (face org-table)) #(\"75\" 0 2 (face org-table)) #(\"80\" 0 2 (face org-table)) #(\"225\" 0 3 (face org-table)))) #(\"   275 \" 0 1 (face org-table rear-nonsticky t display (space :relative-width 1)) 1 3 (face org-table) 3 6 (face org-table) 6 7 (face org-table display (space :relative-width 1.001))) \"| Name  | Q1 | Q2 | Q3 | Total |\n|-------+----+----+----+-------|\n| Eve   | 30 | 40 | 50 |   120 |\n| Alice | 80 | 90 | 70 |   240 |\n| Dave  | 50 | 60 | 40 |   150 |\n| Bob   | 95 | 85 | 95 |   275 |\n| Carol | 70 | 75 | 80 |   225 |\n#+TBLFM: $5=vsum($2..$4)\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-table)
@@ -1384,9 +1408,7 @@ fn org_table_formula_multi_col_sort_recalc_edit_deep() {
                 edited-lisp
                 bob-total
                 edited-buf))))))"##,
-        expect_test::expect![[
-            r#""OK (nil ((#(\"Name\" 0 4 (face org-table)) #(\"Q1\" 0 2 (face org-table)) #(\"Q2\" 0 2 (face org-table)) #(\"Q3\" 0 2 (face org-table)) #(\"Total\" 0 5 (face org-table))) hline (#(\"Eve\" 0 3 (face org-table)) #(\"30\" 0 2 (face org-table)) #(\"40\" 0 2 (face org-table)) #(\"50\" 0 2 (face org-table)) #(\"120\" 0 3 (face org-table))) (#(\"Alice\" 0 5 (face org-table)) #(\"80\" 0 2 (face org-table)) #(\"90\" 0 2 (face org-table)) #(\"70\" 0 2 (face org-table)) #(\"240\" 0 3 (face org-table))) (#(\"Dave\" 0 4 (face org-table)) #(\"50\" 0 2 (face org-table)) #(\"60\" 0 2 (face org-table)) #(\"40\" 0 2 (face org-table)) #(\"150\" 0 3 (face org-table))) (#(\"Bob\" 0 3 (face org-table)) #(\"90\" 0 2 (face org-table)) #(\"85\" 0 2 (face org-table)) #(\"95\" 0 2 (face org-table)) #(\"270\" 0 3 (face org-table))) (#(\"Carol\" 0 5 (face org-table)) #(\"70\" 0 2 (face org-table)) #(\"75\" 0 2 (face org-table)) #(\"80\" 0 2 (face org-table)) #(\"225\" 0 3 (face org-table)))) ((#(\"Name\" 0 4 (face org-table)) #(\"Q1\" 0 2 (face org-table)) #(\"Q2\" 0 2 (face org-table)) #(\"Q3\" 0 2 (face org-table)) #(\"Total\" 0 5 (face org-table))) hline (#(\"Eve\" 0 3 (face org-table)) #(\"30\" 0 2 (face org-table)) #(\"40\" 0 2 (face org-table)) #(\"50\" 0 2 (face org-table)) #(\"120\" 0 3 (face org-table))) (#(\"Alice\" 0 5 (face org-table)) #(\"80\" 0 2 (face org-table)) #(\"90\" 0 2 (face org-table)) #(\"70\" 0 2 (face org-table)) #(\"240\" 0 3 (face org-table))) (#(\"Dave\" 0 4 (face org-table)) #(\"50\" 0 2 (face org-table)) #(\"60\" 0 2 (face org-table)) #(\"40\" 0 2 (face org-table)) #(\"150\" 0 3 (face org-table))) (#(\"Bob\" 0 3 (face org-table)) #(\"95\" 0 2 (face org-table)) #(\"85\" 0 2 (face org-table)) #(\"95\" 0 2 (face org-table)) #(\"275\" 0 3 (face org-table))) (#(\"Carol\" 0 5 (face org-table)) #(\"70\" 0 2 (face org-table)) #(\"75\" 0 2 (face org-table)) #(\"80\" 0 2 (face org-table)) #(\"225\" 0 3 (face org-table)))) #(\"   275 \" 0 1 (face org-table rear-nonsticky t display (space :relative-width 1)) 1 3 (face org-table) 3 6 (face org-table) 6 7 (face org-table display (space :relative-width 1.001))) \"| Name  | Q1 | Q2 | Q3 | Total |\n|-------+----+----+----+-------|\n| Eve   | 30 | 40 | 50 |   120 |\n| Alice | 80 | 90 | 70 |   240 |\n| Dave  | 50 | 60 | 40 |   150 |\n| Bob   | 95 | 85 | 95 |   275 |\n| Carol | 70 | 75 | 80 |   225 |\n#+TBLFM: $5=vsum($2..$4)\n\")""#
-        ]],
+        expect,
     );
 }
 
@@ -1394,6 +1416,7 @@ fn org_table_formula_multi_col_sort_recalc_edit_deep() {
 fn org_table_formula_avg_sum_edit_sort_recalc_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-table)
@@ -1439,7 +1462,7 @@ fn org_table_formula_avg_sum_edit_sort_recalc_deep() {
                 eve-avg
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 48)""#]],
+        expect,
     );
 }
 
@@ -1447,6 +1470,7 @@ fn org_table_formula_avg_sum_edit_sort_recalc_deep() {
 fn org_table_formula_multi_col_sort_edit_recalc_v2() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-table)
@@ -1489,7 +1513,7 @@ fn org_table_formula_multi_col_sort_edit_recalc_v2() {
                 eve-total eve-grade
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 48)""#]],
+        expect,
     );
 }
 
@@ -1497,6 +1521,7 @@ fn org_table_formula_multi_col_sort_edit_recalc_v2() {
 fn org_table_formula_sort_edit_resort_recalc_v3() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-table)
@@ -1546,7 +1571,7 @@ fn org_table_formula_sort_edit_resort_recalc_v3() {
                     after-edit zara-total resorted
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 54)""#]],
+        expect,
     );
 }
 
@@ -1554,6 +1579,7 @@ fn org_table_formula_sort_edit_resort_recalc_v3() {
 fn org_table_formula_string_col_edit_sort_recalc_v4() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 53 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-table)
@@ -1608,6 +1634,6 @@ fn org_table_formula_string_col_edit_sort_recalc_v4() {
                     after-edit tokyo-total tokyo-avg resorted
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 53 54)""#]],
+        expect,
     );
 }

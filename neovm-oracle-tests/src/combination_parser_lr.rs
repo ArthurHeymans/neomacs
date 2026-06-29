@@ -84,12 +84,10 @@ fn oracle_prop_lr_closure() {
     (fmakunbound 'neovm--lr-item-complete-p)
     (fmakunbound 'neovm--lr-item-advance)
     (fmakunbound 'neovm--lr-closure)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((0 . 0) (1 . 0) (2 . 0)) ((1 . 0) (1 . 1) (2 . 0)) ((2 . 2)) ((1 . 0) (1 . 1) (2 . 0) (2 . 1)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((0 . 0) (1 . 0) (2 . 0)) ((1 . 0) (1 . 1) (2 . 0)) ((2 . 2)) ((1 . 0) (1 . 1) (2 . 0) (2 . 1)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -169,12 +167,10 @@ fn oracle_prop_lr_goto() {
     (fmakunbound 'neovm--lr2-advance)
     (fmakunbound 'neovm--lr2-closure)
     (fmakunbound 'neovm--lr2-goto)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((0 . 0) (1 . 0) (2 . 0)) ((0 . 1)) ((1 . 0) (1 . 1) (2 . 0) (2 . 1)) nil ((2 . 2)) ((1 . 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((0 . 0) (1 . 0) (2 . 0)) ((0 . 1)) ((1 . 0) (1 . 1) (2 . 0) (2 . 1)) nil ((2 . 2)) ((1 . 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -279,12 +275,10 @@ fn oracle_prop_lr_automaton() {
     (fmakunbound 'neovm--lr3-goto)
     (fmakunbound 'neovm--lr3-grammar-symbols)
     (fmakunbound 'neovm--lr3-build-collection)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (states 6 transitions ((0 S 2) (0 \"a\" 1) (1 S 4) (1 \"a\" 1) (1 \"b\" 3) (4 \"b\" 5)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (states 6 transitions ((0 S 2) (0 \"a\" 1) (1 S 4) (1 \"a\" 1) (1 \"b\" 3) (4 \"b\" 5)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -461,12 +455,10 @@ fn oracle_prop_lr_slr_table() {
     (fmakunbound 'neovm--lr4-set-union)
     (fmakunbound 'neovm--lr4-compute-follow)
     (fmakunbound 'neovm--lr4-build-table)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (table-entries 9 table ((0 \"a\" (shift . 1)) (1 \"a\" (shift . 1)) (1 \"b\" (shift . 3)) (2 \"$\" accept) (3 \"$\" (reduce . 2)) (3 \"b\" (reduce . 2)) (4 \"b\" (shift . 5)) (5 \"$\" (reduce . 1)) (5 \"b\" (reduce . 1))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (table-entries 9 table ((0 \"a\" (shift . 1)) (1 \"a\" (shift . 1)) (1 \"b\" (shift . 3)) (2 \"$\" accept) (3 \"$\" (reduce . 2)) (3 \"b\" (reduce . 2)) (4 \"b\" (shift . 5)) (5 \"$\" (reduce . 1)) (5 \"b\" (reduce . 1))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -589,12 +581,10 @@ fn oracle_prop_lr_shift_reduce_parse() {
     (fmakunbound 'neovm--lr5-build-tables)
     (fmakunbound 'neovm--lr5-rule-info)
     (fmakunbound 'neovm--lr5-parse)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((shift \"a\" 2) (shift \"b\" 3) (reduce 2 S 2) accept) ((shift \"a\" 2) (shift \"a\" 2) (shift \"b\" 3) (reduce 2 S 2) (shift \"b\" 5) (reduce 1 S 3) accept) ((shift \"a\" 2) (shift \"a\" 2) (shift \"a\" 2) (shift \"b\" 3) (reduce 2 S 2) (shift \"b\" 5) (reduce 1 S 3) (shift \"b\" 5) (reduce 1 S 3) accept) ((shift \"a\" 2) (error no-action 2 \"$\" 1)) ((error no-action 0 \"b\" 0)) ((error no-action 0 \"$\" 0)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((shift \"a\" 2) (shift \"b\" 3) (reduce 2 S 2) accept) ((shift \"a\" 2) (shift \"a\" 2) (shift \"b\" 3) (reduce 2 S 2) (shift \"b\" 5) (reduce 1 S 3) accept) ((shift \"a\" 2) (shift \"a\" 2) (shift \"a\" 2) (shift \"b\" 3) (reduce 2 S 2) (shift \"b\" 5) (reduce 1 S 3) (shift \"b\" 5) (reduce 1 S 3) accept) ((shift \"a\" 2) (error no-action 2 \"$\" 1)) ((error no-action 0 \"b\" 0)) ((error no-action 0 \"$\" 0)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -713,10 +703,8 @@ fn oracle_prop_lr_expression_precedence() {
     (fmakunbound 'neovm--lr6-prec)
     (fmakunbound 'neovm--lr6-eval)
     (fmakunbound 'neovm--lr6-apply-op)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (7 23 17 35 20 33 5 9 42 579)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (7 23 17 35 20 33 5 9 42 579)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -804,8 +792,6 @@ fn oracle_prop_lr_conflict_detection() {
     (fmakunbound 'neovm--lr7-closure)
     (fmakunbound 'neovm--lr7-goto)
     (fmakunbound 'neovm--lr7-state-conflicts)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((nil nil) (t nil) 3 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((nil nil) (t nil) 3 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

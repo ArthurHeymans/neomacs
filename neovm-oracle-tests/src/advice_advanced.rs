@@ -34,10 +34,8 @@ fn oracle_prop_advice_advanced_multiple_before_advisors_lifo() {
         (fmakunbound 'neovm--adv-b1)
         (fmakunbound 'neovm--adv-b2)
         (makunbound 'neovm--adv-log)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((before-2 42) (before-1 42) (orig 42))""#],
-    );
+    let expect = expect_test::expect![r#""OK ((before-2 42) (before-1 42) (orig 42))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -81,12 +79,10 @@ fn oracle_prop_advice_advanced_before_after_around_combined() {
         (fmakunbound 'neovm--adv-after2)
         (fmakunbound 'neovm--adv-around2)
         (makunbound 'neovm--adv-log2)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (110 (around-enter (before 5) (orig 5) (after 5) (around-exit 10)))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (110 (around-enter (before 5) (orig 5) (after 5) (around-exit 10)))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -121,10 +117,8 @@ fn oracle_prop_advice_advanced_remove_and_member_lifecycle() {
         (fmakunbound 'neovm--adv-tgt3)
         (fmakunbound 'neovm--adv-fn3a)
         (fmakunbound 'neovm--adv-fn3b)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (nil t t nil t nil)""#],
-    );
+    let expect = expect_test::expect![r#""OK (nil t t nil t nil)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -169,10 +163,8 @@ fn oracle_prop_advice_advanced_around_funcall_patterns() {
         (fmakunbound 'neovm--adv-passthru)
         (fmakunbound 'neovm--adv-xform)
         (fmakunbound 'neovm--adv-skip)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (21 51 skipped 21)""#],
-    );
+    let expect = expect_test::expect![r#""OK (21 51 skipped 21)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -196,10 +188,8 @@ fn oracle_prop_advice_advanced_override_replaces_then_restores() {
             (list r1 r2 r3))
         (fmakunbound 'neovm--adv-tgt5)
         (fmakunbound 'neovm--adv-override5)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (11 overridden 11)""#],
-    );
+    let expect = expect_test::expect![r#""OK (11 overridden 11)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -245,12 +235,10 @@ fn oracle_prop_advice_advanced_logging_system() {
         (fmakunbound 'neovm--adv-tracer-add)
         (fmakunbound 'neovm--adv-tracer-mul)
         (makunbound 'neovm--adv-trace)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (45 ((call add (2 3)) (return add 5) (call add (4 5)) (return add 9) (call mul (5 9)) (return mul 45)))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (45 ((call add (2 3)) (return add 5) (call add (4 5)) (return add 9) (call mul (5 9)) (return mul 45)))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -295,7 +283,8 @@ fn oracle_prop_advice_advanced_memoization_wrapper() {
         (fmakunbound 'neovm--adv-memoize)
         (makunbound 'neovm--adv-memo-cache)
         (makunbound 'neovm--adv-memo-call-count)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (55 11 t)""#]);
+    let expect = expect_test::expect![r#""OK (55 11 t)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -338,10 +327,8 @@ fn oracle_prop_advice_advanced_error_handling_chain() {
         (fmakunbound 'neovm--adv-safe-divide)
         (fmakunbound 'neovm--adv-log-divide)
         (makunbound 'neovm--adv-err-log)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (5 division-error 5 ((attempting (10 2)) (attempting (7 0)) (caught arith-error (7 0)) (attempting (20 4))))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (5 division-error 5 ((attempting (10 2)) (attempting (7 0)) (caught arith-error (7 0)) (attempting (20 4))))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

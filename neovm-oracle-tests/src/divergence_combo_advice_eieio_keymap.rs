@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_advice_on_generic_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 13 27)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-adv-obj-xxx () ((v :initarg :v :initform 1)))
@@ -21,7 +22,7 @@ fn divergence_advice_on_generic_method() {
                       (lambda (r) (+ r 100)))
       (list r1 (test-adv-compute-xxx o)
             (= r1 150)))))) "#,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 13 27)""#]],
+        expect,
     );
 }
 
@@ -29,6 +30,9 @@ fn divergence_advice_on_generic_method() {
 fn divergence_keymap_binding_eieio_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((closure ((obj . #s(test-km-obj-xxx \"World\"))) nil (test-km-greet-xxx obj)) t \"Hello, World\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-km-obj-xxx () ((name :initarg :name)))
@@ -41,9 +45,7 @@ fn divergence_keymap_binding_eieio_method() {
     (list (lookup-key map "g")
           (commandp (lookup-key map "g"))
           (funcall (lookup-key map "g"))))) "#,
-        expect_test::expect![[
-            r#""OK ((closure ((obj . #s(test-km-obj-xxx \"World\"))) nil (test-km-greet-xxx obj)) t \"Hello, World\")""#
-        ]],
+        expect,
     );
 }
 
@@ -51,6 +53,7 @@ fn divergence_keymap_binding_eieio_method() {
 fn divergence_advice_on_defun_creating_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (50 t t nil 70 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-factory-xxx () ((id :initarg :id)))
@@ -70,7 +73,7 @@ fn divergence_advice_on_defun_creating_objects() {
                             obj))
           (slot-value (test-make-factory-xxx 7) 'id)
           (= (slot-value (test-make-factory-xxx 7) 'id) 7)))) "#,
-        expect_test::expect![[r#""OK (50 t t nil 70 nil)""#]],
+        expect,
     );
 }
 
@@ -78,6 +81,7 @@ fn divergence_advice_on_defun_creating_objects() {
 fn divergence_eieio_accessor_advice_setf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (10 99 99 (accessed accessed) nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-acc-xxx ()
@@ -93,7 +97,7 @@ fn divergence_eieio_accessor_advice_setf() {
             (>= (length log) 3)
             (advice-remove 'test-acc-val-xxx
                             (lambda (&rest _) (push 'accessed log))))))) "#,
-        expect_test::expect![[r#""OK (10 99 99 (accessed accessed) nil nil)""#]],
+        expect,
     );
 }
 
@@ -101,6 +105,8 @@ fn divergence_eieio_accessor_advice_setf() {
 fn divergence_method_inheritance_advice_child() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""OK ((advised parent) (advised child) t t nil child t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-parent-xxx () ())
@@ -120,7 +126,7 @@ fn divergence_method_inheritance_advice_child() {
                           (lambda (r) (list 'advised r)))
           (test-hierarchy-xxx c)
           (eq (test-hierarchy-xxx c) 'child)))) "#,
-        expect_test::expect![[r#""OK ((advised parent) (advised child) t t nil child t)""#]],
+        expect,
     );
 }
 
@@ -128,6 +134,7 @@ fn divergence_method_inheritance_advice_child() {
 fn divergence_defclass_accessor_keymap_describe() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil t test-desc-data-xxx t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-desc-xxx ()
@@ -138,7 +145,7 @@ fn divergence_defclass_accessor_keymap_describe() {
           (fboundp 'test-desc-data-xxx)
           (lookup-key map "d")
           (eq (lookup-key map "d") 'test-desc-data-xxx)))) "#,
-        expect_test::expect![[r#""OK (nil t test-desc-data-xxx t)""#]],
+        expect,
     );
 }
 
@@ -146,6 +153,7 @@ fn divergence_defclass_accessor_keymap_describe() {
 fn divergence_defgeneric_filter_args_advice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (20 t nil 30 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-fa-xxx () ((v :initarg :v :initform 0)))
@@ -162,7 +170,7 @@ fn divergence_defgeneric_filter_args_advice() {
                           (lambda (args) (list (car args) (* (cadr args) 2))))
           (test-fa-add-xxx o 5)
           (= (slot-value o 'v) 25)))) "#,
-        expect_test::expect![[r#""OK (20 t nil 30 nil)""#]],
+        expect,
     );
 }
 
@@ -170,6 +178,7 @@ fn divergence_defgeneric_filter_args_advice() {
 fn divergence_method_error_after_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (4 (2 3))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-err-method-log-xxx nil)
@@ -187,7 +196,7 @@ fn divergence_method_error_after_check() {
     (ignore-errors (test-err-incr-xxx o))
     (list (slot-value o 'v)
           (nreverse test-err-method-log-xxx)))) "#,
-        expect_test::expect![[r#""OK (4 (2 3))""#]],
+        expect,
     );
 }
 
@@ -195,6 +204,7 @@ fn divergence_method_error_after_check() {
 fn divergence_advice_on_make_instance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (99 t nil 99 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-mi-xxx () ((val :initarg :val :initform 0)))
@@ -213,7 +223,7 @@ fn divergence_advice_on_make_instance() {
                               args)))
           (slot-value (test-mi-xxx "o2" :val 5) 'val)
           (= (slot-value (test-mi-xxx "o2" :val 5) 'val) 5)))) "#,
-        expect_test::expect![[r#""OK (99 t nil 99 nil)""#]],
+        expect,
     );
 }
 
@@ -221,6 +231,9 @@ fn divergence_advice_on_make_instance() {
 fn divergence_keymap_parent_chain_with_eieio() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((closure (t) nil 'parent-x) (closure (t) nil 'child-y) nil t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-km-disp-xxx () ((mode :initarg :mode)))
@@ -236,8 +249,6 @@ fn divergence_keymap_parent_chain_with_eieio() {
         (lookup-key child-map "z")
         (commandp (lookup-key child-map "x"))
         (commandp (lookup-key child-map "y"))))) "#,
-        expect_test::expect![[
-            r#""OK ((closure (t) nil 'parent-x) (closure (t) nil 'child-y) nil t t)""#
-        ]],
+        expect,
     );
 }

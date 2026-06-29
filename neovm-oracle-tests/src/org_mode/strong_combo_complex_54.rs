@@ -17,6 +17,9 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo54_nested_blocks_deep_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:example-type example-block) (:center-type nil) (:quote-type nil) (:bold-count 0))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -41,9 +44,7 @@ fn combo54_nested_blocks_deep_parsing() {
       (when (car bolds)
         (push (list :bold-lineage (mapcar #'org-element-type (org-element-lineage (car bolds)))) r)))
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:example-type example-block) (:center-type nil) (:quote-type nil) (:bold-count 0))""#
-        ]],
+        expect,
     );
 }
 
@@ -54,6 +55,9 @@ fn combo54_nested_blocks_deep_parsing() {
 #[test]
 fn combo54_element_swap_restructure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:table-count-before 2) (:before-order (section section)) (:after-swap-order (section section)) (:interpretable t) (:table-count-after 2))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -76,9 +80,7 @@ fn combo54_element_swap_restructure() {
         ;; table count unchanged
         (push (list :table-count-after (length (org-element-map tree 'table #'identity))) r))
       (nreverse r))))"##,
-        expect_test::expect![[
-            r#""OK ((:table-count-before 2) (:before-order (section section)) (:after-swap-order (section section)) (:interpretable t) (:table-count-after 2))""#
-        ]],
+        expect,
     );
 }
 
@@ -89,6 +91,9 @@ fn combo54_element_swap_restructure() {
 #[test]
 fn combo54_element_create_multi_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:hl-todo \"TODO\") (:hl-priority 65) (:hl-tags (\"test\")) (:para-has-bold t) (:has-table t) (:re-headlines 1) (:re-tables 1) (:re-bolds 1) (:re-italics 1) (:interpreted-has-header 0) (:interpreted-length t))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -128,9 +133,7 @@ fn combo54_element_create_multi_type() {
     (push (list :interpreted-has-header (string-match-p "^\\*" interpreted)) r)
     (push (list :interpreted-length (> (length interpreted) 20)) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:hl-todo \"TODO\") (:hl-priority 65) (:hl-tags (\"test\")) (:para-has-bold t) (:has-table t) (:re-headlines 1) (:re-tables 1) (:re-bolds 1) (:re-italics 1) (:interpreted-has-header 0) (:interpreted-length t))""#
-        ]],
+        expect,
     );
 }
 
@@ -141,6 +144,7 @@ fn combo54_element_create_multi_type() {
 #[test]
 fn combo54_footnote_multi_create_delete_renumber() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-footnote-renumber-fn-n)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -170,7 +174,7 @@ fn combo54_footnote_multi_create_delete_renumber() {
                                          (org-element-map (org-element-parse-buffer) 'footnote-reference #'identity))) r)
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (void-function org-footnote-renumber-fn-n)""#]],
+        expect,
     );
 }
 
@@ -181,6 +185,9 @@ fn combo54_footnote_multi_create_delete_renumber() {
 #[test]
 fn combo54_citation_complex_style_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:citation-count 3) (:style nil :ref-count 2 :ref-keys (\"doe2024\" \"smith2023\") :ref-prefixes (\"see \" \" \")) (:style \"text\" :ref-count 1 :ref-keys (\"jones2024\") :ref-prefixes (\"as mentioned in \")) (:style \"nocite\" :ref-count 1 :ref-keys (\"unreferenced\") :ref-prefixes (nil)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -209,9 +216,7 @@ fn combo54_citation_complex_style_parsing() {
                             refs))
               r)))
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:citation-count 3) (:style nil :ref-count 2 :ref-keys (\"doe2024\" \"smith2023\") :ref-prefixes (\"see \" \" \")) (:style \"text\" :ref-count 1 :ref-keys (\"jones2024\") :ref-prefixes (\"as mentioned in \")) (:style \"nocite\" :ref-count 1 :ref-keys (\"unreferenced\") :ref-prefixes (nil)))""#
-        ]],
+        expect,
     );
 }
 
@@ -222,6 +227,9 @@ fn combo54_citation_complex_style_parsing() {
 #[test]
 fn combo54_dynamic_block_multi_type_update() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r##""OK ((:after-clocktable \"#+BEGIN: clocktable :maxlevel 2 :scope file\n#+CAPTION: Clock summary at [FIXED-TIME]\n| Headline     | Time   |\n|--------------+--------|\n| *Total time* | *0:00* |\n#+END:\n* Task A\n:LOGBOOK:\nCLOCK: [2026-06-29 Mon 06:31]--[2026-06-29 Mon 06:31] =>  0:00\n:END:\n** Sub A1\n:LOGBOOK:\nCLOCK: [2026-06-29 Mon 06:31]--[2026-06-29 Mon 06:31] =>  0:00\n:END:\n\") (:dblock-count 1) (:table-count 1))""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -247,9 +255,7 @@ fn combo54_dynamic_block_multi_type_update() {
       (push (list :dblock-count (length (org-element-map (org-element-parse-buffer) 'dynamic-block #'identity))) r)
       (push (list :table-count (length (org-element-map (org-element-parse-buffer) 'table #'identity))) r)
       (nreverse r))))"##,
-        expect_test::expect![[
-            r##""OK ((:after-clocktable \"#+BEGIN: clocktable :maxlevel 2 :scope file\n#+CAPTION: Clock summary at [FIXED-TIME]\n| Headline     | Time   |\n|--------------+--------|\n| *Total time* | *0:00* |\n#+END:\n* Task A\n:LOGBOOK:\nCLOCK: [2026-06-29 Mon 06:31]--[2026-06-29 Mon 06:31] =>  0:00\n:END:\n** Sub A1\n:LOGBOOK:\nCLOCK: [2026-06-29 Mon 06:31]--[2026-06-29 Mon 06:31] =>  0:00\n:END:\n\") (:dblock-count 1) (:table-count 1))""##
-        ]],
+        expect,
     );
 }
 
@@ -298,6 +304,7 @@ fn combo54_multi_backend_export_no_cross_contamination() {
 #[test]
 fn combo54_multibuffer_5_isolation_stress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((r '()))
   ;; buffer 1: headlines
@@ -324,7 +331,7 @@ fn combo54_multibuffer_5_isolation_stress() {
                            (= (plist-get (nth 1 r) :b4-headlines) 1)
                            (= (plist-get (nth 0 r) :b5-src-blocks) 1))) r)
   (nreverse r))"##,
-        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
+        expect,
     );
 }
 
@@ -335,6 +342,9 @@ fn combo54_multibuffer_5_isolation_stress() {
 #[test]
 fn combo54_3x_parse_modify_reparse_stability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:iter1-headlines 2) (:iter1-after-todo 2) (:iter2-headlines 3) (:iter3-rows 2) (:final-headlines 3) (:final-cells 10) (:interpret-ok t))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -364,9 +374,7 @@ fn combo54_3x_parse_modify_reparse_stability() {
       (push (list :final-cells cell-count) r)
       (push (list :interpret-ok (> (length (substring-no-properties (org-element-interpret-data tree))) 0)) r))
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:iter1-headlines 2) (:iter1-after-todo 2) (:iter2-headlines 3) (:iter3-rows 2) (:final-headlines 3) (:final-cells 10) (:interpret-ok t))""#
-        ]],
+        expect,
     );
 }
 
@@ -377,6 +385,9 @@ fn combo54_3x_parse_modify_reparse_stability() {
 #[test]
 fn combo54_entity_replacement_buffer_export() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:entities-before 5) (:latex-frags-before 0) (:buffer-after-toggle \"* Math symbols: \\\\alpha, \\\\beta, \\\\rightarrow\nLaTeX: \\\\sum_{i=1}^{n} and \\\\int_{a}^{b}f(x)dx\n\") (:export-has-alpha nil) (:export-has-beta nil) (:export-ok t))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -403,8 +414,6 @@ fn combo54_entity_replacement_buffer_export() {
         (push (list :export-has-beta (and out (string-match-p "\\\\beta" out))) r)
         (push (list :export-ok (and out (> (length out) 0))) r))
       (nreverse r))))"##,
-        expect_test::expect![[
-            r#""OK ((:entities-before 5) (:latex-frags-before 0) (:buffer-after-toggle \"* Math symbols: \\\\alpha, \\\\beta, \\\\rightarrow\nLaTeX: \\\\sum_{i=1}^{n} and \\\\int_{a}^{b}f(x)dx\n\") (:export-has-alpha nil) (:export-has-beta nil) (:export-ok t))""#
-        ]],
+        expect,
     );
 }

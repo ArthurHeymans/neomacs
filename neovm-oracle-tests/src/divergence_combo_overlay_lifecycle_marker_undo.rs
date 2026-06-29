@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_overlay_delete_marker_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "odm")))
@@ -34,7 +35,7 @@ fn combo_overlay_delete_marker_undo() {
                 (overlay-end ov)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -42,6 +43,7 @@ fn combo_overlay_delete_marker_undo() {
 fn combo_overlay_delete_narrow_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "odn")))
@@ -70,7 +72,7 @@ fn combo_overlay_delete_narrow_marker() {
                 (overlay-end ov)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -78,6 +80,7 @@ fn combo_overlay_delete_narrow_marker() {
 fn combo_overlay_create_delete_clone_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "ocd")))
@@ -109,7 +112,7 @@ fn combo_overlay_create_delete_clone_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -117,6 +120,7 @@ fn combo_overlay_create_delete_clone_undo() {
 fn combo_overlay_delete_multi_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "omd")))
@@ -150,7 +154,7 @@ fn combo_overlay_delete_multi_undo() {
                 (overlay-end ov2)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -158,6 +162,7 @@ fn combo_overlay_delete_multi_undo() {
 fn combo_overlay_delete_textprop_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "odt")))
@@ -186,6 +191,6 @@ fn combo_overlay_delete_textprop_narrow_undo() {
                 (overlay-end ov)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

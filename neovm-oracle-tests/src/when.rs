@@ -10,16 +10,13 @@ use super::common::{ORACLE_PROP_CASES, assert_ok_eq, eval_oracle_and_neovm};
 fn oracle_prop_when_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle_t, neovm_t) = crate::common::eval_oracle_and_neovm_expect(
-        "(when t 7)",
-        expect_test::expect![[r#""OK 7""#]],
-    );
+    let expect = expect_test::expect![[r#""OK 7""#]];
+    let (oracle_t, neovm_t) = crate::common::eval_oracle_and_neovm_expect("(when t 7)", expect);
     assert_ok_eq("7", &oracle_t, &neovm_t);
 
-    let (oracle_nil, neovm_nil) = crate::common::eval_oracle_and_neovm_expect(
-        "(when nil 7)",
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (oracle_nil, neovm_nil) =
+        crate::common::eval_oracle_and_neovm_expect("(when nil 7)", expect);
     assert_ok_eq("nil", &oracle_nil, &neovm_nil);
 }
 

@@ -9,6 +9,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_r6_regex_dupmax_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (nil nil nil \"Invalid content of \\\\{\\\\}\" \"Invalid content of \\\\{\\\\}\")""#
+    ]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK (nil nil nil "Invalid content of \\{\\}" "Invalid content of \\{\\}")
     // Neomacs:   OK (nil "Regular expression too big" "Regular expression too big" "Regular expression too big" "Regular expression too big")
@@ -24,15 +27,14 @@ fn div_r6_regex_dupmax_boundary() {
       (condition-case err (string-match "a\\{65536\\}" "text") (invalid-regexp (cadr err)) (error 'other))
       (condition-case err (string-match "a\\{100000\\}" "text") (invalid-regexp (cadr err)) (error 'other)))
 "##,
-        expect_test::expect![[
-            r#""OK (nil nil nil \"Invalid content of \\\\{\\\\}\" \"Invalid content of \\\\{\\\\}\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_r6_regex_nested_quantifiers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 0 nil 0 0 nil)""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK (0 0 nil 0 0 nil)
     // Neomacs:   OK (nil nil nil 0 0 nil)
@@ -49,6 +51,6 @@ fn div_r6_regex_nested_quantifiers() {
       (condition-case err (string-match "a\\{2\\}*" "text") (invalid-regexp (cadr err)) (error 'other))
       (condition-case err (string-match "a\\{2,3\\}+" "text") (invalid-regexp (cadr err)) (error 'other)))
 "##,
-        expect_test::expect![[r#""OK (0 0 nil 0 0 nil)""#]],
+        expect,
     );
 }

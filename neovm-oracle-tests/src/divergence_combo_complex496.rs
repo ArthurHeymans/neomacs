@@ -49,10 +49,11 @@ fn div_cx496_read_expression() {
 #[test]
 fn div_cx496_read_buffer_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(fboundp 'read-buffer-to-switch)
 "##,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -70,24 +71,26 @@ fn div_cx496_read_number_custom() {
 #[test]
 fn div_cx496_read_float() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK void-function""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case e
     (read-float "float: " 3.14)
   (error (car e)))
 "##,
-        expect_test::expect![[r#""OK void-function""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx496_read_color() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK wrong-number-of-arguments""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case e
     (read-color "color: " "red")
   (error (car e)))
 "##,
-        expect_test::expect![[r#""OK wrong-number-of-arguments""#]],
+        expect,
     );
 }
 

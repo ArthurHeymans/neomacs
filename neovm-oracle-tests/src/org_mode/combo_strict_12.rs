@@ -12,6 +12,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn strict_wrong_arg_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 29 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -42,13 +43,14 @@ fn strict_wrong_arg_types() {
            (org-element-map (org-element-parse-buffer) nil #'identity)))
      (error (list :map-nil-type (car e))))
    )))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 29 6)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_timestamp_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 24 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -74,13 +76,14 @@ fn strict_timestamp_edge_cases() {
          (list :valid (org-element-property :year-start ts)))
      (error :ok-error))
    )))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 24 6)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_link_escape_null_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 19 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -101,13 +104,14 @@ fn strict_link_escape_null_edge() {
    ;; already-escaped percent
    (org-link-escape "%20%20")
    )))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 19 6)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_malformed_table_formula() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK :no-error""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -121,13 +125,14 @@ fn strict_malformed_table_formula() {
                  (org-table-recalculate t)
                  :no-error)
         (error (list :bad-col (car e)))))))"##,
-        expect_test::expect![[r#""OK :no-error""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_malformed_footnote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 12 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -141,13 +146,14 @@ fn strict_malformed_footnote() {
         (push (list :ref-count (length refs)) r)
         (push (list :ref-labels (mapcar (lambda (fr) (org-element-property :label fr)) refs)) r)
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 12 25)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_export_nonexistent_backend() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:error-type error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -158,13 +164,14 @@ fn strict_export_nonexistent_backend() {
       (condition-case e
           (org-export-as 'nonexistent-backend nil nil t)
         (error (list :error-type (car e)))))))"##,
-        expect_test::expect![[r#""OK (:error-type error)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_babel_unsupported_language() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:error-type error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -177,13 +184,14 @@ fn strict_babel_unsupported_language() {
       (condition-case e
           (org-babel-execute-src-block)
         (error (list :error-type (car e)))))))"##,
-        expect_test::expect![[r#""OK (:error-type error)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_element_degenerate_input() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 15 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -200,13 +208,14 @@ fn strict_element_degenerate_input() {
         (push (list :levels (mapcar (lambda (h) (org-element-property :level h)) headlines)) r)
         (push (list :values (mapcar (lambda (h) (substring-no-properties (org-element-property :raw-value h))) headlines)) r)
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 15 25)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_table_formula_nonexistent_col_ref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK :no-error""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -218,13 +227,14 @@ fn strict_table_formula_nonexistent_col_ref() {
       (condition-case e
           (progn (org-table-recalculate t) :no-error)
         (error (list :error (car e)))))))"##,
-        expect_test::expect![[r#""OK :no-error""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_org_store_link_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -242,13 +252,14 @@ fn strict_org_store_link_edge_cases() {
        (condition-case e
            (org-store-link 1)
          (error (list :interactive-link (car e))))))))"##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_org_babel_var_reference_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:error-type error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -262,13 +273,14 @@ fn strict_org_babel_var_reference_errors() {
       (condition-case e
           (org-babel-execute-src-block)
         (error (list :error-type (car e)))))))"##,
-        expect_test::expect![[r#""OK (:error-type error)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_org_export_include_nonexistent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:include-error error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -282,6 +294,6 @@ fn strict_org_export_include_nonexistent() {
                  (org-export-as 'ascii nil nil t)
                  :no-error)
         (error (list :include-error (car e)))))))"##,
-        expect_test::expect![[r#""OK (:include-error error)""#]],
+        expect,
     );
 }

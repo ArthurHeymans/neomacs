@@ -12,6 +12,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn face_text_property_on_headline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -31,13 +32,14 @@ fn face_text_property_on_headline() {
                               (t :complex)))
                   r))))
       (nreverse r))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn face_property_on_bold_italic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -54,13 +56,14 @@ fn face_property_on_bold_italic() {
                         :face (if (symbolp face) face (if (consp face) (car face) :complex)))
                   r))))
       (nreverse r))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn face_count_total_in_org_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:face-prop-count 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -74,13 +77,16 @@ fn face_count_total_in_org_buffer() {
         (when (get-text-property (1+ i) 'face)
           (setq count (1+ count))))
       (list :face-prop-count count))))"##,
-        expect_test::expect![[r#""OK (:face-prop-count 0)""#]],
+        expect,
     );
 }
 
 #[test]
 fn overlay_lists_in_org_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:overlay-count 2 :overlay-types (org-fold-outline org-fold-outline))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -92,15 +98,16 @@ fn overlay_lists_in_org_buffer() {
     (let ((overs (overlays-in (point-min) (point-max))))
       (list :overlay-count (length overs)
             :overlay-types (mapcar (lambda (o) (overlay-get o 'invisible)) overs)))))"##,
-        expect_test::expect![[
-            r#""OK (:overlay-count 2 :overlay-types (org-fold-outline org-fold-outline))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn face_all_attributes_org_level1() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:attr-keys (:background :box :extend :family :foreground :foundry :height :inherit :inverse-video :overline :slant :stipple :strike-through :underline :weight :width) :attr-count 16)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -108,15 +115,16 @@ fn face_all_attributes_org_level1() {
   (let ((attrs (face-all-attributes 'org-level-1)))
     (list :attr-keys (sort (mapcar #'car attrs) #'string-lessp)
           :attr-count (length attrs))))"##,
-        expect_test::expect![[
-            r#""OK (:attr-keys (:background :box :extend :family :foreground :foundry :height :inherit :inverse-video :overline :slant :stipple :strike-through :underline :weight :width) :attr-count 16)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn face_all_attributes_org_todo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:attr-count 16 :has-foreground (:foreground . unspecified) :has-weight (:weight . unspecified))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -125,9 +133,7 @@ fn face_all_attributes_org_todo() {
     (list :attr-count (length attrs)
           :has-foreground (assq :foreground attrs)
           :has-weight (assq :weight attrs))))"##,
-        expect_test::expect![[
-            r#""OK (:attr-count 16 :has-foreground (:foreground . unspecified) :has-weight (:weight . unspecified))""#
-        ]],
+        expect,
     );
 }
 
@@ -138,6 +144,9 @@ fn face_all_attributes_org_todo() {
 #[test]
 fn charset_ascii_characters() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:A ascii :a ascii :0 ascii :space ascii :newline ascii :exclaim ascii :tilde ascii)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (list
@@ -148,15 +157,16 @@ fn charset_ascii_characters() {
    :newline (char-charset ?\n)
    :exclaim (char-charset ?!)
    :tilde (char-charset ?~)))"##,
-        expect_test::expect![[
-            r#""OK (:A ascii :a ascii :0 ascii :space ascii :newline ascii :exclaim ascii :tilde ascii)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn charset_high_bytes_128_255() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:byte-128 eight-bit :byte-160 eight-bit :byte-200 eight-bit :byte-255 eight-bit)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (list
@@ -164,15 +174,16 @@ fn charset_high_bytes_128_255() {
    :byte-160 (char-charset (make-char 'eight-bit 160))
    :byte-200 (char-charset (make-char 'eight-bit 200))
    :byte-255 (char-charset (make-char 'eight-bit 255))))"##,
-        expect_test::expect![[
-            r#""OK (:byte-128 eight-bit :byte-160 eight-bit :byte-200 eight-bit :byte-255 eight-bit)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn charset_cjk_japanese() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:hiragana-a unicode-bmp :katakana-a unicode-bmp :kanji-nichi unicode-bmp :kanji-hon unicode-bmp)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (list
@@ -180,15 +191,16 @@ fn charset_cjk_japanese() {
    :katakana-a (char-charset ?ア)
    :kanji-nichi (char-charset ?日)
    :kanji-hon (char-charset ?本)))"##,
-        expect_test::expect![[
-            r#""OK (:hiragana-a unicode-bmp :katakana-a unicode-bmp :kanji-nichi unicode-bmp :kanji-hon unicode-bmp)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn charset_cjk_chinese_korean() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:chinese-zhong unicode-bmp :chinese-wen unicode-bmp :korean-han unicode-bmp :korean-gug unicode-bmp)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (list
@@ -196,15 +208,16 @@ fn charset_cjk_chinese_korean() {
    :chinese-wen (char-charset ?文)
    :korean-han (char-charset ?한)
    :korean-gug (char-charset ?국)))"##,
-        expect_test::expect![[
-            r#""OK (:chinese-zhong unicode-bmp :chinese-wen unicode-bmp :korean-han unicode-bmp :korean-gug unicode-bmp)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn charset_greek_cyrillic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:alpha unicode-bmp :omega unicode-bmp :Alpha unicode-bmp :cyrillic-a unicode-bmp :cyrillic-ya unicode-bmp :cyrillic-A unicode-bmp)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (list
@@ -214,15 +227,16 @@ fn charset_greek_cyrillic() {
    :cyrillic-a (char-charset ?а)
    :cyrillic-ya (char-charset ?я)
    :cyrillic-A (char-charset ?А)))"##,
-        expect_test::expect![[
-            r#""OK (:alpha unicode-bmp :omega unicode-bmp :Alpha unicode-bmp :cyrillic-a unicode-bmp :cyrillic-ya unicode-bmp :cyrillic-A unicode-bmp)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn charset_emoji_math_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:emoji unicode :sum-sign unicode-bmp :integral unicode-bmp :infinite unicode-bmp :arrow-right unicode-bmp :approx unicode-bmp)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (list
@@ -232,15 +246,14 @@ fn charset_emoji_math_symbols() {
    :infinite (char-charset ?∞)
    :arrow-right (char-charset ?→)
    :approx (char-charset ?≈)))"##,
-        expect_test::expect![[
-            r#""OK (:emoji unicode :sum-sign unicode-bmp :integral unicode-bmp :infinite unicode-bmp :arrow-right unicode-bmp :approx unicode-bmp)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn char_bytes_width_various() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function char-bytes)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (list
@@ -249,7 +262,7 @@ fn char_bytes_width_various() {
    :cjk-nichi (char-bytes ?日)
    :emoji (char-bytes ?🎉)
    :arrow (char-bytes ?→)))"##,
-        expect_test::expect![[r#""ERR (void-function char-bytes)""#]],
+        expect,
     );
 }
 
@@ -260,6 +273,8 @@ fn char_bytes_width_various() {
 #[test]
 fn case_fold_greek_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (:alpha-upper 0 :alpha-lower 0 :omega-upper 0 :sigma 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (let ((case-fold-search t))
@@ -268,13 +283,14 @@ fn case_fold_greek_search() {
      :alpha-lower (string-match-p "α" "Α")
      :omega-upper (string-match-p "Ω" "ω")
      :sigma (string-match-p "Σ" "σ"))))"##,
-        expect_test::expect![[r#""OK (:alpha-upper 0 :alpha-lower 0 :omega-upper 0 :sigma 0)""#]],
+        expect,
     );
 }
 
 #[test]
 fn case_fold_cyrillic_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:cyr-A 0 :cyr-ya 0 :cyr-r 0 :cyr-p 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (let ((case-fold-search t))
@@ -283,13 +299,16 @@ fn case_fold_cyrillic_search() {
      :cyr-ya (string-match-p "Я" "я")
      :cyr-r (string-match-p "Р" "р")
      :cyr-p (string-match-p "П" "п"))))"##,
-        expect_test::expect![[r#""OK (:cyr-A 0 :cyr-ya 0 :cyr-r 0 :cyr-p 0)""#]],
+        expect,
     );
 }
 
 #[test]
 fn downcase_greek_special() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:alpha 945 :beta 946 :gamma 947 :sigma-final 963 :omega 969)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (list
@@ -298,15 +317,16 @@ fn downcase_greek_special() {
    :gamma (downcase ?Γ)
    :sigma-final (downcase ?Σ)
    :omega (downcase ?Ω)))"##,
-        expect_test::expect![[
-            r#""OK (:alpha 945 :beta 946 :gamma 947 :sigma-final 963 :omega 969)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn upcase_greek_cyrillic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:alpha 913 :omega 937 :cyrillic-a 1040 :cyrillic-ya 1071)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (list
@@ -314,15 +334,14 @@ fn upcase_greek_cyrillic() {
    :omega (upcase ?ω)
    :cyrillic-a (upcase ?а)
    :cyrillic-ya (upcase ?я)))"##,
-        expect_test::expect![[
-            r#""OK (:alpha 913 :omega 937 :cyrillic-a 1040 :cyrillic-ya 1071)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn capitalize_mixed_case_nonascii() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 6 35)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (list
@@ -330,7 +349,7 @@ fn capitalize_mixed_case_nonascii() {
    :cyrillic (capitalize "абв")
    :mixed (capitalize "foo_bar")
    :german (capitalize "straße"))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 6 35)""#]],
+        expect,
     );
 }
 
@@ -341,6 +360,7 @@ fn capitalize_mixed_case_nonascii() {
 #[test]
 fn current_column_with_display_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:col-before 0 :col-after 3 :point 7)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (with-temp-buffer
@@ -352,13 +372,14 @@ fn current_column_with_display_property() {
       (goto-char 7)
       (let ((col2 (current-column)))
         (list :col-before col1 :col-after col2 :point (point))))))"##,
-        expect_test::expect![[r#""OK (:col-before 0 :col-after 3 :point 7)""#]],
+        expect,
     );
 }
 
 #[test]
 fn move_to_column_with_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 8 50)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (with-temp-buffer
@@ -368,13 +389,14 @@ fn move_to_column_with_display() {
     (goto-char (point-min))
     (move-to-column 3)
     (list :point (point) :col (current-column)))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 8 50)""#]],
+        expect,
     );
 }
 
 #[test]
 fn org_table_column_after_alignment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 10 62)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -386,7 +408,7 @@ fn org_table_column_after_alignment() {
     (forward-line 1)
     (forward-char 2)
     (list :col (current-column) :at-table (org-at-table-p)))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 10 62)""#]],
+        expect,
     );
 }
 
@@ -397,6 +419,7 @@ fn org_table_column_after_alignment() {
 #[test]
 fn bidi_paragraph_direction_rtl() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:bidi-direction nil :rtl-detected nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (with-temp-buffer
@@ -404,26 +427,29 @@ fn bidi_paragraph_direction_rtl() {
     (goto-char (point-min))
     (list :bidi-direction (buffer-local-value 'bidi-paragraph-direction (current-buffer))
           :rtl-detected (eq (buffer-local-value 'bidi-paragraph-direction (current-buffer)) 'right-to-left))))"##,
-        expect_test::expect![[r#""OK (:bidi-direction nil :rtl-detected nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn bidi_hebrew_paragraph() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:direction nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (with-temp-buffer
     (insert "זהו טקסט בעברית\n")
     (goto-char (point-min))
     (list :direction (buffer-local-value 'bidi-paragraph-direction (current-buffer)))))"##,
-        expect_test::expect![[r#""OK (:direction nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn org_parse_rtl_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (:hl-count 1 :raw (\"عنوان بالعربية\") :para-count 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -436,7 +462,7 @@ fn org_parse_rtl_text() {
       (list :hl-count (length hls)
             :raw (mapcar (lambda (h) (substring-no-properties (org-element-property :raw-value h))) hls)
             :para-count (length (org-element-map tree 'paragraph #'identity))))))"##,
-        expect_test::expect![[r#""OK (:hl-count 1 :raw (\"عنوان بالعربية\") :para-count 1)""#]],
+        expect,
     );
 }
 
@@ -447,6 +473,7 @@ fn org_parse_rtl_text() {
 #[test]
 fn composition_find_in_org_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:composition nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (with-temp-buffer
@@ -454,13 +481,14 @@ fn composition_find_in_org_buffer() {
     (goto-char (point-min))
     (let ((comp (find-composition 1)))
       (list :composition comp))))"##,
-        expect_test::expect![[r#""OK (:composition nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn compose_region_and_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:composition (1 3))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (with-temp-buffer
@@ -469,7 +497,7 @@ fn compose_region_and_check() {
     (goto-char (point-min))
     (let ((comp (find-composition 1)))
       (list :composition (when comp (list (car comp) (cadr comp)))))))"##,
-        expect_test::expect![[r#""OK (:composition (1 3))""#]],
+        expect,
     );
 }
 
@@ -480,6 +508,7 @@ fn compose_region_and_check() {
 #[test]
 fn text_property_plist_ordering() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:props (baz qux foo bar face bold))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (with-temp-buffer
@@ -488,13 +517,14 @@ fn text_property_plist_ordering() {
     (goto-char (point-min))
     (let ((props (text-properties-at 1)))
       (list :props props))))"##,
-        expect_test::expect![[r#""OK (:props (baz qux foo bar face bold))""#]],
+        expect,
     );
 }
 
 #[test]
 fn invisible_property_after_fold() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -509,13 +539,16 @@ fn invisible_property_after_fold() {
         (let ((inv (get-text-property (1+ i) 'invisible)))
           (when inv (push (list :pos (1+ i) :invisible inv) r))))
       (nreverse r))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn org_hide_leading_stars_invisible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:pos 1 :invisible nil) (:pos 2 :invisible nil) (:pos 3 :invisible nil) (:pos 4 :invisible nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -530,9 +563,7 @@ fn org_hide_leading_stars_invisible() {
           (let ((inv (get-text-property (1+ i) 'invisible)))
             (push (list :pos (1+ i) :invisible inv) r)))
         (nreverse r)))))"##,
-        expect_test::expect![[
-            r#""OK ((:pos 1 :invisible nil) (:pos 2 :invisible nil) (:pos 3 :invisible nil) (:pos 4 :invisible nil))""#
-        ]],
+        expect,
     );
 }
 
@@ -543,6 +574,7 @@ fn org_hide_leading_stars_invisible() {
 #[test]
 fn org_multibyte_buffer_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:multibyte-p t :length 21 :bytes 37)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -554,13 +586,14 @@ fn org_multibyte_buffer_string() {
       (list :multibyte-p (multibyte-string-p str)
             :length (length str)
             :bytes (string-bytes str)))))"##,
-        expect_test::expect![[r#""OK (:multibyte-p t :length 21 :bytes 37)""#]],
+        expect,
     );
 }
 
 #[test]
 fn org_set_buffer_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -571,7 +604,7 @@ fn org_set_buffer_multibyte() {
     (let ((before-multibyte (multibyte-string-p (buffer-string))))
       (list :before-multibyte before-multibyte
             :enable-multibyte (enable-multibyte-characters))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -582,72 +615,77 @@ fn org_set_buffer_multibyte() {
 #[test]
 fn error_message_style_wrong_arg() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:msg \"Wrong type argument: listp, 42\" :type wrong-type-argument)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (condition-case e
       (car 42)
     (error (list :msg (error-message-string e)
                  :type (car e)))))"##,
-        expect_test::expect![[
-            r#""OK (:msg \"Wrong type argument: listp, 42\" :type wrong-type-argument)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn error_message_style_void_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:msg \"Symbol’s function definition is void: nonexistent-function-xyz\" :type void-function)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (condition-case e
       (nonexistent-function-xyz)
     (error (list :msg (error-message-string e)
                  :type (car e)))))"##,
-        expect_test::expect![[
-            r#""OK (:msg \"Symbol’s function definition is void: nonexistent-function-xyz\" :type void-function)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn error_message_style_void_variable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:msg \"Symbol’s value as variable is void: nonexistent-variable-xyz\" :type void-variable)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (condition-case e
       nonexistent-variable-xyz
     (error (list :msg (error-message-string e)
                  :type (car e)))))"##,
-        expect_test::expect![[
-            r#""OK (:msg \"Symbol’s value as variable is void: nonexistent-variable-xyz\" :type void-variable)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn error_message_style_args_out_of_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:msg \"Args out of range: \\\"abc\\\", 0, 10\" :type args-out-of-range)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (condition-case e
       (substring "abc" 0 10)
     (error (list :msg (error-message-string e)
                  :type (car e)))))"##,
-        expect_test::expect![[
-            r#""OK (:msg \"Args out of range: \\\"abc\\\", 0, 10\" :type args-out-of-range)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn error_message_style_div_by_zero() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:msg \"Arithmetic error\" :type arith-error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (condition-case e
       (/ 1 0)
     (error (list :msg (error-message-string e)
                  :type (car e)))))"##,
-        expect_test::expect![[r#""OK (:msg \"Arithmetic error\" :type arith-error)""#]],
+        expect,
     );
 }

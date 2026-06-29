@@ -9,6 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx350_cl_generic_dispatch_by_type_full_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:str :int :cons :vec :nil :sym :float)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -28,13 +29,14 @@ fn div_cx350_cl_generic_dispatch_by_type_full_matrix() {
               '("str" 42 (1 . 2) [1 2] nil sym 3.14)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:str :int :cons :vec :nil :sym :float)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx350_cl_generic_satisfies_and_head_specializer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -52,13 +54,14 @@ fn div_cx350_cl_generic_satisfies_and_head_specializer() {
             (mapcar #'neo-cx350-head '((:kw . v) (:cmd . x) (other . z) nil))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored error)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx350_cl_generic_argument_precedence_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:a-str :b-str :c-str :c-str)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -76,13 +79,14 @@ fn div_cx350_cl_generic_argument_precedence_order() {
             (neo-cx350-po "x" "y" "z")))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:a-str :b-str :c-str :c-str)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx350_cl_generic_method_combination_all_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -98,13 +102,14 @@ fn div_cx350_cl_generic_method_combination_all_variants() {
       (list (neo-cx350-plus "test") (neo-cx350-maxg "test")))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored error)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx350_cl_generic_call_next_method_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -118,13 +123,14 @@ fn div_cx350_cl_generic_call_next_method_deep() {
       (list (neo-cx350-next "test") (neo-cx350-next 42) (neo-cx350-next :sym)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx350_cl_generic_no_applicable_method_handling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK :caught-no-applicable""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -137,13 +143,16 @@ fn div_cx350_cl_generic_no_applicable_method_handling() {
         (error (list :caught-error (car err)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK :caught-no-applicable""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx350_cl_generic_keyword_and_optional_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"test\" nil nil) (\"test\" :opt-val nil) (\"test\" :opt-val :m))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -157,15 +166,14 @@ fn div_cx350_cl_generic_keyword_and_optional_args() {
             (neo-cx350-kw "test" :opt-val :mode :m)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK ((\"test\" nil nil) (\"test\" :opt-val nil) (\"test\" :opt-val :m))""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx350_cl_generic_methods_list_and_find_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -179,13 +187,14 @@ fn div_cx350_cl_generic_methods_list_and_find_method() {
         (list (consp methods) (= (length methods) 3))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx350_cl_generic_context_specializer_major_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:elisp-mode :text-mode :default)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -202,13 +211,14 @@ fn div_cx350_cl_generic_context_specializer_major_mode() {
             (with-temp-buffer (neo-cx350-context "test"))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:elisp-mode :text-mode :default)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx350_cl_generic_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -242,6 +252,6 @@ fn div_cx350_cl_generic_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     )
 }

@@ -45,10 +45,9 @@ fn oracle_prop_char_ops_comprehensive_roundtrip() {
  (string= (char-to-string ?\n) "\n")
  (string= (char-to-string ?\t) "\t"))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (97 90 48 32 26085 233 955 945 1 1 1 t t 0 t t t t t)""#],
-    );
+    let expect =
+        expect_test::expect![r#""OK (97 90 48 32 26085 233 955 945 1 1 1 t t 0 t t t t t)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -90,10 +89,8 @@ fn oracle_prop_char_ops_comprehensive_char_width() {
  ;; Fullwidth latin A (U+FF21) should be width 2
  (char-width #xff21))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (1 1 1 1 1 2 2 2 2 1 1 1 1 1 1 t 0 2 2 2)""#],
-    );
+    let expect = expect_test::expect![r#""OK (1 1 1 1 1 2 2 2 2 1 1 1 1 1 1 t 0 2 2 2)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -137,10 +134,9 @@ fn oracle_prop_char_ops_comprehensive_char_equal() {
     (char-equal ?\t ?\t)
     (char-equal ?a ?\n))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((t nil t t nil t nil) (t t t nil t t t) (t t t nil))""#],
-    );
+    let expect =
+        expect_test::expect![r#""OK ((t nil t t nil t nil) (t t t nil t t t) (t t t nil))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -183,12 +179,10 @@ fn oracle_prop_char_ops_comprehensive_characterp() {
  ;; Zero is a valid character
  (characterp 0))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (t t t t t t t t t t nil nil nil nil nil nil nil nil nil nil nil t)""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (t t t t t t t t t t nil nil nil nil nil nil nil nil nil nil nil t)""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -242,12 +236,10 @@ fn oracle_prop_char_ops_comprehensive_buffer_char_access() {
        (widen)
        r))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (72 101 32 87 26085 nil nil 72 101 35486 nil nil (72 0) (44 111) (0 35486) (108 0 108 nil))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (72 101 32 87 26085 nil nil 72 101 35486 nil nil (72 0) (44 111) (0 35486) (108 0 108 nil))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -296,12 +288,10 @@ fn oracle_prop_char_ops_comprehensive_char_syntax() {
          (char-syntax ?a)
          (char-syntax ?\())))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (119 119 119 119 95 32 32 62 40 41 40 41 95 95 95 39 60 34 95 95 95 95 39 (119 119 119 40))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (119 119 119 119 95 32 32 62 40 41 40 41 95 95 95 39 60 34 95 95 95 95 39 (119 119 119 40))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -351,12 +341,10 @@ fn oracle_prop_char_ops_comprehensive_downcase_upcase() {
  (characterp (downcase ?A))
  (characterp (upcase ?a)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (97 122 97 122 65 90 65 90 48 48 33 33 32 32 t t t t t t 233 201 241 209 t t t t t)""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (97 122 97 122 65 90 65 90 48 48 33 33 32 32 t t t t t t 233 201 241 209 t t t t t)""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -411,12 +399,10 @@ fn oracle_prop_char_ops_comprehensive_char_table() {
       ;; char-table-p on the category table (built-in)
       (char-table-p (standard-syntax-table))))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (t nil nil nil nil nil nil nil (alpha beta default-val uppercase uppercase uppercase default-val default-val (uppercase special-m uppercase) t))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (t nil nil nil nil nil nil nil (alpha beta default-val uppercase uppercase uppercase default-val default-val (uppercase special-m uppercase) t))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -453,10 +439,8 @@ fn oracle_prop_char_ops_comprehensive_max_char() {
  (>= (max-char) ?é)
  (>= (max-char) #x10FFFF))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (t t t t t t t t t t t t t t)""#],
-    );
+    let expect = expect_test::expect![r#""OK (t t t t t t t t t t t t t t)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -518,10 +502,8 @@ fn oracle_prop_char_ops_comprehensive_caesar_cipher() {
                  (>= (aref shifted 1) ?a) (<= (aref shifted 1) ?z)))))
     (fmakunbound 'neovm--caesar-shift)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Uif Rvjdl Cspxo Gpy Kvnqt Pwfs Uif Mbaz Eph 123!\" \"Gur Dhvpx Oebja Sbk Whzcf Bire Gur Ynml Qbt 123!\" t t t t (t t t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Uif Rvjdl Cspxo Gpy Kvnqt Pwfs Uif Mbaz Eph 123!\" \"Gur Dhvpx Oebja Sbk Whzcf Bire Gur Ynml Qbt 123!\" t t t t (t t t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

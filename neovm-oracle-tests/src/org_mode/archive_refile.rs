@@ -5,6 +5,9 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_archive_subtree_file_context_properties_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK (\"#+CATEGORY: Work\n* Parent :client:\n:PROPERTIES:\n:Owner: Ada\n:END:\n** TODO Keep\n\" \"#    -*- mode: org -*-\n\n\nArchived entries from file <source-file>\n\n\n* Archive\n\n** TODO Ship feature                                          :client:urgent:\nDEADLINE: <2026-06-01 Mon>\n:PROPERTIES:\n:ARCHIVE_FILE: <source-file>\n:ARCHIVE_OLPATH: Parent\n:ARCHIVE_CATEGORY: Work\n:ARCHIVE_TODO: TODO\n:ARCHIVE_ITAGS: client\n:END:\nBody\n\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -49,9 +52,7 @@ fn org_archive_subtree_file_context_properties_combo() {
         (when buf (kill-buffer buf)))
       (when (file-exists-p file) (delete-file file))
       (when (file-exists-p archive) (delete-file archive)))))"##,
-        expect_test::expect![[
-            r##""OK (\"#+CATEGORY: Work\n* Parent :client:\n:PROPERTIES:\n:Owner: Ada\n:END:\n** TODO Keep\n\" \"#    -*- mode: org -*-\n\n\nArchived entries from file <source-file>\n\n\n* Archive\n\n** TODO Ship feature                                          :client:urgent:\nDEADLINE: <2026-06-01 Mon>\n:PROPERTIES:\n:ARCHIVE_FILE: <source-file>\n:ARCHIVE_OLPATH: Parent\n:ARCHIVE_CATEGORY: Work\n:ARCHIVE_TODO: TODO\n:ARCHIVE_ITAGS: client\n:END:\nBody\n\")""##
-        ]],
+        expect,
     );
 }
 
@@ -59,6 +60,7 @@ fn org_archive_subtree_file_context_properties_combo() {
 fn org_refile_copy_with_logbook_and_bookmark_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 28 55)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -88,7 +90,7 @@ fn org_refile_copy_with_logbook_and_bookmark_combo() {
                     (point-min) (point-max)))))))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (when (file-exists-p file) (delete-file file)))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 28 55)""#]],
+        expect,
     );
 }
 
@@ -96,6 +98,9 @@ fn org_refile_copy_with_logbook_and_bookmark_combo() {
 fn org_sparse_tree_match_visibility_and_map_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (((\"Alpha\" (\"work\") t) (\"WAIT Hidden child\" (\"work\") t) (\"Beta\" (\"home\") t) (\"Matched child\" (\"work\") t) (\"Gamma\" (\"work\") t)) ((\"Alpha\" t) (\"WAIT Hidden child\" t) (\"Beta\" t) (\"Matched child\" t) (\"Gamma\" t)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -124,9 +129,7 @@ fn org_sparse_tree_match_visibility_and_map_combo() {
                      (not (null (org-invisible-p (line-end-position)))))
                states))
        (nreverse states)))))"##,
-        expect_test::expect![[
-            r#""OK (((\"Alpha\" (\"work\") t) (\"WAIT Hidden child\" (\"work\") t) (\"Beta\" (\"home\") t) (\"Matched child\" (\"work\") t) (\"Gamma\" (\"work\") t)) ((\"Alpha\" t) (\"WAIT Hidden child\" t) (\"Beta\" t) (\"Matched child\" t) (\"Gamma\" t)))""#
-        ]],
+        expect,
     );
 }
 
@@ -134,6 +137,7 @@ fn org_sparse_tree_match_visibility_and_map_combo() {
 fn org_refile_targets_cache_new_child_outline_path_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -197,7 +201,7 @@ fn org_refile_targets_cache_new_child_outline_path_combo() {
       (dolist (file (list one two))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (when (file-exists-p file) (delete-file file)))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -205,6 +209,7 @@ fn org_refile_targets_cache_new_child_outline_path_combo() {
 fn org_capture_refile_to_file_headline_then_archive_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -295,7 +300,7 @@ fn org_capture_refile_to_file_headline_then_archive_combo() {
                               org-stored-links)
                       "\n")))))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -303,6 +308,9 @@ fn org_capture_refile_to_file_headline_then_archive_combo() {
 fn org_archive_sibling_reversed_order_stats_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (\"* Parent [0/1]\n** TODO Keep\n** Archive                                                          :ARCHIVE:\n*** DONE Old one\n:PROPERTIES:\n:ARCHIVE_TIME: [stamp]\n:END:\nBody one\n*** DONE Old two\n:PROPERTIES:\n:ARCHIVE_TIME: [stamp]\n:END:\nBody two\n\" ((\"Parent\" 1 nil) (\"Archive\" 2 t) (\"Old one\" 3 t) (\"Old two\" 3 t) (\"Keep\" 2 nil)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -340,9 +348,7 @@ fn org_archive_sibling_reversed_order_stats_combo() {
                        (org-current-level)
                        (not (null (org-invisible-p (line-end-position)))))))
              '("Parent" "Archive" "Old one" "Old two" "Keep"))))))"##,
-        expect_test::expect![[
-            r#""OK (\"* Parent [0/1]\n** TODO Keep\n** Archive                                                          :ARCHIVE:\n*** DONE Old one\n:PROPERTIES:\n:ARCHIVE_TIME: [stamp]\n:END:\nBody one\n*** DONE Old two\n:PROPERTIES:\n:ARCHIVE_TIME: [stamp]\n:END:\nBody two\n\" ((\"Parent\" 1 nil) (\"Archive\" 2 t) (\"Old one\" 3 t) (\"Old two\" 3 t) (\"Keep\" 2 nil)))""#
-        ]],
+        expect,
     );
 }
 
@@ -350,6 +356,7 @@ fn org_archive_sibling_reversed_order_stats_combo() {
 fn org_archive_all_done_tag_then_move_old_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (error \"No file associated to buffer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -381,7 +388,7 @@ fn org_archive_all_done_tag_then_move_old_combo() {
                      (org-entry-get nil "ARCHIVE_CATEGORY")
                      (org-entry-get nil "ARCHIVE_TODO")))
              nil nil)))))"##,
-        expect_test::expect![[r#""ERR (error \"No file associated to buffer\")""#]],
+        expect,
     );
 }
 
@@ -389,6 +396,9 @@ fn org_archive_all_done_tag_then_move_old_combo() {
 fn org_archive_property_locations_hooks_files_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK ((\"archive-a.org\" \"* Project Archive\") (\"archive-b.org\" \"* Other Archive\") ((\"Task A\" 2 (\"done\")) (\"Task B\" 2 (\"closed\"))) (\"archive-a.org\" \"archive-b.org\") (\"archive-a.org\" \"archive-b.org\" \"source.org\") \"#+CATEGORY: Cases\n* Project :client:\n:PROPERTIES:\n:ARCHIVE: <root>/archive-a.org::* Project Archive\n:END:\n** TODO Active\n* Other :ops:\n:PROPERTIES:\n:ARCHIVE: <root>/archive-b.org::* Other Archive\n:END:\n\" \"\nArchived entries from file <root>/source.org\n\n\n* Project Archive\n\n** DONE Task A                                                  :client:done:\n:PROPERTIES:\n:ARCHIVE_FILE: <root>/source.org\n:ARCHIVE_CATEGORY: Cases\n:ARCHIVE_TODO: DONE\n:ARCHIVE_OLPATH: Project\n:ARCHIVE_ITAGS: client\n:ARCHIVE_LTAGS: done\n:END:\nBody A\n\" \"\nArchived entries from file <root>/source.org\n\n\n* Other Archive\n\n** DONE Task B                                                   :ops:closed:\n:PROPERTIES:\n:ARCHIVE_FILE: <root>/source.org\n:ARCHIVE_CATEGORY: Cases\n:ARCHIVE_TODO: DONE\n:ARCHIVE_OLPATH: Other\n:ARCHIVE_ITAGS: ops\n:ARCHIVE_LTAGS: closed\n:END:\nBody B\n\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -472,9 +482,7 @@ fn org_archive_property_locations_hooks_files_combo() {
         (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
         (when (file-exists-p file) (delete-file file)))
       (delete-directory root t))))"##,
-        expect_test::expect![[
-            r##""OK ((\"archive-a.org\" \"* Project Archive\") (\"archive-b.org\" \"* Other Archive\") ((\"Task A\" 2 (\"done\")) (\"Task B\" 2 (\"closed\"))) (\"archive-a.org\" \"archive-b.org\") (\"archive-a.org\" \"archive-b.org\" \"source.org\") \"#+CATEGORY: Cases\n* Project :client:\n:PROPERTIES:\n:ARCHIVE: <root>/archive-a.org::* Project Archive\n:END:\n** TODO Active\n* Other :ops:\n:PROPERTIES:\n:ARCHIVE: <root>/archive-b.org::* Other Archive\n:END:\n\" \"\nArchived entries from file <root>/source.org\n\n\n* Project Archive\n\n** DONE Task A                                                  :client:done:\n:PROPERTIES:\n:ARCHIVE_FILE: <root>/source.org\n:ARCHIVE_CATEGORY: Cases\n:ARCHIVE_TODO: DONE\n:ARCHIVE_OLPATH: Project\n:ARCHIVE_ITAGS: client\n:ARCHIVE_LTAGS: done\n:END:\nBody A\n\" \"\nArchived entries from file <root>/source.org\n\n\n* Other Archive\n\n** DONE Task B                                                   :ops:closed:\n:PROPERTIES:\n:ARCHIVE_FILE: <root>/source.org\n:ARCHIVE_CATEGORY: Cases\n:ARCHIVE_TODO: DONE\n:ARCHIVE_OLPATH: Other\n:ARCHIVE_ITAGS: ops\n:ARCHIVE_LTAGS: closed\n:END:\nBody B\n\")""##
-        ]],
+        expect,
     );
 }
 
@@ -482,6 +490,9 @@ fn org_archive_property_locations_hooks_files_combo() {
 fn org_refile_then_archive_logged_context_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK (((\"Alpha\" 3 (\"work\"))) \"** DONE Beta :work:\nBeta body\n\" \"#+CATEGORY: Flow\n* Inbox :inbox:\n* Projects :project:\n** Target :client:\nTarget body\n*** TODO Alpha                                                         :work:\nAlpha body\n\" \"\nArchived entries from file <root>/tasks.org\n\n\n* Archive\n\n** DONE Beta                                                     :inbox:work:\n:PROPERTIES:\n:ARCHIVE_FILE: <root>/tasks.org\n:ARCHIVE_OLPATH: Inbox\n:ARCHIVE_CATEGORY: Flow\n:ARCHIVE_TODO: DONE\n:ARCHIVE_ITAGS: inbox\n:ARCHIVE_LTAGS: work\n:END:\nBeta body\n\" ((\"Inbox\" 1 nil (\"inbox\") nil nil) (\"Projects\" 1 nil (\"project\") nil nil) (\"Target\" 2 nil (\"client\") nil nil) (\"Alpha\" 3 \"TODO\" (\"work\") nil nil)))""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -570,9 +581,7 @@ fn org_refile_then_archive_logged_context_combo() {
                          (get-file-buffer archive)))
         (when buf (kill-buffer buf)))
       (delete-directory root t))))"##,
-        expect_test::expect![[
-            r##""OK (((\"Alpha\" 3 (\"work\"))) \"** DONE Beta :work:\nBeta body\n\" \"#+CATEGORY: Flow\n* Inbox :inbox:\n* Projects :project:\n** Target :client:\nTarget body\n*** TODO Alpha                                                         :work:\nAlpha body\n\" \"\nArchived entries from file <root>/tasks.org\n\n\n* Archive\n\n** DONE Beta                                                     :inbox:work:\n:PROPERTIES:\n:ARCHIVE_FILE: <root>/tasks.org\n:ARCHIVE_OLPATH: Inbox\n:ARCHIVE_CATEGORY: Flow\n:ARCHIVE_TODO: DONE\n:ARCHIVE_ITAGS: inbox\n:ARCHIVE_LTAGS: work\n:END:\nBeta body\n\" ((\"Inbox\" 1 nil (\"inbox\") nil nil) (\"Projects\" 1 nil (\"project\") nil nil) (\"Target\" 2 nil (\"client\") nil nil) (\"Alpha\" 3 \"TODO\" (\"work\") nil nil)))""##
-        ]],
+        expect,
     );
 }
 
@@ -580,6 +589,7 @@ fn org_refile_then_archive_logged_context_combo() {
 fn org_refile_completion_new_parent_verify_history_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp \"Inbox/\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -652,7 +662,7 @@ fn org_refile_completion_new_parent_verify_history_combo() {
                            (point-min) (point-max)))))))))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (when (file-exists-p file) (delete-file file)))))"##,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp \"Inbox/\")""#]],
+        expect,
     );
 }
 
@@ -660,6 +670,7 @@ fn org_refile_completion_new_parent_verify_history_combo() {
 fn org_refile_targets_outline_path_markers_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -725,7 +736,7 @@ fn org_refile_targets_outline_path_markers_deep_state_combo() {
                     after-refile)))
           (kill-buffer))
       (when (file-exists-p file) (delete-file file)))))"##,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -733,6 +744,9 @@ fn org_refile_targets_outline_path_markers_deep_state_combo() {
 fn org_refile_active_region_reverse_order_log_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((\"Loose note line\" \"Task A\") \"org-refile-last-stored\" \"* Inbox\n\n** TODO Task B :inbox:\nTask B body\n* Projects\n** Target\n*** Existing child\n** Loose note line\nContinued context\n*** TODO Task A                                                       :inbox:\nTask body\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -789,9 +803,7 @@ Task B body
                       (point-min) (point-max)))))))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (when (file-exists-p file) (delete-file file)))))"##,
-        expect_test::expect![[
-            r#""OK ((\"Loose note line\" \"Task A\") \"org-refile-last-stored\" \"* Inbox\n\n** TODO Task B :inbox:\nTask B body\n* Projects\n** Target\n*** Existing child\n** Loose note line\nContinued context\n*** TODO Task A                                                       :inbox:\nTask body\n\")""#
-        ]],
+        expect,
     );
 }
 
@@ -799,6 +811,7 @@ Task B body
 fn org_refile_multi_target_edit_refile_back_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 54 34)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -854,6 +867,6 @@ fn org_refile_multi_target_edit_refile_back_deep() {
         (when (get-file-buffer f) (kill-buffer (get-file-buffer f)))
         (when (file-exists-p f) (delete-file f)))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 54 34)""#]],
+        expect,
     );
 }

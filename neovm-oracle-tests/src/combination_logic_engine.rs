@@ -112,12 +112,10 @@ fn oracle_prop_logic_engine_eval_and_truth_table() {
     (fmakunbound 'neovm--logic-vars)
     (fmakunbound 'neovm--logic-all-envs)
     (fmakunbound 'neovm--logic-truth-table)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((p q) (p q r s) t nil t nil (t nil nil nil) (t t t nil) (t t nil t) (t nil nil t) (nil t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((p q) (p q r s) t nil t nil (t nil nil nil) (t t t nil) (t t nil t) (t nil nil t) (nil t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -254,10 +252,8 @@ fn oracle_prop_logic_engine_taut_contra_sat() {
     (fmakunbound 'neovm--logic-contradiction-p)
     (fmakunbound 'neovm--logic-satisfiable-p)
     (fmakunbound 'neovm--logic-find-sat)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t nil nil t t nil nil t nil t (t nil))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t nil nil t t nil nil t nil t (t nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -371,12 +367,10 @@ fn oracle_prop_logic_engine_simplify() {
        ;; (not (and p (not q))) -> (or (not p) q)
        (funcall 'neovm--logic-simplify '(not (and p (not q)))))
     (fmakunbound 'neovm--logic-simplify)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (p (not p) p nil t p (or (not p) (not q)) (and (not p) (not q)) nil t p p (or (not p) q) (and (or (not p) q) (or (not q) p)) (or (not p) q) (or (not p) q))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (p (not p) p nil t p (or (not p) (not q)) (and (not p) (not q)) nil t p p (or (not p) q) (and (or (not p) q) (or (not q) p)) (or (not p) q) (or (not p) q))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -499,12 +493,10 @@ fn oracle_prop_logic_engine_cnf() {
     (fmakunbound 'neovm--logic-nnf)
     (fmakunbound 'neovm--logic-dist-or)
     (fmakunbound 'neovm--logic-to-cnf)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (p (not p) (and p q) (or p q) (or (not p) q) (and (or p q) (or p r)) (and (or (not p) q) (or (not q) p)) (or (or (not p) (not q)) r) (or (not p) (not q)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (p (not p) (and p q) (or p q) (or (not p) q) (and (or p q) (or p r)) (and (or (not p) q) (or (not q) p)) (or (or (not p) (not q)) r) (or (not p) (not q)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -601,12 +593,10 @@ fn oracle_prop_logic_engine_dnf() {
     (fmakunbound 'neovm--logic-nnf)
     (fmakunbound 'neovm--logic-dist-and)
     (fmakunbound 'neovm--logic-to-dnf)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (p (or p q) (and p q) (or (and p q) (and p r)) (or (or (and a c) (and a d)) (or (and b c) (and b d))) (or (not p) q) (and (not p) (not q)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (p (or p q) (and p q) (or (and p q) (and p r)) (or (or (and a c) (and a d)) (or (and b c) (and b d))) (or (not p) q) (and (not p) (not q)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -750,12 +740,10 @@ fn oracle_prop_logic_engine_resolution() {
     (fmakunbound 'neovm--logic-has-empty-p)
     (fmakunbound 'neovm--logic-clause-in-set-p)
     (fmakunbound 'neovm--logic-resolution)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((unsatisfiable 1) (unsatisfiable 2) (unsatisfiable 2) (satisfiable 1) (satisfiable 2) (q r) nil no-resolve)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((unsatisfiable 1) (unsatisfiable 2) (unsatisfiable 2) (satisfiable 1) (satisfiable 2) (q r) nil no-resolve)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -900,12 +888,10 @@ fn oracle_prop_logic_engine_simplify_verify() {
     (fmakunbound 'neovm--logic-all-envs)
     (fmakunbound 'neovm--logic-simplify)
     (fmakunbound 'neovm--logic-equiv-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((not (not p)) p t) ((and p (not p)) nil t) ((or p (not p)) t t) ((implies p q) (or (not p) q) t) ((iff p q) (and (or (not p) q) (or (not q) p)) t) ((not (and p q)) (or (not p) (not q)) t) ((not (or (not p) (not q))) (and p q) t) ((and (or p q) t) (or p q) t) ((or (and p q) nil) (and p q) t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((not (not p)) p t) ((and p (not p)) nil t) ((or p (not p)) t t) ((implies p q) (or (not p) q) t) ((iff p q) (and (or (not p) q) (or (not q) p)) t) ((not (and p q)) (or (not p) (not q)) t) ((not (or (not p) (not q))) (and p q) t) ((and (or p q) t) (or p q) t) ((or (and p q) nil) (and p q) t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -1011,8 +997,6 @@ fn oracle_prop_logic_engine_three_var_complex() {
     (fmakunbound 'neovm--logic-eval)
     (fmakunbound 'neovm--logic-all-envs)
     (fmakunbound 'neovm--logic-count-true)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((4 t nil nil) 2 t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((4 t nil nil) 2 t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

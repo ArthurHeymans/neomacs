@@ -14,23 +14,16 @@ use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 fn oracle_prop_eval_quoted_forms() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    crate::common::assert_oracle_parity_expect(
-        "(eval '(+ 1 2 3))",
-        expect_test::expect![[r#""OK 6""#]],
-    );
-    crate::common::assert_oracle_parity_expect(
-        "(eval '(list 1 2 3))",
-        expect_test::expect![[r#""OK (1 2 3)""#]],
-    );
-    crate::common::assert_oracle_parity_expect(
-        "(eval ''hello)",
-        expect_test::expect![[r#""OK hello""#]],
-    );
-    crate::common::assert_oracle_parity_expect("(eval 42)", expect_test::expect![[r#""OK 42""#]]);
-    crate::common::assert_oracle_parity_expect(
-        r#"(eval "hello")"#,
-        expect_test::expect![[r#""OK \"hello\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK 6""#]];
+    crate::common::assert_oracle_parity_expect("(eval '(+ 1 2 3))", expect);
+    let expect = expect_test::expect![[r#""OK (1 2 3)""#]];
+    crate::common::assert_oracle_parity_expect("(eval '(list 1 2 3))", expect);
+    let expect = expect_test::expect![[r#""OK hello""#]];
+    crate::common::assert_oracle_parity_expect("(eval ''hello)", expect);
+    let expect = expect_test::expect![[r#""OK 42""#]];
+    crate::common::assert_oracle_parity_expect("(eval 42)", expect);
+    let expect = expect_test::expect![[r#""OK \"hello\"""#]];
+    crate::common::assert_oracle_parity_expect(r#"(eval "hello")"#, expect);
 }
 
 #[test]
@@ -41,8 +34,8 @@ fn oracle_prop_eval_constructed_forms() {
     let form = "(let ((op '+)
                       (args '(1 2 3 4 5)))
                   (eval (cons op args)))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 15""#]]);
+    let expect = expect_test::expect![[r#""OK 15""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("15", &o, &n);
 }
 
@@ -50,10 +43,8 @@ fn oracle_prop_eval_constructed_forms() {
 fn oracle_prop_eval_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    crate::common::assert_oracle_parity_expect(
-        "(eval (eval '(quote (+ 1 2))))",
-        expect_test::expect![[r#""OK 3""#]],
-    );
+    let expect = expect_test::expect![[r#""OK 3""#]];
+    crate::common::assert_oracle_parity_expect("(eval (eval '(quote (+ 1 2))))", expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -68,8 +59,8 @@ fn oracle_prop_eval_dynamic_let() {
     let form = "(let ((bindings '((x 10) (y 20)))
                       (body '(+ x y)))
                   (eval (list 'let bindings body)))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 30""#]]);
+    let expect = expect_test::expect![[r#""OK 30""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("30", &o, &n);
 }
 
@@ -82,14 +73,12 @@ fn oracle_prop_eval_dynamic_cond() {
                                     (list '(= 2 2) 'branch-b)
                                     (list t 'default))))
                   (eval (cons 'cond clauses)))";
+    let expect = expect_test::expect![[r#""ERR (void-variable branch-b)""#]];
     // Under lexical binding, `eval` without a lexical environment argument
     // evaluates in a null lexical environment, so the quoted symbol `branch-b`
     // inside `cond` is treated as a variable reference that is unbound.
     // Both GNU Emacs and NeoVM signal (void-variable branch-b).
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable branch-b)""#]],
-    );
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_eq!(n, o, "neovm and oracle should match");
 }
 
@@ -109,7 +98,8 @@ fn oracle_prop_eval_code_generation() {
                         (add10 (eval (funcall gen-adder 10))))
                     (list (funcall add5 3)
                           (funcall add10 3))))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (8 13)""#]]);
+    let expect = expect_test::expect![[r#""OK (8 13)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -133,7 +123,8 @@ fn oracle_prop_eval_template_expansion() {
                     (let ((record '((name . alice) (age . 30))))
                       (list (funcall is-alice record)
                             (funcall is-bob record)))))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t nil)""#]]);
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -151,8 +142,8 @@ fn oracle_prop_eval_progn_forms() {
                                       (1+ neovm--test-eval-tmp))
                                 neovm--test-eval-tmp)))
                   (eval (cons 'progn forms)))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 2""#]]);
+    let expect = expect_test::expect![[r#""OK 2""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("2", &o, &n);
 }
 
@@ -179,5 +170,6 @@ fn oracle_prop_eval_test_framework() {
                       (setq failed (1+ failed)
                             failures (cons (cdr test) failures))))
                   (list passed failed (nreverse failures)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (5 0 nil)""#]]);
+    let expect = expect_test::expect![[r#""OK (5 0 nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

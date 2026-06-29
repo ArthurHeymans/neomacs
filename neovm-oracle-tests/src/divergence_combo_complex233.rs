@@ -8,6 +8,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx233_calc_eval_basic_arithmetic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"3\" \"12\" \"3.33333333333\" \"1024\" \"4\" \"3628800\" \"6\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -22,15 +25,14 @@ fn div_cx233_calc_eval_basic_arithmetic() {
             (calc-eval "gcd(12, 18)")))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (\"3\" \"12\" \"3.33333333333\" \"1024\" \"4\" \"3628800\" \"6\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx233_calc_eval_algebraic_simplification() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"5 x\" \"(a + b)^2\" \"0\" \"0\" \"1\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -43,13 +45,14 @@ fn div_cx233_calc_eval_algebraic_simplification() {
             (calc-eval "exp(0)")))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"5 x\" \"(a + b)^2\" \"0\" \"0\" \"1\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx233_calc_radix_conversions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"255\" \"16\" \"10\" \"64\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -62,13 +65,14 @@ fn div_cx233_calc_radix_conversions() {
               (let ((calc-number-radix 8)) (calc-eval "64")))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"255\" \"16\" \"10\" \"64\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx233_calc_matrix_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"[[19, 22], [43, 50]]\" \"-2\" \"[5, 7, 9]\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -79,13 +83,14 @@ fn div_cx233_calc_matrix_operations() {
             (calc-eval "[1, 2, 3] + [4, 5, 6]")))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"[[19, 22], [43, 50]]\" \"-2\" \"[5, 7, 9]\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx233_calc_fraction_and_rational() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"0.5\" \"0.5\" \"0.0833333333333\" \"1.5\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -97,13 +102,14 @@ fn div_cx233_calc_fraction_and_rational() {
             (calc-eval "6 / 4")))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"0.5\" \"0.5\" \"0.0833333333333\" \"1.5\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx233_calc_eval_trigonometric() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"0\" \"1\" \"0\" \"asin(1)\" \"acos(0)\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -116,13 +122,14 @@ fn div_cx233_calc_eval_trigonometric() {
             (calc-eval "acos(0)")))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"0\" \"1\" \"0\" \"asin(1)\" \"acos(0)\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx233_math_read_expr_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -132,13 +139,14 @@ fn div_cx233_math_read_expr_availability() {
           (boundp 'calc-language))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx233_calc_modes_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -149,13 +157,14 @@ fn div_cx233_calc_modes_query() {
           (boundp 'calc-display-just))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx233_calc_log_and_exponential() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"2\" \"2\" \"1.\" \"2.71828182846\" \"1000\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -168,13 +177,14 @@ fn div_cx233_calc_log_and_exponential() {
             (calc-eval "10^3")))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"2\" \"2\" \"1.\" \"2.71828182846\" \"1000\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx233_calc_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -203,6 +213,6 @@ fn div_cx233_calc_with_marker_overlay_undo_narrow_mega() {
                     (text-properties-at 1)))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     );
 }

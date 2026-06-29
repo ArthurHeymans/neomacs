@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_composition_property_scan() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass comp-region ()
@@ -57,7 +58,7 @@ fn combo_eieio_composition_property_scan() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -65,6 +66,7 @@ fn combo_eieio_composition_property_scan() {
 fn combo_eieio_decompose_region_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass decomp-snap ()
@@ -119,7 +121,7 @@ fn combo_eieio_decompose_region_overlay() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -127,6 +129,7 @@ fn combo_eieio_decompose_region_overlay() {
 fn combo_eieio_composition_narrow_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass comp-narrow-snap ()
@@ -180,7 +183,7 @@ fn combo_eieio_composition_narrow_edit() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -188,6 +191,7 @@ fn combo_eieio_composition_narrow_edit() {
 fn combo_eieio_composition_multi_prop_stacking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass stacked-prop-snap ()
@@ -247,7 +251,7 @@ fn combo_eieio_composition_multi_prop_stacking() {
                 (overlay-start ov1) (overlay-end ov1)
                 (overlay-start ov2) (overlay-end ov2)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -255,6 +259,7 @@ fn combo_eieio_composition_multi_prop_stacking() {
 fn combo_eieio_composition_undo_decompose_recompose() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass recomp-snap ()
@@ -308,6 +313,6 @@ fn combo_eieio_composition_undo_decompose_recompose() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

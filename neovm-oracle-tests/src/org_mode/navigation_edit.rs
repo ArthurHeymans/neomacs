@@ -5,6 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_element_navigation_positions_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (search-failed \"Paragraph\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -52,7 +53,7 @@ fn org_element_navigation_positions_combo() {
                   (line-number-at-pos)))
             states)
       (nreverse states))))"##,
-        expect_test::expect![[r#""ERR (search-failed \"Paragraph\")""#]],
+        expect,
     );
 }
 
@@ -60,6 +61,7 @@ fn org_element_navigation_positions_combo() {
 fn org_drag_transpose_element_buffer_integrity_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -93,7 +95,7 @@ fn org_drag_transpose_element_buffer_integrity_combo() {
                   (list (org-element-type e)
                         (org-element-property :begin e)
                         (org-element-property :end e))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -101,6 +103,7 @@ fn org_drag_transpose_element_buffer_integrity_combo() {
 fn org_mark_narrow_unindent_navigation_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -143,7 +146,7 @@ fn org_mark_narrow_unindent_navigation_combo() {
                   narrow-text
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -151,6 +154,7 @@ fn org_mark_narrow_unindent_navigation_combo() {
 fn org_copy_visible_clone_subtree_navigation_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -202,7 +206,7 @@ fn org_copy_visible_clone_subtree_navigation_combo() {
                   (org-get-heading t t t t)
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -210,6 +214,7 @@ fn org_copy_visible_clone_subtree_navigation_combo() {
 fn org_navigation_hidden_narrow_deep_faces_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable states)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -352,7 +357,7 @@ fn org_navigation_hidden_narrow_deep_faces_combo() {
         (push (buffer-substring-no-properties (point-min) (point-max))
               states)
         (nreverse states))))"##,
-        expect_test::expect![[r#""ERR (void-variable states)""#]],
+        expect,
     );
 }
 
@@ -360,6 +365,9 @@ fn org_navigation_hidden_narrow_deep_faces_combo() {
 fn org_outline_path_entry_position_level_visibility_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((1 1 \"Project\" (\"work\") \"Ada\" nil t) (6 2 \"Design\" (\"deep\") \"Ada\" nil t) (8 3 \"Frontend\" nil \"Ada\" nil t) (12 5 \"Sub component\" nil \"Ada\" nil t) (10 4 \"WAIT Component A\" nil \"Ada\" nil t) (8 3 \"Frontend\" nil \"Ada\" nil t) (14 3 \"Backend\" nil \"Ada\" nil t) 15 \"* TODO Project :work:\n:PROPERTIES:\n:Owner: Ada\n:END:\nProject body.\n** DONE Design :deep:\nDesign body.\n*** TODO Frontend\nFrontend body.\n**** WAIT Component A\nCompA body.\n***** DONE Sub component\nSub body.\n*** TODO Backend\nBackend body.\n** NEXT Testing\nTesting body.\n* Archive :archive:\nArchive body.\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -425,9 +433,7 @@ fn org_outline_path_entry_position_level_visibility_deep_state_combo() {
                             (line-number-at-pos end-pos)
                             (buffer-substring-no-properties
                              (point-min) (point-max))))))))))))))"##,
-        expect_test::expect![[
-            r#""OK ((1 1 \"Project\" (\"work\") \"Ada\" nil t) (6 2 \"Design\" (\"deep\") \"Ada\" nil t) (8 3 \"Frontend\" nil \"Ada\" nil t) (12 5 \"Sub component\" nil \"Ada\" nil t) (10 4 \"WAIT Component A\" nil \"Ada\" nil t) (8 3 \"Frontend\" nil \"Ada\" nil t) (14 3 \"Backend\" nil \"Ada\" nil t) 15 \"* TODO Project :work:\n:PROPERTIES:\n:Owner: Ada\n:END:\nProject body.\n** DONE Design :deep:\nDesign body.\n*** TODO Frontend\nFrontend body.\n**** WAIT Component A\nCompA body.\n***** DONE Sub component\nSub body.\n*** TODO Backend\nBackend body.\n** NEXT Testing\nTesting body.\n* Archive :archive:\nArchive body.\n\")""#
-        ]],
+        expect,
     );
 }
 
@@ -435,6 +441,7 @@ fn org_outline_path_entry_position_level_visibility_deep_state_combo() {
 fn org_navigate_up_forward_end_subtree_cycle_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 53 60)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -489,7 +496,7 @@ fn org_navigate_up_forward_end_subtree_cycle_edit_deep() {
                         at-sub2
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 53 60)""#]],
+        expect,
     );
 }
 
@@ -497,6 +504,7 @@ fn org_navigate_up_forward_end_subtree_cycle_edit_deep() {
 fn org_navigate_up_down_forward_backward_edit_fold_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -550,7 +558,7 @@ fn org_navigate_up_down_forward_backward_edit_fold_deep() {
                         after-fold
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
+        expect,
     );
 }
 
@@ -558,6 +566,7 @@ fn org_navigate_up_down_forward_backward_edit_fold_deep() {
 fn org_navigate_level_jump_fold_edit_reparse_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -612,7 +621,7 @@ fn org_navigate_level_jump_fold_edit_reparse_deep() {
                         after-fold
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
+        expect,
     );
 }
 
@@ -620,6 +629,7 @@ fn org_navigate_level_jump_fold_edit_reparse_deep() {
 fn org_navigate_siblings_descendants_edit_fold_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -677,7 +687,7 @@ fn org_navigate_siblings_descendants_edit_fold_deep() {
                           at-eta after-fold
                           (buffer-substring-no-properties
                            (point-min) (point-max))))))))))))))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
+        expect,
     );
 }
 
@@ -685,6 +695,7 @@ fn org_navigate_siblings_descendants_edit_fold_deep() {
 fn org_navigate_multi_level_cycle_edit_fold_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (search-failed \"^\\\\* A$\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -738,7 +749,7 @@ fn org_navigate_multi_level_cycle_edit_fold_deep() {
                         after-fold
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
-        expect_test::expect![[r#""ERR (search-failed \"^\\\\* A$\")""#]],
+        expect,
     );
 }
 
@@ -746,6 +757,7 @@ fn org_navigate_multi_level_cycle_edit_fold_deep() {
 fn org_navigate_complex_tree_fold_edit_show_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -802,7 +814,7 @@ fn org_navigate_complex_tree_fold_edit_show_deep() {
                           after-fold
                           (buffer-substring-no-properties
                            (point-min) (point-max))))))))))))))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
+        expect,
     );
 }
 
@@ -810,6 +822,7 @@ fn org_navigate_complex_tree_fold_edit_show_deep() {
 fn org_navigate_ten_heading_tree_fold_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -870,7 +883,7 @@ fn org_navigate_ten_heading_tree_fold_edit_deep() {
                           after-fold
                           (buffer-substring-no-properties
                            (point-min) (point-max))))))))))))))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
+        expect,
     );
 }
 
@@ -878,6 +891,7 @@ fn org_navigate_ten_heading_tree_fold_edit_deep() {
 fn org_navigate_twelve_heading_tree_fold_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -940,7 +954,7 @@ fn org_navigate_twelve_heading_tree_fold_edit_deep() {
                           after-fold
                           (buffer-substring-no-properties
                            (point-min) (point-max))))))))))))))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
+        expect,
     );
 }
 
@@ -948,6 +962,7 @@ fn org_navigate_twelve_heading_tree_fold_edit_deep() {
 fn org_navigate_fourteen_heading_tree_fold_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1014,7 +1029,7 @@ fn org_navigate_fourteen_heading_tree_fold_edit_deep() {
                             after-fold
                             (buffer-substring-no-properties
                              (point-min) (point-max))))))))))))))))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
+        expect,
     );
 }
 
@@ -1022,6 +1037,7 @@ fn org_navigate_fourteen_heading_tree_fold_edit_deep() {
 fn org_navigate_sixteen_heading_tree_fold_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"*** S2C1\nBody.\n\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1090,6 +1106,6 @@ fn org_navigate_sixteen_heading_tree_fold_edit_deep() {
                             after-fold
                             (buffer-substring-no-properties
                              (point-min) (point-max))))))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"*** S2C1\nBody.\n\n\")""#]],
+        expect,
     );
 }

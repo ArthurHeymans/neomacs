@@ -11,6 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_utf8_toggle_unibyte_to_multibyte_trailing_ascii_dropped() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 (4194248 4194249 65) t)""#]];
     // Original corruption case: bytes (200 201 65) -> NEO drops trailing 65.
     crate::common::assert_oracle_parity_expect(
         r#"
@@ -21,13 +22,14 @@ fn div_utf8_toggle_unibyte_to_multibyte_trailing_ascii_dropped() {
   (list (length (buffer-string)) (append (buffer-string) nil)
         (multibyte-string-p (buffer-string))))
 "#,
-        expect_test::expect![[r#""OK (3 (4194248 4194249 65) t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_utf8_toggle_unibyte_to_multibyte_raw_bytes_only() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 (4194248 4194249 4194303))""#]];
     // No trailing ASCII — does corruption still occur?
     crate::common::assert_oracle_parity_expect(
         r#"
@@ -37,13 +39,14 @@ fn div_utf8_toggle_unibyte_to_multibyte_raw_bytes_only() {
   (set-buffer-multibyte t)
   (list (length (buffer-string)) (append (buffer-string) nil)))
 "#,
-        expect_test::expect![[r#""OK (3 (4194248 4194249 4194303))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_utf8_toggle_unibyte_to_multibyte_leading_ascii() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (4 (65 66 4194248 4194249))""#]];
     // ASCII first, then raw bytes.
     crate::common::assert_oracle_parity_expect(
         r#"
@@ -53,13 +56,14 @@ fn div_utf8_toggle_unibyte_to_multibyte_leading_ascii() {
   (set-buffer-multibyte t)
   (list (length (buffer-string)) (append (buffer-string) nil)))
 "#,
-        expect_test::expect![[r#""OK (4 (65 66 4194248 4194249))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_utf8_toggle_unibyte_to_multibyte_interleaved() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (6 (65 4194248 66 4194249 67 4194303))""#]];
     // ASCII and raw bytes interleaved.
     crate::common::assert_oracle_parity_expect(
         r#"
@@ -69,13 +73,14 @@ fn div_utf8_toggle_unibyte_to_multibyte_interleaved() {
   (set-buffer-multibyte t)
   (list (length (buffer-string)) (append (buffer-string) nil)))
 "#,
-        expect_test::expect![[r#""OK (6 (65 4194248 66 4194249 67 4194303))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_utf8_toggle_unibyte_to_multibyte_single_raw_byte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 (4194248) t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
@@ -85,13 +90,14 @@ fn div_utf8_toggle_unibyte_to_multibyte_single_raw_byte() {
   (list (length (buffer-string)) (append (buffer-string) nil)
         (multibyte-string-p (buffer-string))))
 "#,
-        expect_test::expect![[r#""OK (1 (4194248) t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_utf8_toggle_double_roundtrip_multibyte_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"café世界\" t 6 (99 97 102 233 19990 30028))""#]];
     // multibyte -> unibyte -> multibyte round trip stability.
     crate::common::assert_oracle_parity_expect(
         r#"
@@ -103,13 +109,15 @@ fn div_utf8_toggle_double_roundtrip_multibyte_text() {
     (list (buffer-string) (equal original (buffer-string))
           (length (buffer-string)) (append (buffer-string) nil))))
 "#,
-        expect_test::expect![[r#""OK (\"café世界\" t 6 (99 97 102 233 19990 30028))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_utf8_toggle_with_narrowing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (error \"Changing multibyteness in a narrowed buffer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
@@ -119,13 +127,14 @@ fn div_utf8_toggle_with_narrowing() {
   (set-buffer-multibyte t)
   (list (point-min) (point-max) (append (buffer-string) nil)))
 "#,
-        expect_test::expect![[r#""ERR (error \"Changing multibyteness in a narrowed buffer\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_utf8_toggle_unibyte_to_multibyte_preserves_point_max() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 5 4 (4194248 4194249 65 66))""#]];
     // point-max before vs after the toggle.
     crate::common::assert_oracle_parity_expect(
         r#"
@@ -136,6 +145,6 @@ fn div_utf8_toggle_unibyte_to_multibyte_preserves_point_max() {
     (set-buffer-multibyte t)
     (list before (point-max) (length (buffer-string)) (append (buffer-string) nil))))
 "#,
-        expect_test::expect![[r#""OK (5 5 4 (4194248 4194249 65 66))""#]],
+        expect,
     );
 }

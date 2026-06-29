@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_generic_before_after_around_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defgeneric)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass log-entry ()
@@ -78,7 +79,7 @@ fn combo_eieio_generic_before_after_around_buffer() {
                 (buffer-string)
                 entry1 entry2)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function defgeneric)""#]],
+        expect,
     );
 }
 
@@ -86,6 +87,7 @@ fn combo_eieio_generic_before_after_around_buffer() {
 fn combo_eieio_method_combination_buffer_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defgeneric)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass scored-item ()
@@ -137,7 +139,7 @@ fn combo_eieio_method_combination_buffer_undo() {
                 (buffer-string)
                 scored)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function defgeneric)""#]],
+        expect,
     );
 }
 
@@ -145,6 +147,9 @@ fn combo_eieio_method_combination_buffer_undo() {
 fn combo_eieio_next_method_chain_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""ERR (error \"button-label is already defined as something else than a generic function\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass widget ()
@@ -203,9 +208,7 @@ fn combo_eieio_next_method_chain_buffer_ops() {
                 (buffer-string)
                 my-widget)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[
-            r#""ERR (error \"button-label is already defined as something else than a generic function\")""#
-        ]],
+        expect,
     );
 }
 
@@ -213,6 +216,7 @@ fn combo_eieio_next_method_chain_buffer_ops() {
 fn combo_eieio_static_method_dispatch_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defgeneric)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass expr ()
@@ -271,7 +275,7 @@ fn combo_eieio_static_method_dispatch_narrow() {
                 (buffer-string)
                 my-expr)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function defgeneric)""#]],
+        expect,
     );
 }
 
@@ -279,6 +283,7 @@ fn combo_eieio_static_method_dispatch_narrow() {
 fn combo_eieio_no_applicable_method_error_recovery() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defgeneric)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass container ()
@@ -336,6 +341,6 @@ fn combo_eieio_no_applicable_method_error_recovery() {
                 (buffer-string)
                 results errors cont1 cont2)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function defgeneric)""#]],
+        expect,
     );
 }

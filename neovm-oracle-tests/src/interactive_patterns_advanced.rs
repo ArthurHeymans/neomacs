@@ -31,10 +31,8 @@ fn oracle_prop_interactive_lambda_specs() {
                       (funcall cmd-no-args)
                       (funcall cmd-with-spec 42)
                       (funcall cmd-list-spec 10 20)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t no-args 42 30)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t no-args 42 30)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -66,10 +64,8 @@ fn oracle_prop_commandp_various_types() {
                   (commandp \"string\")
                   ;; Quoted lambda (not a closure)
                   (commandp '(lambda () (interactive) t)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil t t t t nil nil nil nil nil t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil t t t t nil nil nil nil nil t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -107,10 +103,9 @@ fn oracle_prop_funcall_apply_interactive() {
         (commandp 'neovm--test-icmd-greet))
     (fmakunbound 'neovm--test-icmd-add)
     (fmakunbound 'neovm--test-icmd-greet)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (10 \"Hello, World!\" 30 \"Hello, Emacs!\" 10 t t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (10 \"Hello, World!\" 30 \"Hello, Emacs!\" 10 t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -136,10 +131,8 @@ fn oracle_prop_interactive_list_form_complex() {
                       (commandp cmd)
                       ;; But we can call the interactive spec manually
                       (funcall cmd 10))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (25 9 0 t 100)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (25 9 0 t 100)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -190,12 +183,10 @@ fn oracle_prop_command_dispatch_system() {
     (fmakunbound 'neovm--test-dispatch-mul)
     (fmakunbound 'neovm--test-dispatch-neg)
     (fmakunbound 'neovm--test-dispatch-sq)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((add . 7) (mul . 30) (neg . -7) (sq . 64) (add . 300)) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((add . 7) (mul . 30) (neg . -7) (sq . 64) (add . 300)) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -246,7 +237,8 @@ fn oracle_prop_keybinding_command_pipeline() {
     (fmakunbound 'neovm--test-kb-upcase)
     (fmakunbound 'neovm--test-kb-reverse)
     (fmakunbound 'neovm--test-kb-repeat))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -316,12 +308,10 @@ fn oracle_prop_command_registration_introspection() {
     (put 'neovm--test-reg-cmd2 'category nil)
     (put 'neovm--test-reg-cmd3 'doc nil)
     (put 'neovm--test-reg-cmd3 'category nil)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((neovm--test-reg-cmd3) (neovm--test-reg-cmd2) ((neovm--test-reg-cmd1 . \"Command one\") (neovm--test-reg-cmd2 . \"Command two\") (neovm--test-reg-cmd3 . \"Command three\")) (cmd1-result (10 20)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((neovm--test-reg-cmd3) (neovm--test-reg-cmd2) ((neovm--test-reg-cmd1 . \"Command one\") (neovm--test-reg-cmd2 . \"Command two\") (neovm--test-reg-cmd3 . \"Command three\")) (cmd1-result (10 20)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -371,5 +361,6 @@ fn oracle_prop_mode_setup_pattern() {
             (null (lookup-key mode-map [?z])))))
     (fmakunbound 'neovm--test-mode-action1)
     (fmakunbound 'neovm--test-mode-action2))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

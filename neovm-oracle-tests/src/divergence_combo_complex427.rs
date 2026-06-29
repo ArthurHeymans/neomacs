@@ -12,6 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx427_process_connection_details() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "neo-cx427-pd"
@@ -22,7 +23,7 @@ fn div_cx427_process_connection_details() {
                (condition-case e (process-datagram-address proc) (error (car e))))
     (delete-process proc)))
 "##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
@@ -30,6 +31,7 @@ fn div_cx427_process_connection_details() {
 #[test]
 fn div_cx427_process_mark_filter_sentinel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "neo-cx427-pm"
@@ -41,7 +43,7 @@ fn div_cx427_process_mark_filter_sentinel() {
                (functionp (process-sentinel proc)))
     (delete-process proc)))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
@@ -49,6 +51,7 @@ fn div_cx427_process_mark_filter_sentinel() {
 #[test]
 fn div_cx427_set_process_plist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (key1 val1 key2 val2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "neo-cx427-pp"
@@ -59,7 +62,7 @@ fn div_cx427_set_process_plist() {
   (prog1 (process-plist proc)
     (delete-process proc)))
 "##,
-        expect_test::expect![[r#""OK (key1 val1 key2 val2)""#]],
+        expect,
     );
 }
 
@@ -67,13 +70,14 @@ fn div_cx427_set_process_plist() {
 #[test]
 fn div_cx427_make_pipe_process() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK #<process neo-cx427-pipe>""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (make-pipe-process :name "neo-cx427-pipe")
   (error (car e)))
 "##,
-        expect_test::expect![[r#""OK #<process neo-cx427-pipe>""#]],
+        expect,
     );
 }
 
@@ -81,6 +85,7 @@ fn div_cx427_make_pipe_process() {
 #[test]
 fn div_cx427_process_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "neo-cx427-pl"
@@ -91,7 +96,7 @@ fn div_cx427_process_list() {
     (delete-process proc)
     in-list)
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -99,6 +104,7 @@ fn div_cx427_process_list() {
 #[test]
 fn div_cx427_process_live_dead() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "neo-cx427-dp"
@@ -114,7 +120,7 @@ fn div_cx427_process_live_dead() {
     (delete-process proc)
     (list before (process-live-p proc))))
 "##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
@@ -122,13 +128,14 @@ fn div_cx427_process_live_dead() {
 #[test]
 fn div_cx427_signal_process() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 0""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (signal-process (emacs-pid) 0)
   (error (car e)))
 "##,
-        expect_test::expect![[r#""OK 0""#]],
+        expect,
     );
 }
 
@@ -136,12 +143,13 @@ fn div_cx427_signal_process() {
 #[test]
 fn div_cx427_get_internal_run_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((t1 (get-internal-run-time)))
   (and (listp t1) (= (length t1) 4)))
 "##,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -149,6 +157,7 @@ fn div_cx427_get_internal_run_time() {
 #[test]
 fn div_cx427_current_undo_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -158,7 +167,7 @@ fn div_cx427_current_undo_list() {
   (list (consp buffer-undo-list)
         (listp buffer-undo-list)))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
@@ -166,6 +175,7 @@ fn div_cx427_current_undo_list() {
 #[test]
 fn div_cx427_with_undo_amalgamate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -178,7 +188,7 @@ fn div_cx427_with_undo_amalgamate() {
   (list (length (delq nil buffer-undo-list))
         (> (length (delq nil buffer-undo-list)) 0)))
 "##,
-        expect_test::expect![[r#""OK (3 t)""#]],
+        expect,
     );
 }
 
@@ -186,6 +196,7 @@ fn div_cx427_with_undo_amalgamate() {
 #[test]
 fn div_cx427_window_prev_next_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -195,7 +206,7 @@ fn div_cx427_window_prev_next_buffers() {
     (list (listp (window-prev-buffers w))
           (listp (window-next-buffers w)))))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
@@ -203,12 +214,13 @@ fn div_cx427_window_prev_next_buffers() {
 #[test]
 fn div_cx427_buffer_match_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (buffer-match-p "\\*.*\\*" (current-buffer)) (error (car e)))
       (condition-case e (buffer-match-p "nonexistent-pattern" (current-buffer)) (error (car e))))
 "##,
-        expect_test::expect![[r#""OK (t nil)""#]],
+        expect,
     );
 }
 
@@ -216,13 +228,14 @@ fn div_cx427_buffer_match_p() {
 #[test]
 fn div_cx427_unicode_normalize() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function ucs-normalize-NFD-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (ucs-normalize-NFD-string "café")
       (ucs-normalize-NFC-string "cafe\u0301")
       (ucs-normalize-NFKD-string "①"))
 "##,
-        expect_test::expect![[r#""ERR (void-function ucs-normalize-NFD-string)""#]],
+        expect,
     );
 }
 
@@ -230,6 +243,7 @@ fn div_cx427_unicode_normalize() {
 #[test]
 fn div_cx427_set_process_coding_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil . raw-text-unix)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "neo-cx427-scn"
@@ -240,7 +254,7 @@ fn div_cx427_set_process_coding_nil() {
   (prog1 (process-coding-system proc)
     (delete-process proc)))
 "##,
-        expect_test::expect![[r#""OK (nil . raw-text-unix)""#]],
+        expect,
     );
 }
 
@@ -248,6 +262,7 @@ fn div_cx427_set_process_coding_nil() {
 #[test]
 fn div_cx427_process_connection_pty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK exit""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "neo-cx427-pct"
@@ -261,6 +276,6 @@ fn div_cx427_process_connection_pty() {
   (prog1 (process-status proc)
     (delete-process proc)))
 "##,
-        expect_test::expect![[r#""OK exit""#]],
+        expect,
     );
 }

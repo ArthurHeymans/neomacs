@@ -20,7 +20,8 @@ fn oracle_prop_remove_text_properties_single() {
     (remove-text-properties 0 5 '(face nil) s)
     (let ((after (get-text-property 0 'face s)))
       (list before after))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (bold nil)""#]]);
+    let expect = expect_test::expect![[r#""OK (bold nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -41,7 +42,8 @@ fn oracle_prop_remove_text_properties_return_value() {
         (s3 (propertize "xyz" 'face 'bold)))
     (let ((r3 (remove-text-properties 0 3 '(help-echo nil) s3)))
       (list r1 r2 r3))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t nil nil)""#]]);
+    let expect = expect_test::expect![[r#""OK (t nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -66,10 +68,8 @@ fn oracle_prop_remove_text_properties_multiple() {
      (list r
            (get-text-property 0 'mouse-face s)
            (get-text-property 0 'category s)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil highlight my-cat (t nil nil))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil highlight my-cat (t nil nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -94,11 +94,10 @@ fn oracle_prop_remove_text_properties_partial_range() {
    ;; property boundaries
    (next-property-change 0 s)      ;; 3
    (next-property-change 3 s)      ;; 7
-   (next-property-change 7 s)))"#; // nil (rest is uniform)
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (bold bold nil nil nil bold bold 3 7 nil)""#]],
-    );
+   (next-property-change 7 s)))"#;
+    let expect = expect_test::expect![[r#""OK (bold bold nil nil nil bold bold 3 7 nil)""#]];
+    // nil (rest is uniform)
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -124,10 +123,9 @@ fn oracle_prop_remove_text_properties_then_readd() {
                  (get-text-property 3 'help-echo s)
                  (get-text-property 4 'help-echo s))))
       (list after-remove after-readd))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((nil nil) (italic nil \"new-tip\" \"new-tip\" nil))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((nil nil) (italic nil \"new-tip\" \"new-tip\" nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -163,12 +161,10 @@ fn oracle_prop_remove_text_properties_strip_all_in_buffer() {
       (list before after
             ;; Text content preserved
             (buffer-substring-no-properties (point-min) (point-max))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((bold italic \"hover\" (:foreground \"red\") highlight) (nil nil nil nil nil) \"bold italic colored\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((bold italic \"hover\" (:foreground \"red\") highlight) (nil nil nil nil nil) \"bold italic colored\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -209,10 +205,9 @@ fn oracle_prop_remove_text_properties_selective_walk() {
        (setq p (next-property-change p s))
        (when p (setq boundaries (cons p boundaries))))
      (nreverse boundaries))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil italic italic nil nil italic italic (3 6 9))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (nil nil italic italic nil nil italic italic (3 6 9))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -232,10 +227,8 @@ fn oracle_prop_remove_text_properties_double_removal() {
           (null r2)
           ;; Property is definitely gone
           (get-text-property 0 'face s))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil t t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil t t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -264,8 +257,6 @@ fn oracle_prop_remove_text_properties_edge_ranges() {
            (let ((r-full (remove-text-properties 0 (length s3) '(face nil help-echo nil) s3)))
              (list r-full
                    (text-properties-at 0 s3)))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil bold t nil (t nil))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil bold t nil (t nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

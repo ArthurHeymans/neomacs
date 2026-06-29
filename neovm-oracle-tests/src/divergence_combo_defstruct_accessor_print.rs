@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_cl_defstruct_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (\"unknown\" t 0 t t t \"Alice\" t 30 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-ds-xxx (:constructor test-ds-make-xxx))
@@ -25,7 +26,7 @@ fn divergence_cl_defstruct_basic() {
           (string= (test-ds-xxx-name p2) "Alice")
           (test-ds-xxx-age p2)
           (= (test-ds-xxx-age p2) 30)))) "#,
-        expect_test::expect![[r#""OK (\"unknown\" t 0 t t t \"Alice\" t 30 t)""#]],
+        expect,
     );
 }
 
@@ -33,6 +34,7 @@ fn divergence_cl_defstruct_basic() {
 fn divergence_cl_defstruct_setf_accessor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (99 t (x y z) t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct test-mut-xxx (val 0) (items nil))
@@ -43,7 +45,7 @@ fn divergence_cl_defstruct_setf_accessor() {
           (= (test-mut-xxx-val obj) 99)
           (test-mut-xxx-items obj)
           (equal (test-mut-xxx-items obj) '(x y z))))) "#,
-        expect_test::expect![[r#""OK (99 t (x y z) t)""#]],
+        expect,
     );
 }
 
@@ -51,6 +53,7 @@ fn divergence_cl_defstruct_setf_accessor() {
 fn divergence_cl_defstruct_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct test-pred-xxx x y)
@@ -60,7 +63,7 @@ fn divergence_cl_defstruct_predicate() {
           (null (test-pred-xxx-p nil))
           (null (test-pred-xxx-p '(1 2)))
           (test-pred-xxx-p (make-test-pred-xxx))))) "#,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
@@ -68,6 +71,7 @@ fn divergence_cl_defstruct_predicate() {
 fn divergence_cl_defstruct_copy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (10 t 99 t 20 t 30 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct test-copy-xxx (a 1) (b 2))
@@ -83,7 +87,7 @@ fn divergence_cl_defstruct_copy() {
             (= (test-copy-xxx-b copy) 20)
             (test-copy-xxx-a other)
             (= (test-copy-xxx-a other) 30))))) "#,
-        expect_test::expect![[r#""OK (10 t 99 t 20 t 30 t)""#]],
+        expect,
     );
 }
 
@@ -91,6 +95,7 @@ fn divergence_cl_defstruct_copy() {
 fn divergence_cl_defstruct_named_print() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t 3 1 t 3 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-np-xxx (:constructor test-np-new-xxx))
@@ -104,7 +109,7 @@ fn divergence_cl_defstruct_named_print() {
             (= (test-np-xxx-x obj) 1)
             (test-np-xxx-z obj)
             (= (test-np-xxx-z obj) 3))))) "#,
-        expect_test::expect![[r#""OK (t t 3 1 t 3 t)""#]],
+        expect,
     );
 }
 
@@ -112,6 +117,7 @@ fn divergence_cl_defstruct_named_print() {
 fn divergence_defstruct_included() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (1 t 2 t 3 t 4 t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct test-base-xxx a b)
@@ -128,7 +134,7 @@ fn divergence_defstruct_included() {
           (= (test-child-xxx-d obj) 4)
           (test-child-xxx-p obj)
           (test-base-xxx-p obj)))) "#,
-        expect_test::expect![[r#""OK (1 t 2 t 3 t 4 t t t)""#]],
+        expect,
     );
 }
 
@@ -136,6 +142,7 @@ fn divergence_defstruct_included() {
 fn divergence_defstruct_vector_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t 1 t 2 t 2 nil 3 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-vec-xxx (:type vector))
@@ -150,7 +157,7 @@ fn divergence_defstruct_vector_type() {
           (= (aref obj 1) 1)
           (length obj)
           (= (length obj) 3)))) "#,
-        expect_test::expect![[r#""OK (t 1 t 2 t 2 nil 3 t)""#]],
+        expect,
     );
 }
 
@@ -158,6 +165,7 @@ fn divergence_defstruct_vector_type() {
 fn divergence_defstruct_list_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t \"test\" t 42 t \"test\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-lst-xxx (:type list))
@@ -170,7 +178,7 @@ fn divergence_defstruct_list_type() {
           (= (test-lst-xxx-value obj) 42)
           (car obj)
           (string= (car obj) "test")))) "#,
-        expect_test::expect![[r#""OK (t \"test\" t 42 t \"test\" t)""#]],
+        expect,
     );
 }
 
@@ -178,6 +186,7 @@ fn divergence_defstruct_list_type() {
 fn divergence_defstruct_boa_constructor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (10 t 0 t 99 t 20 t 30 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-boa-xxx
@@ -195,7 +204,7 @@ fn divergence_defstruct_boa_constructor() {
           (= (test-boa-xxx-a o2) 20)
           (test-boa-xxx-b o2)
           (= (test-boa-xxx-b o2) 30)))) "#,
-        expect_test::expect![[r#""OK (10 t 0 t 99 t 20 t 30 t)""#]],
+        expect,
     );
 }
 
@@ -203,6 +212,7 @@ fn divergence_defstruct_boa_constructor() {
 fn divergence_defstruct_equal_and_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable o1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct test-teq-xxx (v 0))
@@ -217,6 +227,6 @@ fn divergence_defstruct_equal_and_type() {
           (test-teq-xxx-p o1)
           (null (test-teq-xxx-p 42))
           (= (test-teq-xxx-v o1) (test-teq-xxx-v o2))))) "#,
-        expect_test::expect![[r#""ERR (void-variable o1)""#]],
+        expect,
     );
 }

@@ -15,41 +15,27 @@ use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 fn oracle_prop_apply_varying_trailing_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![r#""OK 6""#];
     // 0 trailing args
-    crate::common::assert_oracle_parity_expect(
-        "(apply #'+ '(1 2 3))",
-        expect_test::expect![r#""OK 6""#],
-    );
+    crate::common::assert_oracle_parity_expect("(apply #'+ '(1 2 3))", expect);
+    let expect = expect_test::expect![r#""OK 16""#];
     // 1 trailing arg
-    crate::common::assert_oracle_parity_expect(
-        "(apply #'+ 10 '(1 2 3))",
-        expect_test::expect![r#""OK 16""#],
-    );
+    crate::common::assert_oracle_parity_expect("(apply #'+ 10 '(1 2 3))", expect);
+    let expect = expect_test::expect![r#""OK 36""#];
     // 2 trailing args
-    crate::common::assert_oracle_parity_expect(
-        "(apply #'+ 10 20 '(1 2 3))",
-        expect_test::expect![r#""OK 36""#],
-    );
+    crate::common::assert_oracle_parity_expect("(apply #'+ 10 20 '(1 2 3))", expect);
+    let expect = expect_test::expect![r#""OK 66""#];
     // 3 trailing args
-    crate::common::assert_oracle_parity_expect(
-        "(apply #'+ 10 20 30 '(1 2 3))",
-        expect_test::expect![r#""OK 66""#],
-    );
+    crate::common::assert_oracle_parity_expect("(apply #'+ 10 20 30 '(1 2 3))", expect);
+    let expect = expect_test::expect![r#""OK (a b c d e f)""#];
     // 4 trailing args
-    crate::common::assert_oracle_parity_expect(
-        "(apply #'list 'a 'b 'c 'd '(e f))",
-        expect_test::expect![r#""OK (a b c d e f)""#],
-    );
+    crate::common::assert_oracle_parity_expect("(apply #'list 'a 'b 'c 'd '(e f))", expect);
+    let expect = expect_test::expect![r#""OK (a b c)""#];
     // trailing args with nil final list
-    crate::common::assert_oracle_parity_expect(
-        "(apply #'list 'a 'b 'c '())",
-        expect_test::expect![r#""OK (a b c)""#],
-    );
+    crate::common::assert_oracle_parity_expect("(apply #'list 'a 'b 'c '())", expect);
+    let expect = expect_test::expect![r#""OK 15""#];
     // All args via trailing, empty final list
-    crate::common::assert_oracle_parity_expect(
-        "(apply #'+ 1 2 3 4 5 '())",
-        expect_test::expect![r#""OK 15""#],
-    );
+    crate::common::assert_oracle_parity_expect("(apply #'+ 1 2 3 4 5 '())", expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -66,7 +52,8 @@ fn oracle_prop_apply_nested_function_arg() {
                     (unwind-protect
                         (apply (symbol-function 'neovm--test-afa-add) '(1 2 3))
                       (fmakunbound 'neovm--test-afa-add)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK 6""#]);
+    let expect = expect_test::expect![r#""OK 6""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Selecting function from alist
     let form = r#"(let ((ops '((add . +) (mul . *) (cat . concat))))
@@ -74,10 +61,8 @@ fn oracle_prop_apply_nested_function_arg() {
                      (apply (cdr (assq 'add ops)) '(10 20 30))
                      (apply (cdr (assq 'mul ops)) '(2 3 4))
                      (apply (cdr (assq 'cat ops)) '("a" "b" "c"))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (60 24 \"abc\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (60 24 \"abc\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Function returned from a closure
     let form = r#"(let ((make-adder (lambda (n) (lambda (&rest args) (apply #'+ n args)))))
@@ -85,7 +70,8 @@ fn oracle_prop_apply_nested_function_arg() {
                       (list (funcall add10 1 2 3)
                             (funcall add10)
                             (apply add10 '(5 5 5)))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (16 10 25)""#]);
+    let expect = expect_test::expect![r#""OK (16 10 25)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -96,29 +82,33 @@ fn oracle_prop_apply_nested_function_arg() {
 fn oracle_prop_funcall_direct_lambda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![r#""OK 25""#];
     // Simple direct lambda
     crate::common::assert_oracle_parity_expect(
         "(funcall (lambda (x y) (+ (* x x) (* y y))) 3 4)",
-        expect_test::expect![r#""OK 25""#],
+        expect,
     );
 
+    let expect = expect_test::expect![r#""OK ((1 nil) (1 2))""#];
     // Lambda with &optional
     crate::common::assert_oracle_parity_expect(
         "(list (funcall (lambda (a &optional b) (list a b)) 1)
                (funcall (lambda (a &optional b) (list a b)) 1 2))",
-        expect_test::expect![r#""OK ((1 nil) (1 2))""#],
+        expect,
     );
 
+    let expect = expect_test::expect![r#""OK (a . 3)""#];
     // Lambda with &rest
     crate::common::assert_oracle_parity_expect(
         "(funcall (lambda (head &rest tail) (cons head (length tail))) 'a 'b 'c 'd)",
-        expect_test::expect![r#""OK (a . 3)""#],
+        expect,
     );
 
+    let expect = expect_test::expect![r#""OK 30""#];
     // Nested lambda application
     crate::common::assert_oracle_parity_expect(
         "(funcall (funcall (lambda (x) (lambda (y) (+ x y))) 10) 20)",
-        expect_test::expect![r#""OK 30""#],
+        expect,
     );
 
     // Lambda with destructuring via let inside
@@ -126,7 +116,8 @@ fn oracle_prop_funcall_direct_lambda() {
                               (let ((a (car pair)) (b (cdr pair)))
                                 (* a b)))
                             '(6 . 7))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK 42""#]);
+    let expect = expect_test::expect![r#""OK 42""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +141,8 @@ fn oracle_prop_funcall_symbol_function_chain() {
                              (symbol-function 'neovm--test-afa-f1)))
                       (fmakunbound 'neovm--test-afa-f1)
                       (fmakunbound 'neovm--test-afa-f2)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (10 10 10 t)""#]);
+    let expect = expect_test::expect![r#""OK (10 10 10 t)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -167,10 +159,8 @@ fn oracle_prop_apply_mapcar_flatten() {
                            (mapcar (lambda (sub)
                                      (if sub (mapcar #'1+ sub) nil))
                                    data)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (2 3 4 5 6 7 8 9 10 11)""#],
-    );
+    let expect = expect_test::expect![r#""OK (2 3 4 5 6 7 8 9 10 11)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Build format strings and concat via apply
     let form = r#"(let ((parts '(("hello" . "HELLO") ("world" . "WORLD"))))
@@ -178,18 +168,14 @@ fn oracle_prop_apply_mapcar_flatten() {
                            (mapcar (lambda (p)
                                      (format "%s->%s " (car p) (cdr p)))
                                    parts)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK \"hello->HELLO world->WORLD \"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"hello->HELLO world->WORLD \"""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Transpose a matrix via mapcar + apply
     let form = r#"(let ((matrix '((1 2 3) (4 5 6) (7 8 9))))
                     (apply #'mapcar #'list matrix))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""ERR (wrong-number-of-arguments #<subr mapcar> 4)""#],
-    );
+    let expect = expect_test::expect![r#""ERR (wrong-number-of-arguments #<subr mapcar> 4)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -227,7 +213,8 @@ fn oracle_prop_funcall_rest_accumulator() {
                             (funcall get "a")
                             (funcall get "c")
                             (funcall get "d"))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (4 1 3 4)""#]);
+    let expect = expect_test::expect![r#""OK (4 1 3 4)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -281,10 +268,8 @@ fn oracle_prop_apply_method_dispatch() {
                          (funcall dispatch 'area circ)
                          (funcall dispatch 'scale rect 2)
                          (plist-get (funcall dispatch 'scale circ 3) :r)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (12 7850 (:kind rect :w 6 :h 8) 15)""#],
-    );
+    let expect = expect_test::expect![r#""OK (12 7850 (:kind rect :w 6 :h 8) 15)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -325,10 +310,8 @@ fn oracle_prop_funcall_middleware_chain() {
                         (let ((result1 (funcall chain "hello"))
                               (result2 (funcall chain "")))
                           (list result1 result2 (nreverse log))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ok \"processed:HELLO\") (error \"validation failed\") ((enter \"core\") (exit \"core\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ok \"processed:HELLO\") (error \"validation failed\") ((enter \"core\") (exit \"core\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

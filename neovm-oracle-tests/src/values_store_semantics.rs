@@ -36,8 +36,7 @@ fn oracle_prop_gnu_values_store_value_pushes_and_returns() {
        (equal (cdddr state3) '(old-tail))
        values))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t nil nil nil nil nil nil nil nil nil (old-tail))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (t t t nil nil nil nil nil nil nil nil nil (old-tail))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -166,12 +166,10 @@ fn oracle_prop_undo_system_basic_execute_undo_redo() {
     (makunbound 'neovm--undo-doc)
     (makunbound 'neovm--undo-stack)
     (makunbound 'neovm--redo-stack)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Hello, Beautiful World\" \"Hello, Beautifuld\" \"Hello, Beautiful World\" \"Hello World\" \"Hello, Beautiful World\" \"Hello, Beautifuld\" 2 0)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Hello, Beautiful World\" \"Hello, Beautifuld\" \"Hello, Beautiful World\" \"Hello World\" \"Hello, Beautiful World\" \"Hello, Beautifuld\" 2 0)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -295,12 +293,10 @@ fn oracle_prop_undo_system_compound_commands() {
     (makunbound 'neovm--undo2-state)
     (makunbound 'neovm--undo2-stack)
     (makunbound 'neovm--undo2-redo)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((x . 30) (y . 20)) ((x . 30) (y . 20) (z . 40)) ((w) (x . 30) (y . 20) (z . 40)) ((w) (x . 30) (y . 20) (z . 40)) ((w) (x . 30) (y . 20) (z . 40)) ((w) (x . 30) (y . 20) (z . 40)) 2 1)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((x . 30) (y . 20)) ((x . 30) (y . 20) (z . 40)) ((w) (x . 30) (y . 20) (z . 40)) ((w) (x . 30) (y . 20) (z . 40)) ((w) (x . 30) (y . 20) (z . 40)) ((w) (x . 30) (y . 20) (z . 40)) 2 1)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -395,12 +391,10 @@ fn oracle_prop_undo_system_history_traversal() {
     (fmakunbound 'neovm--hist-can-redo)
     (makunbound 'neovm--hist-states)
     (makunbound 'neovm--hist-cursor)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((step-4) t nil (step-2) (step-1) t t (step-2) (branch-step) nil 4 3)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((step-4) t nil (step-2) (step-1) t t (step-2) (branch-step) nil 4 3)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -498,12 +492,10 @@ fn oracle_prop_undo_system_limit_management() {
     (makunbound 'neovm--ulim-redo)
     (makunbound 'neovm--ulim-max)
     (makunbound 'neovm--ulim-evictions)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((10 1 0 0) (20 2 0 0) (30 3 0 0) (40 4 0 0) (50 5 0 0) (60 5 0 1) (70 5 0 2) (80 5 0 3)) (80 5 0 3) (50 2 3 3) (30 0 5 3) (80 5 0 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((10 1 0 0) (20 2 0 0) (30 3 0 0) (40 4 0 0) (50 5 0 0) (60 5 0 1) (70 5 0 2) (80 5 0 3)) (80 5 0 3) (50 2 3 3) (30 0 5 3) (80 5 0 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -605,12 +597,10 @@ fn oracle_prop_undo_system_selective_undo() {
     (makunbound 'neovm--sel-items)
     (makunbound 'neovm--sel-log)
     (makunbound 'neovm--sel-counter)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((a b c d e) 5) ((a c d e) 6) ((a d e) 7) ((a b d e) 8) ((b d e) 9) 9)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((a b c d e) 5) ((a c d e) 6) ((a d e) 7) ((a b d e) 8) ((b d e) 9) 9)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -726,10 +716,8 @@ fn oracle_prop_undo_system_calculator() {
     (makunbound 'neovm--calc-stack)
     (makunbound 'neovm--calc-undo)
     (makunbound 'neovm--calc-redo)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((7) (35) (5 7) (7) (5 7) (35) (33) nil 0 7)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((7) (35) (5 7) (7) (5 7) (35) (33) nil 0 7)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -852,8 +840,6 @@ fn oracle_prop_undo_system_branching_tree() {
     (fmakunbound 'neovm--utree-count-nodes)
     (makunbound 'neovm--utree-root)
     (makunbound 'neovm--utree-current)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 3 4 2 5 6 2 1 2)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 3 4 2 5 6 2 1 2)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

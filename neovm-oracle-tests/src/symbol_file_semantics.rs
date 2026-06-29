@@ -36,12 +36,10 @@ fn oracle_symbol_file_reads_load_history_for_core_and_custom_types() {
    (symbol-file 'neomacs--oracle-symbol-file-missing)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"/tmp/neomacs-oracle-symbol-file-a.el\" \"/tmp/neomacs-oracle-symbol-file-a.el\" \"/tmp/neomacs-oracle-symbol-file-a.el\" \"/tmp/neomacs-oracle-symbol-file-a.el\" \"/tmp/neomacs-oracle-symbol-file-a.el\" \"/tmp/neomacs-oracle-symbol-file-a.el\" \"/tmp/neomacs-oracle-symbol-file-a.el\" nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"/tmp/neomacs-oracle-symbol-file-a.el\" \"/tmp/neomacs-oracle-symbol-file-a.el\" \"/tmp/neomacs-oracle-symbol-file-a.el\" \"/tmp/neomacs-oracle-symbol-file-a.el\" \"/tmp/neomacs-oracle-symbol-file-a.el\" \"/tmp/neomacs-oracle-symbol-file-a.el\" \"/tmp/neomacs-oracle-symbol-file-a.el\" nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -62,10 +60,8 @@ fn oracle_symbol_file_autoload_uses_locate_library_not_raw_file_name() {
     (fmakunbound 'neomacs--oracle-symbol-file-autoload)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -86,10 +82,8 @@ fn oracle_symbol_file_accepts_non_symbol_and_native_arg() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil nil \"/tmp/neomacs-oracle-symbol-file-native.el\" \"/tmp/neomacs-oracle-symbol-file-native.el\" (wrong-number-of-arguments ((1 . 3) 4)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil nil \"/tmp/neomacs-oracle-symbol-file-native.el\" \"/tmp/neomacs-oracle-symbol-file-native.el\" (wrong-number-of-arguments ((1 . 3) 4)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -93,12 +93,10 @@ fn oracle_prop_promise_deferred_lazy() {
     (fmakunbound 'neovm--prom-forced-p)
     (fmakunbound 'neovm--prom-defer-map)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((before nil nil nil calls 0) (after-force-d3 85 t t t calls 1) (second-force-d1 42 calls 1) (shared 100 15 10))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((before nil nil nil calls 0) (after-force-d3 85 t t t calls 1) (second-force-d1 42 calls 1) (shared 100 15 10))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -214,12 +212,10 @@ fn oracle_prop_promise_then_catch_chains() {
     (fmakunbound 'neovm--prom-map)
     (fmakunbound 'neovm--prom-chain)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((resolved . 5) (rejected . \"division by zero: 20/0\") (resolved . 10) (resolved . 49) (rejected . \"already failed\") (resolved . 10) (rejected . \"not positive: 0\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((resolved . 5) (rejected . \"division by zero: 20/0\") (resolved . 10) (resolved . 49) (rejected . \"already failed\") (resolved . 10) (rejected . \"not positive: 0\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -317,12 +313,10 @@ fn oracle_prop_promise_all() {
     (fmakunbound 'neovm--pa-all)
     (fmakunbound 'neovm--pa-all-settled)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((resolved 1 2 3) (rejected . \"fail at 2\") (rejected . \"fail at 1\") (resolved) (resolved 42) (rejected . \"oops\") (resolved 1 4 9 16 25 36 49 64 81 100) (resolved (fulfilled 10) (rejected \"error-a\") (fulfilled 30) (rejected \"error-b\") (fulfilled 50)) (resolved (fulfilled \"a\") (fulfilled \"b\") (fulfilled \"c\")) (resolved (rejected \"e1\") (rejected \"e2\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((resolved 1 2 3) (rejected . \"fail at 2\") (rejected . \"fail at 1\") (resolved) (resolved 42) (rejected . \"oops\") (resolved 1 4 9 16 25 36 49 64 81 100) (resolved (fulfilled 10) (rejected \"error-a\") (fulfilled 30) (rejected \"error-b\") (fulfilled 50)) (resolved (fulfilled \"a\") (fulfilled \"b\") (fulfilled \"c\")) (resolved (rejected \"e1\") (rejected \"e2\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -427,12 +421,10 @@ fn oracle_prop_promise_race() {
     (fmakunbound 'neovm--pr-any)
     (fmakunbound 'neovm--pr-priority-race)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((resolved . \"fast\") (rejected . \"fail-fast\") (rejected . \"empty race\") (resolved . \"winner\") (rejected \"e1\" \"e2\" \"e3\") (resolved . \"immediate\") (resolved . \"high\") (resolved . \"medium-ok\") (rejected . \"no resolved promises\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((resolved . \"fast\") (rejected . \"fail-fast\") (rejected . \"empty race\") (resolved . \"winner\") (rejected \"e1\" \"e2\" \"e3\") (resolved . \"immediate\") (resolved . \"high\") (resolved . \"medium-ok\") (rejected . \"no resolved promises\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -586,12 +578,10 @@ fn oracle_prop_promise_combinators() {
     (fmakunbound 'neovm--pc-retry)
     (fmakunbound 'neovm--pc-fallback)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((resolved 100 20 11) (rejected . \"compute failed\") (rejected . \"no input\") (resolved . 100) (rejected . \"step 2 failed\") (resolved . \"success on attempt 2\") (rejected . \"failed attempt 2\") (resolved . \"backup-2 ok\") (resolved . \"primary ok\") (rejected . \"alt-2 failed\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((resolved 100 20 11) (rejected . \"compute failed\") (rejected . \"no input\") (resolved . 100) (rejected . \"step 2 failed\") (resolved . \"success on attempt 2\") (rejected . \"failed attempt 2\") (resolved . \"backup-2 ok\") (resolved . \"primary ok\") (rejected . \"alt-2 failed\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -731,12 +721,10 @@ fn oracle_prop_promise_error_propagation() {
     (fmakunbound 'neovm--pe-check-range)
     (fmakunbound 'neovm--pe-process-record)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((resolved (parsed . t) (name . \"alice\") (value . 42)) (resolved (value . 75) (name . \"bob\")) (rejected . \"record(\\\"charlie\\\"): parsing: range-check: invalid input structure\") (rejected . \"record(\\\"dave\\\"): parsing: range-check: unparseable value: \\\"abc\\\"\") (rejected . \"record(\\\"eve\\\"): parsing: range-check: value 150 out of range [0,100]\") (resolved (parsed . t) (name . \"frank\") (value . 0)) (resolved (value . 0) (name . \"grace\")) (resolved (parsed . t) (name . \"heidi\") (value . 100))) ((resolved (parsed . t) (name . \"alice\") (value . 42)) (rejected . \"recovery failed [original: record(\\\"bob\\\"): parsing: range-check: invalid input structure] [recovery: unrecoverable: record(\\\"bob\\\"): parsing: range-check: invalid input structure]\") (rejected . \"recovery failed [original: record(\\\"charlie\\\"): parsing: range-check: invalid input structure] [recovery: unrecoverable: record(\\\"charlie\\\"): parsing: range-check: invalid input structure]\") (rejected . \"recovery failed [original: record(\\\"dave\\\"): parsing: range-check: unparseable value: \\\"abc\\\"] [recovery: unrecoverable: record(\\\"dave\\\"): parsing: range-check: unparseable value: \\\"abc\\\"]\") (resolved (value . 100) (name . \"eve\")) (resolved (parsed . t) (name . \"frank\") (value . 0)) (rejected . \"recovery failed [original: record(\\\"grace\\\"): parsing: range-check: invalid input structure] [recovery: unrecoverable: record(\\\"grace\\\"): parsing: range-check: invalid input structure]\") (resolved (parsed . t) (name . \"heidi\") (value . 100))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((resolved (parsed . t) (name . \"alice\") (value . 42)) (resolved (value . 75) (name . \"bob\")) (rejected . \"record(\\\"charlie\\\"): parsing: range-check: invalid input structure\") (rejected . \"record(\\\"dave\\\"): parsing: range-check: unparseable value: \\\"abc\\\"\") (rejected . \"record(\\\"eve\\\"): parsing: range-check: value 150 out of range [0,100]\") (resolved (parsed . t) (name . \"frank\") (value . 0)) (resolved (value . 0) (name . \"grace\")) (resolved (parsed . t) (name . \"heidi\") (value . 100))) ((resolved (parsed . t) (name . \"alice\") (value . 42)) (rejected . \"recovery failed [original: record(\\\"bob\\\"): parsing: range-check: invalid input structure] [recovery: unrecoverable: record(\\\"bob\\\"): parsing: range-check: invalid input structure]\") (rejected . \"recovery failed [original: record(\\\"charlie\\\"): parsing: range-check: invalid input structure] [recovery: unrecoverable: record(\\\"charlie\\\"): parsing: range-check: invalid input structure]\") (rejected . \"recovery failed [original: record(\\\"dave\\\"): parsing: range-check: unparseable value: \\\"abc\\\"] [recovery: unrecoverable: record(\\\"dave\\\"): parsing: range-check: unparseable value: \\\"abc\\\"]\") (resolved (value . 100) (name . \"eve\")) (resolved (parsed . t) (name . \"frank\") (value . 0)) (rejected . \"recovery failed [original: record(\\\"grace\\\"): parsing: range-check: invalid input structure] [recovery: unrecoverable: record(\\\"grace\\\"): parsing: range-check: invalid input structure]\") (resolved (parsed . t) (name . \"heidi\") (value . 100))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -879,10 +867,8 @@ fn oracle_prop_promise_task_scheduler() {
     (fmakunbound 'neovm--pt-make-task)
     (fmakunbound 'neovm--pt-execute)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"a\" resolved . 10) (\"b\" resolved . 20) (\"c\" resolved . 25)) ((\"a\" resolved . 5) (\"b\" resolved . 15) (\"c\" resolved . 15) (\"d\" resolved . 30)) ((\"a\" resolved . 1) (\"b\" rejected . \"b crashed\") (\"c\" rejected . \"dep failed: b crashed\")) ((\"x\" resolved . \"hello\") (\"y\" resolved . \"world\") (\"z\" resolved . 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"a\" resolved . 10) (\"b\" resolved . 20) (\"c\" resolved . 25)) ((\"a\" resolved . 5) (\"b\" resolved . 15) (\"c\" resolved . 15) (\"d\" resolved . 30)) ((\"a\" resolved . 1) (\"b\" rejected . \"b crashed\") (\"c\" rejected . \"dep failed: b crashed\")) ((\"x\" resolved . \"hello\") (\"y\" resolved . \"world\") (\"z\" resolved . 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -46,12 +46,10 @@ fn oracle_prop_suffix_array_build() {
        ;; With repetition
        (funcall 'neovm--sa-build "abcabc"))
     (fmakunbound 'neovm--sa-build)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((5 . \"a\") (3 . \"ana\") (1 . \"anana\") (0 . \"banana\") (4 . \"na\") (2 . \"nana\")) ((0 . \"a\")) ((3 . \"a\") (2 . \"aa\") (1 . \"aaa\") (0 . \"aaaa\")) ((0 . \"abcd\") (1 . \"bcd\") (2 . \"cd\") (3 . \"d\")) ((3 . \"a\") (2 . \"ba\") (1 . \"cba\") (0 . \"dcba\")) ((3 . \"abc\") (0 . \"abcabc\") (4 . \"bc\") (1 . \"bcabc\") (5 . \"c\") (2 . \"cabc\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((5 . \"a\") (3 . \"ana\") (1 . \"anana\") (0 . \"banana\") (4 . \"na\") (2 . \"nana\")) ((0 . \"a\")) ((3 . \"a\") (2 . \"aa\") (1 . \"aaa\") (0 . \"aaaa\")) ((0 . \"abcd\") (1 . \"bcd\") (2 . \"cd\") (3 . \"d\")) ((3 . \"a\") (2 . \"ba\") (1 . \"cba\") (0 . \"dcba\")) ((3 . \"abc\") (0 . \"abcabc\") (4 . \"bc\") (1 . \"bcabc\") (5 . \"c\") (2 . \"cabc\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -138,12 +136,10 @@ fn oracle_prop_suffix_array_binary_search() {
     (fmakunbound 'neovm--sa-prefix-p)
     (fmakunbound 'neovm--sa-compare)
     (fmakunbound 'neovm--sa-search)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((4 . \"issippi\") (0 . \"mississippi\") (6 . \"sippi\") (9 . \"pi\") (4 . \"issippi\") nil nil (0 . \"mississippi\") (9 . \"pi\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((4 . \"issippi\") (0 . \"mississippi\") (6 . \"sippi\") (9 . \"pi\") (4 . \"issippi\") nil nil (0 . \"mississippi\") (9 . \"pi\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -218,12 +214,10 @@ fn oracle_prop_suffix_array_lcp() {
     (fmakunbound 'neovm--sa-lcp-pair)
     (fmakunbound 'neovm--sa-build-sorted)
     (fmakunbound 'neovm--sa-compute-lcp)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((suffixes (\"a\" \"ana\" \"anana\" \"banana\" \"na\" \"nana\") lcp (1 3 0 0 2)) (suffixes (\"abc\" \"abcabc\" \"bc\" \"bcabc\" \"c\" \"cabc\") lcp (3 0 2 0 1)) (suffixes (\"a\" \"aa\" \"aaa\" \"aaaa\") lcp (1 2 3)) (suffixes (\"abcd\" \"bcd\" \"cd\" \"d\") lcp (0 0 0)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((suffixes (\"a\" \"ana\" \"anana\" \"banana\" \"na\" \"nana\") lcp (1 3 0 0 2)) (suffixes (\"abc\" \"abcabc\" \"bc\" \"bcabc\" \"c\" \"cabc\") lcp (3 0 2 0 1)) (suffixes (\"a\" \"aa\" \"aaa\" \"aaaa\") lcp (1 2 3)) (suffixes (\"abcd\" \"bcd\" \"cd\" \"d\") lcp (0 0 0)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -286,12 +280,10 @@ fn oracle_prop_suffix_array_count_occurrences() {
          (car (funcall 'neovm--sa-count-pattern sa "abracadabra"))))
     (fmakunbound 'neovm--sa-count-build)
     (fmakunbound 'neovm--sa-count-pattern)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((2 (0 7)) (5 (0 3 5 7 10)) (2 (1 8)) (1 (4)) (0 nil) (1 (0)) 1)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((2 (0 7)) (5 (0 3 5 7 10)) (2 (1 8)) (1 (4)) (0 nil) (1 (0)) 1)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -360,12 +352,10 @@ fn oracle_prop_suffix_array_longest_repeated() {
     (fmakunbound 'neovm--sa-lr-lcp)
     (fmakunbound 'neovm--sa-lr-build)
     (fmakunbound 'neovm--sa-longest-repeated)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((3 . \"ana\") (3 . \"abc\") (3 . \"aaa\") (0 . \"\") (4 . \"issi\") (3 . \"abc\") (0 . \"\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((3 . \"ana\") (3 . \"abc\") (3 . \"aaa\") (0 . \"\") (4 . \"issi\") (3 . \"abc\") (0 . \"\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -437,10 +427,8 @@ fn oracle_prop_suffix_array_multi_pattern_search() {
     (fmakunbound 'neovm--sa-mp-build)
     (fmakunbound 'neovm--sa-mp-find-all)
     (fmakunbound 'neovm--sa-mp-search-all)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"the\" 0 31) (\"o\" 12 17 26 41) (\"quick\" 4) (\"xyz\") (\"he\" 1 32) (\" \" 3 9 15 19 25 30 34 39)) ((\"a\" 0 1 2 4 5 6) (\"aa\" 0 1 4 5) (\"aab\" 1 5) (\"b\" 3 7) (\"aaab\" 0 4)) ((\"x\" 0) (\"y\") (\"xx\")) ((\"ab\" 0 2 4 6) (\"ba\" 1 3 5) (\"aba\" 0 2 4) (\"bab\" 1 3 5)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"the\" 0 31) (\"o\" 12 17 26 41) (\"quick\" 4) (\"xyz\") (\"he\" 1 32) (\" \" 3 9 15 19 25 30 34 39)) ((\"a\" 0 1 2 4 5 6) (\"aa\" 0 1 4 5) (\"aab\" 1 5) (\"b\" 3 7) (\"aaab\" 0 4)) ((\"x\" 0) (\"y\") (\"xx\")) ((\"ab\" 0 2 4 6) (\"ba\" 1 3 5) (\"aba\" 0 2 4) (\"bab\" 1 3 5)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

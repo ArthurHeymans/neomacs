@@ -12,6 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_l1_nfc_composition_from_decomposed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"è\" \"ñ\" \"ö\" \"ü\")""#]];
     // Characterization (parity): NFC composition (decomposed -> precomposed)
     // WORKS in Neomacs — the composition table/path is functional.
     crate::common::assert_oracle_parity_with_load_expect(
@@ -22,13 +23,14 @@ fn div_l1_nfc_composition_from_decomposed() {
       (ucs-normalize-NFC-string "ü"))
 "##,
         &["international/ucs-normalize.el"],
-        expect_test::expect![[r#""OK (\"è\" \"ñ\" \"ö\" \"ü\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_l1_hangul_compose_decompose() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"가\" \"가\" 2 \"각\" 3)""#]];
     // Characterization (parity): Hangul algorithmic NFC/NFD composition AND
     // decomposition WORK in Neomacs — the special-case algorithm is functional.
     crate::common::assert_oracle_parity_with_load_expect(
@@ -40,13 +42,14 @@ fn div_l1_hangul_compose_decompose() {
       (length (ucs-normalize-NFD-string "각")))
 "##,
         &["international/ucs-normalize.el"],
-        expect_test::expect![[r#""OK (\"가\" \"가\" 2 \"각\" 3)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_l1_nfd_sweep_precomposed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 2 2 2 1 1 1)""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK (2 2 2 2 1 1 1)
     // Neomacs:   OK (1 1 1 1 1 1 1)
@@ -65,13 +68,14 @@ fn div_l1_nfd_sweep_precomposed() {
       (length (ucs-normalize-NFD-string "ø")))
 "##,
         &["international/ucs-normalize.el"],
-        expect_test::expect![[r#""OK (2 2 2 2 1 1 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_l1_nfc_nfd_idempotent_precomposed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"é\" \"café\" \"日本\" \"Ω\" \"Æ\")""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (ucs-normalize-NFC-string "é")
@@ -81,13 +85,14 @@ fn div_l1_nfc_nfd_idempotent_precomposed() {
       (ucs-normalize-NFC-string "Æ"))
 "##,
         &["international/ucs-normalize.el"],
-        expect_test::expect![[r#""OK (\"é\" \"café\" \"日本\" \"Ω\" \"Æ\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_l1_nfkc_canonical_and_compat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"Ω\" \"(株)\" \"°C\" \"fi\" \"TM\")""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK ("Ω" "(株)" "°C" "fi" "TM")
     // Neomacs:   OK ("Ω" "(株)" "°C" "ﬁ" "™")
@@ -103,6 +108,6 @@ fn div_l1_nfkc_canonical_and_compat() {
       (ucs-normalize-NFKD-string "™"))
 "##,
         &["international/ucs-normalize.el"],
-        expect_test::expect![[r#""OK (\"Ω\" \"(株)\" \"°C\" \"fi\" \"TM\")""#]],
+        expect,
     );
 }

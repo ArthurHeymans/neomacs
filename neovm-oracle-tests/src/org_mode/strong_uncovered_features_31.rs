@@ -11,6 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf31_bibtex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -19,7 +20,7 @@ fn uf31_bibtex() {
   (condition-case nil
       (org-bibtex)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -47,6 +48,7 @@ fn uf31_bibtex_create() {
 #[test]
 fn uf31_bibtex_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -54,7 +56,7 @@ fn uf31_bibtex_check() {
   (condition-case nil
       (org-bibtex-check)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -65,6 +67,7 @@ fn uf31_bibtex_check() {
 #[test]
 fn uf31_bibtex_headline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -73,7 +76,7 @@ fn uf31_bibtex_headline() {
   (condition-case nil
       (org-bibtex-headline)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -84,6 +87,7 @@ fn uf31_bibtex_headline() {
 #[test]
 fn uf31_bibtex_export() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -92,7 +96,7 @@ fn uf31_bibtex_export() {
   (condition-case nil
       (org-bibtex-export-to-kill-ring)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -103,11 +107,12 @@ fn uf31_bibtex_export() {
 #[test]
 fn uf31_cite_style() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-cite-basic--complete-style)
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -118,11 +123,12 @@ fn uf31_cite_style() {
 #[test]
 fn uf31_cite_key() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-cite-basic--complete-key)
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -133,11 +139,12 @@ fn uf31_cite_key() {
 #[test]
 fn uf31_cite_print() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-cite-basic--print-reference "test-key")
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -148,11 +155,12 @@ fn uf31_cite_print() {
 #[test]
 fn uf31_cite_entry() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-cite-basic--get-entry "test-key")
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -163,11 +171,12 @@ fn uf31_cite_entry() {
 #[test]
 fn uf31_cite_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-cite-basic--all-keys)
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -178,11 +187,12 @@ fn uf31_cite_keys() {
 #[test]
 fn uf31_ref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-ref)
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -193,6 +203,7 @@ fn uf31_ref() {
 #[test]
 fn uf31_ref_cite() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -200,7 +211,7 @@ fn uf31_ref_cite() {
   (condition-case nil
       (org-ref-cite-link)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -211,6 +222,7 @@ fn uf31_ref_cite() {
 #[test]
 fn uf31_ref_ref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -218,7 +230,7 @@ fn uf31_ref_ref() {
   (condition-case nil
       (org-ref-ref-link)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -229,6 +241,7 @@ fn uf31_ref_ref() {
 #[test]
 fn uf31_ref_bib() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -236,7 +249,7 @@ fn uf31_ref_bib() {
   (condition-case nil
       (org-ref-bibliography-link)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -247,11 +260,12 @@ fn uf31_ref_bib() {
 #[test]
 fn uf31_ref_bib2() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-ref-bibliography* "refs.bib")
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -262,11 +276,12 @@ fn uf31_ref_bib2() {
 #[test]
 fn uf31_ref_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-ref-format-cite '("key1" "key2"))
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -277,6 +292,7 @@ fn uf31_ref_format() {
 #[test]
 fn uf31_ref_key() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -285,7 +301,7 @@ fn uf31_ref_key() {
   (condition-case nil
       (org-ref-get-bibtex-key-under-cursor)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -296,6 +312,7 @@ fn uf31_ref_key() {
 #[test]
 fn uf31_ref_find() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -303,7 +320,7 @@ fn uf31_ref_find() {
   (condition-case nil
       (org-ref-find-bibliography)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -314,11 +331,12 @@ fn uf31_ref_find() {
 #[test]
 fn uf31_ref_valid() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-ref-valid-keys)
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -329,6 +347,7 @@ fn uf31_ref_valid() {
 #[test]
 fn uf31_ref_cite_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -336,7 +355,7 @@ fn uf31_ref_cite_p() {
   (goto-char (point-min))
   (list (condition-case nil (org-ref-cite-p) (error nil))
         (progn (search-forward "ref:") (condition-case nil (org-ref-cite-p) (error nil)))))"##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
@@ -347,6 +366,7 @@ fn uf31_ref_cite_p() {
 #[test]
 fn uf31_ref_ref_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -354,7 +374,7 @@ fn uf31_ref_ref_p() {
   (goto-char (point-min))
   (list (condition-case nil (org-ref-ref-p) (error nil))
         (progn (search-forward "ref:") (condition-case nil (org-ref-ref-p) (error nil)))))"##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
@@ -365,6 +385,7 @@ fn uf31_ref_ref_p() {
 #[test]
 fn uf31_ref_bib_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -373,6 +394,6 @@ fn uf31_ref_bib_p() {
   (condition-case nil
       (org-ref-bibliography-p)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

@@ -7,6 +7,8 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx175_compose_region_find_composition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((1 4 t) (1 4 t) nil (7 8 t) ((3 . \"\")) ((1 . \"\")))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -20,13 +22,16 @@ fn div_cx175_compose_region_find_composition() {
         (get-text-property 1 'composition)
         (get-text-property 7 'composition)))
 "##,
-        expect_test::expect![[r#""OK ((1 4 t) (1 4 t) nil (7 8 t) ((3 . \"\")) ((1 . \"\")))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx175_compose_string_returns_composed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (#(\"café\" 1 4 (composition ((3 . \"\")))) 4 (composition ((3 . \"\"))) ((3 . \"\")))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s (compose-string "café" 1 4 ""))
@@ -34,15 +39,14 @@ fn div_cx175_compose_string_returns_composed() {
        (comp (get-text-property 1 'composition s)))
   (list s (length s) props comp))
 "##,
-        expect_test::expect![[
-            r#""OK (#(\"café\" 1 4 (composition ((3 . \"\")))) 4 (composition ((3 . \"\"))) ((3 . \"\")))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx175_glyphless_char_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -51,13 +55,14 @@ fn div_cx175_glyphless_char_display() {
           (fboundp 'glyphless-char-display))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx175_char_script_get() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -65,13 +70,14 @@ fn div_cx175_char_script_get() {
             '(?a ?A ?0 ?α ?世 ?界 ?日 ?ä ?☺))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx175_compose_text_property_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -84,13 +90,14 @@ fn div_cx175_compose_text_property_format() {
           (eq prop-at-1 prop-at-3)
           prop-at-6)))
 "##,
-        expect_test::expect![[r#""OK (t t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx175_decompose_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (((4 . \"\")) nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -102,13 +109,14 @@ fn div_cx175_decompose_region() {
         (list before (get-text-property 1 'composition))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (((4 . \"\")) nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx175_char_script_table_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -118,13 +126,14 @@ fn div_cx175_char_script_table_query() {
                           nil)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx175_auto_composition_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -133,13 +142,14 @@ fn div_cx175_auto_composition_mode() {
           (boundp 'auto-composition-functions))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx175_compose_last_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -147,13 +157,14 @@ fn div_cx175_compose_last_chars() {
           (boundp 'composition-function-table))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx175_glyphless_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -179,6 +190,6 @@ fn div_cx175_glyphless_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1)))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }

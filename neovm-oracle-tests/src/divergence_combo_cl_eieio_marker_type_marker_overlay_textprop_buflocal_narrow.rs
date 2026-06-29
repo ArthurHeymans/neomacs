@@ -9,6 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_mtype_advance_vs_stay_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass mtype-snap ()
@@ -83,7 +84,7 @@ fn combo_eieio_mtype_advance_vs_stay_basic() {
               (marker-insertion-type m-adv) (marker-insertion-type m-stay)
               (overlay-start ov) (overlay-end ov))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -91,6 +92,7 @@ fn combo_eieio_mtype_advance_vs_stay_basic() {
 fn combo_eieio_mtype_narrow_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass mtype-narrow-snap ()
@@ -166,7 +168,7 @@ fn combo_eieio_mtype_narrow_boundary() {
               (marker-position m-adv) (marker-position m-stay)
               (overlay-start ov) (overlay-end ov))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -174,6 +176,7 @@ fn combo_eieio_mtype_narrow_boundary() {
 fn combo_eieio_mtype_multiple_markers_edit_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass mtype-chain-snap ()
@@ -255,7 +258,7 @@ fn combo_eieio_mtype_multiple_markers_edit_chain() {
               (mapcar 'marker-insertion-type all-markers)
               (overlay-start ov) (overlay-end ov))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -263,6 +266,7 @@ fn combo_eieio_mtype_multiple_markers_edit_chain() {
 fn combo_eieio_mtype_overlay_modification_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass mtype-hook-snap ()
@@ -337,7 +341,7 @@ fn combo_eieio_mtype_overlay_modification_hooks() {
               (overlay-start ov) (overlay-end ov)
               hook-fire-count)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -345,6 +349,7 @@ fn combo_eieio_mtype_overlay_modification_hooks() {
 fn combo_eieio_mtype_buflocal_undo_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass mtype-buflocal-snap ()
@@ -429,6 +434,6 @@ fn combo_eieio_mtype_buflocal_undo_with_markers() {
               (overlay-start ov) (overlay-end ov)
               tab-width fill-column)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

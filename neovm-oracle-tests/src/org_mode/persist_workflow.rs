@@ -5,6 +5,9 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_persist_grouped_elisp_version_load_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (nil (nil \"v1\" \"literal\" :keyword) nil (:reset t) ((elisp org-persist-test-var) (version \"v1\") (elisp-data \"literal\") (elisp-data :keyword) (elisp org-persist-test-var) (version \"v1\") (elisp-data \"literal\") (elisp-data :keyword) (elisp org-persist-test-var) (version \"v1\") (elisp-data \"literal\") (elisp-data :keyword) (elisp org-persist-test-var) (version \"v1\") (elisp-data \"literal\") (elisp-data :keyword)) nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-persist)
@@ -51,9 +54,7 @@ fn org_persist_grouped_elisp_version_load_combo() {
                     (org-persist-read
                      'org-persist-test-var '(:key "suite"))))))
       (delete-directory root t))))"##,
-        expect_test::expect![[
-            r#""OK (nil (nil \"v1\" \"literal\" :keyword) nil (:reset t) ((elisp org-persist-test-var) (version \"v1\") (elisp-data \"literal\") (elisp-data :keyword) (elisp org-persist-test-var) (version \"v1\") (elisp-data \"literal\") (elisp-data :keyword) (elisp org-persist-test-var) (version \"v1\") (elisp-data \"literal\") (elisp-data :keyword) (elisp org-persist-test-var) (version \"v1\") (elisp-data \"literal\") (elisp-data :keyword)) nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -61,6 +62,9 @@ fn org_persist_grouped_elisp_version_load_combo() {
 fn org_persist_buffer_local_hash_match_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((:buffer-value \"original\" :items (a b)) nil (:buffer-value \"original\" :items (a b)) (:buffer-value \"original\" :items (a b)) t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -107,9 +111,7 @@ fn org_persist_buffer_local_hash_match_combo() {
                       (not (null kill-buffer-hook)))))))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (delete-directory root t))))"##,
-        expect_test::expect![[
-            r#""OK ((:buffer-value \"original\" :items (a b)) nil (:buffer-value \"original\" :items (a b)) (:buffer-value \"original\" :items (a b)) t)""#
-        ]],
+        expect,
     );
 }
 
@@ -117,6 +119,9 @@ fn org_persist_buffer_local_hash_match_combo() {
 fn org_persist_file_container_gc_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (t \"one\ntwo\n\" (\"<persist-file>\" \"file-v1\" \"payload\") t nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-persist)
@@ -158,9 +163,7 @@ fn org_persist_file_container_gc_combo() {
                   (and stored (file-exists-p stored))
                   (org-persist-read '(file) source))))
       (delete-directory root t))))"##,
-        expect_test::expect![[
-            r#""OK (t \"one\ntwo\n\" (\"<persist-file>\" \"file-v1\" \"payload\") t nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -168,6 +171,9 @@ fn org_persist_file_container_gc_combo() {
 fn org_persist_shared_hooks_loadall_gc_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (((:left (shared-node)) (:right (shared-node)) \"shared-v1\") t \"shared-v1\" nil nil (:load \"reset\") 5 4 3 2 nil nil ((before-write (elisp org-persist-test-a)) (before-write (elisp org-persist-test-b)) (before-write (version \"shared-v1\")) (before-read (elisp org-persist-test-a)) (before-read (elisp org-persist-test-b)) (before-read (version \"shared-v1\")) (after-read (elisp org-persist-test-a)) (after-read (elisp org-persist-test-b)) (after-read (version \"shared-v1\")) (before-write (elisp org-persist-test-load)) (before-read (elisp org-persist-test-load)) (after-read (elisp org-persist-test-load)) (before-write (elisp org-persist-test-blocked)) (before-write (elisp-data \"expired\")) (before-write (elisp-data (:gone t))) (before-read (elisp org-persist-test-a)) (before-read (elisp org-persist-test-b)) (before-read (version \"shared-v1\")) (after-read (elisp org-persist-test-a)) (after-read (elisp org-persist-test-b)) (after-read (version \"shared-v1\")) (before-write (elisp org-persist-test-blocked))))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-persist)
@@ -276,9 +282,7 @@ fn org_persist_shared_hooks_loadall_gc_combo() {
                           (list (car event) (cadr event)))
                         (reverse events)))))))
       (delete-directory root t))))"##,
-        expect_test::expect![[
-            r#""OK (((:left (shared-node)) (:right (shared-node)) \"shared-v1\") t \"shared-v1\" nil nil (:load \"reset\") 5 4 3 2 nil nil ((before-write (elisp org-persist-test-a)) (before-write (elisp org-persist-test-b)) (before-write (version \"shared-v1\")) (before-read (elisp org-persist-test-a)) (before-read (elisp org-persist-test-b)) (before-read (version \"shared-v1\")) (after-read (elisp org-persist-test-a)) (after-read (elisp org-persist-test-b)) (after-read (version \"shared-v1\")) (before-write (elisp org-persist-test-load)) (before-read (elisp org-persist-test-load)) (after-read (elisp org-persist-test-load)) (before-write (elisp org-persist-test-blocked)) (before-write (elisp-data \"expired\")) (before-write (elisp-data (:gone t))) (before-read (elisp org-persist-test-a)) (before-read (elisp org-persist-test-b)) (before-read (version \"shared-v1\")) (after-read (elisp org-persist-test-a)) (after-read (elisp org-persist-test-b)) (after-read (version \"shared-v1\")) (before-write (elisp org-persist-test-blocked))))""#
-        ]],
+        expect,
     );
 }
 
@@ -286,6 +290,7 @@ fn org_persist_shared_hooks_loadall_gc_combo() {
 fn org_persist_write_read_gc_unregister_lifecycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 3) 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-persist)
@@ -328,7 +333,7 @@ fn org_persist_write_read_gc_unregister_lifecycle_combo() {
                          read-after-unreg
                          (file-exists-p org-persist-directory)))))))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 3) 6)""#]],
+        expect,
     );
 }
 
@@ -336,6 +341,7 @@ fn org_persist_write_read_gc_unregister_lifecycle_combo() {
 fn org_persist_write_read_hash_table_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 3) 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-persist)
@@ -363,6 +369,6 @@ fn org_persist_write_read_hash_table_deep_state_combo() {
                   (list idx-len read-hash read-assoc dir-files after-unreg
                         (file-exists-p org-persist-directory)))))))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 3) 6)""#]],
+        expect,
     );
 }

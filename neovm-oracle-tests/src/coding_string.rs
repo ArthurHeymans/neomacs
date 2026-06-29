@@ -25,10 +25,8 @@ fn oracle_prop_encode_coding_string_utf8_and_latin1() {
   (length (encode-coding-string "\u4e16" 'utf-8))
   ;; Empty string
   (encode-coding-string "" 'utf-8))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"hello\" \"hello\" 2 1 3 \"\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"hello\" \"hello\" 2 1 3 \"\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -47,7 +45,8 @@ fn oracle_prop_decode_encode_roundtrip() {
              (decoded (decode-coding-string encoded 'utf-8)))
         (setq results (cons (string-equal s decoded) results))))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t)""#]]);
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -74,7 +73,8 @@ fn oracle_prop_encode_coding_string_nocopy() {
   (list content-eq mb-eq
         (length encoded-copy)
         (length mb-encoded)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t 11 7)""#]]);
+    let expect = expect_test::expect![[r#""OK (t t 11 7)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -101,10 +101,8 @@ fn oracle_prop_multibyte_encode_decode() {
     (length (encode-coding-string "ABC" 'utf-8))
     (length (encode-coding-string "\u00e9\u00f1" 'utf-8))
     (length (encode-coding-string "\u4e16\u754c" 'utf-8))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t 7 13 3 4 6)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t 7 13 3 4 6)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -131,10 +129,9 @@ fn oracle_prop_ascii_encoding_identity() {
                       (length utf8))
                     results))))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((t t t 0) (t t t 1) (t t t 5) (t t t 10) (t t t 10))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((t t t 0) (t t t 1) (t t t 5) (t t t 10) (t t t 10))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -145,15 +142,17 @@ fn oracle_prop_ascii_encoding_identity() {
 fn oracle_prop_coding_string_error_invalid_system() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (coding-system-error neovm-bogus-coding)""#]];
     let (oracle_enc, neovm_enc) = crate::common::eval_oracle_and_neovm_expect(
         "(encode-coding-string \"abc\" 'neovm-bogus-coding)",
-        expect_test::expect![[r#""ERR (coding-system-error neovm-bogus-coding)""#]],
+        expect,
     );
     assert_err_kind(&oracle_enc, &neovm_enc, "coding-system-error");
 
+    let expect = expect_test::expect![[r#""ERR (coding-system-error neovm-bogus-coding)""#]];
     let (oracle_dec, neovm_dec) = crate::common::eval_oracle_and_neovm_expect(
         "(decode-coding-string \"abc\" 'neovm-bogus-coding)",
-        expect_test::expect![[r#""ERR (coding-system-error neovm-bogus-coding)""#]],
+        expect,
     );
     assert_err_kind(&oracle_dec, &neovm_dec, "coding-system-error");
 }
@@ -162,16 +161,14 @@ fn oracle_prop_coding_string_error_invalid_system() {
 fn oracle_prop_coding_string_wrong_type_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(encode-coding-string 42 'utf-8)",
-        expect_test::expect![[r#""ERR (wrong-type-argument stringp 42)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument stringp 42)""#]];
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect("(encode-coding-string 42 'utf-8)", expect);
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 
-    let (oracle2, neovm2) = crate::common::eval_oracle_and_neovm_expect(
-        "(decode-coding-string 42 'utf-8)",
-        expect_test::expect![[r#""ERR (wrong-type-argument stringp 42)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument stringp 42)""#]];
+    let (oracle2, neovm2) =
+        crate::common::eval_oracle_and_neovm_expect("(decode-coding-string 42 'utf-8)", expect);
     assert_err_kind(&oracle2, &neovm2, "wrong-type-argument");
 }
 
@@ -205,10 +202,8 @@ fn oracle_prop_encode_manipulate_decode_pipeline() {
     (length enc2)
     (length combined)
     (length original)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t 5 6 11 7)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t 5 6 11 7)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -239,8 +234,7 @@ fn oracle_prop_batch_encode_statistics() {
                     (= byte-len char-len))
                   stats))))
   (nreverse stats))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((10 10 t t) (3 6 t nil) (4 12 t nil) (7 10 t nil))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((10 10 t t) (3 6 t nil) (4 12 t nil) (7 10 t nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

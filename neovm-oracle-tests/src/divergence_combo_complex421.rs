@@ -11,6 +11,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx421_bignum_arithmetic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (1208925819614629174706177 2417851639229258349412352 402975273204876391568725 4)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((big (expt 2 80)))
@@ -19,9 +22,7 @@ fn div_cx421_bignum_arithmetic() {
         (/ big 3)
         (% big 7)))
 "##,
-        expect_test::expect![[
-            r#""OK (1208925819614629174706177 2417851639229258349412352 402975273204876391568725 4)""#
-        ]],
+        expect,
     );
 }
 
@@ -29,6 +30,7 @@ fn div_cx421_bignum_arithmetic() {
 #[test]
 fn div_cx421_read_from_string_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "(a b c) (d e f) (g h i)"))
@@ -36,7 +38,7 @@ fn div_cx421_read_from_string_boundaries() {
         (read-from-string s 6)
         (read-from-string s 6 11)))
 "##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\")""#]],
+        expect,
     );
 }
 
@@ -44,13 +46,14 @@ fn div_cx421_read_from_string_boundaries() {
 #[test]
 fn div_cx421_eval_buffer_context() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"local\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "local")
   (eval '(buffer-string)))
 "##,
-        expect_test::expect![[r#""OK \"local\"""#]],
+        expect,
     );
 }
 
@@ -58,6 +61,7 @@ fn div_cx421_eval_buffer_context() {
 #[test]
 fn div_cx421_save_excursion_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (#<buffer  *neovm-oracle-stdout*> 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((a (get-buffer-create " *cx421-a*"))
@@ -72,7 +76,7 @@ fn div_cx421_save_excursion_deep() {
     (goto-char 3))
   (list (current-buffer) (point)))
 "##,
-        expect_test::expect![[r#""OK (#<buffer  *neovm-oracle-stdout*> 1)""#]],
+        expect,
     );
 }
 
@@ -80,6 +84,7 @@ fn div_cx421_save_excursion_deep() {
 #[test]
 fn div_cx421_narrowing_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 8 \"cdefg\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -91,7 +96,7 @@ fn div_cx421_narrowing_nested() {
       (list (point-min) (point-max) (buffer-string)))
     (list (point-min) (point-max) (buffer-string))))
 "##,
-        expect_test::expect![[r#""OK (3 8 \"cdefg\")""#]],
+        expect,
     );
 }
 
@@ -99,6 +104,7 @@ fn div_cx421_narrowing_nested() {
 #[test]
 fn div_cx421_with_output_to_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"hello world\" \"test\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-output-to-string (princ "hello") (princ " world"))
@@ -107,7 +113,7 @@ fn div_cx421_with_output_to_string() {
             (princ "test"))
         (error (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"hello world\" \"test\")""#]],
+        expect,
     );
 }
 
@@ -115,6 +121,9 @@ fn div_cx421_with_output_to_string() {
 #[test]
 fn div_cx421_format_bignum() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"717897987691852588770249\" \"980553f0db2fd09de3c9\" \"-1\" \"-1\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((big (expt 3 50)))
@@ -123,9 +132,7 @@ fn div_cx421_format_bignum() {
         (format "%d" -1)
         (format "%x" -1)))
 "##,
-        expect_test::expect![[
-            r#""OK (\"717897987691852588770249\" \"980553f0db2fd09de3c9\" \"-1\" \"-1\")""#
-        ]],
+        expect,
     );
 }
 
@@ -133,12 +140,13 @@ fn div_cx421_format_bignum() {
 #[test]
 fn div_cx421_float_rounding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (4 3 3 4 -3 -4 -3 -4)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (ceiling 3.5) (floor 3.5) (truncate 3.5) (round 3.5)
       (ceiling -3.5) (floor -3.5) (truncate -3.5) (round -3.5))
 "##,
-        expect_test::expect![[r#""OK (4 3 3 4 -3 -4 -3 -4)""#]],
+        expect,
     );
 }
 
@@ -146,6 +154,7 @@ fn div_cx421_float_rounding() {
 #[test]
 fn div_cx421_logical_ops_bignum() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 3458764513820540928 3458764513820540928 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((a (expt 2 60)) (b (expt 2 61)))
@@ -154,7 +163,7 @@ fn div_cx421_logical_ops_bignum() {
         (logxor a b)
         (lognot a)))
 "##,
-        expect_test::expect![[r#""OK (0 3458764513820540928 3458764513820540928 0)""#]],
+        expect,
     );
 }
 
@@ -162,6 +171,7 @@ fn div_cx421_logical_ops_bignum() {
 #[test]
 fn div_cx421_ash_lsh_negative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1024 32 -1024 1024 32)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (ash 1 10)
@@ -170,7 +180,7 @@ fn div_cx421_ash_lsh_negative() {
       (lsh 1 10)
       (lsh 1024 -5))
 "##,
-        expect_test::expect![[r#""OK (1024 32 -1024 1024 32)""#]],
+        expect,
     );
 }
 
@@ -178,13 +188,15 @@ fn div_cx421_ash_lsh_negative() {
 #[test]
 fn div_cx421_one_plus_minus_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (2305843009213693952 -2305843009213693953 integer)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (1+ most-positive-fixnum)
       (1- most-negative-fixnum)
       (type-of (1+ most-positive-fixnum)))
 "##,
-        expect_test::expect![[r#""OK (2305843009213693952 -2305843009213693953 integer)""#]],
+        expect,
     );
 }
 
@@ -192,13 +204,14 @@ fn div_cx421_one_plus_minus_edge() {
 #[test]
 fn div_cx421_mod_rem_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function rem)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (mod 7 3) (rem 7 3)
       (mod -7 3) (rem -7 3)
       (mod 7 -3) (rem 7 -3))
 "##,
-        expect_test::expect![[r#""ERR (void-function rem)""#]],
+        expect,
     );
 }
 
@@ -206,6 +219,7 @@ fn div_cx421_mod_rem_edge() {
 #[test]
 fn div_cx421_window_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t \"\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *cx421-wb*")))
@@ -214,7 +228,7 @@ fn div_cx421_window_buffer_ops() {
   (list (eq (window-buffer) buf)
         (buffer-string)))
 "##,
-        expect_test::expect![[r#""OK (t \"\")""#]],
+        expect,
     );
 }
 
@@ -222,6 +236,7 @@ fn div_cx421_window_buffer_ops() {
 #[test]
 fn div_cx421_with_temp_buffer_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"outer\" \"inner\" \"outer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -232,7 +247,7 @@ fn div_cx421_with_temp_buffer_nested() {
           (buffer-string))
         (buffer-string)))
 "##,
-        expect_test::expect![[r#""OK (\"outer\" \"inner\" \"outer\")""#]],
+        expect,
     );
 }
 
@@ -240,6 +255,8 @@ fn div_cx421_with_temp_buffer_nested() {
 #[test]
 fn div_cx421_prin1_escape_flags() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK \"\\\"hello\\\\ncaf\\\\x00e9\\\\n\\\\x4e16\\\\x754c\\\"\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((print-escape-newlines t)
@@ -247,7 +264,7 @@ fn div_cx421_prin1_escape_flags() {
       (print-escape-multibyte t))
   (prin1-to-string "hello\ncafé\n世界"))
 "##,
-        expect_test::expect![[r#""OK \"\\\"hello\\\\ncaf\\\\x00e9\\\\n\\\\x4e16\\\\x754c\\\"\"""#]],
+        expect,
     );
 }
 
@@ -255,6 +272,7 @@ fn div_cx421_prin1_escape_flags() {
 #[test]
 fn div_cx421_format_self_referencing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r##""OK \"#1=(#1#)\"""##]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((x (list 1))
@@ -262,7 +280,7 @@ fn div_cx421_format_self_referencing() {
   (setcar x x)
   (format "%S" x))
 "##,
-        expect_test::expect![[r##""OK \"#1=(#1#)\"""##]],
+        expect,
     );
 }
 
@@ -270,13 +288,14 @@ fn div_cx421_format_self_referencing() {
 #[test]
 fn div_cx421_eval_region_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (insert "(+ 1 2)")
   (eval-region (point-min) (point-max) nil))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -284,6 +303,7 @@ fn div_cx421_eval_region_buffer() {
 #[test]
 fn div_cx421_set_buffer_dead() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK error""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *cx421-dead*")))
@@ -292,7 +312,7 @@ fn div_cx421_set_buffer_dead() {
       (set-buffer buf)
     (error (car e))))
 "##,
-        expect_test::expect![[r#""OK error""#]],
+        expect,
     );
 }
 
@@ -300,6 +320,7 @@ fn div_cx421_set_buffer_dead() {
 #[test]
 fn div_cx421_buffer_size_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 10""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -307,7 +328,7 @@ fn div_cx421_buffer_size_narrow() {
   (narrow-to-region 3 8)
   (buffer-size))
 "##,
-        expect_test::expect![[r#""OK 10""#]],
+        expect,
     );
 }
 
@@ -315,6 +336,9 @@ fn div_cx421_buffer_size_narrow() {
 #[test]
 fn div_cx421_float_truncate_bignum() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (1.2676506002282294e+30 1267650600228229401496703205376 1267650600228229401496703205376)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((big (expt 2 100)))
@@ -322,8 +346,6 @@ fn div_cx421_float_truncate_bignum() {
         (condition-case e (truncate big) (error (car e)))
         (condition-case e (floor big) (error (car e)))))
 "##,
-        expect_test::expect![[
-            r#""OK (1.2676506002282294e+30 1267650600228229401496703205376 1267650600228229401496703205376)""#
-        ]],
+        expect,
     );
 }

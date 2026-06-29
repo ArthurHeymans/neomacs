@@ -108,10 +108,8 @@ fn oracle_prop_imgproc_convolution_kernels() {
     (fmakunbound 'neovm--img-rows)
     (fmakunbound 'neovm--img-cols)
     (fmakunbound 'neovm--img-convolve)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable sum)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable sum)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -168,12 +166,10 @@ Bins values into NUM-BINS buckets over [0, MAX-VAL]."
          ;; All uniform pixels in same bin
          :uniform-single-bin (= (apply 'max hist-uni) 4)))
     (fmakunbound 'neovm--img-histogram)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:hist-4-bins (7 6 1 2) :hist-8-bins (4 3 3 3 1 0 1 1) :total-4 16 :total-8 16 :total-correct t :uniform-hist (0 0 4 0) :uniform-single-bin t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:hist-4-bins (7 6 1 2) :hist-8-bins (4 3 3 3 1 0 1 1) :total-4 16 :total-8 16 :total-correct t :uniform-hist (0 0 4 0) :uniform-single-bin t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -238,12 +234,10 @@ fn oracle_prop_imgproc_threshold() {
                         (setq r (1+ r)))
                       cnt)))
     (fmakunbound 'neovm--img-threshold)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:bin-128-row0 (0 0 0 255) :bin-128-row1 (255 255 0 0) :bin-128-row2 (0 255 255 255) :bin-128-row3 (255 0 255 0) :white-count-128 8 :bin-64-row0 (0 0 1 1) :all-white 16)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:bin-128-row0 (0 0 0 255) :bin-128-row1 (255 255 0 0) :bin-128-row2 (0 255 255 255) :bin-128-row3 (255 0 255 0) :white-count-128 8 :bin-64-row0 (0 0 1 1) :all-white 16)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -347,12 +341,10 @@ Pixel is 1 if center OR any 4-neighbor is 1."
     (fmakunbound 'neovm--img-erode)
     (fmakunbound 'neovm--img-dilate)
     (fmakunbound 'neovm--img-count-fg)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:fg-original 13 :fg-eroded 1 :fg-dilated 33 :fg-opened 5 :erosion-shrinks t :dilation-grows t :opened-leq-original t :eroded-row3 (0 0 0 1 0 0 0) :dilated-row0 (0 0 1 1 1 0 0))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:fg-original 13 :fg-eroded 1 :fg-dilated 33 :fg-opened 5 :erosion-shrinks t :dilation-grows t :opened-leq-original t :eroded-row3 (0 0 0 1 0 0 0) :dilated-row0 (0 0 1 1 1 0 0))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -428,12 +420,10 @@ fn oracle_prop_imgproc_rotation() {
     (fmakunbound 'neovm--img-rotate180)
     (fmakunbound 'neovm--img-rotate270)
     (fmakunbound 'neovm--img-to-list)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:original ((1 2 3) (4 5 6)) :rotated-90 ((4 1) (5 2) (6 3)) :rotated-180 ((6 5 4) (3 2 1)) :rotated-270 ((3 6) (2 5) (1 4)) :r90-dims (3 2) :r360-identity t :r180-twice t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:original ((1 2 3) (4 5 6)) :rotated-90 ((4 1) (5 2) (6 3)) :rotated-180 ((6 5 4) (3 2 1)) :rotated-270 ((3 6) (2 5) (1 4)) :r90-dims (3 2) :r360-identity t :r180-twice t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -515,12 +505,10 @@ fn oracle_prop_imgproc_crop_and_pad() {
     (fmakunbound 'neovm--img-crop)
     (fmakunbound 'neovm--img-pad)
     (fmakunbound 'neovm--img-to-list)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:original ((1 2 3 4) (5 6 7 8) (9 10 11 12)) :cropped ((2 3) (6 7)) :padded ((0 0 0 0 0 0) (0 1 2 3 4 0) (0 5 6 7 8 0) (0 9 10 11 12 0) (0 0 0 0 0 0)) :padded-dims (5 6) :unpad-recovers t :crop-dims (2 2))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:original ((1 2 3 4) (5 6 7 8) (9 10 11 12)) :cropped ((2 3) (6 7)) :padded ((0 0 0 0 0 0) (0 1 2 3 4 0) (0 5 6 7 8 0) (0 9 10 11 12 0) (0 0 0 0 0 0)) :padded-dims (5 6) :unpad-recovers t :crop-dims (2 2))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -614,10 +602,8 @@ new = clamp(128 + (old - 128) * factor / 100)."
     (fmakunbound 'neovm--img-adjust-brightness)
     (fmakunbound 'neovm--img-adjust-contrast)
     (fmakunbound 'neovm--img-to-list)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:original ((0 50 100 150 200 255) (30 80 128 180 220 240)) :bright-plus-50 ((50 100 150 200 250 255) (80 130 178 230 255 255)) :bright-minus-50 ((0 0 50 100 150 205) (0 30 78 130 170 190)) :high-contrast ((0 0 72 172 255 255) (0 32 128 232 255 255)) :low-contrast ((64 89 114 139 164 191) (79 104 128 154 174 184)) :zero-bright-identity t :bright-clamped t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:original ((0 50 100 150 200 255) (30 80 128 180 220 240)) :bright-plus-50 ((50 100 150 200 250 255) (80 130 178 230 255 255)) :bright-minus-50 ((0 0 50 100 150 205) (0 30 78 130 170 190)) :high-contrast ((0 0 72 172 255 255) (0 32 128 232 255 255)) :low-contrast ((64 89 114 139 164 191) (79 104 128 154 174 184)) :zero-bright-identity t :bright-clamped t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

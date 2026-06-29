@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx248_mega_1_full_chaos_ultimate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
@@ -75,13 +76,14 @@ fn div_cx248_mega_1_full_chaos_ultimate() {
               (kill-buffer buf)
               (list state (buffer-live-p buf))))))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx248_mega_2_pcase_rx_syntax_advice_register_window_format_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments re-search-forward 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
@@ -125,13 +127,14 @@ fn div_cx248_mega_2_pcase_rx_syntax_advice_register_window_format_time() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments re-search-forward 5)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx248_mega_3_process_buflocal_coding_env_timer_weak_hash_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
@@ -172,6 +175,6 @@ fn div_cx248_mega_3_process_buflocal_coding_env_timer_weak_hash_textprop_undo() 
         (kill-buffer buf))
       (list snapshot (buffer-live-p buf)))))
 "##,
-        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
+        expect,
     );
 }

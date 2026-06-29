@@ -72,10 +72,8 @@ fn oracle_prop_encoding_base64_simple() {
                         (funcall encode "Ma")
                         (funcall encode "M")
                         (funcall encode "Hello!"))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"TWFu\" \"TWE=\" \"TQ==\" \"SGVsbG8h\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"TWFu\" \"TWE=\" \"TQ==\" \"SGVsbG8h\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -138,12 +136,10 @@ fn oracle_prop_encoding_url_percent() {
                                     (list encoded
                                           (equal s (funcall url-decode encoded)))))
                                 inputs))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"hello%20world\" t) (\"foo%40bar.com\" t) (\"a%3D1%26b%3D2\" t) (\"100%25%20done%21\" t) (\"%2Fpath%2Fto%2Ffile\" t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"hello%20world\" t) (\"foo%40bar.com\" t) (\"a%3D1%26b%3D2\" t) (\"100%25%20done%21\" t) (\"%2Fpath%2Fto%2Ffile\" t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -188,12 +184,10 @@ fn oracle_prop_encoding_roman_numerals() {
                                 (let ((roman (funcall to-roman n)))
                                   (list n roman (funcall from-roman roman))))
                               nums)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 \"I\" 1) (4 \"IV\" 4) (9 \"IX\" 9) (14 \"XIV\" 14) (42 \"XLII\" 42) (99 \"XCIX\" 99) (399 \"CCCXCIX\" 399) (944 \"CMXLIV\" 944) (1776 \"MDCCLXXVI\" 1776) (2024 \"MMXXIV\" 2024) (3999 \"MMMCMXCIX\" 3999))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 \"I\" 1) (4 \"IV\" 4) (9 \"IX\" 9) (14 \"XIV\" 14) (42 \"XLII\" 42) (99 \"XCIX\" 99) (399 \"CCCXCIX\" 399) (944 \"CMXLIV\" 944) (1776 \"MDCCLXXVI\" 1776) (2024 \"MMXXIV\" 2024) (3999 \"MMMCMXCIX\" 3999))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -258,12 +252,10 @@ fn oracle_prop_encoding_morse_code() {
                                       (list w encoded
                                             (funcall decode encoded))))
                                   words)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"HELLO\" \".... . .-.. .-.. ---\" \"HELLO\") (\"SOS\" \"... --- ...\" \"SOS\") (\"ELISP42\" \". .-.. .. ... .--. ....- ..---\" \"ELISP42\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"HELLO\" \".... . .-.. .-.. ---\" \"HELLO\") (\"SOS\" \"... --- ...\" \"SOS\") (\"ELISP42\" \". .-.. .. ... .--. ....- ..---\" \"ELISP42\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -321,12 +313,10 @@ fn oracle_prop_encoding_prefix_free() {
                                   (list n encoded
                                         (funcall gamma-decode encoded))))
                               test-values)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 \"1\" 1) (2 \"010\" 2) (3 \"011\" 3) (4 \"00100\" 4) (5 \"00101\" 5) (10 \"0001010\" 10) (16 \"000010000\" 16) (31 \"000011111\" 31) (42 \"00000101010\" 42) (100 \"0000001100100\" 100))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 \"1\" 1) (2 \"010\" 2) (3 \"011\" 3) (4 \"00100\" 4) (5 \"00101\" 5) (10 \"0001010\" 10) (16 \"000010000\" 16) (31 \"000011111\" 31) (42 \"00000101010\" 42) (100 \"0000001100100\" 100))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -362,10 +352,8 @@ fn oracle_prop_encoding_checksum_xor() {
                       (mapcar (lambda (s)
                                 (cons s (funcall checksum s)))
                               inputs)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"hello\" . 82) (\"world\" . 247) (\"hello\" . 82) (\"foo\" . 83) (\"bar\" . 113) (\"baz\" . 97) (\"\" . 0) (\"a\" . 195) (\"ab\" . 67) (\"abc\" . 71))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"hello\" . 82) (\"world\" . 247) (\"hello\" . 82) (\"foo\" . 83) (\"bar\" . 113) (\"baz\" . 97) (\"\" . 0) (\"a\" . 195) (\"ab\" . 67) (\"abc\" . 71))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

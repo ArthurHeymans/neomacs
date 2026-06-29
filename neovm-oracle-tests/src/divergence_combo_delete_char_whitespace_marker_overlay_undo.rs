@@ -15,6 +15,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_delete_char_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-dc")))
@@ -55,7 +56,7 @@ fn combo_delete_char_marker_overlay_undo() {
                                 (get-text-property 16 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -63,6 +64,7 @@ fn combo_delete_char_marker_overlay_undo() {
 fn combo_delete_backward_char_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-dbc")))
@@ -100,7 +102,7 @@ fn combo_delete_backward_char_marker_overlay_undo() {
                                 (get-text-property 16 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -108,6 +110,7 @@ fn combo_delete_backward_char_marker_overlay_undo() {
 fn combo_delete_horizontal_space_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 16 20)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-dhs")))
@@ -142,7 +145,7 @@ fn combo_delete_horizontal_space_marker_overlay_undo() {
                                 (get-text-property 16 'word))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (args-out-of-range 16 20)""#]],
+        expect,
     );
 }
 
@@ -150,6 +153,7 @@ fn combo_delete_horizontal_space_marker_overlay_undo() {
 fn combo_just_one_space_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 20 24)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-jos")))
@@ -184,7 +188,7 @@ fn combo_just_one_space_marker_overlay_undo() {
                                 (get-text-property 20 'word))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (args-out-of-range 20 24)""#]],
+        expect,
     );
 }
 
@@ -192,6 +196,7 @@ fn combo_just_one_space_marker_overlay_undo() {
 fn combo_delete_blank_lines_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 20 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-dbl")))
@@ -226,6 +231,6 @@ fn combo_delete_blank_lines_marker_overlay_undo() {
                                 (get-text-property 20 'line))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (args-out-of-range 20 25)""#]],
+        expect,
     );
 }

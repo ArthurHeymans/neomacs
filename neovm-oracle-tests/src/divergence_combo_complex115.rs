@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx115_cl_letf_with_setf_place() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((1 2 3) [10 20 30] 99 88)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lst (list 1 2 3))
@@ -16,13 +17,14 @@ fn div_cx115_cl_letf_with_setf_place() {
             ((aref vec 1) 88))
     (list lst vec (car lst) (aref vec 1))))
 "##,
-        expect_test::expect![[r#""OK ((1 2 3) [10 20 30] 99 88)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx115_cl_letf_star_chained_bindings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK [1 2 3]""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((vec (vector 1 2 3)))
@@ -31,26 +33,28 @@ fn div_cx115_cl_letf_star_chained_bindings() {
              ((aref vec 2) (* (aref vec 1) 2)))
     vec))
 "##,
-        expect_test::expect![[r#""OK [1 2 3]""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx115_cl_letf_with_symbol_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (-6 -30 -300)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((orig-fn (symbol-function '+)))
   (cl-letf (((symbol-function '+) (lambda (&rest args) (- (apply orig-fn args)))))
     (list (+ 1 2 3) (+ 10 20) (+ 100 200))))
 "##,
-        expect_test::expect![[r#""OK (-6 -30 -300)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx115_cl_letf_restores_after_throw() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((counter (list 0)))
@@ -59,62 +63,67 @@ fn div_cx115_cl_letf_restores_after_throw() {
         (throw 'done :caught)))
     counter)
 "##,
-        expect_test::expect![[r#""OK (0)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx115_cl_multiple_value_bind_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function values)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-multiple-value-bind (a b c) (values 1 2 3)
   (list a b c))
 "##,
-        expect_test::expect![[r#""ERR (void-function values)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx115_cl_multiple_value_bind_fewer_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function values)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-multiple-value-bind (a b c) (values 1 2)
   (list a b c))
 "##,
-        expect_test::expect![[r#""ERR (void-function values)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx115_cl_multiple_value_bind_extra_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function values)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-multiple-value-bind (a b) (values 1 2 3 4 5)
   (list a b))
 "##,
-        expect_test::expect![[r#""ERR (void-function values)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx115_cl_multiple_value_list_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function values)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-multiple-value-list (values 1 2 3))
       (cl-multiple-value-list (values))
       (cl-multiple-value-list (values :only)))
 "##,
-        expect_test::expect![[r#""ERR (void-function values)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx115_cl_typep_with_satisfies() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t nil t t nil t t nil t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-typep 42 'integer)
@@ -131,13 +140,15 @@ fn div_cx115_cl_typep_with_satisfies() {
       (cl-typep 'a '(member a b c))
       (cl-typep 'd '(member a b c)))
 "##,
-        expect_test::expect![[r#""OK (t t nil t t nil t t nil t t t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx115_cl_check_type_with_message() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (nil wrong-type-argument nil wrong-type-argument)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (cl-check-type 42 integer) (error :no-error))
@@ -145,13 +156,14 @@ fn div_cx115_cl_check_type_with_message() {
       (condition-case e (cl-check-type 5 (integer 0 10)) (error :no-error))
       (condition-case e (cl-check-type 11 (integer 0 10)) (error (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil wrong-type-argument nil wrong-type-argument)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx115_cl_assert_with_message() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil cl-assertion-failed nil error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (cl-assert t) (error :err))
@@ -159,13 +171,14 @@ fn div_cx115_cl_assert_with_message() {
       (condition-case e (cl-assert (> 5 3) nil "5 should be > 3") (error :err))
       (condition-case e (cl-assert (< 5 3) nil "5 should be < 3") (error (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil cl-assertion-failed nil error)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx115_cl_ecase_and_etypecase_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:one :two error :int :str error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-ecase 1 (1 :one) (2 :two) (3 :three))
@@ -175,13 +188,14 @@ fn div_cx115_cl_ecase_and_etypecase_dispatch() {
       (cl-typecase "x" (integer :int) (string :str))
       (condition-case e (cl-etypecase 'symbol (integer :int) (string :str)) (error (car e))))
 "##,
-        expect_test::expect![[r#""OK (:one :two error :int :str error)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx115_cl_defstruct_with_predicate_and_included() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t nil t 1 3 99 99)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx115-base (:conc-name neo-cx115-b-)) a b)
@@ -199,13 +213,14 @@ fn div_cx115_cl_defstruct_with_predicate_and_included() {
         (setf (neo-cx115-b-a d) 99)
         (neo-cx115-b-a d)))
 "##,
-        expect_test::expect![[r#""OK (t t nil t 1 3 99 99)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx115_cl_letf_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((counter (list 0)))
@@ -231,6 +246,6 @@ fn div_cx115_cl_letf_marker_overlay_undo_narrow_mega() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }

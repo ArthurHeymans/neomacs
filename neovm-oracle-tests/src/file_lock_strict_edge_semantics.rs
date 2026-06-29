@@ -48,10 +48,8 @@ fn oracle_file_lock_state_transitions_and_error_edges() {
     (delete-directory dir t)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil nil t nil nil (nil nil nil nil) nil (wrong-number-of-arguments (lock-file 0)) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil nil t nil nil (nil nil nil nil) nil (wrong-number-of-arguments (lock-file 0)) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

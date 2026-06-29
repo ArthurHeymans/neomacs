@@ -13,10 +13,8 @@ fn oracle_take_drop_while_preserve_gnu_tail_semantics() {
         (eq dropped (nthcdr 3 xs))
         dropped
         xs))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3) nil t (4 5) (1 2 3 4 5))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 2 3) nil t (4 5) (1 2 3 4 5))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -39,12 +37,10 @@ fn oracle_take_drop_while_short_circuit_malformed_tails() {
    (condition-case err
        (drop-while (lambda (x) (push x calls) t) xs)
      (error (car err)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2) (1 2 3) (t (1 2 3)) wrong-type-argument wrong-type-argument)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2) (1 2 3) (t (1 2 3)) wrong-type-argument wrong-type-argument)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -68,10 +64,8 @@ fn oracle_all_any_are_defined_by_drop_while() {
    (condition-case err
        (any (lambda (x) nil) ys)
      (error (car err)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t nil t (3 4) t nil nil wrong-type-argument (2 3 . bad-tail) wrong-type-argument)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t nil t (3 4) t nil nil wrong-type-argument (2 3 . bad-tail) wrong-type-argument)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

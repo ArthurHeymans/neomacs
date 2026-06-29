@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_o8_word_search_forward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (6 13 13)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -18,13 +19,14 @@ fn div_o8_word_search_forward() {
   (word-search-forward "foo bar")
   (list (match-beginning 0) (match-end 0) (point)))
 "##,
-        expect_test::expect![[r#""OK (6 13 13)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_o8_sentence_motion_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (16 29 18 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -38,13 +40,14 @@ fn div_o8_sentence_motion_deep() {
       (list p1 p2 (point)
             (progn (backward-sentence) (point))))))
 "##,
-        expect_test::expect![[r#""OK (16 29 18 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_o8_re_search_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (17 20 17 9)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -54,13 +57,14 @@ fn div_o8_re_search_backward() {
   (list (match-beginning 0) (match-end 0) (point)
         (progn (re-search-backward "aaa" nil t) (point))))
 "##,
-        expect_test::expect![[r#""OK (17 20 17 9)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_o8_word_search_regexp_lax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (12 12 \"\\\\<foo\\\\W+bar\\\\>\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -70,6 +74,6 @@ fn div_o8_word_search_regexp_lax() {
         (point)
         (word-search-regexp "foo bar")))
 "##,
-        expect_test::expect![[r#""OK (12 12 \"\\\\<foo\\\\W+bar\\\\>\")""#]],
+        expect,
     );
 }

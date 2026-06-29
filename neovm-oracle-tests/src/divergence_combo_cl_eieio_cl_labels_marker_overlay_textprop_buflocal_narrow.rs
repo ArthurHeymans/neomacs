@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_cl_labels_recursive_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass edit-chain ()
@@ -71,7 +72,7 @@ fn combo_eieio_cl_labels_recursive_edit() {
               (overlay-start ov) (overlay-end ov)
               my-ech-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -79,6 +80,7 @@ fn combo_eieio_cl_labels_recursive_edit() {
 fn combo_eieio_cl_labels_mutual_recursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass mutual-ctx ()
@@ -139,7 +141,7 @@ fn combo_eieio_cl_labels_mutual_recursion() {
               (overlay-start ov) (overlay-end ov)
               my-mc-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -147,6 +149,7 @@ fn combo_eieio_cl_labels_mutual_recursion() {
 fn combo_eieio_cl_labels_higher_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ho-ctx ()
@@ -237,7 +240,7 @@ fn combo_eieio_cl_labels_higher_order() {
                   (overlay-start ov) (overlay-end ov)
                   my-ho-log))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -245,6 +248,7 @@ fn combo_eieio_cl_labels_higher_order() {
 fn combo_eieio_cl_labels_closure_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass capture-ctx ()
@@ -325,7 +329,7 @@ fn combo_eieio_cl_labels_closure_capture() {
               (overlay-start ov) (overlay-end ov)
               my-cc-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -333,6 +337,7 @@ fn combo_eieio_cl_labels_closure_capture() {
 fn combo_eieio_cl_labels_map_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ov-mapper ()
@@ -414,6 +419,6 @@ fn combo_eieio_cl_labels_map_overlays() {
               (overlay-start ov4) (overlay-end ov4)
               my-om-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }

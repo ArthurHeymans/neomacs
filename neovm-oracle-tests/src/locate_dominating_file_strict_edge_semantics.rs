@@ -59,10 +59,8 @@ fn oracle_locate_dominating_file_parent_predicate_and_error_edges() {
     (delete-directory root t)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"a/\" \"a/\" nil \"a/b/\" nil (wrong-number-of-arguments ((2 . 2) 0)) (wrong-type-argument (stringp 42)) (invalid-function (42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"a/\" \"a/\" nil \"a/b/\" nil (wrong-number-of-arguments ((2 . 2) 0)) (wrong-type-argument (stringp 42)) (invalid-function (42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

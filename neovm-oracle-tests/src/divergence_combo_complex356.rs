@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx356_ucs_normalize_nfc_nfd_roundtrip_latin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((nfc "café naïve résumé")
@@ -18,13 +19,14 @@ fn div_cx356_ucs_normalize_nfc_nfd_roundtrip_latin() {
         (length nfc) (length nfd)
         (string-bytes nfc) (string-bytes nfd)))
 "##,
-        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx356_ucs_normalize_nfkc_nfkd_compatibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((orig "ﬁℌ℃")
@@ -34,13 +36,14 @@ fn div_cx356_ucs_normalize_nfkc_nfkd_compatibility() {
         (length orig) (length nfkc) (length nfkd)
         (string= nfkc nfkd)))
 "##,
-        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx356_ucs_normalize_hangul_composition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((composed "한글")
@@ -50,13 +53,14 @@ fn div_cx356_ucs_normalize_hangul_composition() {
         (string= composed decomposed)
         (length composed) (length decomposed)))
 "##,
-        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx356_ucs_normalize_region_in_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -68,13 +72,14 @@ fn div_cx356_ucs_normalize_region_in_buffer() {
         (list nfd-len (buffer-size) (buffer-string))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx356_ucs_normalize_greek_diacritics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((nfc "άέήίόύώ")
@@ -84,26 +89,28 @@ fn div_cx356_ucs_normalize_greek_diacritics() {
         (string= nfc nfd)
         (length nfc) (length nfd)))
 "##,
-        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx356_ucs_normalize_idempotent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "café 한글 ﬁℌ"))
   (list (string= s (ucs-normalize-string (ucs-normalize-string s 'nfc) 'nfc))
         (string= s (ucs-normalize-string (ucs-normalize-string s 'nfd) 'nfd))))
 "##,
-        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx356_ucs_normalize_already_normalized_ascii() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ascii "Hello World 123"))
@@ -112,13 +119,14 @@ fn div_cx356_ucs_normalize_already_normalized_ascii() {
         (string= ascii (ucs-normalize-string ascii 'nfkc))
         (string= ascii (ucs-normalize-string ascii 'nfkd))))
 "##,
-        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx356_ucs_normalize_empty_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (ucs-normalize-string "" 'nfc)
@@ -127,13 +135,14 @@ fn div_cx356_ucs_normalize_empty_string() {
       (ucs-normalize-string "" 'nfkd)
       (length (ucs-normalize-string "" 'nfc)))
 "##,
-        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx356_ucs_normalize_combined_precomposed_decomposed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((precomposed "é")
@@ -144,13 +153,14 @@ fn div_cx356_ucs_normalize_combined_precomposed_decomposed() {
         (length nfc-pre) (length nfc-decomp)
         (length precomposed) (length decomposed)))
 "##,
-        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx356_ucs_normalize_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((nfc "café 한글 naïve")
@@ -178,6 +188,6 @@ fn div_cx356_ucs_normalize_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""ERR (void-function ucs-normalize-string)""#]],
+        expect,
     )
 }

@@ -11,6 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx435_org_export_latex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'ox-latex)
   (with-temp-buffer
@@ -19,7 +20,7 @@ fn div_cx435_org_export_latex() {
      (org-export-as 'latex nil nil t nil)))
       t))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -27,6 +28,7 @@ fn div_cx435_org_export_latex() {
 #[test]
 fn div_cx435_org_export_html() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'ox-html)
   (with-temp-buffer
@@ -35,7 +37,7 @@ fn div_cx435_org_export_html() {
       (org-export-as 'html nil nil t nil)))
       t))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -43,12 +45,13 @@ fn div_cx435_org_export_html() {
 #[test]
 fn div_cx435_org_publish_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'ox-publish)
   (list (fboundp 'org-publish)
         (fboundp 'org-publish-current-project)))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
@@ -56,6 +59,7 @@ fn div_cx435_org_publish_ops() {
 #[test]
 fn div_cx435_org_datetree_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-datetree-insert-line)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-datetree)
   (with-temp-buffer
@@ -63,7 +67,7 @@ fn div_cx435_org_datetree_ops() {
     (org-datetree-insert-line (encode-time 0 0 0 16 6 2024 nil))
     (buffer-string)))
 "##,
-        expect_test::expect![[r#""ERR (void-function org-datetree-insert-line)""#]],
+        expect,
     );
 }
 
@@ -71,6 +75,7 @@ fn div_cx435_org_datetree_ops() {
 #[test]
 fn div_cx435_org_clocktable_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-clock)
   (with-temp-buffer
@@ -79,7 +84,7 @@ fn div_cx435_org_clocktable_ops() {
     (list (fboundp 'org-dblock-write:clocktable)
           (fboundp 'org-clock-report)))
   "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -87,6 +92,7 @@ fn div_cx435_org_clocktable_ops() {
 #[test]
 fn div_cx435_org_refile_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer
@@ -95,7 +101,7 @@ fn div_cx435_org_refile_ops() {
     (list (fboundp 'org-refile)
           (fboundp 'org-refile-cache-clear)))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -103,6 +109,7 @@ fn div_cx435_org_refile_ops() {
 #[test]
 fn div_cx435_org_toggle_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer
@@ -111,7 +118,7 @@ fn div_cx435_org_toggle_ops() {
     (org-toggle-item (point-min) (point-max))
     (buffer-string)))
 "##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 2)""#]],
+        expect,
     );
 }
 
@@ -119,6 +126,7 @@ fn div_cx435_org_toggle_ops() {
 #[test]
 fn div_cx435_org_store_insert_link() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer
@@ -127,7 +135,7 @@ fn div_cx435_org_store_insert_link() {
     (goto-char 1)
     (org-insert-link nil "https://example.com" "Example"))
   "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -135,6 +143,7 @@ fn div_cx435_org_store_insert_link() {
 #[test]
 fn div_cx435_org_mark_ring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer
@@ -145,7 +154,7 @@ fn div_cx435_org_mark_ring() {
     (list (fboundp 'org-mark-ring-goto)
           (boundp 'org-mark-ring)))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -153,12 +162,13 @@ fn div_cx435_org_mark_ring() {
 #[test]
 fn div_cx435_org_speed_commands() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable org-speed-commands-default)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (list (boundp 'org-speed-commands-default)
         (assoc "n" org-speed-commands-default)))
 "##,
-        expect_test::expect![[r#""ERR (void-variable org-speed-commands-default)""#]],
+        expect,
     );
 }
 
@@ -166,6 +176,7 @@ fn div_cx435_org_speed_commands() {
 #[test]
 fn div_cx435_org_find_entry_with_id() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-id)
   (with-temp-buffer
@@ -176,7 +187,7 @@ fn div_cx435_org_find_entry_with_id() {
           (org-id-find id)
         (error (car e)))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -184,12 +195,13 @@ fn div_cx435_org_find_entry_with_id() {
 #[test]
 fn div_cx435_org_log_note() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (list (boundp 'org-log-note-headings)
         (fboundp 'org-add-log-note)))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
@@ -197,12 +209,13 @@ fn div_cx435_org_log_note() {
 #[test]
 fn div_cx435_org_plot_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-plot)
   (list (fboundp 'org-plot/gnuplot)
         (fboundp 'org-plot/gnuplot-script)))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
@@ -210,12 +223,13 @@ fn div_cx435_org_plot_ops() {
 #[test]
 fn div_cx435_org_ctags_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-ctags)
   (list (boundp 'org-ctags-enabled-p)
         (fboundp 'org-ctags-visit-directory-tree)))
 "##,
-        expect_test::expect![[r#""OK (t nil)""#]],
+        expect,
     );
 }
 
@@ -223,6 +237,7 @@ fn div_cx435_org_ctags_ops() {
 #[test]
 fn div_cx435_org_indent_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-indent)
   (with-temp-buffer
@@ -231,7 +246,7 @@ fn div_cx435_org_indent_ops() {
     (list org-indent-mode
           (boundp 'org-indent-indentation-per-level)))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -239,6 +254,9 @@ fn div_cx435_org_indent_ops() {
 #[test]
 fn div_cx435_org_faces_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ([face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified nil] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified nil] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified])""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-faces)
   (list (facep 'org-level-1)
@@ -246,8 +264,6 @@ fn div_cx435_org_faces_ops() {
         (facep 'org-date)
         (facep 'org-tag)))
 "##,
-        expect_test::expect![[
-            r#""OK ([face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified nil] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified nil] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified])""#
-        ]],
+        expect,
     );
 }

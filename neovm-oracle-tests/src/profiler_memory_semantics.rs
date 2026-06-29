@@ -24,10 +24,8 @@ fn oracle_profiler_memory_start_stop_running_state() {
   (list initial start running second stop stopped stop2))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil t t (error \"Memory profiler is already running\") t nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil t t (error \"Memory profiler is already running\") t nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

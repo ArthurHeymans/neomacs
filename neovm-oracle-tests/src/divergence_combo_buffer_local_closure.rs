@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_buffer_local_var_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 16 54)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-bl-chain-val 0)
@@ -24,7 +25,7 @@ fn divergence_buffer_local_var_chain() {
           test-bl-chain-history
           (= (length test-bl-chain-history) 2)
           (equal test-bl-chain-history '(404 192)))) #"#,
-        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 16 54)""##]],
+        expect,
     );
 }
 
@@ -32,6 +33,8 @@ fn divergence_buffer_local_var_chain() {
 fn divergence_marker_set_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""AAAA-XXXX-CCCC-DDDD-EEEEERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
@@ -68,7 +71,7 @@ fn divergence_marker_set_with_undo() {
             (get-text-property 6 'sec) (eq (get-text-property 6 'sec) 'b)
             (get-text-property 11 'sec) (eq (get-text-property 11 'sec) 'c)
             (overlay-get ov 'scope))))) "#,
-        expect_test::expect![[r#""AAAA-XXXX-CCCC-DDDD-EEEEERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -76,6 +79,9 @@ fn divergence_marker_set_with_undo() {
 fn divergence_mark_ring_with_edits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""ALPHA-QQBETA-SIGMA-DELTA-EPSILONERR (wrong-type-argument listp t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ALPHA-BETA-GAMMA-DELTA-EPSILON")
@@ -110,9 +116,7 @@ fn divergence_mark_ring_with_edits() {
               (get-text-property 1 'greek) (eq (get-text-property 1 'greek) 'a)
               (get-text-property 7 'greek) (eq (get-text-property 7 'greek) 'b)
               (overlay-get ov 'chain)))))) "#,
-        expect_test::expect![[
-            r#""ALPHA-QQBETA-SIGMA-DELTA-EPSILONERR (wrong-type-argument listp t)""#
-        ]],
+        expect,
     );
 }
 
@@ -120,6 +124,7 @@ fn divergence_mark_ring_with_edits() {
 fn deficiency_dotimes_with_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((result nil))
@@ -133,7 +138,7 @@ fn deficiency_dotimes_with_buffer_ops() {
           (equal (car result) '(0 . "item-0"))
           (equal (car (last result)) '(9 . "item-9"))
           (cl-every (lambda (p) (stringp (cdr p))) result)))) "#,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -141,6 +146,7 @@ fn deficiency_dotimes_with_buffer_ops() {
 fn divergence_closure_over_hash_with_edits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (2 t 2 t 1 t 5 t 5 t 3 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal))
@@ -161,7 +167,7 @@ fn divergence_closure_over_hash_with_edits() {
             (funcall sum-fn) (= (funcall sum-fn) 5)
             counter (= counter 5)
             (hash-table-count ht) (= (hash-table-count ht) 3))))) "#,
-        expect_test::expect![[r#""OK (2 t 2 t 1 t 5 t 5 t 3 t)""#]],
+        expect,
     );
 }
 
@@ -169,6 +175,9 @@ fn divergence_closure_over_hash_with_edits() {
 fn divergence_recursive_edit_sim() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""MODIFIED-INNERLEVEL2-LEVEL3-LEVEL4ERR (wrong-type-argument listp t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "LEVEL1-LEVEL2-LEVEL3-LEVEL4")
@@ -198,9 +207,7 @@ fn divergence_recursive_edit_sim() {
               (get-text-property 1 'depth) (= (get-text-property 1 'depth) 1)
               (get-text-property 8 'depth) (= (get-text-property 8 'depth) 2)
               (overlay-get ov 'nested))))))) "#,
-        expect_test::expect![[
-            r#""MODIFIED-INNERLEVEL2-LEVEL3-LEVEL4ERR (wrong-type-argument listp t)""#
-        ]],
+        expect,
     );
 }
 
@@ -208,6 +215,7 @@ fn divergence_recursive_edit_sim() {
 fn deficiency_cl_loop_with_temp_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((results
@@ -221,7 +229,7 @@ fn deficiency_cl_loop_with_temp_buffers() {
     (list (= (length results) 10)
           (equal (car results) '("X" t t))
           (cl-every (lambda (r) (and (listp r) (= (length r) 3))) results)))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
+        expect,
     );
 }
 
@@ -229,6 +237,7 @@ fn deficiency_cl_loop_with_temp_buffers() {
 fn divergence_dynamic_binding_vs_lexical() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-dyn-var nil)
@@ -243,7 +252,7 @@ fn divergence_dynamic_binding_vs_lexical() {
             (equal (car results) '("a" "outer"))
             (equal (nth 4 results) '("e" "outer"))
             (cl-every (lambda (r) (equal (cadr r) "outer")) results))))) "#,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -251,6 +260,9 @@ fn divergence_dynamic_binding_vs_lexical() {
 fn deficiency_backquote_splice_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""Result: alpha-beta-gamma-delta-epsilon-beta-gamma-deltaOK (\"Result: alpha-beta-gamma-delta-epsilon-beta-gamma-delta\" t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((items '("alpha" "beta" "gamma" "delta")))
@@ -261,9 +273,7 @@ fn deficiency_backquote_splice_with_props() {
     (list (buffer-string)
           (stringp (buffer-string))
           (> (buffer-size) 10)))) "#,
-        expect_test::expect![[
-            r#""Result: alpha-beta-gamma-delta-epsilon-beta-gamma-deltaOK (\"Result: alpha-beta-gamma-delta-epsilon-beta-gamma-delta\" t t)""#
-        ]],
+        expect,
     );
 }
 
@@ -271,6 +281,9 @@ fn deficiency_backquote_splice_with_props() {
 fn deficiency_mapconcat_propertize_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""one two three four fiveOK (#(\"one two three four five\" 0 3 (word t) 4 7 (word t) 8 13 (word t) 14 18 (word t) 19 23 (word t)) t t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let* ((words '("one" "two" "three" "four" "five"))
@@ -286,8 +299,6 @@ fn deficiency_mapconcat_propertize_chain() {
             (string= (buffer-string) "one two three four five")
             all-word
             (= (buffer-size) 23))))) "#,
-        expect_test::expect![[
-            r#""one two three four fiveOK (#(\"one two three four five\" 0 3 (word t) 4 7 (word t) 8 13 (word t) 14 18 (word t) 19 23 (word t)) t t t)""#
-        ]],
+        expect,
     );
 }

@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx68_write_read_roundtrip_text_utf8() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (24 t \"Hello café 世界 😀\n\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((path (make-temp-file "neo-cx68-utf8"))
@@ -23,13 +24,14 @@ fn div_cx68_write_read_roundtrip_text_utf8() {
     (delete-file path)
     (list size (string= content data) content (file-exists-p path))))
 "##,
-        expect_test::expect![[r#""OK (24 t \"Hello café 世界 😀\n\" nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx68_write_then_append_then_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"first part\nsecond part\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((path (make-temp-file "neo-cx68-app")))
@@ -46,13 +48,16 @@ fn div_cx68_write_then_append_then_read() {
     (delete-file path)
     content))
 "##,
-        expect_test::expect![[r#""OK \"first part\nsecond part\n\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx68_file_name_operations_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"file.txt\" \"/path/to/\" \"file\" \"/path/to/file.txt\" \"gz\" \"file.tar\" \"file.txt\" \"foo/bar\" \"/home/user/foo/bar\" \"/home/user\" \"/home/user/\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -68,15 +73,16 @@ fn div_cx68_file_name_operations_matrix() {
  (directory-file-name "/home/user/")
  (file-name-as-directory "/home/user"))
 "##,
-        expect_test::expect![[
-            r#""OK (\"file.txt\" \"/path/to/\" \"file\" \"/path/to/file.txt\" \"gz\" \"file.tar\" \"file.txt\" \"foo/bar\" \"/home/user/foo/bar\" \"/home/user\" \"/home/user/\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx68_directory_files_with_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"alpha.txt\" \"beta.dat\") (\"alpha.txt\" \"beta.dat\") nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((dir (make-temp-file "neo-cx68-dir" t))
@@ -94,15 +100,14 @@ fn div_cx68_directory_files_with_attributes() {
     (delete-directory dir t)
     (list names full (file-exists-p dir))))
 "##,
-        expect_test::expect![[
-            r#""OK ((\"alpha.txt\" \"beta.dat\") (\"alpha.txt\" \"beta.dat\") nil)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx68_file_attributes_full_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function file-attribute-file-system)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((path (make-temp-file "neo-cx68-attrs")))
@@ -119,7 +124,7 @@ fn div_cx68_file_attributes_full_destructuring() {
           (car (file-attribute-access-time a))
           (file-attribute-file-system a))))
 "##,
-        expect_test::expect![[r#""ERR (void-function file-attribute-file-system)""#]],
+        expect,
     );
 }
 
@@ -149,6 +154,9 @@ fn div_cx68_file_coding_roundtrip_latin1_unibyte_charset_prop() {
 #[test]
 fn div_cx68_expand_file_name_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"/home/user/foo\" \"/var/foo\" \"/home/exec/foo\" \"/home/user/foo\" \"/home/user/foo\" \"/absolute/path\" \"/home/user/file with spaces\" \"/home/user\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((default-directory "/home/user/"))
@@ -162,15 +170,14 @@ fn div_cx68_expand_file_name_edge_cases() {
    (expand-file-name "file with spaces")
    (expand-file-name "" "/home/user/")))
 "##,
-        expect_test::expect![[
-            r#""OK (\"/home/user/foo\" \"/var/foo\" \"/home/exec/foo\" \"/home/user/foo\" \"/home/user/foo\" \"/absolute/path\" \"/home/user/file with spaces\" \"/home/user\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx68_make_temp_file_with_suffix_and_dir() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t \"innerH6MiC0.tmp\" \"tmp\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -183,13 +190,14 @@ fn div_cx68_make_temp_file_with_suffix_and_dir() {
         (list created f-base f-ext (file-exists-p dir))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t \"innerH6MiC0.tmp\" \"tmp\" nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx68_insert_file_contents_partial_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"56789ABCDE\" 10)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((path (make-temp-file "neo-cx68-partial")))
@@ -202,13 +210,14 @@ fn div_cx68_insert_file_contents_partial_range() {
     (delete-file path)
     (list content (length content))))
 "##,
-        expect_test::expect![[r#""OK (\"56789ABCDE\" 10)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx68_file_modes_get_set_and_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((path (make-temp-file "neo-cx68-modes")))
@@ -220,13 +229,14 @@ fn div_cx68_file_modes_get_set_and_replace() {
         (delete-file path)
         (list initial-modes rwx rw- (file-modes-symbolic-to-number "rwxr-xr-x")))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx68_temp_file_read_write_buffer_local_undo_marker_overlay_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((path (make-temp-file "neo-cx68-mega"))
@@ -254,6 +264,6 @@ fn div_cx68_temp_file_read_write_buffer_local_undo_marker_overlay_mega() {
           (length content)
           (file-exists-p path))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

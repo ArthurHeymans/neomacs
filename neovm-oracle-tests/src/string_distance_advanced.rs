@@ -40,12 +40,10 @@ fn oracle_prop_string_distance_edge_cases_and_symmetry() {
                        (string-distance b a)))))
           pairs))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 0 t) (1 1 t) (1 1 t) (0 0 t) (1 1 t) (0 0 t) (3 3 t) (6 6 t) (6 6 t) (2 2 t) (3 3 t) (3 3 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 0 t) (1 1 t) (1 1 t) (0 0 t) (1 1 t) (0 0 t) (3 3 t) (6 6 t) (6 6 t) (2 2 t) (3 3 t) (3 3 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -75,10 +73,8 @@ fn oracle_prop_string_distance_byte_mode() {
   (string-distance "algorithm" "altruistic" t)
   (string-distance "intention" "execution" t))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t 1 1 1 0 3 6 5)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t 1 1 1 0 3 6 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -121,12 +117,10 @@ fn oracle_prop_string_version_lessp_comprehensive() {
                     (eq (if (string-version-lessp a b) t nil) expected))))
           pairs))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"1.0\" \"1.1\" t t) (\"1.1\" \"1.0\" nil t) (\"1.9\" \"1.10\" t t) (\"1.10\" \"1.9\" nil t) (\"2.0\" \"10.0\" t t) (\"10.0\" \"2.0\" nil t) (\"1.0.0\" \"1.0.1\" t t) (\"1.0.1\" \"1.0.0\" nil t) (\"0.9.9\" \"1.0.0\" t t) (\"1.0.0\" \"1.0.0\" nil t) (\"foo2\" \"foo10\" t t) (\"foo10\" \"foo2\" nil t) (\"bar\" \"bar1\" t t) (\"bar1\" \"bar\" nil t) (\"a1b2\" \"a1b10\" t t) (\"a1b10\" \"a1b2\" nil t) (\"\" \"\" nil t) (\"\" \"a\" t t) (\"a\" \"\" nil t) (\"001\" \"1\" nil t) (\"1\" \"001\" nil t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"1.0\" \"1.1\" t t) (\"1.1\" \"1.0\" nil t) (\"1.9\" \"1.10\" t t) (\"1.10\" \"1.9\" nil t) (\"2.0\" \"10.0\" t t) (\"10.0\" \"2.0\" nil t) (\"1.0.0\" \"1.0.1\" t t) (\"1.0.1\" \"1.0.0\" nil t) (\"0.9.9\" \"1.0.0\" t t) (\"1.0.0\" \"1.0.0\" nil t) (\"foo2\" \"foo10\" t t) (\"foo10\" \"foo2\" nil t) (\"bar\" \"bar1\" t t) (\"bar1\" \"bar\" nil t) (\"a1b2\" \"a1b10\" t t) (\"a1b10\" \"a1b2\" nil t) (\"\" \"\" nil t) (\"\" \"a\" t t) (\"a\" \"\" nil t) (\"001\" \"1\" nil t) (\"1\" \"001\" nil t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -166,12 +160,10 @@ fn oracle_prop_string_comparison_functions() {
                 (compare-strings a nil nil b nil nil t))))
           pairs))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t t -3 -3) (t nil 3 3) (t nil t t) (t t -4 -4) (t nil 4 4) (t t -1 -1) (t nil 1 1) (t nil t t) (t t -1 t) (t nil 1 t) (t t -1 -1) (t nil 1 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t t -3 -3) (t nil 3 3) (t nil t t) (t t -4 -4) (t nil 4 4) (t t -1 -1) (t nil 1 1) (t nil t t) (t t -1 t) (t nil 1 t) (t t -1 -1) (t nil 1 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -210,12 +202,10 @@ fn oracle_prop_fuzzy_string_matching() {
     (fmakunbound 'neovm--sd-fuzzy-score)
     (fmakunbound 'neovm--sd-fuzzy-match)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1000 . \"fun\") (750 . \"fund\") (600 . \"funny\") (500 . \"fusion\") (429 . \"funeral\") (400 . \"fuzzy\") (375 . \"function\") (273 . \"fundamental\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1000 . \"fun\") (750 . \"fund\") (600 . \"funny\") (500 . \"fusion\") (429 . \"funeral\") (400 . \"fuzzy\") (375 . \"function\") (273 . \"fundamental\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -267,12 +257,10 @@ fn oracle_prop_autocomplete_ranking() {
                  "buf" "build" "bulk" "bufferp" "bug-report"))
     (fmakunbound 'neovm--sd-rank-candidates)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"buf\" \"buffer\" \"bufferp\" \"buffer-name\" \"buffer-list\") (\"bulk\" \"build\" \"bury-buffer\" \"bug-report\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"buf\" \"buffer\" \"bufferp\" \"buffer-name\" \"buffer-list\") (\"bulk\" \"build\" \"bury-buffer\" \"bug-report\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -323,12 +311,10 @@ fn oracle_prop_line_diff_algorithm() {
     (fmakunbound 'neovm--sd-find-closest)
     (fmakunbound 'neovm--sd-diff-docs)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((modified \"(defun hello (name)\" 4) (modified \"  (message \\\"hello %s\\\" name)\" 8) (unchanged \"  (newline))\" 0) (added \"(provide 'hello)\" 10))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((modified \"(defun hello (name)\" 4) (modified \"  (message \\\"hello %s\\\" name)\" 8) (unchanged \"  (newline))\" 0) (added \"(provide 'hello)\" 10))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -359,5 +345,6 @@ fn oracle_prop_string_distance_triangle_inequality() {
               (setq examples (cons (list a b c ab bc ac) examples)))))))
     (list violations total (null examples))))
 "#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (0 729 t)""#]]);
+    let expect = expect_test::expect![[r#""OK (0 729 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

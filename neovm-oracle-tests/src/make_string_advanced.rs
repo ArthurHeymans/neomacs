@@ -35,10 +35,8 @@ fn oracle_prop_make_string_adv_various_lengths() {
                             (string= s (make-string 500 ?#))))
                     ;; Very large
                     (length (make-string 10000 ?a)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"\" 0 t \"Z\" 1 100 t (500 35 35 t) 10000)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"\" 0 t \"Z\" 1 100 t (500 35 35 t) 10000)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -69,10 +67,9 @@ fn oracle_prop_make_string_adv_multibyte_chars() {
                     ;; Mixing: make-string produces uniform, then compare with hand-built
                     (let ((s (make-string 3 ?\u00f1)))  ; n-tilde
                       (equal s (string ?\u00f1 ?\u00f1 ?\u00f1))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((3 233 233 t) (4 19990 19990) (2 10084) (5 t) t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((3 233 233 t) (4 19990 19990) (2 10084) (5 t) t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -123,12 +120,10 @@ fn oracle_prop_make_string_adv_aset_modification() {
                       (let ((ref s))
                         (aset ref 1 ?B)
                         (list s ref (eq s ref)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"aaXaa\" \"[----]\" \"*.*.*.*.*.\" \"abcdefghijklmnopqrstuvwxyz\" \"+------+\" (\"aBa\" \"aBa\" t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"aaXaa\" \"[----]\" \"*.*.*.*.*.\" \"abcdefghijklmnopqrstuvwxyz\" \"+------+\" (\"aBa\" \"aBa\" t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -169,12 +164,10 @@ fn oracle_prop_make_string_adv_with_concat() {
                       (dotimes (i 5)
                         (setq s (concat s (make-string (1+ i) ?#) " ")))
                       s))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r##""OK (\"aaabbb\" \"<<====================>>\" \"***** TITLE *****\" (\"- item\" \"  - item\" \"    - item\" \"      - item\" \"        - item\") \"|Name      |Age  |City        |\" \"# ## ### #### ##### \")""##
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r##""OK (\"aaabbb\" \"<<====================>>\" \"***** TITLE *****\" (\"- item\" \"  - item\" \"    - item\" \"      - item\" \"        - item\") \"|Name      |Age  |City        |\" \"# ## ### #### ##### \")""##
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -239,12 +232,10 @@ fn oracle_prop_make_string_adv_padding_patterns() {
     (fmakunbound 'neovm--test-rpad)
     (fmakunbound 'neovm--test-lpad)
     (fmakunbound 'neovm--test-center)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"hi        \" 10 \"toolong\" \"000042\" \"0001\" \"12345\" \"    hi    \" 10 \"   title   \" \"  x   \" (\"| Alice    |    95 |\" \"| Bob      |    82 |\" \"| Carol    |   100 |\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"hi        \" 10 \"toolong\" \"000042\" \"0001\" \"12345\" \"    hi    \" 10 \"   title   \" \"  x   \" (\"| Alice    |    95 |\" \"| Bob      |    82 |\" \"| Carol    |   100 |\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -285,12 +276,10 @@ fn oracle_prop_make_string_adv_multibyte_arg() {
                       (list (multibyte-string-p s1)
                             (multibyte-string-p s2)
                             (string= s1 s2))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((3 nil \"aaa\") (3 nil) (3 t) (4 t 200) (t t nil t 5 5) (t t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((3 nil \"aaa\") (3 nil) (3 t) (4 t 200) (t t nil t 5 5) (t t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -362,12 +351,10 @@ fn oracle_prop_make_string_adv_formatting_utilities() {
     (fmakunbound 'neovm--test-text-box)
     (fmakunbound 'neovm--test-progress-bar)
     (fmakunbound 'neovm--test-tree-indent)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"+--------+\" \"| Hello  |\" \"| World! |\" \"| OK     |\" \"+--------+\") \"[....................] 0%\" \"[##########..........] 50%\" \"[####################] 100%\" \"[###############.....] 75%\" \"\" \"|-- \" \"`-- \" \"    |-- \" \"        `-- \" (\"root\" \"  child-1\" \"    grandchild-a\" \"    grandchild-b\" \"  child-2\" \"    leaf\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"+--------+\" \"| Hello  |\" \"| World! |\" \"| OK     |\" \"+--------+\") \"[....................] 0%\" \"[##########..........] 50%\" \"[####################] 100%\" \"[###############.....] 75%\" \"\" \"|-- \" \"`-- \" \"    |-- \" \"        `-- \" (\"root\" \"  child-1\" \"    grandchild-a\" \"    grandchild-b\" \"  child-2\" \"    leaf\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -424,10 +411,8 @@ fn oracle_prop_make_string_adv_string_building_algorithms() {
                           (aset rev (- len 1 i) (aref s i))
                           (setq i (1+ i))))
                       rev))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"khoorzruog\" \"helloworld\") \"3a3b2c5d1e\" \"jihgfedcba\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"khoorzruog\" \"helloworld\") \"3a3b2c5d1e\" \"jihgfedcba\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

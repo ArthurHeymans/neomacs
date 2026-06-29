@@ -60,8 +60,6 @@ fn oracle_delete_file_wrapper_edges() {
     (ignore-errors (delete-directory dir t))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 46)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 46)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

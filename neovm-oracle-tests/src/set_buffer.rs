@@ -12,19 +12,16 @@ fn oracle_prop_set_buffer_basics() {
 
     let form = r#"(let ((b (get-buffer-create "*neovm-oracle-set-buffer*")))
   (buffer-name (set-buffer b)))"#;
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK \"*neovm-oracle-set-buffer*\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"*neovm-oracle-set-buffer*\"""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("\"*neovm-oracle-set-buffer*\"", &oracle, &neovm);
 
     let form_current = r#"(let ((b (get-buffer-create "*neovm-oracle-set-buffer-current*")))
   (set-buffer b)
   (buffer-name (current-buffer)))"#;
-    let (oracle_current, neovm_current) = crate::common::eval_oracle_and_neovm_expect(
-        form_current,
-        expect_test::expect![[r#""OK \"*neovm-oracle-set-buffer-current*\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"*neovm-oracle-set-buffer-current*\"""#]];
+    let (oracle_current, neovm_current) =
+        crate::common::eval_oracle_and_neovm_expect(form_current, expect);
     assert_ok_eq(
         "\"*neovm-oracle-set-buffer-current*\"",
         &oracle_current,
@@ -36,16 +33,14 @@ fn oracle_prop_set_buffer_basics() {
 fn oracle_prop_set_buffer_error_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (arity_oracle, arity_neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(set-buffer)",
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments set-buffer 0)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments set-buffer 0)""#]];
+    let (arity_oracle, arity_neovm) =
+        crate::common::eval_oracle_and_neovm_expect("(set-buffer)", expect);
     assert_err_kind(&arity_oracle, &arity_neovm, "wrong-number-of-arguments");
 
-    let (type_oracle, type_neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(set-buffer 1)",
-        expect_test::expect![[r#""ERR (wrong-type-argument stringp 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument stringp 1)""#]];
+    let (type_oracle, type_neovm) =
+        crate::common::eval_oracle_and_neovm_expect("(set-buffer 1)", expect);
     assert_err_kind(&type_oracle, &type_neovm, "wrong-type-argument");
 }
 

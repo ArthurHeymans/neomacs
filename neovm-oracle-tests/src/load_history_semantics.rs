@@ -45,12 +45,10 @@ fn oracle_prop_gnu_load_history_regexp_matches_suffix_rules() {
                "/var/tmp/neomacs-oracle-load-history.el")))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"\\\\(\\\\`\\\\|/\\\\)foo/bar\\\\(\\\\.elc\\\\|\\\\.el\\\\|\\\\)?\\\\(\\\\.gz\\\\|\\\\.bz2\\\\|\\\\)?\\\\'\" \"\\\\(\\\\`\\\\|/\\\\)foo/bar\\\\.el\\\\(\\\\.gz\\\\|\\\\.bz2\\\\|\\\\)?\\\\'\" \"\\\\`/tmp/neomacs-oracle-load-history\\\\(\\\\.elc\\\\|\\\\.el\\\\|\\\\)?\\\\(\\\\.gz\\\\|\\\\.bz2\\\\|\\\\)?\\\\'\" (t t t t nil nil) (t t t nil nil) (t t t nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"\\\\(\\\\`\\\\|/\\\\)foo/bar\\\\(\\\\.elc\\\\|\\\\.el\\\\|\\\\)?\\\\(\\\\.gz\\\\|\\\\.bz2\\\\|\\\\)?\\\\'\" \"\\\\(\\\\`\\\\|/\\\\)foo/bar\\\\.el\\\\(\\\\.gz\\\\|\\\\.bz2\\\\|\\\\)?\\\\'\" \"\\\\`/tmp/neomacs-oracle-load-history\\\\(\\\\.elc\\\\|\\\\.el\\\\|\\\\)?\\\\(\\\\.gz\\\\|\\\\.bz2\\\\|\\\\)?\\\\'\" (t t t t nil nil) (t t t nil nil) (t t t nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -83,10 +81,8 @@ fn oracle_prop_gnu_load_history_filename_element_preserves_match_data() {
        after))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"/tmp/neomacs-oracle-load-history/alpha.el\" (provide . alpha)) (\"/tmp/neomacs-oracle-load-history/beta.el.gz\" (provide . beta)) nil t (1 3 1 2 2 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"/tmp/neomacs-oracle-load-history/alpha.el\" (provide . alpha)) (\"/tmp/neomacs-oracle-load-history/beta.el.gz\" (provide . beta)) nil t (1 3 1 2 2 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

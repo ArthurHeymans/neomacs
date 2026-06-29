@@ -39,12 +39,10 @@ fn oracle_prop_symbol_plist_basic_get_put() {
           ;; put returns the value
           (put 'neovm--spp-basic 'new-prop 'hello)))
     (setplist 'neovm--spp-basic nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"test-widget\" 42 2.718 important (a b c d) nil ((1 2) (3 4) (5)) nil hello)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"test-widget\" 42 2.718 important (a b c d) nil ((1 2) (3 4) (5)) nil hello)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -88,10 +86,8 @@ fn oracle_prop_symbol_plist_setplist_replace() {
 
         (nreverse trace))
     (setplist 'neovm--spp-repl nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (6 10 8 nil nil 100 400 nil nil 999 2)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (6 10 8 nil nil 100 400 nil nil 999 2)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -133,10 +129,8 @@ fn oracle_prop_symbol_plist_full_list_retrieval() {
                 (plist-put pl 'a 999)
                 (get 'neovm--spp-full 'a))))))
     (setplist 'neovm--spp-full nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil t t 6 1 2 3 nil t t 999)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil t t 6 1 2 3 nil t t 999)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -176,12 +170,10 @@ fn oracle_prop_symbol_plist_multiple_properties() {
         (setq snapshots (cons (length (symbol-plist 'neovm--spp-multi)) snapshots))
         (nreverse snapshots))
     (setplist 'neovm--spp-multi nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 1 4 9 16 25 36 49) (1000 1 1002 9 1004 25 1006 49) 16 18)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 1 4 9 16 25 36 49) (1000 1 1002 9 1004 25 1006 49) 16 18)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -253,12 +245,10 @@ fn oracle_prop_symbol_plist_object_system() {
     (dolist (s '(neovm--spp-obj-counter1 neovm--spp-obj-counter2
                  neovm--spp-obj-account1))
       (setplist s nil))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (1 (0 5 8 20 0 1) counter 120 (100 150 120) (error \"no method :nonexistent\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (1 (0 5 8 20 0 1) counter 120 (100 150 120) (error \"no method :nonexistent\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -331,12 +321,10 @@ fn oracle_prop_symbol_plist_property_inheritance() {
                   (funcall inh-get 'neovm--spp-inh-base :color)))))
     (dolist (s '(neovm--spp-inh-base neovm--spp-inh-mid neovm--spp-inh-leaf))
       (setplist s nil))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (blue 25 t \"base-item\" solid \"I'm a leaf\" nil red nil (blue blue green))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (blue 25 t \"base-item\" solid \"I'm a leaf\" nil red nil (blue blue green))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -435,8 +423,7 @@ fn oracle_prop_symbol_plist_metadata_annotations() {
                  neovm--spp-ann-fn4))
       (setplist s nil))
     (makunbound 'neovm--spp-ann-registry)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"Alice\" (2 1 0) t nil 2 2 2 4 \"Alice (updated)\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (\"Alice\" (2 1 0) t nil 2 2 2 4 \"Alice (updated)\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

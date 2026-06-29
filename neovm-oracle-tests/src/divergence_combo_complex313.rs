@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx313_overlay_create_move_delete_lifecycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t 3 7 #<overlay in no buffer> 5 10 nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -22,13 +23,14 @@ fn div_cx313_overlay_create_move_delete_lifecycle() {
           (overlayp ov)
           (overlays-in 1 16))))
 "##,
-        expect_test::expect![[r#""OK (t 3 7 #<overlay in no buffer> 5 10 nil t nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx313_overlay_evaporate_when_region_emptied() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t 1 t 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -43,13 +45,16 @@ fn div_cx313_overlay_evaporate_when_region_emptied() {
             (overlayp ov)
             (length (overlays-in 1 6))))))
 "##,
-        expect_test::expect![[r#""OK (t 1 t 0)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx313_overlay_priority_chain_with_invisible_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (nil bold italic italic italic italic neo-cx313-h \"0123456789ABCDEF\" (t) \"0123456789ABCDEF\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -73,15 +78,16 @@ fn div_cx313_overlay_priority_chain_with_invisible_display() {
           (remove-from-invisibility-spec 'neo-cx313-h)
           (buffer-substring 1 17))))
 "##,
-        expect_test::expect![[
-            r#""OK (nil bold italic italic italic italic neo-cx313-h \"0123456789ABCDEF\" (t) \"0123456789ABCDEF\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx313_overlay_before_after_string_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"middl\" #(\"[BEFORE]\" 0 8 (face bold)) #(\"[AFTER]\" 0 7 (face italic)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -93,15 +99,14 @@ fn div_cx313_overlay_before_after_string_properties() {
           (overlay-get ov 'before-string)
           (overlay-get ov 'after-string))))
 "##,
-        expect_test::expect![[
-            r#""OK (\"middl\" #(\"[BEFORE]\" 0 8 (face bold)) #(\"[AFTER]\" 0 7 (face italic)))""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx313_overlay_window_local_filtering() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (region nil #<window 1 on *scratch*>)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -113,13 +118,14 @@ fn div_cx313_overlay_window_local_filtering() {
           (get-char-property 5 'face)
           (overlay-get ov 'window))))
 "##,
-        expect_test::expect![[r#""OK (region nil #<window 1 on *scratch*>)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx313_overlay_modification_hooks_invocation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:before 4 6 nil) (:after 4 4 2))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -133,13 +139,14 @@ fn div_cx313_overlay_modification_hooks_invocation() {
       (insert "XY")))
   (nreverse calls))
 "##,
-        expect_test::expect![[r#""OK ((:before 4 6 nil) (:after 4 4 2))""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx313_overlay_insert_in_front_behind_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 7 \"01X234Y56789\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -155,13 +162,14 @@ fn div_cx313_overlay_insert_in_front_behind_hooks() {
     (insert "Y")
     (list (overlay-start ov) (overlay-end ov) (buffer-string))))
 "##,
-        expect_test::expect![[r#""OK (3 7 \"01X234Y56789\")""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx313_overlay_invisible_buffer_substring_visibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 1 19)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -175,13 +183,14 @@ fn div_cx313_overlay_invisible_buffer_substring_visibility() {
       (remove-from-invisibility-spec 'neo-cx313-h)
       (list visible no-props filtered (length visible) (length filtered)))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 1 19)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx313_overlay_category_properties_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (neo-cx313-cat bold 99)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -194,13 +203,14 @@ fn div_cx313_overlay_category_properties_lookup() {
           (get 'neo-cx313-cat 'face)
           (get 'neo-cx313-cat 'priority))))
 "##,
-        expect_test::expect![[r#""OK (neo-cx313-cat bold 99)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx313_overlay_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -234,6 +244,6 @@ fn div_cx313_overlay_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov2) (overlay-end ov2)
             (text-properties-at 1)))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     )
 }

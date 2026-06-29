@@ -88,10 +88,8 @@ fn oracle_prop_obj_sys_closure_dispatch() {
                     ;; Prove isolation: c1 operations didn't affect c2
                     (funcall c2 'get))))))))
     (fmakunbound 'neovm--os-make-counter)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 90 42 3 0 (0 1 2 3) 1 5 90)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 90 42 3 0 (0 1 2 3) 1 5 90)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -199,12 +197,10 @@ fn oracle_prop_obj_sys_prototype_inheritance() {
     (fmakunbound 'neovm--os-obj-get)
     (fmakunbound 'neovm--os-obj-has-own)
     (fmakunbound 'neovm--os-obj-send)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"woof!\" \"meow!\" \"mew!\" \"Rex says woof!\" \"Whiskers says meow!\" \"Tiny says mew!\" \"Rex fetches the ball\" \"dog\" \"cat\" t nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"woof!\" \"meow!\" \"mew!\" \"Rex says woof!\" \"Whiskers says meow!\" \"Tiny says mew!\" \"Rex fetches the ball\" \"dog\" \"cat\" t nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -308,12 +304,10 @@ fn oracle_prop_obj_sys_mixins_multiple_inheritance() {
     (fmakunbound 'neovm--os-mixin-compose)
     (fmakunbound 'neovm--os-mixin-call)
     (fmakunbound 'neovm--os-mixin-list-methods)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"[Build tags:dev,ci]\" \"[Test tags:qa]\" t t t (dev ci) (ci) nil (equal-to greater-than has-tag less-than tags to-string))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"[Build tags:dev,ci]\" \"[Test tags:qa]\" t t t (dev ci) (ci) nil (equal-to greater-than has-tag less-than tags to-string))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -407,12 +401,10 @@ fn oracle_prop_obj_sys_encapsulation_accessors() {
             ;; Introspection
             (funcall p1 'fields))))
     (fmakunbound 'neovm--os-make-class)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Alice\" 30 1001 \"Alicia\" \"Alicia\" 31 31 \"Field id is not writable\" \"Validation failed for age\" \"Bob\" 25 (name age id))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Alice\" 30 1001 \"Alicia\" \"Alicia\" 31 31 \"Field id is not writable\" \"Validation failed for age\" \"Bob\" 25 (name age id))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -510,12 +502,10 @@ fn oracle_prop_obj_sys_polymorphism_virtual_dispatch() {
     (fmakunbound 'neovm--os-prop)
     (fmakunbound 'neovm--os-dispatch)
     (makunbound 'neovm--os-vtables)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((314 40 36) (\"circle with area 314\" \"rect with area 40\" \"square with area 36\") (circle rect square) 390)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((314 40 36) (\"circle with area 314\" \"rect with area 40\" \"square with area 36\") (circle rect square) 390)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -612,12 +602,10 @@ fn oracle_prop_obj_sys_introspection() {
     (fmakunbound 'neovm--os-class-ancestors)
     (fmakunbound 'neovm--os-class-is-a)
     (makunbound 'neovm--os-class-registry)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((electric-car car vehicle) (truck vehicle) (vehicle) (honk describe) (charge battery-level) (battery-level charge describe honk start stop) (capacity describe load-cargo start stop) t t t nil t t t nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((electric-car car vehicle) (truck vehicle) (vehicle) (honk describe) (charge battery-level) (battery-level charge describe honk start stop) (capacity describe load-cargo start stop) t t t nil t t t nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -739,10 +727,8 @@ fn oracle_prop_obj_sys_factory_pattern() {
     (makunbound 'neovm--os-factory-registry)
     (makunbound 'neovm--os-factory-defaults)
     (makunbound 'neovm--os-factory-cache)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"INFO\" \"DEBUG\" (\"[INFO] system started\" \"[INFO] processing\") (\"APP:[DEBUG] variable dump\") \"HELLO WORLD\" \"Hello world\" upper 80 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"INFO\" \"DEBUG\" (\"[INFO] system started\" \"[INFO] processing\") (\"APP:[DEBUG] variable dump\") \"HELLO WORLD\" \"Hello world\" upper 80 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

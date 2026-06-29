@@ -59,12 +59,10 @@ Each spec is (NAME PRED-BODY)."
                       (fmakunbound 'neovm--test-check-zero)
                       (fmakunbound 'neovm--test-check-even)
                       (fmakunbound 'neovm--test-check-odd)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((-3 nil t nil nil t) (-2 nil t nil t nil) (-1 nil t nil nil t) (0 nil nil t t nil) (1 t nil nil nil t) (2 t nil nil t nil) (3 t nil nil nil t)) (5 5))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((-3 nil t nil nil t) (-2 nil t nil t nil) (-1 nil t nil nil t) (0 nil nil t t nil) (1 t nil nil nil t) (2 t nil nil t nil) (3 t nil nil nil t)) (5 5))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +159,8 @@ fn oracle_prop_meta_struct_system() {
                       (fmakunbound 'neovm--test-set-person-name)
                       (fmakunbound 'neovm--test-set-person-age)
                       (fmakunbound 'neovm--test-set-person-email)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -233,12 +232,10 @@ fn oracle_prop_meta_state_machine_dsl() {
                          ;; Traffic light: two cycles
                          (funcall sm-run traffic
                                   '(next next next next next next))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((locked locked unlocked locked) (locked locked locked locked unlocked locked) (locked locked unlocked unlocked unlocked locked) (red red green yellow red) (red red green yellow red green yellow red))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((locked locked unlocked locked) (locked locked locked locked unlocked locked) (locked locked unlocked unlocked unlocked locked) (red red green yellow red) (red red green yellow red green yellow red))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -306,12 +303,10 @@ fn oracle_prop_meta_template_expansion() {
                      (funcall template-subst
                               '(list $known $unknown)
                               '(($known . 42)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((defun add-ten (x) (+ x 10)) ((list \"width\" 80) (list \"height\" 24) (list \"depth\" 8)) (let ((i 0)) (while (< i 10) (print i) (setq i (+ i 2)))) (vector 1 2 3) (list 42 $unknown))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((defun add-ten (x) (+ x 10)) ((list \"width\" 80) (list \"height\" 24) (list \"depth\" 8)) (let ((i 0)) (while (< i 10) (print i) (setq i (+ i 2)))) (vector 1 2 3) (list 42 $unknown))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -404,12 +399,10 @@ fn oracle_prop_meta_reflective_properties() {
                                                 :a 1 :b 2 :c 3)))
                              (funcall obj-map-values nums
                                       (lambda (v) (* v 2)))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (80 30 \"mono\" t nil (:width :height :color :font) 120 \"red\" 8 (nums :a 2 :b 4 :c 6))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (80 30 \"mono\" t nil (:width :height :color :font) 120 \"red\" 8 (nums :a 2 :b 4 :c 6))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -450,12 +443,10 @@ fn oracle_prop_meta_macroexpand_inspection() {
                       (fmakunbound 'neovm--test-my-when)
                       (fmakunbound 'neovm--test-my-unless)
                       (fmakunbound 'neovm--test-my-and2)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((if t (progn (print 1)) nil) (if (not nil) (progn (+ 1 2)) nil) (+ 1 2) (if (not (= x 0)) (progn (/ 1 x)) nil) (neovm--test-my-when (not (= x 0)) (/ 1 x)) 30 (if (neovm--test-my-when t 'yes) 42 nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((if t (progn (print 1)) nil) (if (not nil) (progn (+ 1 2)) nil) (+ 1 2) (if (not (= x 0)) (progn (/ 1 x)) nil) (neovm--test-my-when (not (= x 0)) (/ 1 x)) 30 (if (neovm--test-my-when t 'yes) 42 nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -524,12 +515,10 @@ fn oracle_prop_meta_code_walker() {
                                     (+ (cadr node) (caddr node))
                                   node))
                               '(list (+ 1 2) (+ 3 4) (+ x 5)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((let ((tmp-x 1) (tmp-y 2)) (+ tmp-x tmp-y)) (progn (my-add 1 2) (my-mul 3 (my-add 4 5))) (if > x + x - x) 16 (list 3 7 (+ x 5)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((let ((tmp-x 1) (tmp-y 2)) (+ tmp-x tmp-y)) (progn (my-add 1 2) (my-mul 3 (my-add 4 5))) (if > x + x - x) 16 (list 3 7 (+ x 5)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -605,8 +594,6 @@ fn oracle_prop_meta_method_dispatch() {
                                   (list
                                    (funcall send c1 'get)
                                    (funcall send c2 'get)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (7 10 t 0 10)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (7 10 t 0 10)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

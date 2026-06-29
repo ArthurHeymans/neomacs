@@ -41,12 +41,10 @@ fn oracle_prop_char_syntax_adv_basic_categories() {
                      (char-syntax ?\[) (char-syntax ?\])
                      ;; String delimiter
                      (char-syntax ?\")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (119 119 119 119 119 119 32 32 32 46 46 46 46 95 95 95 95 40 41 40 41 34)""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (119 119 119 119 119 119 32 32 32 46 46 46 46 95 95 95 95 40 41 40 41 34)""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -86,10 +84,8 @@ fn oracle_prop_char_syntax_adv_after_modification() {
                                   ;; Verify changes happened
                                   (not (= orig-at mod-at))
                                   (= restored-at (char-to-string ?.))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p \".\")""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p \".\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -123,12 +119,10 @@ fn oracle_prop_char_syntax_adv_class_to_char_all() {
                             (= (cdr (assq 6 mapping)) ?\")   ;; string -> "
                             (= (cdr (assq 7 mapping)) ?\\))) ;; escape -> \
                     )"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (((0 . 32) (1 . 46) (2 . 119) (3 . 95) (4 . 40) (5 . 41) (6 . 39) (7 . 34) (8 . 36) (9 . 92) (10 . 47) (11 . 60) (12 . 62) (13 . 64) (14 . 33) (15 . 124)) t nil nil nil t t nil nil)""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (((0 . 32) (1 . 46) (2 . 119) (3 . 95) (4 . 40) (5 . 41) (6 . 39) (7 . 34) (8 . 36) (9 . 92) (10 . 47) (11 . 60) (12 . 62) (13 . 64) (14 . 33) (15 . 124)) t nil nil nil t t nil nil)""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -169,10 +163,8 @@ fn oracle_prop_char_syntax_adv_matching_paren_extended() {
                        ;; Guillemets
                        (matching-paren 171)
                        (matching-paren 187))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (41 40 93 91 125 123 62 60 nil nil nil 49 49)""#],
-    );
+    let expect = expect_test::expect![r#""OK (41 40 93 91 125 123 62 60 nil nil nil 49 49)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -211,12 +203,10 @@ fn oracle_prop_char_syntax_adv_string_to_syntax() {
                     ;; Verify they are cons cells
                     (consp (string-to-syntax "w"))
                     (integerp (car (string-to-syntax "w"))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((0) (2) (3) (1) (7) (9) (6) (11) (12) (14) (15) (4 . 41) (5 . 40) (4 . 62) (5 . 60) (65537) (131073) (262145) (524289) t t)""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((0) (2) (3) (1) (7) (9) (6) (11) (12) (14) (15) (4 . 41) (5 . 40) (4 . 62) (5 . 60) (65537) (131073) (262145) (524289) t t)""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -236,12 +226,10 @@ fn oracle_string_to_syntax_invalid_descriptor_errors_like_gnu() {
      (string-to-syntax "?")
    (error (list (car err) (cdr err)))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((error (\"Invalid syntax description letter: \\0\")) (error (\"Invalid syntax description letter: ?\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((error (\"Invalid syntax description letter: \\0\")) (error (\"Invalid syntax description letter: ?\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -304,12 +292,10 @@ fn oracle_prop_char_syntax_adv_tokenizer() {
                          (neovm--test-char-syntax-tokenize "  a + b  ")
                          (neovm--test-char-syntax-tokenize "hello"))
                       (fmakunbound 'neovm--test-char-syntax-tokenize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((word \"x\") (ws \" \") (punct \"=\") (ws \" \") (word \"foo\") (open \"(\") (word \"42\") (close \")\") (ws \" \") (punct \"+\") (ws \" \") (word \"bar\") (sym \"_\") (word \"baz\")) ((ws \"  \") (word \"a\") (ws \" \") (punct \"+\") (ws \" \") (word \"b\") (ws \"  \")) ((word \"hello\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((word \"x\") (ws \" \") (punct \"=\") (ws \" \") (word \"foo\") (open \"(\") (word \"42\") (close \")\") (ws \" \") (punct \"+\") (ws \" \") (word \"bar\") (sym \"_\") (word \"baz\")) ((ws \"  \") (word \"a\") (ws \" \") (punct \"+\") (ws \" \") (word \"b\") (ws \"  \")) ((word \"hello\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -355,8 +341,6 @@ fn oracle_prop_char_syntax_adv_buffer_local_switching() {
                                           (not (= lisp-semi c-semi))
                                           (not (= lisp-under c-under))))))))
                       results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (95 60 95 46 46 119 t t t)""#],
-    );
+    let expect = expect_test::expect![r#""OK (95 60 95 46 46 119 t t t)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

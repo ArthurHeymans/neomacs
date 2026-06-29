@@ -24,8 +24,6 @@ fn oracle_find_buffer_uses_equal_for_buffer_local_values() {
       (kill-buffer buf))
     (makunbound var)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t \" *oracle-find-buffer-equal*\" t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t \" *oracle-find-buffer-equal*\" t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

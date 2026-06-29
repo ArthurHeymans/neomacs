@@ -10,59 +10,50 @@ use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 #[test]
 fn oracle_arrayp_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(arrayp [1 2 3])"#,
-        expect_test::expect![[r#""OK t""#]],
-    );
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(arrayp [1 2 3])"#, expect);
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_arrayp_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(arrayp "hello")"#,
-        expect_test::expect![[r#""OK t""#]],
-    );
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(arrayp "hello")"#, expect);
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_arrayp_list_returns_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(arrayp '(a b c))"#,
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(arrayp '(a b c))"#, expect);
     assert_ok_eq("nil", &o, &n);
 }
 
 #[test]
 fn oracle_vectorp_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(vectorp [1 2])"#,
-        expect_test::expect![[r#""OK t""#]],
-    );
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(vectorp [1 2])"#, expect);
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_vectorp_string_returns_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(vectorp "hello")"#,
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(vectorp "hello")"#, expect);
     assert_ok_eq("nil", &o, &n);
 }
 
 #[test]
 fn oracle_char_table_p_on_char_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
     let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(char-table-p (make-char-table 'syntax-table))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
     assert_ok_eq("t", &o, &n);
 }
@@ -70,30 +61,24 @@ fn oracle_char_table_p_on_char_table() {
 #[test]
 fn oracle_char_table_p_on_vector_returns_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(char-table-p [1 2 3])"#,
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(char-table-p [1 2 3])"#, expect);
     assert_ok_eq("nil", &o, &n);
 }
 
 #[test]
 fn oracle_keywordp_on_keyword() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(keywordp :test)"#,
-        expect_test::expect![[r#""OK t""#]],
-    );
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(keywordp :test)"#, expect);
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_keywordp_on_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(keywordp 'test)"#,
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(keywordp 'test)"#, expect);
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -122,31 +107,25 @@ fn oracle_keywordp_initial_obarray_strict_edges() {
        (keywordp :x :y)
      (error (cons (car err) (cdr err))))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t nil nil nil t t nil (wrong-number-of-arguments keywordp 0) (wrong-number-of-arguments keywordp 2))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t nil nil nil t t nil (wrong-number-of-arguments keywordp 0) (wrong-number-of-arguments keywordp 2))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
 fn oracle_sequencep_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(sequencep '(a b))"#,
-        expect_test::expect![[r#""OK t""#]],
-    );
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(sequencep '(a b))"#, expect);
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_sequencep_integer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(sequencep 42)"#,
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(sequencep 42)"#, expect);
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -179,10 +158,8 @@ fn oracle_data_c_sequence_array_vector_predicate_matrix() {
        (sequencep nil nil)
      (error (cons (car err) (cdr err))))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((t nil nil nil nil nil nil) (t nil nil nil nil nil nil) (t nil nil nil nil nil nil) (t t t t nil nil nil) (t t t t nil nil nil) (t t nil nil nil nil nil) (t t nil nil nil t nil) (t t nil t t nil nil) (nil nil nil nil nil nil t) (nil nil nil nil nil nil nil) (nil nil nil nil nil nil nil)) (wrong-number-of-arguments bool-vector-p 0) (wrong-number-of-arguments sequencep 2))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((t nil nil nil nil nil nil) (t nil nil nil nil nil nil) (t nil nil nil nil nil nil) (t t t t nil nil nil) (t t t t nil nil nil) (t t nil nil nil nil nil) (t t nil nil nil t nil) (t t nil t t nil nil) (nil nil nil nil nil nil t) (nil nil nil nil nil nil nil) (nil nil nil nil nil nil nil)) (wrong-number-of-arguments bool-vector-p 0) (wrong-number-of-arguments sequencep 2))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

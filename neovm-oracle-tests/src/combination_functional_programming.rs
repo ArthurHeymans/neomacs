@@ -31,12 +31,10 @@ fn oracle_prop_fp_map_filter_reduce_pipeline() {
                 ;; Sum
                 (total (let ((s 0)) (dolist (x big) (setq s (+ s x))) s)))
            (list evens squared big total))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((2 4 6 8 10 12 14 16 18 20) (4 16 36 64 100 144 196 256 324 400) (64 100 144 196 256 324 400) 1484)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((2 4 6 8 10 12 14 16 18 20) (4 16 36 64 100 144 196 256 324 400) (64 100 144 196 256 324 400) 1484)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -71,10 +69,9 @@ fn oracle_prop_fp_nested_map_pipeline() {
                                               s))
                                           transposed)))
                     (list doubled row-sums col-sums)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (((2 4 6) (8 10 12) (14 16 18)) (12 30 48) (24 30 36))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (((2 4 6) (8 10 12) (14 16 18)) (12 30 48) (24 30 36))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -116,12 +113,10 @@ fn oracle_prop_fp_zip_unzip() {
                       ;; Roundtrip: unzip(zip(a,b)) == (a, b)
                       (equal (car unzipped) names)
                       (equal (cadr unzipped) ages))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((alice . 30) (bob . 25) (carol . 35) (dave . 28)) ((alice 30 85) (bob 25 92) (carol 35 78) (dave 28 95)) ((alice bob carol dave) (30 25 35 28)) t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((alice . 30) (bob . 25) (carol . 35) (dave . 28)) ((alice 30 85) (bob 25 92) (carol 35 78) (dave 28 95)) ((alice bob carol dave) (30 25 35 28)) t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -165,12 +160,10 @@ fn oracle_prop_fp_group_by_partition() {
                       (funcall group-by
                                (lambda (x) (cond ((< x 5) 1) ((< x 9) 2) (t 3)))
                                nums))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((2 4 6 8 10 12) 1 3 5 7 9 11) ((7 8 9 10 11 12) 1 2 3 4 5 6) ((0 4 8 12) (1 1 5 9) (2 2 6 10) (3 3 7 11)) ((1 1 2 3 4) (2 5 6 7 8) (3 9 10 11 12)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((2 4 6 8 10 12) 1 3 5 7 9 11) ((7 8 9 10 11 12) 1 2 3 4 5 6) ((0 4 8 12) (1 1 5 9) (2 2 6 10) (3 3 7 11)) ((1 1 2 3 4) (2 5 6 7 8) (3 9 10 11 12)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -215,10 +208,8 @@ fn oracle_prop_fp_transducer_compose() {
                                        (lambda (acc x) (cons x acc))
                                        nil '(1 2 3 4 5 6 7 8))))
                 (list result1 (nreverse result2))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (77 (12 14 16 18))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (77 (12 14 16 18))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -268,10 +259,8 @@ fn oracle_prop_fp_maybe_monad() {
                       (funcall chain '((a . 100) (b . 0) (c . 25))
                                (lambda (alist) (cdr (assq 'a alist)))
                                (lambda (x) (funcall safe-div x 5))))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (5.0 nil nil 1 nil 20)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (5.0 nil nil 1 nil 20)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -322,12 +311,10 @@ fn oracle_prop_fp_lazy_thunks() {
                           (nreverse result))))
                   (fmakunbound 'neovm--test-naturals-from)
                   (fmakunbound 'neovm--test-fibs-from))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4 5 6 7 8 9 10) (0 1 1 2 3 5 8 13 21 34 55 89) (1 4 9 16 25 36 49 64))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5 6 7 8 9 10) (0 1 1 2 3 5 8 13 21 34 55 89) (1 4 9 16 25 36 49 64))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -375,10 +362,8 @@ fn oracle_prop_fp_lazy_filtered_stream() {
     (fmakunbound 'neovm--test-sieve)
     (fmakunbound 'neovm--test-stream-filter)
     (fmakunbound 'neovm--test-stream-take)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (2 3 5 7 11 13 17 19 23 29 31 37 41 43 47)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 3 5 7 11 13 17 19 23 29 31 37 41 43 47)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -412,9 +397,7 @@ fn oracle_prop_fp_church_numerals() {
                   (funcall church-to-int c3)
                   (funcall church-to-int c5)
                   (funcall church-to-int c6))))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (0 1 2 3 5 6)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 1 2 3 5 6)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(0 1 2 3 5 6)", &o, &n);
 }

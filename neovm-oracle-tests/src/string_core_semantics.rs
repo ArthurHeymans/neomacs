@@ -28,12 +28,10 @@ fn oracle_string_comparison_symbol_coercion_and_errors() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t t nil t (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t t nil t (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -55,12 +53,10 @@ fn oracle_substring_properties_and_no_properties() {
    (string= sub plain)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (#(\"bcde\" 0 4 (tag source face bold)) bold source (tag source face bold) \"bcde\" nil nil t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (#(\"bcde\" 0 4 (tag source face bold)) bold source (tag source face bold) \"bcde\" nil nil t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -83,12 +79,10 @@ fn oracle_substring_vector_negative_and_error_payloads() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ([b c d] [c d e] \"ébc\" (wrong-type-argument (integerp bad)) (args-out-of-range ([a b c] 0 4)) (wrong-type-argument (stringp [a b c])))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ([b c d] [c d e] \"ébc\" (wrong-type-argument (integerp bad)) (args-out-of-range ([a b c] 0 4)) (wrong-type-argument (stringp [a b c])))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -103,10 +97,8 @@ fn oracle_substring_rejects_record_without_crashing_like_gnu() {
   (error (list (car err) (cdr err))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (wrong-type-argument (arrayp #s(a 1 2)))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (wrong-type-argument (arrayp #s(a 1 2)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -122,10 +114,8 @@ fn oracle_substring_rejects_bool_vector_like_gnu() {
   (error (list (car err) (cdr err))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (wrong-type-argument (arrayp #&3\"\u{5}\"))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (wrong-type-argument (arrayp #&3\"\u{5}\"))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -140,12 +130,10 @@ fn oracle_substring_rejects_char_table_like_gnu() {
   (error (list (car err) (cdr err))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (wrong-type-argument (arrayp #^[65 nil generic 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65]))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (wrong-type-argument (arrayp #^[65 nil generic 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65]))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -168,12 +156,10 @@ fn oracle_substring_no_properties_rejects_vectorlike_objects_like_gnu() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-type-argument (stringp #^[65 nil generic 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65])) (wrong-type-argument (stringp #&3\"\u{7}\")) (wrong-type-argument (stringp #s(tag 1 2))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-type-argument (stringp #^[65 nil generic 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65])) (wrong-type-argument (stringp #&3\"\u{7}\")) (wrong-type-argument (stringp #s(tag 1 2))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -201,12 +187,10 @@ fn oracle_concat_and_vconcat_character_sequence_edges() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (#(\"abcdef\" 0 2 (face bold)) bold bold nil [97 98 c d e f] (wrong-type-argument (characterp bad)) (wrong-type-argument (characterp 4194304)) (wrong-type-argument (sequencep 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (#(\"abcdef\" 0 2 (face bold)) bold bold nil [97 98 c d e f] (wrong-type-argument (characterp bad)) (wrong-type-argument (characterp 4194304)) (wrong-type-argument (sequencep 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -238,12 +222,10 @@ fn oracle_copy_sequence_text_properties_and_shallow_copy() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil t ((changed)) nil #(\"abc\" 0 3 (face bold)) (face bold) nil t [(changed)] nil (wrong-type-argument (sequencep 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil t ((changed)) nil #(\"abc\" 0 3 (face bold)) (face bold) nil t [(changed)] nil (wrong-type-argument (sequencep 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -268,12 +250,10 @@ fn oracle_copy_sequence_vectorlike_type_boundaries() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t t t 65 (wrong-type-argument (sequencep (closure (t) (x) x))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t t t 65 (wrong-type-argument (sequencep (closure (t) (x) x))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -310,12 +290,10 @@ fn oracle_copy_sequence_char_table_deep_subtables_shallow_slots() {
            (char-table-extra-slot copy 0)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""ERR (args-out-of-range #^[default #^[parent-default nil generic #^^[3 0 parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-a parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default] #^^[1 0 #^^[2 0 #^^[3 0 parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-a parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default] parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default] parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default] parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default] generic default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default] 0)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""ERR (args-out-of-range #^[default #^[parent-default nil generic #^^[3 0 parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-a parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default] #^^[1 0 #^^[2 0 #^^[3 0 parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-a parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default] parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default] parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default] parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default parent-default] generic default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default default] 0)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -341,12 +319,10 @@ fn oracle_copy_sequence_record_allocates_shallow_slot_copy() {
    (equal rec copy)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil t t (neovm--copy-sequence-record neovm--copy-sequence-record) ((mutated) (mutated)) (tail copy-tail) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil t t (neovm--copy-sequence-record neovm--copy-sequence-record) ((mutated) (mutated)) (tail copy-tail) nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -381,10 +357,8 @@ fn oracle_copy_sequence_circular_and_improper_list_errors() {
             (car (cadr err)))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-type-argument (listp c)) (circular-list t 5 1) (circular-list t 4 c1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-type-argument (listp c)) (circular-list t 5 1) (circular-list t 4 c1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

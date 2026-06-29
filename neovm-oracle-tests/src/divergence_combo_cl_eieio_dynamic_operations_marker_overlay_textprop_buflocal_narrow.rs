@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_dynamic_slot_value_access() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 14 22)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass dyn-slots ()
@@ -55,7 +56,7 @@ fn combo_eieio_dynamic_slot_value_access() {
                 (buffer-string)
                 my-obj)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 14 22)""#]],
+        expect,
     );
 }
 
@@ -63,6 +64,7 @@ fn combo_eieio_dynamic_slot_value_access() {
 fn combo_eieio_class_slots_introspection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 18 30)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass introspected ()
@@ -116,7 +118,7 @@ fn combo_eieio_class_slots_introspection() {
                 (buffer-string)
                 my-obj)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 18 30)""#]],
+        expect,
     );
 }
 
@@ -124,6 +126,7 @@ fn combo_eieio_class_slots_introspection() {
 fn combo_eieio_apply_funcall_generic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defgeneric)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass callable-entity ()
@@ -173,7 +176,7 @@ fn combo_eieio_apply_funcall_generic() {
                 (buffer-string)
                 entity)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function defgeneric)""#]],
+        expect,
     );
 }
 
@@ -181,6 +184,7 @@ fn combo_eieio_apply_funcall_generic() {
 fn combo_eieio_setf_slot_via_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 22 30)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass mutable-entity ()
@@ -225,7 +229,7 @@ fn combo_eieio_setf_slot_via_symbol() {
                 (buffer-string)
                 my-obj)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 22 30)""#]],
+        expect,
     );
 }
 
@@ -233,6 +237,7 @@ fn combo_eieio_setf_slot_via_symbol() {
 fn combo_eieio_dynamic_dispatch_apply_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defgeneric)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass dispatched ()
@@ -287,6 +292,6 @@ fn combo_eieio_dynamic_dispatch_apply_list() {
                 (buffer-string)
                 my-obj)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function defgeneric)""#]],
+        expect,
     );
 }

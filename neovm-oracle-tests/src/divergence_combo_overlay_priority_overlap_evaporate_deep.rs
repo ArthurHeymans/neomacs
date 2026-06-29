@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_overlay_priority_ordering() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"opo\")))\n\
@@ -30,7 +31,7 @@ fn deficiency_overlay_priority_ordering() {
          (< (or (overlay-get a 'priority) 0)\n\
          (or (overlay-get b 'priority) 0)))))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -38,6 +39,7 @@ fn deficiency_overlay_priority_ordering() {
 fn deficiency_overlapping_overlays_with_different_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ood\")))\n\
@@ -56,7 +58,7 @@ fn deficiency_overlapping_overlays_with_different_properties() {
          (mapcar (lambda (ov) (overlay-get ov 'tag))\n\
          (overlays-in 5 7))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -64,6 +66,7 @@ fn deficiency_overlapping_overlays_with_different_properties() {
 fn deficiency_overlay_evaporate_on_empty_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"oee\")))\n\
@@ -80,7 +83,7 @@ fn deficiency_overlay_evaporate_on_empty_range() {
          (overlay-get ov1 'data)\n\
          (buffer-string))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -88,6 +91,7 @@ fn deficiency_overlay_evaporate_on_empty_range() {
 fn deficiency_overlay_evaporate_nil_survives_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"oen\")))\n\
@@ -102,7 +106,7 @@ fn deficiency_overlay_evaporate_nil_survives_empty() {
          (overlay-get ov 'data)\n\
          (buffer-string)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -110,6 +114,7 @@ fn deficiency_overlay_evaporate_nil_survives_empty() {
 fn deficiency_overlay_move_with_insertion_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"omi\")))\n\
@@ -127,7 +132,7 @@ fn deficiency_overlay_move_with_insertion_type() {
          (overlay-get ov 'data)\n\
          (buffer-string)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -135,6 +140,7 @@ fn deficiency_overlay_move_with_insertion_type() {
 fn deficiency_overlay_after_replace_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"orm\")))\n\
@@ -149,7 +155,7 @@ fn deficiency_overlay_after_replace_match() {
          (overlay-get ov 'word)\n\
          (buffer-string)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -157,6 +163,7 @@ fn deficiency_overlay_after_replace_match() {
 fn deficiency_delete_overlay_vs_set_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"dov\")))\n\
@@ -174,7 +181,7 @@ fn deficiency_delete_overlay_vs_set_nil() {
          (overlay-start ov2)\n\
          (overlay-get ov1 'tag))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -182,6 +189,7 @@ fn deficiency_delete_overlay_vs_set_nil() {
 fn deficiency_overlay_in_narrowed_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"oni\")))\n\
@@ -195,7 +203,7 @@ fn deficiency_overlay_in_narrowed_buffer() {
          (overlay-get ov 'role)\n\
          (length (overlays-in (point-min) (point-max))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -203,6 +211,7 @@ fn deficiency_overlay_in_narrowed_buffer() {
 fn deficiency_overlay_after_buffer_substring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"obs\")))\n\
@@ -216,7 +225,7 @@ fn deficiency_overlay_after_buffer_substring() {
          (overlay-start ov) (overlay-end ov)\n\
          (overlay-get ov 'tag))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -224,6 +233,7 @@ fn deficiency_overlay_after_buffer_substring() {
 fn deficiency_many_overlays_stress_with_priorities() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mos\")))\n\
@@ -242,6 +252,6 @@ fn deficiency_many_overlays_stress_with_priorities() {
          (overlay-end ov)\n\
          (overlay-get ov 'priority))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

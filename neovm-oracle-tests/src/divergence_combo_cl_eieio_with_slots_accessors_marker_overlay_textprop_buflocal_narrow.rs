@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_with_slots_buffer_manipulation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function cl-with-slots)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass config-item ()
@@ -52,7 +53,7 @@ fn combo_eieio_with_slots_buffer_manipulation() {
                 (buffer-string)
                 cfg-obj)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function cl-with-slots)""#]],
+        expect,
     );
 }
 
@@ -60,6 +61,7 @@ fn combo_eieio_with_slots_buffer_manipulation() {
 fn combo_eieio_with_accessors_multi_class() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass account ()
@@ -122,7 +124,7 @@ fn combo_eieio_with_accessors_multi_class() {
                 (buffer-string)
                 accounts)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -130,6 +132,7 @@ fn combo_eieio_with_accessors_multi_class() {
 fn combo_eieio_slot_setf_via_setv_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass point ()
@@ -177,7 +180,7 @@ fn combo_eieio_slot_setf_via_setv_narrow_undo() {
                   (buffer-string)
                   my-point))))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -185,6 +188,7 @@ fn combo_eieio_slot_setf_via_setv_narrow_undo() {
 fn combo_eieio_with_slots_clone_overlay_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 27 35)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass task ()
@@ -234,7 +238,7 @@ fn combo_eieio_with_slots_clone_overlay_interaction() {
                   (buffer-string)
                   task-list))))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 27 35)""#]],
+        expect,
     );
 }
 
@@ -242,6 +246,7 @@ fn combo_eieio_with_slots_clone_overlay_interaction() {
 fn combo_eieio_slot_makeunbound_with_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function slot-makunbound)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass resource ()
@@ -289,6 +294,6 @@ fn combo_eieio_slot_makeunbound_with_overlay_undo() {
                 (buffer-string)
                 res-obj)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function slot-makunbound)""#]],
+        expect,
     );
 }

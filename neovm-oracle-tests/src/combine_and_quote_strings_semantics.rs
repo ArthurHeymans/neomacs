@@ -24,12 +24,10 @@ fn oracle_combine_and_quote_basic_space_separator() {
    cases))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"alpha\" \"beta\" \"gamma\") \"alpha beta gamma\" (\"alpha\" \"beta\" \"gamma\")) ((\"alpha beta\" \"gamma\") \"\\\"alpha beta\\\" gamma\" (\"alpha beta\" \"gamma\")) ((\"alpha\" \"\" \"gamma\") \"alpha  gamma\" (\"alpha\" \"gamma\")) ((\"a\\\"b\" \"c\\\\d\" \"e f\") \"\\\"a\\\\\\\"b\\\" \\\"c\\\\\\\\d\\\" \\\"e f\\\"\" (\"a\\\"b\" \"c\\\\d\" \"e f\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"alpha\" \"beta\" \"gamma\") \"alpha beta gamma\" (\"alpha\" \"beta\" \"gamma\")) ((\"alpha beta\" \"gamma\") \"\\\"alpha beta\\\" gamma\" (\"alpha beta\" \"gamma\")) ((\"alpha\" \"\" \"gamma\") \"alpha  gamma\" (\"alpha\" \"gamma\")) ((\"a\\\"b\" \"c\\\\d\" \"e f\") \"\\\"a\\\\\\\"b\\\" \\\"c\\\\\\\\d\\\" \\\"e f\\\"\" (\"a\\\"b\" \"c\\\\d\" \"e f\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -50,12 +48,10 @@ fn oracle_combine_and_quote_custom_literal_separators() {
    cases))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"a,b\" \"c\" \"d,e\") \",\" \"\\\"a,b\\\",c,\\\"d,e\\\"\" (\"a,b\" \"c\" \"d,e\")) ((\"a::b\" \"c\" \"d::e\") \"::\" \"\\\"a::b\\\"::c::\\\"d::e\\\"\" (\"a::b\" \"c\" \"d::e\")) ((\"a|b\" \"c d\" \"e\\\"f\") \"|\" \"\\\"a|b\\\"|c d|\\\"e\\\\\\\"f\\\"\" (\"a|b\" \"c d\" \"e\\\"f\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"a,b\" \"c\" \"d,e\") \",\" \"\\\"a,b\\\",c,\\\"d,e\\\"\" (\"a,b\" \"c\" \"d,e\")) ((\"a::b\" \"c\" \"d::e\") \"::\" \"\\\"a::b\\\"::c::\\\"d::e\\\"\" (\"a::b\" \"c\" \"d::e\")) ((\"a|b\" \"c d\" \"e\\\"f\") \"|\" \"\\\"a|b\\\"|c d|\\\"e\\\\\\\"f\\\"\" (\"a|b\" \"c d\" \"e\\\"f\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -70,12 +66,10 @@ fn oracle_split_string_and_unquote_without_quotes() {
  (split-string-and-unquote "alpha::beta::::gamma" "::+"))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"alpha\" \"beta\" \"gamma\") (\"alpha\" \"beta\" \"gamma\") (\"alpha\" \"beta\") (\"alpha\" \"beta\" \"gamma\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"alpha\" \"beta\" \"gamma\") (\"alpha\" \"beta\" \"gamma\") (\"alpha\" \"beta\") (\"alpha\" \"beta\" \"gamma\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -90,12 +84,10 @@ fn oracle_split_string_and_unquote_quoted_segments() {
  (split-string-and-unquote "\"\" middle \"\"" "\\s-+"))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"alpha\" \"beta gamma\" \"delta\") (\"alpha beta\" \"gamma\\\"delta\") (\"pre\" \"a,b\" \"post\") (\"\" \"middle\" \"\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"alpha\" \"beta gamma\" \"delta\") (\"alpha beta\" \"gamma\\\"delta\") (\"pre\" \"a,b\" \"post\") (\"\" \"middle\" \"\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -116,12 +108,10 @@ fn oracle_split_string_and_unquote_errors() {
    cases))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((end-of-file nil) (\"alpha\" \"badq\" \"beta\") (wrong-type-argument stringp))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((end-of-file nil) (\"alpha\" \"badq\" \"beta\") (wrong-type-argument stringp))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -140,10 +130,8 @@ fn oracle_combine_and_quote_preserves_string_properties_observably() {
           (text-properties-at 14 combined))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (#(\"\\\"alpha beta\\\" gamma\" 1 6 (face bold) 13 18 (face italic)) \"\\\"alpha beta\\\" gamma\" (face bold) (face italic))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (#(\"\\\"alpha beta\\\" gamma\" 1 6 (face bold) 13 18 (face italic)) \"\\\"alpha beta\\\" gamma\" (face bold) (face italic))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

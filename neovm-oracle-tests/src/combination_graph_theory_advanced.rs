@@ -93,12 +93,10 @@ fn oracle_prop_graph_adv_tarjan_scc() {
             (list 'dag-sccs (length s3) (= (length s3) 3)))))
     (fmakunbound 'neovm--tarjan-scc)
     (fmakunbound 'neovm--tarjan-visit)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((num-sccs 3) (sccs ((a b c) (d e) (f))) (single-scc ((p q r s)) t) (dag-sccs 3 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((num-sccs 3) (sccs ((a b c) (d e) (f))) (single-scc ((p q r s)) t) (dag-sccs 3 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -174,12 +172,10 @@ fn oracle_prop_graph_adv_dijkstra() {
                     (gethash 'B dist))))))
     (fmakunbound 'neovm--dijkstra)
     (fmakunbound 'neovm--dj-path)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((A . 0) (B . 3) (C . 2) (D . 6) (E . 4)) (A-to-D (A C B D) 6) (A-to-E (A C B E) 4) (A-to-B (A C B) 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((A . 0) (B . 3) (C . 2) (D . 6) (E . 4)) (A-to-D (A C B D) 6) (A-to-E (A C B E) 4) (A-to-B (A C B) 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -256,12 +252,10 @@ fn oracle_prop_graph_adv_bipartite_check() {
                    (4 . (3 1)))))
           (funcall 'neovm--is-bipartite g '(1 2 3 4))))
     (fmakunbound 'neovm--is-bipartite)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t ((1 2) (3 4 5))) (nil nil) (t ((1 3) (2 4))) (nil nil) (t ((1 3) (2 4))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t ((1 2) (3 4 5))) (nil nil) (t ((1 3) (2 4))) (nil nil) (t ((1 3) (2 4))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -325,10 +319,8 @@ fn oracle_prop_graph_adv_cycle_extraction() {
           '(a b c d)))
     (fmakunbound 'neovm--find-cycle)
     (fmakunbound 'neovm--fc-visit)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((a c b a) nil (x x) (a b a))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((a c b a) nil (x x) (a b a))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -397,12 +389,10 @@ fn oracle_prop_graph_adv_greedy_coloring() {
           (list c num-colors (funcall 'neovm--valid-coloring g c))))
     (fmakunbound 'neovm--greedy-color)
     (fmakunbound 'neovm--valid-coloring)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((((1 . 0) (2 . 1) (3 . 0) (4 . 1)) 2 t) (((1 . 0) (2 . 1) (3 . 2) (4 . 3)) 4 t) (((0 . 0) (1 . 1) (2 . 1) (3 . 1) (4 . 1) (5 . 1)) 2 t) (((1 . 0) (2 . 1) (3 . 0) (4 . 1) (5 . 2)) 3 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((((1 . 0) (2 . 1) (3 . 0) (4 . 1)) 2 t) (((1 . 0) (2 . 1) (3 . 2) (4 . 3)) 4 t) (((0 . 0) (1 . 1) (2 . 1) (3 . 1) (4 . 1) (5 . 1)) 2 t) (((1 . 0) (2 . 1) (3 . 0) (4 . 1) (5 . 2)) 3 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -475,12 +465,10 @@ fn oracle_prop_graph_adv_topo_sort_all_orderings() {
           (list order (funcall 'neovm--verify-topo g order))))
     (fmakunbound 'neovm--kahn-topo)
     (fmakunbound 'neovm--verify-topo)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((a b c d) t) ((a b c d) t) ((a b c d) t) ((a b c d e f) t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((a b c d) t) ((a b c d) t) ((a b c d) t) ((a b c d e f) t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -553,12 +541,10 @@ fn oracle_prop_graph_adv_bridge_finding() {
           (funcall 'neovm--find-bridges g '(0 1 2 3))))
     (fmakunbound 'neovm--find-bridges)
     (fmakunbound 'neovm--bridge-dfs)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 2) (2 3)) nil ((1 2) (2 3) (3 4)) ((0 1) (0 2) (0 3)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 2) (2 3)) nil ((1 2) (2 3) (3 4)) ((0 1) (0 2) (0 3)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -632,12 +618,10 @@ fn oracle_prop_graph_adv_eulerian_detection() {
           '((1 . (2 4)) (2 . (1 3)) (3 . (2 4)) (4 . (3 1)))
           '(1 2 3 4)))
     (fmakunbound 'neovm--euler-check)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((degrees ((1 . 2) (2 . 2) (3 . 2))) (odd-degree-count 0) (connected t) (has-euler-circuit t) (has-euler-path t)) ((degrees ((1 . 1) (2 . 2) (3 . 1))) (odd-degree-count 2) (connected t) (has-euler-circuit nil) (has-euler-path t)) ((degrees ((1 . 3) (2 . 3) (3 . 3) (4 . 3))) (odd-degree-count 4) (connected t) (has-euler-circuit nil) (has-euler-path nil)) ((degrees ((1 . 3) (2 . 3) (3 . 3) (4 . 3))) (odd-degree-count 4) (connected t) (has-euler-circuit nil) (has-euler-path nil)) ((degrees ((1 . 2) (2 . 2) (3 . 2) (4 . 2))) (odd-degree-count 0) (connected t) (has-euler-circuit t) (has-euler-path t)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((degrees ((1 . 2) (2 . 2) (3 . 2))) (odd-degree-count 0) (connected t) (has-euler-circuit t) (has-euler-path t)) ((degrees ((1 . 1) (2 . 2) (3 . 1))) (odd-degree-count 2) (connected t) (has-euler-circuit nil) (has-euler-path t)) ((degrees ((1 . 3) (2 . 3) (3 . 3) (4 . 3))) (odd-degree-count 4) (connected t) (has-euler-circuit nil) (has-euler-path nil)) ((degrees ((1 . 3) (2 . 3) (3 . 3) (4 . 3))) (odd-degree-count 4) (connected t) (has-euler-circuit nil) (has-euler-path nil)) ((degrees ((1 . 2) (2 . 2) (3 . 2) (4 . 2))) (odd-degree-count 0) (connected t) (has-euler-circuit t) (has-euler-path t)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -722,12 +706,10 @@ fn oracle_prop_graph_adv_kruskal_mst() {
     (fmakunbound 'neovm--uf-find)
     (fmakunbound 'neovm--uf-union)
     (fmakunbound 'neovm--kruskal)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((((1 3 2) (3 4 3) (1 2 4) (4 5 7)) 16 1) (((1 2 1) (2 3 2) (2 4 4)) 7 1) (((2 3 1) (3 4 2) (1 2 3)) 6 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((((1 3 2) (3 4 3) (1 2 4) (4 5 7)) 16 1) (((1 2 1) (2 3 2) (2 4 4)) 7 1) (((2 3 1) (3 4 2) (1 2 3)) 6 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -792,12 +774,10 @@ fn oracle_prop_graph_adv_prim_mst() {
             (3 . ((1 . 3) (2 . 2))))
           '(1 2 3)))
     (fmakunbound 'neovm--prim-mst)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((((1 3 2) (3 4 3) (1 2 4) (4 5 7)) 16 1) (((1 2 1) (2 3 2)) 3 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((((1 3 2) (3 4 3) (1 2 4) (4 5 7)) 16 1) (((1 2 1) (2 3 2)) 3 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -851,12 +831,10 @@ fn oracle_prop_graph_adv_degree_analysis() {
           '((a . (b)) (b . (c)) (c . (a)))
           '(a b c)))
     (fmakunbound 'neovm--degree-analysis)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((degrees ((a 0 2) (b 1 1) (c 1 2) (d 2 1) (e 1 1) (f 2 0) (g 0 0))) (sources (a)) (sinks (f)) (isolated (g))) ((degrees ((a 1 1) (b 1 1) (c 1 1))) (sources nil) (sinks nil) (isolated nil)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((degrees ((a 0 2) (b 1 1) (c 1 2) (d 2 1) (e 1 1) (f 2 0) (g 0 0))) (sources (a)) (sinks (f)) (isolated (g))) ((degrees ((a 1 1) (b 1 1) (c 1 1))) (sources nil) (sinks nil) (isolated nil)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -899,10 +877,8 @@ fn oracle_prop_graph_adv_transpose() {
           '((x . (x y)) (y . (z)) (z . ()))
           '(x y z)))
     (fmakunbound 'neovm--transpose-graph)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((a) (b a) (c a) (d b c) (e c)) ((a c) (b a) (c b)) ((x x) (y x) (z y)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((a) (b a) (c a) (d b c) (e c)) ((a c) (b a) (c b)) ((x x) (y x) (z y)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

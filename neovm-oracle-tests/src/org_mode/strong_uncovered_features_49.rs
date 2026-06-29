@@ -11,11 +11,12 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf49_export_html() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r##""OK \"<div id=\\\"table-of-contents\\\" role=\\\"doc-toc\\\">\n<h2>Table of Contents</h2>\n<div id=\\\"text-table-of-contents\\\" role=\\\"doc-toc\\\">\n<ul>\n<li><a href=\\\"#orge734c84\\\">1. H</a></li>\n</ul>\n</div>\n</div>\n<div id=\\\"outline-container-orge734c84\\\" class=\\\"outline-2\\\">\n<h2 id=\\\"orge734c84\\\"><span class=\\\"section-number-2\\\">1.</span> H</h2>\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\n<p>\nBody <b>bold</b></p>\n</div>\n</div>\n\"""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-export-string-as "* H\nBody *bold*" 'html t)"##,
-        expect_test::expect![[
-            r##""OK \"<div id=\\\"table-of-contents\\\" role=\\\"doc-toc\\\">\n<h2>Table of Contents</h2>\n<div id=\\\"text-table-of-contents\\\" role=\\\"doc-toc\\\">\n<ul>\n<li><a href=\\\"#orge734c84\\\">1. H</a></li>\n</ul>\n</div>\n</div>\n<div id=\\\"outline-container-orge734c84\\\" class=\\\"outline-2\\\">\n<h2 id=\\\"orge734c84\\\"><span class=\\\"section-number-2\\\">1.</span> H</h2>\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\n<p>\nBody <b>bold</b></p>\n</div>\n</div>\n\"""##
-        ]],
+        expect,
     );
 }
 
@@ -26,11 +27,12 @@ fn uf49_export_html() {
 #[test]
 fn uf49_export_latex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK \"\\\\section{H}\n\\\\label{sec:orgfc04a12}\nBody \\\\textbf{bold}\n\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-export-string-as "* H\nBody *bold*" 'latex t)"##,
-        expect_test::expect![[
-            r#""OK \"\\\\section{H}\n\\\\label{sec:orgfc04a12}\nBody \\\\textbf{bold}\n\"""#
-        ]],
+        expect,
     );
 }
 
@@ -41,9 +43,10 @@ fn uf49_export_latex() {
 #[test]
 fn uf49_export_ascii() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"1 H\n===\n\n  Body *bold*\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-export-string-as "* H\nBody *bold*" 'ascii t)"##,
-        expect_test::expect![[r#""OK \"1 H\n===\n\n  Body *bold*\n\"""#]],
+        expect,
     );
 }
 
@@ -54,11 +57,12 @@ fn uf49_export_ascii() {
 #[test]
 fn uf49_export_opts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r##""OK \"<div id=\\\"table-of-contents\\\" role=\\\"doc-toc\\\">\n<h2>Table of Contents</h2>\n<div id=\\\"text-table-of-contents\\\" role=\\\"doc-toc\\\">\n<ul>\n<li><a href=\\\"#org31ef010\\\">1. H</a></li>\n</ul>\n</div>\n</div>\n<div id=\\\"outline-container-org31ef010\\\" class=\\\"outline-2\\\">\n<h2 id=\\\"org31ef010\\\"><span class=\\\"section-number-2\\\">1.</span> H</h2>\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\n<p>\nBody</p>\n</div>\n</div>\n\"""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-export-string-as "#+TITLE: T\n* H\nBody" 'html t)"##,
-        expect_test::expect![[
-            r##""OK \"<div id=\\\"table-of-contents\\\" role=\\\"doc-toc\\\">\n<h2>Table of Contents</h2>\n<div id=\\\"text-table-of-contents\\\" role=\\\"doc-toc\\\">\n<ul>\n<li><a href=\\\"#org31ef010\\\">1. H</a></li>\n</ul>\n</div>\n</div>\n<div id=\\\"outline-container-org31ef010\\\" class=\\\"outline-2\\\">\n<h2 id=\\\"org31ef010\\\"><span class=\\\"section-number-2\\\">1.</span> H</h2>\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\n<p>\nBody</p>\n</div>\n</div>\n\"""##
-        ]],
+        expect,
     );
 }
 
@@ -69,9 +73,10 @@ fn uf49_export_opts() {
 #[test]
 fn uf49_link_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable org-link-types)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(sort (copy-sequence org-link-types) 'string<)"##,
-        expect_test::expect![[r#""ERR (void-variable org-link-types)""#]],
+        expect,
     );
 }
 
@@ -82,10 +87,8 @@ fn uf49_link_types() {
 #[test]
 fn uf49_link_protocols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    crate::common::assert_oracle_parity_expect(
-        r##"(mapcar 'car org-link-protocols)"##,
-        expect_test::expect![[r#""ERR (void-variable org-link-protocols)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable org-link-protocols)""#]];
+    crate::common::assert_oracle_parity_expect(r##"(mapcar 'car org-link-protocols)"##, expect);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -95,13 +98,14 @@ fn uf49_link_protocols() {
 #[test]
 fn uf49_link_escape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"http://example.com?a=1&b=2\" \"hello%20world\" \"test%20\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-link-escape-browser "http://example.com?a=1&b=2")
         (org-link-escape-browser "hello world")
         (org-link-escape-browser "test%20"))"##,
-        expect_test::expect![[
-            r#""OK (\"http://example.com?a=1&b=2\" \"hello%20world\" \"test%20\")""#
-        ]],
+        expect,
     );
 }
 
@@ -112,13 +116,14 @@ fn uf49_link_escape() {
 #[test]
 fn uf49_link_unescape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"http://example.com?a=1%26b=2\" \"hello%20world\" \"test%2520\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-link-unescape "http://example.com?a=1%26b=2")
         (org-link-unescape "hello%20world")
         (org-link-unescape "test%2520"))"##,
-        expect_test::expect![[
-            r#""OK (\"http://example.com?a=1%26b=2\" \"hello%20world\" \"test%2520\")""#
-        ]],
+        expect,
     );
 }
 
@@ -129,9 +134,10 @@ fn uf49_link_unescape() {
 #[test]
 fn uf49_link_plain_re() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 0""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(string-match-p org-link-plain-re "http://example.com")"##,
-        expect_test::expect![[r#""OK 0""#]],
+        expect,
     );
 }
 
@@ -142,9 +148,10 @@ fn uf49_link_plain_re() {
 #[test]
 fn uf49_link_bracket_re() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 0""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(string-match-p org-bracket-link-regexp "[[http://example.com][Example]]")"##,
-        expect_test::expect![[r#""OK 0""#]],
+        expect,
     );
 }
 
@@ -155,9 +162,10 @@ fn uf49_link_bracket_re() {
 #[test]
 fn uf49_protocol_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-protocol-parse-parameters)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-protocol-parse-parameters "org-protocol://store-link?url=http://example.com&title=Test")"##,
-        expect_test::expect![[r#""ERR (void-function org-protocol-parse-parameters)""#]],
+        expect,
     );
 }
 
@@ -168,11 +176,12 @@ fn uf49_protocol_parse() {
 #[test]
 fn uf49_protocol_sanitize() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-protocol-sanitize-uri)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-protocol-sanitize-uri "http://example.com")
         (org-protocol-sanitize-uri "https://test.org/path?a=1&b=2")
         (org-protocol-sanitize-uri "file:///tmp/test.txt"))"##,
-        expect_test::expect![[r#""ERR (void-function org-protocol-sanitize-uri)""#]],
+        expect,
     );
 }
 
@@ -183,9 +192,10 @@ fn uf49_protocol_sanitize() {
 #[test]
 fn uf49_protocol_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-protocol-check-protocol-for)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-protocol-check-protocol-for "store-link")"##,
-        expect_test::expect![[r#""ERR (void-function org-protocol-check-protocol-for)""#]],
+        expect,
     );
 }
 
@@ -196,6 +206,7 @@ fn uf49_protocol_check() {
 #[test]
 fn uf49_store_link() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -203,7 +214,7 @@ fn uf49_store_link() {
   (goto-char (point-min))
   (org-store-link nil)
   (list (car org-stored-links)))"##,
-        expect_test::expect![[r#""OK (nil)""#]],
+        expect,
     );
 }
 
@@ -214,12 +225,13 @@ fn uf49_store_link() {
 #[test]
 fn uf49_insert_link() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"[[http://example.com][Example]]\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (org-insert-link nil "http://example.com" "Example")
   (buffer-string))"##,
-        expect_test::expect![[r#""OK \"[[http://example.com][Example]]\"""#]],
+        expect,
     );
 }
 
@@ -230,6 +242,7 @@ fn uf49_insert_link() {
 #[test]
 fn uf49_open_link() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (search-failed \"Link\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -238,7 +251,7 @@ fn uf49_open_link() {
   (list (org-element-property :type (org-element-context))
         (org-element-property :path (org-element-context))
         (org-element-property :raw-link (org-element-context))))"##,
-        expect_test::expect![[r#""ERR (search-failed \"Link\")""#]],
+        expect,
     );
 }
 
@@ -249,6 +262,9 @@ fn uf49_open_link() {
 #[test]
 fn uf49_map_links() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"http\" \"//a.com\") (\"file\" \"b.el\") (\"id\" \"xxx\") (\"mailto\" \"d@e.com\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -256,9 +272,7 @@ fn uf49_map_links() {
   (org-element-map (org-element-parse-buffer) 'link
     (lambda (l) (list (org-element-property :type l)
                       (org-element-property :path l)))))"##,
-        expect_test::expect![[
-            r#""OK ((\"http\" \"//a.com\") (\"file\" \"b.el\") (\"id\" \"xxx\") (\"mailto\" \"d@e.com\"))""#
-        ]],
+        expect,
     );
 }
 
@@ -269,6 +283,7 @@ fn uf49_map_links() {
 #[test]
 fn uf49_map_timestamps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((active-range 2026 20) (inactive 2026 30))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -277,7 +292,7 @@ fn uf49_map_timestamps() {
     (lambda (ts) (list (org-element-property :type ts)
                       (org-element-property :year-start ts)
                       (org-element-property :day-start ts)))))"##,
-        expect_test::expect![[r#""OK ((active-range 2026 20) (inactive 2026 30))""#]],
+        expect,
     );
 }
 
@@ -288,6 +303,9 @@ fn uf49_map_timestamps() {
 #[test]
 fn uf49_map_planning() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (((timestamp (:standard-properties [21 nil nil nil 33 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2026-01-15>\" :year-start 2026 :month-start 1 :day-start 15 :hour-start nil :minute-start nil :year-end 2026 :month-end 1 :day-end 15 :hour-end nil :minute-end nil)) nil nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -296,9 +314,7 @@ fn uf49_map_planning() {
     (lambda (p) (list (org-element-property :scheduled p)
                       (org-element-property :deadline p)
                       (org-element-property :closed p)))))"##,
-        expect_test::expect![[
-            r#""OK (((timestamp (:standard-properties [21 nil nil nil 33 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2026-01-15>\" :year-start 2026 :month-start 1 :day-start 15 :hour-start nil :minute-start nil :year-end 2026 :month-end 1 :day-end 15 :hour-end nil :minute-end nil)) nil nil))""#
-        ]],
+        expect,
     );
 }
 
@@ -309,6 +325,7 @@ fn uf49_map_planning() {
 #[test]
 fn uf49_map_clock() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((closed \"1:30\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -316,7 +333,7 @@ fn uf49_map_clock() {
   (org-element-map (org-element-parse-buffer) 'clock
     (lambda (c) (list (org-element-property :status c)
                       (org-element-property :duration c)))))"##,
-        expect_test::expect![[r#""OK ((closed \"1:30\"))""#]],
+        expect,
     );
 }
 
@@ -327,6 +344,7 @@ fn uf49_map_clock() {
 #[test]
 fn uf49_map_footnote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"1\" \"2\") (\"1\" \"2\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -335,6 +353,6 @@ fn uf49_map_footnote() {
           (lambda (f) (org-element-property :label f)))
         (org-element-map (org-element-parse-buffer) 'footnote-definition
           (lambda (f) (org-element-property :label f)))))"##,
-        expect_test::expect![[r#""OK ((\"1\" \"2\") (\"1\" \"2\"))""#]],
+        expect,
     );
 }

@@ -24,12 +24,10 @@ fn oracle_prop_time_date_parse_safe_and_day_helpers() {
    (time-to-day-in-year (date-to-time "2020-12-31T00:00:00Z"))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"1970-01-01 00:00:00 +0000\" \"2000-02-29 12:34:56 +0000\" \"1970-01-01\" 730120 9 365)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"1970-01-01 00:00:00 +0000\" \"2000-02-29 12:34:56 +0000\" \"1970-01-01\" 730120 9 365)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -53,12 +51,10 @@ fn oracle_prop_time_date_leap_month_and_ordinal_helpers() {
    (date-ordinal-to-time 2021 365)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((nil t t nil) (29 28 30 31) (error \"Month 0 is invalid\") (error \"Month 13 is invalid\") (nil nil nil 29 2 2020 nil nil nil) (nil nil nil 31 12 2021 nil nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((nil t t nil) (29 28 30 31) (error \"Month 0 is invalid\") (error \"Month 13 is invalid\") (nil nil nil 29 2 2020 nil nil nil) (nil nil nil 31 12 2021 nil nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -87,12 +83,10 @@ fn oracle_prop_time_date_format_seconds_flags_and_errors() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"2 years 3 days 4 hours 5 minutes 6 seconds\" \"0 years 0 days 4 hours 5 minutes 6 seconds\" \"2 years 0 days 0 hours 0 minutes 6 seconds\" \"000 years 00 days 01 hour 01 minute 01 second\" \"1.2\" \"% 9\" \"-1\" \"0 0\" (error \"Multiple instances of specifier: ‘s’\") (error \"Bad format specifier: ‘q’\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"2 years 3 days 4 hours 5 minutes 6 seconds\" \"0 years 0 days 4 hours 5 minutes 6 seconds\" \"2 years 0 days 0 hours 0 minutes 6 seconds\" \"000 years 00 days 01 hour 01 minute 01 second\" \"1.2\" \"% 9\" \"-1\" \"0 0\" (error \"Multiple instances of specifier: ‘s’\") (error \"Bad format specifier: ‘q’\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -117,10 +111,8 @@ fn oracle_prop_time_date_seconds_to_string_modes() {
    (seconds-to-string -2.5)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"0s\" \"0 seconds\" \"0s\" \"1.00ms\" \"12.35s\" \"2.00m\" \"1 hour\" \"1 hour 1 minute\" \"1h 1m\" \"1.5 minutes\" \"1.5 minutes\" \"-2.50s\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"0s\" \"0 seconds\" \"0s\" \"1.00ms\" \"12.35s\" \"2.00m\" \"1 hour\" \"1 hour 1 minute\" \"1h 1m\" \"1.5 minutes\" \"1.5 minutes\" \"-2.50s\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

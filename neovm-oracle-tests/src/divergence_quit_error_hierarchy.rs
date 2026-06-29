@@ -15,10 +15,8 @@ fn oracle_quit_not_caught_by_error_handler() {
     (progn (signal 'quit nil) 'not-reached)
   (error 'error-caught)
   (quit 'quit-caught))"#;
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK quit-caught""#]],
-    );
+    let expect = expect_test::expect![[r#""OK quit-caught""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("quit-caught", &oracle, &neovm);
 }
 
@@ -27,8 +25,8 @@ fn oracle_quit_error_conditions_list_excludes_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r#"(member 'error (get 'quit 'error-conditions))"#;
-    let (oracle, neovm) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
@@ -37,8 +35,8 @@ fn oracle_quit_error_conditions_includes_quit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r#"(member 'quit (get 'quit 'error-conditions))"#;
-    let (oracle, neovm) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK (quit)""#]]);
+    let expect = expect_test::expect![[r#""OK (quit)""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(quit)", &oracle, &neovm);
 }
 
@@ -49,10 +47,8 @@ fn oracle_quit_not_matched_by_t_condition() {
     let form = r#"(condition-case err
     (signal 'quit nil)
   (t (list 'caught-by-t (car err))))"#;
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (caught-by-t quit)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (caught-by-t quit)""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(caught-by-t quit)", &oracle, &neovm);
 }
 
@@ -69,10 +65,8 @@ fn oracle_quit_vs_error_different_handler_branches() {
       (signal 'quit nil)
     (error 'got-error)
     (quit 'got-quit)))"#;
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (got-error got-quit)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (got-error got-quit)""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(got-error got-quit)", &oracle, &neovm);
 }
 
@@ -81,10 +75,8 @@ fn oracle_minibuffer_quit_hierarchy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r#"(get 'minibuffer-quit 'error-conditions)"#;
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (minibuffer-quit quit)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (minibuffer-quit quit)""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(minibuffer-quit quit)", &oracle, &neovm);
 }
 
@@ -93,7 +85,7 @@ fn oracle_minibuffer_quit_not_inheriting_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r#"(member 'error (get 'minibuffer-quit 'error-conditions))"#;
-    let (oracle, neovm) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("nil", &oracle, &neovm);
 }

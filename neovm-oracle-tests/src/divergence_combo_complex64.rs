@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx64_process_filter_chunked_utf8_decoding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"\nProcess neo-cx64-pf finished\n\" 30 1 8)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx64-pf*"))
@@ -24,13 +25,16 @@ fn div_cx64_process_filter_chunked_utf8_decoding() {
       (list output (length output) (length chunks)
             (apply #'+ (mapcar #'length chunks))))))
 "##,
-        expect_test::expect![[r#""OK (\"\nProcess neo-cx64-pf finished\n\" 30 1 8)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx64_process_sentinel_exit_and_signal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (((:exit . \"exited abnormally with code 7\n\") (:sig . \"terminated\n\")) 7 exit 15 signal)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((events nil))
@@ -49,15 +53,14 @@ fn div_cx64_process_sentinel_exit_and_signal() {
           (process-exit-status p2)
           (process-status p2))))
 "##,
-        expect_test::expect![[
-            r#""OK (((:exit . \"exited abnormally with code 7\n\") (:sig . \"terminated\n\")) 7 exit 15 signal)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx64_make_pipe_pair_one_way_communication() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -76,13 +79,14 @@ fn div_cx64_make_pipe_pair_one_way_communication() {
         content))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK \"\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx64_timer_repeated_invocation_in_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (20 0 19 (:once))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (fire-seq)
@@ -96,13 +100,14 @@ fn div_cx64_timer_repeated_invocation_in_order() {
         (list (length first) (car first) (car (last first))
               (nreverse fire-seq))))))
 "##,
-        expect_test::expect![[r#""OK (20 0 19 (:once))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx64_idle_timer_does_not_fire_during_active_processing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable idle-fired)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (fired)
@@ -114,13 +119,14 @@ fn div_cx64_idle_timer_does_not_fire_during_active_processing() {
       (cancel-timer idle)
       (list first (nreverse fired)))))
 "##,
-        expect_test::expect![[r#""ERR (void-variable idle-fired)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx64_process_environment_inheritance_and_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil \"value1\" \"value2\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((before (getenv "NEO_CX64"))
@@ -130,13 +136,14 @@ fn div_cx64_process_environment_inheritance_and_override() {
                (string-trim (shell-command-to-string "printf %s $NEO_CX64")))))
   (list before env1 env2 (getenv "NEO_CX64")))
 "##,
-        expect_test::expect![[r#""OK (nil \"value1\" \"value2\" nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx64_process_buffer_undo_recording() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx64-pb*")))
@@ -155,13 +162,14 @@ fn div_cx64_process_buffer_undo_recording() {
         (prog1 (list content undo-list-len after-undo)
           (kill-buffer buf))))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx64_two_processes_interleaved_buffer_appends() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"AAABBB\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx64-i*")))
@@ -181,13 +189,14 @@ fn div_cx64_two_processes_interleaved_buffer_appends() {
   (prog1 (with-current-buffer buf (buffer-string))
     (kill-buffer buf)))
 "##,
-        expect_test::expect![[r#""OK \"AAABBB\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx64_set_process_coding_system_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument processp nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx64-cs*")))
@@ -202,13 +211,14 @@ fn div_cx64_set_process_coding_system_round_trip() {
                  decode-system)
       (kill-buffer buf))))
 "##,
-        expect_test::expect![[r#""ERR (wrong-type-argument processp nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx64_timer_process_buffer_undo_textprop_narrow_env_exitcode_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil))
@@ -250,6 +260,6 @@ fn div_cx64_timer_process_buffer_undo_textprop_narrow_env_exitcode_mega() {
                   (length (overlays-in 1 20))))))
       (kill-buffer buf))))
 "##,
-        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
+        expect,
     );
 }

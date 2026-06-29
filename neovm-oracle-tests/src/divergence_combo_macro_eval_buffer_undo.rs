@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_defmacro_expansion_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defmacro with-tagged-insert (tag &rest body)\n\
@@ -27,7 +28,7 @@ fn deficiency_defmacro_expansion_buffer_ops() {
          (get-text-property 21 'tag)\n\
          (= (buffer-size) 30))))\n\
          (kill-buffer (get-buffer \"dmb\")))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -35,6 +36,7 @@ fn deficiency_defmacro_expansion_buffer_ops() {
 fn deficiency_eval_and_compile_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (eval-and-compile\n\
@@ -53,7 +55,7 @@ fn deficiency_eval_and_compile_buffer_ops() {
          (get-text-property 10 'processed)\n\
          my-processor-version)))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -61,6 +63,7 @@ fn deficiency_eval_and_compile_buffer_ops() {
 fn deficiency_eval_when_compile_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 7 10)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (eval-when-compile\n\
@@ -85,7 +88,7 @@ fn deficiency_eval_when_compile_buffer_ops() {
          (get-text-property 1 'field)\n\
          (get-text-property 7 'field)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (args-out-of-range 7 10)""#]],
+        expect,
     );
 }
 
@@ -93,6 +96,7 @@ fn deficiency_eval_when_compile_buffer_ops() {
 fn deficiency_symbol_function_plist_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defun my-test-fn () \"test\")\n\
@@ -119,7 +123,7 @@ fn deficiency_symbol_function_plist_undo() {
          (get 'my-test-fn 'extra)))))\n\
          (kill-buffer buf)\n\
          (fmakunbound 'my-test-fn)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -127,6 +131,7 @@ fn deficiency_symbol_function_plist_undo() {
 fn deficiency_obarray_mapatoms_buffer_collect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable text)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((my-ob (make-vector 31 0))\n\
@@ -147,7 +152,7 @@ fn deficiency_obarray_mapatoms_buffer_collect() {
          (= (length sorted) 5)\n\
          (equal sorted '(\"alpha\" \"beta\" \"delta\" \"epsilon\" \"gamma\"))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable text)""#]],
+        expect,
     );
 }
 
@@ -155,6 +160,7 @@ fn deficiency_obarray_mapatoms_buffer_collect() {
 fn deficiency_gensym_uniqueness_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((syms (cl-loop for i from 1 to 5 collect (gensym \"g\"))))\n\
@@ -173,7 +179,7 @@ fn deficiency_gensym_uniqueness_buffer_ops() {
          (= (length syms) 5)\n\
          (get-text-property 1 'symbol)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -181,6 +187,7 @@ fn deficiency_gensym_uniqueness_buffer_ops() {
 fn deficiency_defsubst_buffer_call_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defsubst my-insert-tagged (tag text)\n\
@@ -209,7 +216,7 @@ fn deficiency_defsubst_buffer_call_undo() {
          (get-text-property 5 'tag)\n\
          (get-text-property 9 'tag)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -217,6 +224,7 @@ fn deficiency_defsubst_buffer_call_undo() {
 fn deficiency_compiler_macro_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable executed)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defmacro my-with-buffer-props (buf &rest body)\n\
@@ -237,7 +245,7 @@ fn deficiency_compiler_macro_buffer_ops() {
          (get-text-property 1 'order)\n\
          (get-text-property 6 'order))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable executed)""#]],
+        expect,
     );
 }
 
@@ -245,6 +253,8 @@ fn deficiency_compiler_macro_buffer_ops() {
 fn deficiency_recursive_macro_buffer_build() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""ERR (error \"Format specifier doesn’t match argument type\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defmacro insert-numbered-line (num text)\n\
@@ -263,7 +273,7 @@ fn deficiency_recursive_macro_buffer_build() {
          (get-text-property 1 'section)\n\
          (= (count-lines 1 (point-max)) 4))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (error \"Format specifier doesn’t match argument type\")""#]],
+        expect,
     );
 }
 
@@ -271,6 +281,7 @@ fn deficiency_recursive_macro_buffer_build() {
 fn deficiency_macro_with_undo_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defmacro my-atomic-insert (&rest body)\n\
@@ -298,6 +309,6 @@ fn deficiency_macro_with_undo_boundary() {
          (cl-loop for i from 1 to (buffer-size)\n\
          collect (get-text-property i 'batch))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }

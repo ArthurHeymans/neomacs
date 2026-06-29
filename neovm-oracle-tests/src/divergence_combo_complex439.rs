@@ -13,6 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx439_display_eightbit_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (7 \"\\200\\201AB\" 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-multibyte nil)
@@ -23,7 +24,7 @@ fn div_cx439_display_eightbit_overlay() {
   (list (current-column)
         (buffer-string)
         (length (buffer-string))))"##,
-        expect_test::expect![[r#""OK (7 \"\\200\\201AB\" 4)""#]],
+        expect,
     );
 }
 
@@ -31,14 +32,15 @@ fn div_cx439_display_eightbit_overlay() {
 #[test]
 fn div_cx439_casefold_coding_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (0 \"\\316\\240\\316\\241\\316\\243\\316\\244\\316\\245\" 10)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((case-fold-search t))
   (list (string-match "πρστυ" "ΠΡΣΤΥ")
         (encode-coding-string "ΠΡΣΤΥ" 'utf-8)
         (string-bytes (encode-coding-string "πρστυ" 'utf-8))))"##,
-        expect_test::expect![[
-            r#""OK (0 \"\\316\\240\\316\\241\\316\\243\\316\\244\\316\\245\" 10)""#
-        ]],
+        expect,
     );
 }
 
@@ -46,6 +48,7 @@ fn div_cx439_casefold_coding_time() {
 #[test]
 fn div_cx439_multibyte_encode_process() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 5 \"\\310\\311ABC\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-multibyte nil)
@@ -55,7 +58,7 @@ fn div_cx439_multibyte_encode_process() {
     (list (length data)
           (length (buffer-string))
           (encode-coding-string data 'utf-8))))"##,
-        expect_test::expect![[r#""OK (5 5 \"\\310\\311ABC\")""#]],
+        expect,
     );
 }
 
@@ -63,6 +66,7 @@ fn div_cx439_multibyte_encode_process() {
 #[test]
 fn div_cx439_overlay_lists_display_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 9 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "abcd efgh")
@@ -72,7 +76,7 @@ fn div_cx439_overlay_lists_display_column() {
     (list (length (car (overlay-lists)))
           (current-column)
           (progn (goto-char 4) (current-column)))))"##,
-        expect_test::expect![[r#""OK (2 9 4)""#]],
+        expect,
     );
 }
 
@@ -80,13 +84,14 @@ fn div_cx439_overlay_lists_display_column() {
 #[test]
 fn div_cx439_string_collate_local_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil \"test\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (let ((s1 (make-local-variable 'neo-cx439-loc)))
     (setq neo-cx439-loc "test")
     (list (condition-case e (string-collate-lessp "ä" "z") (error (car e)))
           (buffer-local-value 'neo-cx439-loc (current-buffer)))))"##,
-        expect_test::expect![[r#""OK (nil \"test\")""#]],
+        expect,
     );
 }
 
@@ -94,11 +99,12 @@ fn div_cx439_string_collate_local_error() {
 #[test]
 fn div_cx439_frame_process_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (error #<process np> nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (condition-case e (make-frame '((name . "test"))) (error (car e)))
       (condition-case e (make-network-process :name "np" :server t :service 0) (error (car e)))
       (display-color-p))"##,
-        expect_test::expect![[r#""OK (error #<process np> nil)""#]],
+        expect,
     );
 }
 
@@ -106,12 +112,13 @@ fn div_cx439_frame_process_display() {
 #[test]
 fn div_cx439_time_locale_casefold() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((501485566126885707972608 . 0) nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((case-fold-search t))
   (list (condition-case e (encode-time 30.5 30 14 16 6 2026 nil) (error (car e)))
         (string-collate-lessp "a" "B")
         (char-equal ?π ?Π)))"##,
-        expect_test::expect![[r#""OK ((501485566126885707972608 . 0) nil t)""#]],
+        expect,
     );
 }
 
@@ -119,12 +126,14 @@ fn div_cx439_time_locale_casefold() {
 #[test]
 fn div_cx439_detect_coding_charset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((undecided) (ascii 97) (unicode-bmp 0 233) unicode-bmp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (detect-coding-string "abc")
       (condition-case e (split-char ?a) (error (car e)))
       (condition-case e (split-char ?é) (error (car e)))
       (condition-case e (char-charset ?é) (error (car e))))"##,
-        expect_test::expect![[r#""OK ((undecided) (ascii 97) (unicode-bmp 0 233) unicode-bmp)""#]],
+        expect,
     );
 }
 
@@ -132,13 +141,14 @@ fn div_cx439_detect_coding_charset() {
 #[test]
 fn div_cx439_message_format_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil \"‘quoted’\" \"\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (message "test %s" "msg")
   (list (current-message)
         (format-message "`%s'" "quoted")
         (condition-case e (replace-regexp-in-string "x" "\\1" "x") (error (cadr e)))))"##,
-        expect_test::expect![[r#""OK (nil \"‘quoted’\" \"\")""#]],
+        expect,
     );
 }
 
@@ -146,15 +156,16 @@ fn div_cx439_message_format_error() {
 #[test]
 fn div_cx439_features_load_provide() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (t (neo-cx439-feat warnings icons cl-loaddefs cl-lib rmc iso-transl tooltip cconv eldoc paren electric uniquify ediff-hook vc-hooks lisp-float-type elisp-mode mwheel term/x-win x-win term/common-win x-dnd touch-screen tool-bar dnd fontset image regexp-opt fringe tabulated-list replace newcomment text-mode lisp-mode prog-mode register page tab-bar menu-bar rfn-eshadow isearch easymenu timer select scroll-bar mouse jit-lock font-lock syntax font-core term/tty-colors frame minibuffer nadvice seq simple cl-generic indonesian philippine cham georgian utf-8-lang misc-lang vietnamese tibetan thai tai-viet lao korean japanese eucjp-ms cp51932 hebrew greek romanian slovak czech european ethiopic indian cyrillic chinese composite emoji-zwj charscript charprop case-table epa-hook jka-cmpr-hook help abbrev obarray oclosure cl-preloaded button loaddefs theme-loaddefs faces cus-face macroexp files window text-properties overlay sha1 md5 base64 format env code-pages mule custom widget keymap hashtable-print-readable backquote threads dbusbind inotify lcms2 dynamic-setting system-font-setting font-render-setting cairo gtk x-toolkit xinput2 x multi-tty move-toolbar make-network-process tty-child-frames emacs) t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((sym (make-symbol "neo-cx439-feat")))
   (provide sym)
   (list (featurep sym)
         (memq sym features)
         (listp features)))"##,
-        expect_test::expect![[
-            r#""OK (t (neo-cx439-feat warnings icons cl-loaddefs cl-lib rmc iso-transl tooltip cconv eldoc paren electric uniquify ediff-hook vc-hooks lisp-float-type elisp-mode mwheel term/x-win x-win term/common-win x-dnd touch-screen tool-bar dnd fontset image regexp-opt fringe tabulated-list replace newcomment text-mode lisp-mode prog-mode register page tab-bar menu-bar rfn-eshadow isearch easymenu timer select scroll-bar mouse jit-lock font-lock syntax font-core term/tty-colors frame minibuffer nadvice seq simple cl-generic indonesian philippine cham georgian utf-8-lang misc-lang vietnamese tibetan thai tai-viet lao korean japanese eucjp-ms cp51932 hebrew greek romanian slovak czech european ethiopic indian cyrillic chinese composite emoji-zwj charscript charprop case-table epa-hook jka-cmpr-hook help abbrev obarray oclosure cl-preloaded button loaddefs theme-loaddefs faces cus-face macroexp files window text-properties overlay sha1 md5 base64 format env code-pages mule custom widget keymap hashtable-print-readable backquote threads dbusbind inotify lcms2 dynamic-setting system-font-setting font-render-setting cairo gtk x-toolkit xinput2 x multi-tty move-toolbar make-network-process tty-child-frames emacs) t)""#
-        ]],
+        expect,
     );
 }
 
@@ -162,6 +173,7 @@ fn div_cx439_features_load_provide() {
 #[test]
 fn div_cx439_posn_display_invisible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "hello world")
@@ -170,7 +182,7 @@ fn div_cx439_posn_display_invisible() {
   (condition-case e
       (list (posn-at-point 3) (posn-at-point 8))
     (error (car e))))"##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
@@ -178,11 +190,12 @@ fn div_cx439_posn_display_invisible() {
 #[test]
 fn div_cx439_face_attribute_font_frame() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (bold italic nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (face-attribute 'bold :weight nil 'default)
       (face-attribute 'italic :slant nil 'default)
       (fontp (face-font 'default)))"##,
-        expect_test::expect![[r#""OK (bold italic nil)""#]],
+        expect,
     );
 }
 
@@ -190,6 +203,7 @@ fn div_cx439_face_attribute_font_frame() {
 #[test]
 fn div_cx439_buffer_local_overlay_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((neo-cx439-v . val) 1 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (let ((v (make-local-variable 'neo-cx439-v)))
@@ -201,7 +215,7 @@ fn div_cx439_buffer_local_overlay_marker() {
         (list (assq 'neo-cx439-v locals)
               (length (overlays-in 1 10))
               (marker-position m))))))"##,
-        expect_test::expect![[r#""OK ((neo-cx439-v . val) 1 3)""#]],
+        expect,
     );
 }
 
@@ -209,11 +223,12 @@ fn div_cx439_buffer_local_overlay_marker() {
 #[test]
 fn div_cx439_time_arithmetic_stack() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1704088800 86400)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((t1 (encode-time 0 0 0 1 1 2024 nil)))
   (list (condition-case e (time-add t1 (seconds-to-time 3600)) (error (car e)))
         (condition-case e (time-subtract (time-add t1 (seconds-to-time 86400)) t1) (error (car e)))))"##,
-        expect_test::expect![[r#""OK (1704088800 86400)""#]],
+        expect,
     );
 }
 
@@ -221,12 +236,13 @@ fn div_cx439_time_arithmetic_stack() {
 #[test]
 fn div_cx439_format_message_error_condition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"‘hello’ ‘world’\" car \"Invalid use of ‘\\\\’ in replacement text\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (format-message "`hello' `world'")
       (condition-case e (car 1 2 3) (error (cadr e)))
       (condition-case e (replace-regexp-in-string "x" "\\g<bad>" "x") (error (cadr e))))"##,
-        expect_test::expect![[
-            r#""OK (\"‘hello’ ‘world’\" car \"Invalid use of ‘\\\\’ in replacement text\")""#
-        ]],
+        expect,
     );
 }

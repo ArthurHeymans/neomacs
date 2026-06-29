@@ -49,10 +49,8 @@ fn oracle_prop_compare_strings_return_position_semantics() {
       (push (compare-strings "b" nil nil "a" nil nil) results)
 
       (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t -1 1 -4 4 -3 3 -6 -1 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t -1 1 -4 4 -3 3 -6 -1 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -93,10 +91,8 @@ fn oracle_prop_compare_strings_substring_boundaries() {
       (push (compare-strings "abcde" 1 4 "Xbcde" 1 3) results)
 
       (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t -1 t t t t t t t 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t -1 t t t t t t t 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -134,10 +130,8 @@ fn oracle_prop_compare_strings_case_insensitive() {
       (push (compare-strings "Hello, World!" nil nil "hello, world!" nil nil t) results)
 
       (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t 2 -5 -4 t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t 2 -5 -4 t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,10 +171,8 @@ fn oracle_prop_compare_strings_edge_cases() {
       (push (compare-strings " a" nil nil "a " nil nil) results)
 
       (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t -1 1 t t t -1 -21 t t -1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t -1 1 t t t -1 -21 t t -1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -222,12 +214,10 @@ fn oracle_prop_compare_strings_common_prefix_search() {
                             (substring s1 0 len)))))
                 tests))
     (fmakunbound 'neovm--test-common-prefix-len)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"abcdef\" \"abcxyz\" 3 \"abc\") (\"hello\" \"hello world\" 5 \"hello\") (\"\" \"anything\" 0 \"\") (\"completely\" \"different\" 0 \"\") (\"same\" \"same\" 4 \"same\") (\"aab\" \"aac\" 2 \"aa\") (\"prefix123\" \"prefix456\" 6 \"prefix\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"abcdef\" \"abcxyz\" 3 \"abc\") (\"hello\" \"hello world\" 5 \"hello\") (\"\" \"anything\" 0 \"\") (\"completely\" \"different\" 0 \"\") (\"same\" \"same\" 4 \"same\") (\"aab\" \"aac\" 2 \"aa\") (\"prefix123\" \"prefix456\" 6 \"prefix\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -266,12 +256,10 @@ fn oracle_prop_compare_strings_sort_by_substring() {
                                  (and (integerp r) (< r 0)))))))
                   (list sorted-mid sorted-prefix sorted-ci)))))))
     (fmakunbound 'neovm--test-substr-less-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"xxAxx\" \"xxBxx\" \"xxCxx\" \"xxDxx\" \"xxExx\") (\"aaXX\" \"abXX\" \"azXX\" \"baXX\" \"bbXX\") (\"apple\" \"APRICOT\" \"Banana\" \"Cherry\" \"date\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"xxAxx\" \"xxBxx\" \"xxCxx\" \"xxDxx\" \"xxExx\") (\"aaXX\" \"abXX\" \"azXX\" \"baXX\" \"bbXX\") (\"apple\" \"APRICOT\" \"Banana\" \"Cherry\" \"date\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -320,8 +308,6 @@ fn oracle_prop_compare_strings_pairwise_matrix() {
             (list :matrix matrix
                   :diagonal (nreverse diagonal)
                   :antisymmetric antisym-ok)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-function signum)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-function signum)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

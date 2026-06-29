@@ -7,13 +7,14 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_window_config() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'current-window-configuration)
   (fboundp 'set-window-configuration)
   (fboundp 'window-configuration-p)
   (fboundp 'compare-window-configurations)) "#,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -21,12 +22,13 @@ fn divergence_window_config() {
 fn divergence_window_config_frame() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'window-configuration-frame)
   (fboundp 'window-configuration-buffer)
   (fboundp 'window-configuration-window)) "#,
-        expect_test::expect![[r#""OK (t nil nil)""#]],
+        expect,
     );
 }
 
@@ -34,6 +36,7 @@ fn divergence_window_config_frame() {
 fn divergence_window_split_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'split-window-below)
@@ -41,7 +44,7 @@ fn divergence_window_split_delete() {
   (fboundp 'delete-window)
   (fboundp 'delete-other-windows)
   (fboundp 'balance-windows)) "#,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
@@ -49,13 +52,14 @@ fn divergence_window_split_delete() {
 fn divergence_window_buffer_swap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'set-window-buffer)
   (fboundp 'window-buffer)
   (fboundp 'get-buffer-window)
   (fboundp 'get-buffer-window-list)) "#,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -63,6 +67,7 @@ fn divergence_window_buffer_swap() {
 fn divergence_window_tree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'window-tree)
@@ -71,7 +76,7 @@ fn divergence_window_tree() {
   (fboundp 'window-body-edges)
   (fboundp 'window-top-line)
   (fboundp 'window-left-column)) "#,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -79,6 +84,7 @@ fn divergence_window_tree() {
 fn divergence_window_size_fixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'window-size-fixed-p)
@@ -86,7 +92,7 @@ fn divergence_window_size_fixed() {
   (fboundp 'window-size)
   (fboundp 'window-full-height-p)
   (fboundp 'window-full-width-p)) "#,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
@@ -94,13 +100,14 @@ fn divergence_window_size_fixed() {
 fn divergence_window_minibuffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'minibuffer-window)
   (fboundp 'minibuffer-window-active-p)
   (fboundp 'window-minibuffer-p)
   (fboundp 'set-minibuffer-window)) "#,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -108,6 +115,7 @@ fn divergence_window_minibuffer() {
 fn divergence_window_margins() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t (nil no-fringe minimal default))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'set-window-margins)
@@ -116,7 +124,7 @@ fn divergence_window_margins() {
   (fboundp 'window-fringes)
   (boundp 'fringe-mode)
   (member fringe-mode '(nil no-fringe minimal default))) "#,
-        expect_test::expect![[r#""OK (t t t t t (nil no-fringe minimal default))""#]],
+        expect,
     );
 }
 
@@ -124,6 +132,7 @@ fn divergence_window_margins() {
 fn divergence_window_scroll_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'scroll-up-command)
@@ -134,7 +143,7 @@ fn divergence_window_scroll_functions() {
   (integerp scroll-conservatively)
   (boundp 'scroll-margin)
   (integerp scroll-margin)) "#,
-        expect_test::expect![[r#""OK (t t t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -142,6 +151,7 @@ fn divergence_window_scroll_functions() {
 fn divergence_window_preserve() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'window-use-time)
@@ -149,6 +159,6 @@ fn divergence_window_preserve() {
   (fboundp 'window-old-buffer)
   (boundp 'window-configuration-change-hook)
   (listp window-configuration-change-hook)) "#,
-        expect_test::expect![[r#""OK (t nil t t t)""#]],
+        expect,
     );
 }

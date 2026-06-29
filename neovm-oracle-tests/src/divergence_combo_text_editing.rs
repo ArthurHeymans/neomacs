@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_kill_yank_rectangle_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""line1\nline1-B\nline1-C-AOK (\"line1\nline1-B\nline1-C\" \"line1\nline1-B\nline1-C-A\" \"line1\nline1-B\nline1-C-A\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"line1-A\\nline1-B\\nline1-C\")
@@ -20,9 +23,7 @@ fn divergence_kill_yank_rectangle_undo() {
       (yank-rectangle)
       (let ((s2 (buffer-string)))
         (list s1 s2 (buffer-string)))))) ",
-        expect_test::expect![[
-            r#""line1\nline1-B\nline1-C-AOK (\"line1\nline1-B\nline1-C\" \"line1\nline1-B\nline1-C-A\" \"line1\nline1-B\nline1-C-A\")""#
-        ]],
+        expect,
     );
 }
 
@@ -30,12 +31,13 @@ fn divergence_kill_yank_rectangle_undo() {
 fn divergence_transpose_regions_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""-DDD-BBBB-CCCCAAADOK \"-DDD-BBBB-CCCCAAAD\"""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"AAA-BBBB-CCCC-DDDD\")
   (transpose-regions 1 4 14 18)
   (buffer-string)) ",
-        expect_test::expect![[r#""-DDD-BBBB-CCCCAAADOK \"-DDD-BBBB-CCCCAAAD\"""#]],
+        expect,
     );
 }
 
@@ -43,6 +45,9 @@ fn divergence_transpose_regions_combo() {
 fn divergence_format_region_insert_delete_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""item-000\nitem-001\nitem-002\nitem-003\nitem-004\nOK ((\"item-000\" \"item-001\" \"item-002\" \"item-003\" \"item-004\") 1 nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (dotimes (i 5) (insert (format \"item-%03d\\n\" i)))
@@ -54,9 +59,7 @@ fn divergence_format_region_insert_delete_cycle() {
     (list (nreverse lines)
           (length (nreverse lines))
           (string= (nth 0 (nreverse lines)) \"item-000\")))) ",
-        expect_test::expect![[
-            r#""item-000\nitem-001\nitem-002\nitem-003\nitem-004\nOK ((\"item-000\" \"item-001\" \"item-002\" \"item-003\" \"item-004\") 1 nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -64,6 +67,9 @@ fn divergence_format_region_insert_delete_cycle() {
 fn divergence_kill_ring_save_excursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#"" SECOND PART THIRD PARTFIRST PARTOK (\"FIRST PAR\" \"FIRST PART\" \" SECOND PART THIRD PARTFIRST PART\" 34)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"FIRST PART SECOND PART THIRD PART\")
@@ -78,9 +84,7 @@ fn divergence_kill_ring_save_excursion() {
             (string-trim killed-text)
             (buffer-string)
             (point))))) ",
-        expect_test::expect![[
-            r#"" SECOND PART THIRD PARTFIRST PARTOK (\"FIRST PAR\" \"FIRST PART\" \" SECOND PART THIRD PARTFIRST PART\" 34)""#
-        ]],
+        expect,
     );
 }
 
@@ -88,6 +92,9 @@ fn divergence_kill_ring_save_excursion() {
 fn divergence_replace_regex_with_backref_transform() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""name:Alice age:31 city:NYC\nname:Bob age:26 city:LAOK \"name:Alice age:31 city:NYC\nname:Bob age:26 city:LA\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"name:Alice age:30 city:NYC\\nname:Bob age:25 city:LA\")
@@ -96,9 +103,7 @@ fn divergence_replace_regex_with_backref_transform() {
     (let ((age (string-to-number (match-string 1))))
       (replace-match (format \"age:%d\" (+ age 1)) t)))
   (buffer-string)) ",
-        expect_test::expect![[
-            r#""name:Alice age:31 city:NYC\nname:Bob age:26 city:LAOK \"name:Alice age:31 city:NYC\nname:Bob age:26 city:LA\"""#
-        ]],
+        expect,
     );
 }
 
@@ -106,6 +111,9 @@ fn divergence_replace_regex_with_backref_transform() {
 fn divergence_fill_region_paragraphs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""This is a very long\nline that should be\nfilled at the fill\ncolumn boundary.OK (\"This is a very long\nline that should be\nfilled at the fill\ncolumn boundary.\" t t 4)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (setq fill-column 20)
@@ -116,9 +124,7 @@ fn divergence_fill_region_paragraphs() {
         (>= (length (buffer-string)) 50)
         (<= (length (buffer-string)) 200)
         (length (split-string (buffer-string) \"\\n\")))) ",
-        expect_test::expect![[
-            r#""This is a very long\nline that should be\nfilled at the fill\ncolumn boundary.OK (\"This is a very long\nline that should be\nfilled at the fill\ncolumn boundary.\" t t 4)""#
-        ]],
+        expect,
     );
 }
 
@@ -126,15 +132,16 @@ fn divergence_fill_region_paragraphs() {
 fn divergence_sort_lines_in_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""apple\nbanana\ncherry\ndate\nelmOK (\"apple\nbanana\ncherry\ndate\nelm\" t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"cherry\\napple\\nbanana\\ndate\\nelm\")
   (sort-lines nil 1 (point-max))
   (list (buffer-string)
         (string= (buffer-string) \"apple\\nbanana\\ncherry\\ndate\\nelm\"))) ",
-        expect_test::expect![[
-            r#""apple\nbanana\ncherry\ndate\nelmOK (\"apple\nbanana\ncherry\ndate\nelm\" t)""#
-        ]],
+        expect,
     );
 }
 
@@ -142,13 +149,14 @@ fn divergence_sort_lines_in_region() {
 fn divergence_delete_duplicate_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""aaa\nbbb\nccc\ndddOK (\"aaa\nbbb\nccc\nddd\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"aaa\\nbbb\\naaa\\nccc\\nbbb\\nddd\")
   (delete-duplicate-lines 1 (point-max))
   (list (buffer-string)
         (string= (buffer-string) \"aaa\\nbbb\\nccc\\nddd\"))) ",
-        expect_test::expect![[r#""aaa\nbbb\nccc\ndddOK (\"aaa\nbbb\nccc\nddd\" t)""#]],
+        expect,
     );
 }
 
@@ -156,15 +164,16 @@ fn divergence_delete_duplicate_lines() {
 fn divergence_align_regex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""name:Alice\nage:30\ncity:NYCERR (error \"No match for subexpression 1\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"name:Alice\\nage:30\\ncity:NYC\")
   (align-regexp 1 (point-max) \":\" 1 1 t)
   (list (buffer-string)
         (string-match \" +:\" (buffer-string)))) ",
-        expect_test::expect![[
-            r#""name:Alice\nage:30\ncity:NYCERR (error \"No match for subexpression 1\")""#
-        ]],
+        expect,
     );
 }
 
@@ -172,6 +181,9 @@ fn divergence_align_regex() {
 fn divergence_indent_rigidly() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""  line1\n    line2\n      line3OK (\"    line1\n      line2\n\tline3\" \"  line1\n    line2\n      line3\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"line1\\n  line2\\n    line3\")
@@ -179,8 +191,6 @@ fn divergence_indent_rigidly() {
   (let ((s1 (buffer-string)))
     (indent-rigidly 1 (point-max) -2)
     (list s1 (buffer-string)))) ",
-        expect_test::expect![[
-            r#""  line1\n    line2\n      line3OK (\"    line1\n      line2\n\tline3\" \"  line1\n    line2\n      line3\")""#
-        ]],
+        expect,
     );
 }

@@ -46,12 +46,10 @@ fn oracle_prop_nconc_nreverse_comp_nconc_zero_to_five_args() {
   (nconc nil nil nil nil 42)
   ;; 5 args: all nil
   (nconc nil nil nil nil nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil (1 2 3) nil (x y z w) (10 20) (10 20) (1 3) (a b c) (first last) (1 2 3) 42 nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil (1 2 3) nil (x y z w) (10 20) (10 20) (1 3) (a b c) (first last) (1 2 3) 42 nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -87,12 +85,10 @@ fn oracle_prop_nconc_nreverse_comp_nreverse_various_lists() {
          (outer (list 1 inner 3)))
     (let ((rev (nreverse (copy-sequence outer))))
       (eq (nth 1 rev) inner)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil (only) (b a) (10 9 8 7 6 5 4 3 2 1) ((e f) (c d) (a b)) (t nil 4.0 three \"two\" 1) t (0 1 2 3 4) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil (only) (b a) (10 9 8 7 6 5 4 3 2 1) ((e f) (c d) (a b)) (t nil 4.0 three \"two\" 1) t (0 1 2 3 4) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -128,12 +124,10 @@ fn oracle_prop_nconc_nreverse_comp_nbutlast_with_n() {
     (list (equal bl-result nbl-result) bl-result nbl-result))
   ;; nbutlast with N=1 on two-element list
   (nbutlast (list 'first 'second) 1)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4) (1 2 3 4 5) (a b c) (1 2) nil nil nil nil (t (1 2 3) (1 2 3)) (first))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4) (1 2 3 4 5) (a b c) (1 2) nil nil nil nil (t (1 2 3) (1 2 3)) (first))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -174,12 +168,10 @@ fn oracle_prop_nconc_nreverse_comp_sort_predicates() {
          (sorted (sort (copy-sequence data)
                        (lambda (x y) (< (cadr x) (cadr y))))))
     (mapcar #'car sorted))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4 5) (5 4 3 2 1) (\"apple\" \"banana\" \"cherry\" \"date\") (\"date\" \"cherry\" \"banana\" \"apple\") (-1 -2 3 4 -5) (\"h\" \"hi\" \"hey\" \"hello\" \"howdy\") (1 2 3 4 5) (1 2 3 4 5) (42) nil ((b 1) (c 2) (a 3)) (b d a c e))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5) (5 4 3 2 1) (\"apple\" \"banana\" \"cherry\" \"date\") (\"date\" \"cherry\" \"banana\" \"apple\") (-1 -2 3 4 -5) (\"h\" \"hi\" \"hey\" \"hello\" \"howdy\") (1 2 3 4 5) (1 2 3 4 5) (42) nil ((b 1) (c 2) (a 3)) (b d a c e))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -218,12 +210,10 @@ fn oracle_prop_nconc_nreverse_comp_delete_vs_remove() {
   (delq nil (list 1 nil 2 nil 3))
   ;; delete with equal on nested structure
   (delete '(1 2) (list '(1 2) '(3 4) '(1 2) '(5 6)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((a c d) (\"world\" \"foo\") ((x z w) (x y z y w)) ((1 3 1) (1 2 3 2 1)) (t (1 2 4 5) (1 2 4 5)) (1 2 3 4 5) nil nil (1 2 3) ((3 4) (5 6)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((a c d) (\"world\" \"foo\") ((x z w) (x y z y w)) ((1 3 1) (1 2 3 2 1)) (t (1 2 4 5) (1 2 4 5)) (1 2 3 4 5) nil nil (1 2 3) ((3 4) (5 6)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -256,10 +246,8 @@ fn oracle_prop_nconc_nreverse_comp_cl_delete_if() {
       (list (cl-remove-if #'oddp lst) lst))
     ;; cl-remove-if-not
     (cl-remove-if-not (lambda (x) (= (% x 3) 0)) (list 1 2 3 4 5 6 7 8 9))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -302,12 +290,10 @@ fn oracle_prop_nconc_nreverse_comp_destructive_vs_nondestructive() {
          (copied (copy-sequence orig))
          (sorted (sort copied #'<)))
     (list (equal orig '(5 3 1 4 2)) sorted))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t t (5 4 3 2 1) (5 4 3 2 1)) (t (1 2 3 4) (1 2 3 4)) (t (a b c) (a b c)) (1 2 3 4 5) (t (1 2 3 4 5)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t t (5 4 3 2 1) (5 4 3 2 1)) (t (1 2 3 4) (1 2 3 4)) (t (a b c) (a b c)) (1 2 3 4 5) (t (1 2 3 4 5)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -355,12 +341,10 @@ fn oracle_prop_nconc_nreverse_comp_structure_sharing() {
     (dotimes (i 5)
       (setq result (nconc result (list (* i i)))))
     result)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 2 3 4) t t) (1 2 99 4) ((a shared) (b shared) t t) ((5 4 3 2 1) 1 5) (0 1 4 9 16))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 2 3 4) t t) (1 2 99 4) ((a shared) (b shared) t t) ((5 4 3 2 1) 1 5) (0 1 4 9 16))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -386,12 +370,10 @@ fn oracle_prop_nconc_nreverse_comp_dotted_results() {
   (nconc nil nil 'solo)
   ;; Single nil then atom
   (nconc nil 'alone)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 . end) (a b . 42) (1 . \"tail\") (x . t) (1 2 3 . done) solo alone)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 . end) (a b . 42) (1 . \"tail\") (x . t) (1 2 3 . done) solo alone)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -440,12 +422,10 @@ fn oracle_prop_nconc_nreverse_comp_combined_patterns() {
         (puthash x t seen)
         (setq result (cons x result))))
     (nreverse result))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 4 9 16 25) (2 4 6 8 10) (1 3 5 7 2 4 6 8) (1 2 3 4 5 6) (15 12 9) (3 2 1 4 5 6) (1 2 3 4 5))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 4 9 16 25) (2 4 6 8 10) (1 3 5 7 2 4 6 8) (1 2 3 4 5 6) (15 12 9) (3 2 1 4 5 6) (1 2 3 4 5))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -480,8 +460,6 @@ fn oracle_prop_nconc_nreverse_comp_sort_complex_predicates() {
       (sort (list 5 3 1 4 2)
             (lambda (a b) (setq count (1+ count)) (< a b)))
       count)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-function (require 'cl-lib))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

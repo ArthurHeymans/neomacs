@@ -49,10 +49,8 @@ fn oracle_prop_multibyte_string_conversion() {
           (> (string-bytes s) (length s))
           (multibyte-string-p s))))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil (t 5 5) (5 5) t (3 3) t (2 2) (3 t t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil (t 5 5) (5 5) t (3 3) t (2 2) (3 t t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -96,10 +94,8 @@ fn oracle_prop_multibyte_encode_decode_coding() {
     (string= (encode-coding-string s 'utf-8)
              (encode-coding-string s 'iso-latin-1))))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((5 5) t (1 2) t (0 t) t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((5 5) t (1 2) t (0 t) t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -139,12 +135,10 @@ fn oracle_prop_multibyte_char_to_string_unicode() {
                    (char-to-string #x263a))))
     (list (length s) (substring s 0 2))))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"A\" \"z\" \"0\" \" \" \"é\" \"ñ\" \"ü\" 1 1 1 1 1 1 t t (4 \"Hi\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"A\" \"z\" \"0\" \" \" \"é\" \"ñ\" \"ü\" 1 1 1 1 1 1 t t (4 \"Hi\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -181,10 +175,8 @@ fn oracle_prop_multibyte_string_width_cjk() {
                         (char-to-string #x4e8c)
                         (char-to-string #x4e09))))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (5 0 1 2 4 6 1 1 8 0 2 6)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (5 0 1 2 4 6 1 1 8 0 2 6)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -219,10 +211,8 @@ fn oracle_prop_multibyte_char_width() {
   ;; Halfwidth Katakana
   (char-width #xff71))  ;; halfwidth A (katakana)
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 1 1 1 2 2 1 1 1 1 8 0 2 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 1 1 1 2 2 1 1 1 1 8 0 2 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -260,12 +250,10 @@ fn oracle_prop_multibyte_truncate_string_to_width() {
   (let ((mixed (concat "ab" (char-to-string #x4e2d) "cd")))
     (truncate-string-to-width mixed 4)))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"hello\" \"hello world\" \"hello world\" \"\" (6 \"中文\" \"中\" \"\") \"cde\" \"hello wo\" \"ab中\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"hello\" \"hello world\" \"hello world\" \"\" (6 \"中文\" \"中\" \"\") \"cde\" \"hello wo\" \"ab中\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -310,12 +298,10 @@ fn oracle_prop_multibyte_string_to_list_vector() {
          (rebuilt (concat v)))
     (string= orig rebuilt)))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((97 98 99) nil (3 t t t) [104 101 108 108 111] [] (2 t t) t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((97 98 99) nil (3 t t t) [104 101 108 108 111] [] (2 t t) t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -358,12 +344,10 @@ fn oracle_prop_multibyte_regex_matching() {
     (string-match "a.*b" "aXXbYYb")
     (match-string 0 "aXXbYYb")))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (4 3 0 (0 \"x中y\") 3 (\"foo\" \"123\") 4 1 nil \"aXXbYYb\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (4 3 0 (0 \"x中y\") 3 (\"foo\" \"123\") 4 1 nil \"aXXbYYb\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -400,10 +384,8 @@ fn oracle_prop_multibyte_string_as_conversion() {
           (length (string-as-unibyte ascii))
           (length (string-to-unibyte ascii)))))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((5 5) (5 t) t t \"\" \"\" 0 0 (t 3 3))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((5 5) (5 t) t t \"\" \"\" 0 0 (t 3 3))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -455,10 +437,8 @@ fn oracle_prop_multibyte_comprehensive_combined() {
       (list (length result)
             (string-width result)))))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((5 6 9 t t t t t t) (2 t t) (\"HELLO\" \"hello\" \"É\" \"é\") (9 9))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((5 6 9 t t t t t t) (2 t t) (\"HELLO\" \"hello\" \"É\" \"é\") (9 9))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

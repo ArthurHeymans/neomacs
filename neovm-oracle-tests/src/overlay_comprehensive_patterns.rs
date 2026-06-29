@@ -44,10 +44,8 @@ fn oracle_prop_overlay_make_and_predicates() {
      (eq (overlay-buffer ov) (current-buffer))
      (eq (overlay-buffer ov2) (current-buffer)))))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t nil nil nil 1 6 8 13 1 1 t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t nil nil nil 1 6 8 13 1 1 t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -91,10 +89,9 @@ fn oracle_prop_overlay_put_get_properties() {
              (plist-get props 'priority)
              (plist-get props 'invisible))))))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (bold 10 t \"[\" \"]\" (a b c) nil t nil 99 (bold 99 t))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (bold 10 t \"[\" \"]\" (a b c) nil t nil 99 (bold 99 t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -140,10 +137,8 @@ fn oracle_prop_overlay_overlays_at_and_in() {
                    (overlays-at 4))
            'string<))))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 2 2 1 0 2 4 1 0 (\"ov1\" \"ov2\"))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 2 2 1 0 2 4 1 0 (\"ov1\" \"ov2\"))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -181,10 +176,8 @@ fn oracle_prop_overlay_delete() {
          ;; overlayp still returns t for deleted overlay
          (overlayp ov2))))))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 2 nil \"first\" \"third\" 1 20 t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 2 nil \"first\" \"third\" 1 20 t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -221,10 +214,8 @@ fn oracle_prop_overlay_move() {
            ;; Property survives move
            (overlay-get ov 'name)))))))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 10 20 30 t 15 15 1 53 \"mobile\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 10 20 30 t 15 15 1 53 \"mobile\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -264,10 +255,8 @@ fn oracle_prop_overlay_move_to_other_buffer() {
     (kill-buffer buf1)
     (kill-buffer buf2)))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t 1 t 0 1 5 15 moved)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t 1 t 0 1 5 15 moved)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -305,10 +294,8 @@ fn oracle_prop_overlay_change_positions() {
      ;; previous-overlay-change from position 1 -> 1 (point-min)
      (previous-overlay-change 1))))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (5 10 15 25 37 30 20 10 1 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (5 10 15 25 37 30 20 10 1 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -342,10 +329,8 @@ fn oracle_prop_overlay_lists() {
        (let ((ol2 (overlay-lists)))
          (list (length (car ol2)) (length (cdr ol2))))))))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t 4 t t (0 0))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t 4 t t (0 0))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -379,10 +364,8 @@ fn oracle_prop_overlay_recenter() {
          ;; recenter at point-max
          (progn (overlay-recenter (point-max)) (length (overlays-in 1 200))))))))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (20 20 t 0 20 20)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (20 20 t 0 20 20)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -433,12 +416,10 @@ fn oracle_prop_overlay_priority_ordering() {
                                (< pa pb))))))
          (mapcar (lambda (o) (overlay-get o 'name)) sorted))))))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (4 1 50 100 nil -5 200 (\"low\" \"nil-pri\" \"high\" \"mid\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (4 1 50 100 nil -5 200 (\"low\" \"nil-pri\" \"high\" \"mid\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -477,12 +458,10 @@ fn oracle_prop_overlay_face_property() {
              (overlay-get ov1 'help-echo)
              (overlay-get ov1 'mouse-face))))))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (bold (:foreground \"red\" :background \"blue\") (bold italic) (:weight bold :slant italic :underline t) nil (underline \"tooltip text\" highlight))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (bold (:foreground \"red\" :background \"blue\") (bold italic) (:weight bold :slant italic :underline t) nil (underline \"tooltip text\" highlight))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -515,10 +494,8 @@ fn oracle_prop_overlay_evaporate() {
          (overlay-buffer ov-normal)
          (= (overlay-start ov-normal) (overlay-end ov-normal)))))))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (2 1 nil t #<killed buffer> t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 1 nil t #<killed buffer> t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -560,10 +537,8 @@ fn oracle_prop_overlay_complex_nested_boundaries() {
      ;; Total overlays in buffer
      (length (overlays-in 1 46)))))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"full\" \"left\" \"outer\") (\"full\" \"inner\" \"outer\") (\"full\" \"outer\" \"right\") (\"full\" \"outer\") (\"full\") 4 6)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"full\" \"left\" \"outer\") (\"full\" \"inner\" \"outer\") (\"full\" \"outer\" \"right\") (\"full\" \"outer\") (\"full\") 4 6)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -88,12 +88,10 @@ fn oracle_prop_combination_symbolic_value_representation() {
     (fmakunbound 'neovm--sym-unop)
     (fmakunbound 'neovm--sym-type)
     (fmakunbound 'neovm--sym-simplify)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((sym x) (binop + (sym x) (const 5)) (binop * (sym y) (const 3)) (const 8) (binop + (sym x) (const 5)) (const 16) (const -5) (unop neg (sym x)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((sym x) (binop + (sym x) (const 5)) (binop * (sym y) (const 3)) (const 8) (binop + (sym x) (const 5)) (const 16) (const -5) (unop neg (sym x)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -158,12 +156,10 @@ fn oracle_prop_combination_symbolic_path_conditions() {
     (fmakunbound 'neovm--pc-constraints)
     (fmakunbound 'neovm--pc-fork)
     (fmakunbound 'neovm--pc-to-string)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"(cmp > (sym x) (const 0)) AND (cmp < (sym y) (const 10))\" 3 3 \"(cmp > (sym x) (const 0)) AND (cmp < (sym y) (const 10)) AND (cmp = (binop + (sym x) (sym y)) (const 5))\" \"(cmp > (sym x) (const 0)) AND (cmp < (sym y) (const 10)) AND (not (cmp = (binop + (sym x) (sym y)) (const 5)))\" 4)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"(cmp > (sym x) (const 0)) AND (cmp < (sym y) (const 10))\" 3 3 \"(cmp > (sym x) (const 0)) AND (cmp < (sym y) (const 10)) AND (cmp = (binop + (sym x) (sym y)) (const 5))\" \"(cmp > (sym x) (const 0)) AND (cmp < (sym y) (const 10)) AND (not (cmp = (binop + (sym x) (sym y)) (const 5)))\" 4)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -268,12 +264,10 @@ fn oracle_prop_combination_symbolic_branch_exploration() {
     (fmakunbound 'neovm--se-pc)
     (fmakunbound 'neovm--se-trace)
     (fmakunbound 'neovm--se-exec)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (2 (((cmp > (sym x) (const 0))) ((not (cmp > (sym x) (const 0))))) ((binop + (sym x) (const 1)) (binop - (sym x) (const 1))) 4)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (2 (((cmp > (sym x) (const 0))) ((not (cmp > (sym x) (const 0))))) ((binop + (sym x) (const 1)) (binop - (sym x) (const 1))) 4)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -330,12 +324,10 @@ fn oracle_prop_combination_symbolic_loop_bounds() {
                                3))
            (fmakunbound 'neovm--count-depth))))
     (fmakunbound 'neovm--unroll-loop)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((nop) (if-sym (cmp > (sym i) (const 0)) (seq (assign i (binop - (sym i) (const 1))) (nop)) (nop)) if-sym 8)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((nop) (if-sym (cmp > (sym i) (const 0)) (seq (assign i (binop - (sym i) (const 1))) (nop)) (nop)) if-sym 8)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -406,12 +398,10 @@ fn oracle_prop_combination_symbolic_array_access() {
     (fmakunbound 'neovm--sa-empty)
     (fmakunbound 'neovm--sa-write)
     (fmakunbound 'neovm--sa-read)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((const 200) (const 100) (const -1) (ite (cmp = (sym i) (const 1)) (const 200) (ite (cmp = (sym i) (const 0)) (const 100) (const -1))) (ite (cmp = (const 0) (sym j)) (const 999) (const 100)) (const 777))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((const 200) (const 100) (const -1) (ite (cmp = (sym i) (const 1)) (const 200) (ite (cmp = (sym i) (const 0)) (const 100) (const -1))) (ite (cmp = (const 0) (sym j)) (const 999) (const 100)) (const 777))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -514,12 +504,10 @@ fn oracle_prop_combination_symbolic_constraint_solver() {
     (fmakunbound 'neovm--cs-set)
     (fmakunbound 'neovm--cs-constrain)
     (fmakunbound 'neovm--cs-solve)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((x 6 . 9) (y -100 . -1) (z 7 . 7)) ((x 6 . 9) (y -100 . -1) (z 7 . 7)) nil nil ((6 . 9) (-100 . -1) (7 . 7)) nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((x 6 . 9) (y -100 . -1) (z 7 . 7)) ((x 6 . 9) (y -100 . -1) (z 7 . 7)) nil nil ((6 . 9) (-100 . -1) (7 . 7)) nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -614,10 +602,8 @@ fn oracle_prop_combination_symbolic_full_pipeline() {
                        paths2))))))
     (fmakunbound 'neovm--pipe-exec)
     (fmakunbound 'neovm--pipe-feasible)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (4 (path-a path-b path-c path-d) (t t t t) ((impossible nil) (reachable t) (also-reachable t)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (4 (path-a path-b path-c path-d) (t t t t) ((impossible nil) (reachable t) (also-reachable t)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

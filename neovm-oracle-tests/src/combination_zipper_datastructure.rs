@@ -110,12 +110,10 @@ fn oracle_prop_zipper_list_navigation() {
     (fmakunbound 'neovm--zip-to-list)
     (fmakunbound 'neovm--zip-at-start-p)
     (fmakunbound 'neovm--zip-at-end-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (a t nil (b nil) c (e t nil) a nil (a b c d e) (a b c d e))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (a t nil (b nil) c (e t nil) a nil (a b c d e) (a b c d e))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -219,12 +217,10 @@ fn oracle_prop_zipper_insert_delete() {
     (fmakunbound 'neovm--zid-insert-right)
     (fmakunbound 'neovm--zid-replace)
     (fmakunbound 'neovm--zid-delete)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 1 2 3 4 5) (1 99 2 3 4 5) (10 2 3 4 5) (2 3 4 5) ((1 2 4 5) 4) (1 a 2 b 3 4 5) ((1 2 3 4) 4) (nil nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 1 2 3 4 5) (1 99 2 3 4 5) (10 2 3 4 5) (2 3 4 5) ((1 2 4 5) 4) (1 a 2 b 3 4 5) ((1 2 3 4) 4) (nil nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -312,12 +308,10 @@ fn oracle_prop_zipper_modify_focus() {
     (fmakunbound 'neovm--zmf-update)
     (fmakunbound 'neovm--zmf-map-all)
     (fmakunbound 'neovm--zmf-find-right)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((2 2 3 4 5) (1 2 30 4 5) (101 102 103 104 105) (1 4 9 16 25) 4 2 nil (2 6 3 4 5))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((2 2 3 4 5) (1 2 30 4 5) (101 102 103 104 105) (1 4 9 16 25) 4 2 nil (2 6 3 4 5))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -465,10 +459,8 @@ fn oracle_prop_zipper_tree_navigation() {
     (fmakunbound 'neovm--tz-left)
     (fmakunbound 'neovm--tz-up)
     (fmakunbound 'neovm--tz-to-tree)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (a b c d e t (f t) nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (a b c d e t (f t) nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -594,12 +586,10 @@ fn oracle_prop_zipper_buffer_editing() {
     (fmakunbound 'neovm--zb-move-right)
     (fmakunbound 'neovm--zb-move-start)
     (fmakunbound 'neovm--zb-move-end)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"hello\" 0 (\">> hello\" 3) \"hello world\" (\"heXllo\" 3) \"hel\" \"llo\" (\"heabclo\" 0) (\"new\" \"\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"hello\" 0 (\">> hello\" 3) \"hello world\" (\"heXllo\" 3) \"hel\" \"llo\" (\"heabclo\" 0) (\"new\" \"\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -715,10 +705,8 @@ fn oracle_prop_zipper_undo_system() {
     (fmakunbound 'neovm--zu-replace)
     (fmakunbound 'neovm--zu-undo)
     (fmakunbound 'neovm--zu-undo-count)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((a b c d e) 0 ((X a b c d e) 1) (a b c d e) ((W b c d e) 3 (b c d e) (Z b c d e) (a b c d e)) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((a b c d e) 0 ((X a b c d e) 1) (a b c d e) ((W b c d e) 3 (b c d e) (Z b c d e) (a b c d e)) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -92,12 +92,10 @@ fn oracle_prop_network_protocol_packet_routing() {
               (nth 5 p1) (nth 5 p3)))
     (fmakunbound 'neovm--nps-lookup-route)
     (fmakunbound 'neovm--nps-route-packet)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((R1 R5 0 \"data1\" nil nil) (R1 R4 0 \"data2\" nil nil) (R1 R5 0 \"data3\" nil nil) (R5 R5 5 \"data4\" (R5) t) nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((R1 R5 0 \"data1\" nil nil) (R1 R4 0 \"data2\" nil nil) (R1 R5 0 \"data3\" nil nil) (R5 R5 5 \"data4\" (R5) t) nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -188,12 +186,10 @@ fn oracle_prop_network_protocol_tcp_reliable_delivery() {
     (fmakunbound 'neovm--nps-tcp-send)
     (fmakunbound 'neovm--nps-tcp-receive)
     (fmakunbound 'neovm--nps-tcp-retransmit)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (5 (0 10 20 30 40) (0 10 20 30 40) 45 (0 20 30 40) 10 1 (10) 2 (10 30))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (5 (0 10 20 30 40) (0 10 20 30 40) 45 (0 20 30 40) 10 1 (10) 2 (10 30))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -265,12 +261,10 @@ fn oracle_prop_network_protocol_sliding_window() {
               (seq-take log1 6)
               (seq-take log2 6)))
     (fmakunbound 'neovm--nps-sliding-window)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (12 6 6 10 ((0 SEND 0 0 0) (0 SEND 1 0 1) (0 SEND 2 0 2) (1 ACK 2 0 3) (1 ACK 1 0 3) (1 ACK 0 0 3)) ((0 SEND 0 0 0) (0 SEND 1 0 1) (1 ACK 0 0 2) (1 SEND 2 1 2) (2 ACK 2 1 3) (3 ACK 1 1 3)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (12 6 6 10 ((0 SEND 0 0 0) (0 SEND 1 0 1) (0 SEND 2 0 2) (1 ACK 2 0 3) (1 ACK 1 0 3) (1 ACK 0 0 3)) ((0 SEND 0 0 0) (0 SEND 1 0 1) (1 ACK 0 0 2) (1 SEND 2 1 2) (2 ACK 2 1 3) (3 ACK 1 1 3)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -342,12 +336,10 @@ fn oracle_prop_network_protocol_congestion_aimd() {
               (nth 2 (car (last log3)))))
     (fmakunbound 'neovm--nps-aimd-simulate)
     (fmakunbound 'neovm--nps-aimd-with-slow-start)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((success 1 2) (success 2 3) (success 3 4) (success 4 5) (success 5 6) (loss 6 3) (success 3 4) (success 4 5) (success 5 6)) ((success slow-start 1 2 16) (success slow-start 2 4 16) (success slow-start 4 8 16) (success slow-start 8 16 16) (success congestion-avoidance 16 17 16) (loss congestion-avoidance 17 1 8) (success slow-start 1 2 8) (success slow-start 2 4 8) (success slow-start 4 8 8) (success congestion-avoidance 8 9 8) (success congestion-avoidance 9 10 8)) ((success 10 11) (success 11 12) (success 12 13) (loss 13 6) (loss 6 3) (success 3 4) (success 4 5)) 6 10 5)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((success 1 2) (success 2 3) (success 3 4) (success 4 5) (success 5 6) (loss 6 3) (success 3 4) (success 4 5) (success 5 6)) ((success slow-start 1 2 16) (success slow-start 2 4 16) (success slow-start 4 8 16) (success slow-start 8 16 16) (success congestion-avoidance 16 17 16) (loss congestion-avoidance 17 1 8) (success slow-start 1 2 8) (success slow-start 2 4 8) (success slow-start 4 8 8) (success congestion-avoidance 8 9 8) (success congestion-avoidance 9 10 8)) ((success 10 11) (success 11 12) (success 12 13) (loss 13 6) (loss 6 3) (success 3 4) (success 4 5)) 6 10 5)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -426,12 +418,10 @@ fn oracle_prop_network_protocol_dns_resolution() {
          (car r4)))
     (fmakunbound 'neovm--nps-dns-query)
     (fmakunbound 'neovm--nps-dns-resolve)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (ok \"93.184.216.34\" 3 ok \"93.184.216.34\" 2 ok \"198.51.100.1\" 3 nxdomain)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (ok \"93.184.216.34\" 3 ok \"93.184.216.34\" 2 ok \"198.51.100.1\" 3 nxdomain)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -514,12 +504,10 @@ fn oracle_prop_network_protocol_arp_table() {
     (fmakunbound 'neovm--nps-arp-lookup)
     (fmakunbound 'neovm--nps-arp-age-out)
     (fmakunbound 'neovm--nps-arp-entries)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"AA:BB:CC:DD:EE:01\" \"AA:BB:CC:DD:EE:03\" nil 4 ((\"10.0.0.1\" . \"AA:BB:CC:DD:EE:01\") (\"10.0.0.2\" . \"AA:BB:CC:DD:EE:02\") (\"10.0.0.3\" . \"AA:BB:CC:DD:EE:03\") (\"10.0.0.4\" . \"AA:BB:CC:DD:EE:04\")) 1 3 ((\"10.0.0.2\" . \"AA:BB:CC:DD:EE:02\") (\"10.0.0.3\" . \"AA:BB:CC:DD:EE:03\") (\"10.0.0.4\" . \"AA:BB:CC:DD:EE:04\")) \"FF:FF:FF:FF:FF:03\" ((\"10.0.0.2\" . \"AA:BB:CC:DD:EE:02\") (\"10.0.0.3\" . \"FF:FF:FF:FF:FF:03\") (\"10.0.0.4\" . \"AA:BB:CC:DD:EE:04\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"AA:BB:CC:DD:EE:01\" \"AA:BB:CC:DD:EE:03\" nil 4 ((\"10.0.0.1\" . \"AA:BB:CC:DD:EE:01\") (\"10.0.0.2\" . \"AA:BB:CC:DD:EE:02\") (\"10.0.0.3\" . \"AA:BB:CC:DD:EE:03\") (\"10.0.0.4\" . \"AA:BB:CC:DD:EE:04\")) 1 3 ((\"10.0.0.2\" . \"AA:BB:CC:DD:EE:02\") (\"10.0.0.3\" . \"AA:BB:CC:DD:EE:03\") (\"10.0.0.4\" . \"AA:BB:CC:DD:EE:04\")) \"FF:FF:FF:FF:FF:03\" ((\"10.0.0.2\" . \"AA:BB:CC:DD:EE:02\") (\"10.0.0.3\" . \"FF:FF:FF:FF:FF:03\") (\"10.0.0.4\" . \"AA:BB:CC:DD:EE:04\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -617,10 +605,8 @@ fn oracle_prop_network_protocol_nat_translation() {
     (fmakunbound 'neovm--nps-nat-outbound)
     (fmakunbound 'neovm--nps-nat-inbound)
     (fmakunbound 'neovm--nps-nat-table-entries)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"203.0.113.1\" 10000 \"8.8.8.8\" 53) (\"203.0.113.1\" 10001 \"8.8.8.8\" 53) (\"203.0.113.1\" 10002 \"1.1.1.1\" 80) (\"203.0.113.1\" 10000 \"8.8.4.4\" 53) t t (\"8.8.8.8\" 53 \"192.168.1.10\" 5000) nil 3 ((\"192.168.1.10:5000\" . 10000) (\"192.168.1.10:5001\" . 10001) (\"192.168.1.20:3000\" . 10002)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"203.0.113.1\" 10000 \"8.8.8.8\" 53) (\"203.0.113.1\" 10001 \"8.8.8.8\" 53) (\"203.0.113.1\" 10002 \"1.1.1.1\" 80) (\"203.0.113.1\" 10000 \"8.8.4.4\" 53) t t (\"8.8.8.8\" 53 \"192.168.1.10\" 5000) nil 3 ((\"192.168.1.10:5000\" . 10000) (\"192.168.1.10:5001\" . 10001) (\"192.168.1.20:3000\" . 10002)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

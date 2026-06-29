@@ -11,6 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf40_attach() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -19,7 +20,7 @@ fn uf40_attach() {
   (condition-case nil
       (org-attach)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -30,6 +31,7 @@ fn uf40_attach() {
 #[test]
 fn uf40_attach_dir() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -39,7 +41,7 @@ fn uf40_attach_dir() {
       (org-attach-set-directory "/tmp/attach")
     (error nil))
   (org-entry-get nil "ATTACH_DIR"))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -50,6 +52,7 @@ fn uf40_attach_dir() {
 #[test]
 fn uf40_crypt() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -58,7 +61,7 @@ fn uf40_crypt() {
   (condition-case nil
       (org-crypt)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -69,6 +72,9 @@ fn uf40_crypt() {
 #[test]
 fn uf40_encrypt() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK \"* T\n:PROPERTIES:\n:CRYPTKEY: test-key\n:END:\nSecret text\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -78,9 +84,7 @@ fn uf40_encrypt() {
       (org-encrypt-entry)
     (error nil))
   (buffer-string))"##,
-        expect_test::expect![[
-            r#""OK \"* T\n:PROPERTIES:\n:CRYPTKEY: test-key\n:END:\nSecret text\"""#
-        ]],
+        expect,
     );
 }
 
@@ -91,6 +95,9 @@ fn uf40_encrypt() {
 #[test]
 fn uf40_decrypt() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK \"* T\n:PROPERTIES:\n:CRYPTKEY: test-key\n:END:\nSecret text\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -100,9 +107,7 @@ fn uf40_decrypt() {
       (progn (org-encrypt-entry) (org-decrypt-entry))
     (error nil))
   (buffer-string))"##,
-        expect_test::expect![[
-            r#""OK \"* T\n:PROPERTIES:\n:CRYPTKEY: test-key\n:END:\nSecret text\"""#
-        ]],
+        expect,
     );
 }
 
@@ -113,6 +118,9 @@ fn uf40_decrypt() {
 #[test]
 fn uf40_encrypt_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK \"* T1\n:PROPERTIES:\n:CRYPTKEY: k1\n:END:\nSecret1\n* T2\n:PROPERTIES:\n:CRYPTKEY: k2\n:END:\nSecret2\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -121,9 +129,7 @@ fn uf40_encrypt_all() {
       (org-encrypt-entries)
     (error nil))
   (buffer-string))"##,
-        expect_test::expect![[
-            r#""OK \"* T1\n:PROPERTIES:\n:CRYPTKEY: k1\n:END:\nSecret1\n* T2\n:PROPERTIES:\n:CRYPTKEY: k2\n:END:\nSecret2\"""#
-        ]],
+        expect,
     );
 }
 
@@ -134,6 +140,9 @@ fn uf40_encrypt_all() {
 #[test]
 fn uf40_decrypt_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK \"* T1\n:PROPERTIES:\n:CRYPTKEY: k1\n:END:\nSecret1\n* T2\n:PROPERTIES:\n:CRYPTKEY: k2\n:END:\nSecret2\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -142,9 +151,7 @@ fn uf40_decrypt_all() {
       (progn (org-encrypt-entries) (org-decrypt-entries))
     (error nil))
   (buffer-string))"##,
-        expect_test::expect![[
-            r#""OK \"* T1\n:PROPERTIES:\n:CRYPTKEY: k1\n:END:\nSecret1\n* T2\n:PROPERTIES:\n:CRYPTKEY: k2\n:END:\nSecret2\"""#
-        ]],
+        expect,
     );
 }
 
@@ -155,6 +162,7 @@ fn uf40_decrypt_all() {
 #[test]
 fn uf40_checklist_reset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"* T\n- [ ] a\n- [ ] b\n- [ ] c\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -162,7 +170,7 @@ fn uf40_checklist_reset() {
   (goto-char (point-min))
   (org-reset-checkbox-state-subtree)
   (buffer-string))"##,
-        expect_test::expect![[r#""OK \"* T\n- [ ] a\n- [ ] b\n- [ ] c\"""#]],
+        expect,
     );
 }
 
@@ -173,6 +181,7 @@ fn uf40_checklist_reset() {
 #[test]
 fn uf40_check_toggle_univ() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"- a\n- [ ] b\n- [-] c\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -180,7 +189,7 @@ fn uf40_check_toggle_univ() {
   (goto-char (point-min))
   (org-toggle-checkbox '(4))
   (buffer-string))"##,
-        expect_test::expect![[r#""OK \"- a\n- [ ] b\n- [-] c\"""#]],
+        expect,
     );
 }
 
@@ -191,6 +200,7 @@ fn uf40_check_toggle_univ() {
 #[test]
 fn uf40_check_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"* T [1/2]\n- [X] a\n- [ ] b\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -198,7 +208,7 @@ fn uf40_check_count() {
   (goto-char (point-min))
   (org-update-checkbox-count)
   (buffer-string))"##,
-        expect_test::expect![[r#""OK \"* T [1/2]\n- [X] a\n- [ ] b\"""#]],
+        expect,
     );
 }
 
@@ -209,6 +219,7 @@ fn uf40_check_count() {
 #[test]
 fn uf40_check_parent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-update-parent-checkboxes)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -217,7 +228,7 @@ fn uf40_check_parent() {
   (search-forward "[ ] c")
   (org-update-parent-checkboxes)
   (buffer-string))"##,
-        expect_test::expect![[r#""ERR (void-function org-update-parent-checkboxes)""#]],
+        expect,
     );
 }
 
@@ -228,6 +239,7 @@ fn uf40_check_parent() {
 #[test]
 fn uf40_at_checkbox() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:1 t) (:2 t) (:3 nil))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -240,7 +252,7 @@ fn uf40_at_checkbox() {
     (forward-line)
     (push (list :3 (org-at-item-checkbox-p)) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""OK ((:1 t) (:2 t) (:3 nil))""#]],
+        expect,
     );
 }
 
@@ -251,6 +263,7 @@ fn uf40_at_checkbox() {
 #[test]
 fn uf40_list_regexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:1 t) (:2 t) (:3 nil))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -263,7 +276,7 @@ fn uf40_list_regexp() {
     (forward-line)
     (push (list :3 (org-list-at-regexp-after-bullet-p "TODO")) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""OK ((:1 t) (:2 t) (:3 nil))""#]],
+        expect,
     );
 }
 
@@ -274,6 +287,7 @@ fn uf40_list_regexp() {
 #[test]
 fn uf40_list_set_box() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-list-struct-apply)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -283,7 +297,7 @@ fn uf40_list_set_box() {
     (org-list-set-checkbox 1 struct "[ ]")
     (org-list-struct-apply struct)
     (buffer-string)))"##,
-        expect_test::expect![[r#""ERR (void-function org-list-struct-apply)""#]],
+        expect,
     );
 }
 
@@ -294,6 +308,7 @@ fn uf40_list_set_box() {
 #[test]
 fn uf40_list_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-list-toggle-checkbox)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -302,7 +317,7 @@ fn uf40_list_toggle() {
   (let ((struct (org-list-struct)))
     (org-list-toggle-checkbox nil struct)
     (buffer-string)))"##,
-        expect_test::expect![[r#""ERR (void-function org-list-toggle-checkbox)""#]],
+        expect,
     );
 }
 
@@ -313,6 +328,7 @@ fn uf40_list_toggle() {
 #[test]
 fn uf40_list_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -321,7 +337,7 @@ fn uf40_list_overlay() {
   (condition-case nil
       (org-list-checkbox-overlay)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -332,6 +348,7 @@ fn uf40_list_overlay() {
 #[test]
 fn uf40_list_fix_bullet() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-list-struct-fix-bullet)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -339,7 +356,7 @@ fn uf40_list_fix_bullet() {
   (let ((struct (org-list-struct)))
     (org-list-struct-fix-bullet struct)
     (buffer-string)))"##,
-        expect_test::expect![[r#""ERR (void-function org-list-struct-fix-bullet)""#]],
+        expect,
     );
 }
 
@@ -350,6 +367,7 @@ fn uf40_list_fix_bullet() {
 #[test]
 fn uf40_list_fix_ind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 3) 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -357,7 +375,7 @@ fn uf40_list_fix_ind() {
   (let ((struct (org-list-struct)))
     (org-list-struct-fix-ind struct)
     (buffer-string)))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 3) 1)""#]],
+        expect,
     );
 }
 
@@ -368,6 +386,7 @@ fn uf40_list_fix_ind() {
 #[test]
 fn uf40_list_fix_struct() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-list-struct-fix-struct)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -375,7 +394,7 @@ fn uf40_list_fix_struct() {
   (let ((struct (org-list-struct)))
     (org-list-struct-fix-struct struct)
     (buffer-string)))"##,
-        expect_test::expect![[r#""ERR (void-function org-list-struct-fix-struct)""#]],
+        expect,
     );
 }
 
@@ -386,6 +405,7 @@ fn uf40_list_fix_struct() {
 #[test]
 fn uf40_list_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-list-struct-indent-item)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -395,7 +415,7 @@ fn uf40_list_indent() {
   (let ((struct (org-list-struct)))
     (org-list-struct-indent-item 1 struct)
     (buffer-string)))"##,
-        expect_test::expect![[r#""ERR (void-function org-list-struct-indent-item)""#]],
+        expect,
     );
 }
 
@@ -406,6 +426,7 @@ fn uf40_list_indent() {
 #[test]
 fn uf40_list_outdent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-list-struct-outdent-item)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -415,7 +436,7 @@ fn uf40_list_outdent() {
   (let ((struct (org-list-struct)))
     (org-list-struct-outdent-item 1 struct)
     (buffer-string)))"##,
-        expect_test::expect![[r#""ERR (void-function org-list-struct-outdent-item)""#]],
+        expect,
     );
 }
 
@@ -426,6 +447,7 @@ fn uf40_list_outdent() {
 #[test]
 fn uf40_list_move() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-list-struct-move-item)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -435,7 +457,7 @@ fn uf40_list_move() {
   (let ((struct (org-list-struct)))
     (org-list-struct-move-item 1 struct)
     (buffer-string)))"##,
-        expect_test::expect![[r#""ERR (void-function org-list-struct-move-item)""#]],
+        expect,
     );
 }
 
@@ -446,6 +468,7 @@ fn uf40_list_move() {
 #[test]
 fn uf40_list_move_down() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-list-struct-move-item-down)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -454,7 +477,7 @@ fn uf40_list_move_down() {
   (let ((struct (org-list-struct)))
     (org-list-struct-move-item-down 1 struct)
     (buffer-string)))"##,
-        expect_test::expect![[r#""ERR (void-function org-list-struct-move-item-down)""#]],
+        expect,
     );
 }
 
@@ -465,6 +488,7 @@ fn uf40_list_move_down() {
 #[test]
 fn uf40_list_move_up() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-list-struct-move-item-up)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -474,6 +498,6 @@ fn uf40_list_move_up() {
   (let ((struct (org-list-struct)))
     (org-list-struct-move-item-up 3 struct)
     (buffer-string)))"##,
-        expect_test::expect![[r#""ERR (void-function org-list-struct-move-item-up)""#]],
+        expect,
     );
 }

@@ -27,10 +27,8 @@ fn oracle_prop_error_retry_pattern() {
                           (setq result (format \"success on %d\" attempt)))
                       (error nil)))
                   (list result attempt))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"success on 3\" 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"success on 3\" 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -52,10 +50,8 @@ fn oracle_prop_error_cleanup_chain() {
                               (cons 'outer cleanup-log)))
                     (error nil))
                   (nreverse cleanup-log))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (inner middle outer)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (inner middle outer)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(inner middle outer)", &o, &n);
 }
 
@@ -81,12 +77,10 @@ fn oracle_prop_error_selective_handling() {
                     (funcall handle-error 'void-variable \"x\")
                     (funcall handle-error 'wrong-type-argument \"bad\")
                     (funcall handle-error 'error \"generic\")))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((math \"div/0\") (unbound \"x\") (type \"bad\") (generic \"generic\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((math \"div/0\") (unbound \"x\") (type \"bad\") (generic \"generic\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -105,10 +99,8 @@ fn oracle_prop_error_in_mapcar() {
                              results (cons 'error results)))))
                   (list (nreverse results)
                         (nreverse errors)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((10 error 3 error 2) (0 0))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((10 error 3 error 2) (0 0))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -139,10 +131,9 @@ fn oracle_prop_error_with_resource_management() {
                             (funcall release 'A)))
                       (error nil))
                     (list resources (nreverse log))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil ((acquire A) (acquire B) (release B) (release A)))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (nil ((acquire A) (acquire B) (release B) (release A)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -162,10 +153,8 @@ fn oracle_prop_error_wrap_and_rethrow() {
                                (list (format \"wrapped: %s\"
                                              (car (cdr inner-err)))))))
                   (error (car (cdr outer-err))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK \"wrapped: original problem\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"wrapped: original problem\"""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -186,10 +175,8 @@ fn oracle_prop_error_accumulate_in_loop() {
                          (setq failures (cons item failures)))))
                     (list (nreverse successes)
                           (nreverse failures)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((42 7 13) (\"bad\" \"nope\"))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((42 7 13) (\"bad\" \"nope\"))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -230,12 +217,10 @@ fn oracle_prop_error_safe_state_machine() {
                        (list state
                              (nreverse history)
                              (car (cdr err)))))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (complete ((init . process) (process . validate) (validate . complete)) \"no transition from complete\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (complete ((init . process) (process . validate) (validate . complete)) \"no transition from complete\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -252,9 +237,7 @@ fn oracle_prop_unwind_protect_return_value() {
                            (setq log (cons 'cleanup log))
                            99)))
                     (list result (nreverse log))))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (42 (body cleanup))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (42 (body cleanup))""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(42 (body cleanup))", &o, &n);
 }

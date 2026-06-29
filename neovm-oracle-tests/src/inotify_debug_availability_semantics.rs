@@ -22,10 +22,8 @@ fn oracle_inotify_debug_helpers_follow_gnu_build_feature_availability() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil (void-function inotify-watch-list) nil (void-function inotify-allocated-p))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil (void-function inotify-watch-list) nil (void-function inotify-allocated-p))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

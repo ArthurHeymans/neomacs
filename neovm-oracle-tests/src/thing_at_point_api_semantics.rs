@@ -30,12 +30,10 @@ fn oracle_prop_thing_at_point_word_symbol_and_line_bounds() {
           (list word1 symbol1 bounds1 word2 symbol2 line line-bounds))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"alpha\" \"alpha-beta\" (1 . 6) \"gamma\" \"gamma_delta\" \"second line\n\" (24 . 36))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"alpha\" \"alpha-beta\" (1 . 6) \"gamma\" \"gamma_delta\" \"second line\n\" (24 . 36))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -61,10 +59,8 @@ fn oracle_prop_thing_at_point_sexp_list_and_empty_buffer() {
       (bounds-of-thing-at-point 'whitespace)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (search-failed \"inner\")""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (search-failed \"inner\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -86,12 +82,10 @@ fn oracle_prop_thing_at_point_no_properties() {
        (text-properties-at 0 without-props)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (#(\"colored\" 0 7 (face bold oracle-prop 17)) (face bold oracle-prop 17) \"colored\" nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (#(\"colored\" 0 7 (face bold oracle-prop 17)) (face bold oracle-prop 17) \"colored\" nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -122,8 +116,6 @@ fn oracle_prop_thing_at_point_provider_alists() {
        (progn (forward-thing 'oracle-forward -1) (point))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"provider-text\" (5 . 8) 3 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"provider-text\" (5 . 8) 3 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

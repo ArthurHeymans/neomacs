@@ -84,12 +84,10 @@ fn oracle_prop_abstract_interp_sign_domain() {
     (funcall 'neovm--abs-leq 'top 'pos)
     (funcall 'neovm--abs-leq 'bot 'bot)
     (funcall 'neovm--abs-leq 'top 'top)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (pos pos bot top top pos neg zero top top top top pos pos bot bot bot bot bot pos top bot t t t t nil nil t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (pos pos bot top top pos neg zero top top top top pos pos bot bot bot bot bot pos top bot t t t t nil nil t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -188,12 +186,10 @@ fn oracle_prop_abstract_interp_arithmetic() {
     (funcall 'neovm--abs-neg 'zero)
     (funcall 'neovm--abs-neg 'top)
     (funcall 'neovm--abs-neg 'bot)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (pos neg top top pos pos zero bot top pos neg top top neg pos pos pos neg neg zero zero top bot neg pos zero top bot)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (pos neg top top pos pos zero bot top pos neg top top neg pos pos pos neg neg zero zero top bot neg pos zero top bot)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -280,12 +276,10 @@ fn oracle_prop_abstract_interp_comparison() {
     (funcall 'neovm--abs-eq 'neg 'neg)      ;; maybe
     (funcall 'neovm--abs-eq 'top 'zero)     ;; maybe
     (funcall 'neovm--abs-eq 'bot 'zero)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (true false true true false false false maybe maybe maybe bot true false true false true false false maybe maybe maybe bot)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (true false true true false false false maybe maybe maybe bot true false true false true false false maybe maybe maybe bot)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -412,11 +406,10 @@ fn oracle_prop_abstract_interp_transfer_functions() {
         (list
           (funcall 'neovm--abs-state-get joined 'x)   ;; top (pos join neg)
           (funcall 'neovm--abs-state-get joined 'y)   ;; neg (neg join neg)
-          (funcall 'neovm--abs-state-get joined 'z))))))"#; // pos (bot join pos)
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (pos neg top pos pos neg bot (top neg pos))""#]],
-    );
+          (funcall 'neovm--abs-state-get joined 'z))))))"#;
+    let expect = expect_test::expect![[r#""OK (pos neg top pos pos neg bot (top neg pos))""#]];
+    // pos (bot join pos)
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -565,10 +558,8 @@ fn oracle_prop_abstract_interp_loop_widening() {
           (funcall 'neovm--ai-state-get loop2 'y)
           conv2
           iter2)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (top t 2 t (pos t 1))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (top t 2 t (pos t 1))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -724,7 +715,8 @@ fn oracle_prop_abstract_interp_reaching_defs() {
                    (B3 ((def x d4) (use z)) (B2 B4))
                    (B4 ((use x) (use z)) ()))))
     (funcall 'neovm--rd-analyze program)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -858,8 +850,7 @@ fn oracle_prop_abstract_interp_multi_var_program() {
       (funcall 'neovm--ai2-get final 'm)   ;; top
       ;; Unbound
       (funcall 'neovm--ai2-get final 'z))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (pos neg top neg pos pos neg top pos pos neg neg top bot)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (pos neg top neg pos pos neg top pos pos neg neg top bot)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

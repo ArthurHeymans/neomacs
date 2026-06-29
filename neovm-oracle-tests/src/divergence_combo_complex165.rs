@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx165_eieio_cl_defmethod_with_eql_specializer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:eql-special :class :default)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -23,13 +24,14 @@ fn div_cx165_eieio_cl_defmethod_with_eql_specializer() {
             (neo-cx165-call "other")))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:eql-special :class :default)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx165_eieio_cl_defmethod_qualifier_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -54,13 +56,14 @@ fn div_cx165_eieio_cl_defmethod_qualifier_chain() {
           (list result (nreverse calls)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx165_eieio_dispatch_with_two_classes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:ab :ba)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -77,13 +80,16 @@ fn div_cx165_eieio_dispatch_with_two_classes() {
               (neo-cx165-bidi b a))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:ab :ba)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx165_eieio_no_applicable_method_signal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:caught-no-applicable (cl-no-applicable-method neo-cx165-nogeneric #s(neo-cx165-na)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -99,15 +105,14 @@ fn div_cx165_eieio_no_applicable_method_signal() {
           (error (list :caught-other (car err))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (:caught-no-applicable (cl-no-applicable-method neo-cx165-nogeneric #s(neo-cx165-na)))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx165_eieio_method_combination_plus_with_around() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -123,13 +128,14 @@ fn div_cx165_eieio_method_combination_plus_with_around() {
         (neo-cx165-mc-call inst)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored error)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx165_eieio_call_next_method_returns_to_outermost() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -150,13 +156,15 @@ fn div_cx165_eieio_call_next_method_returns_to_outermost() {
             (neo-cx165-chain (make-instance 'neo-cx165-root))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx165_eieio_around_with_call_next_method_through_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (:primary (:around-2-enter :primary :around-2-exit))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -182,13 +190,14 @@ fn div_cx165_eieio_around_with_call_next_method_through_inheritance() {
           (list result (nreverse calls)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:primary (:around-2-enter :primary :around-2-exit))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx165_eieio_method_combination_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -203,13 +212,14 @@ fn div_cx165_eieio_method_combination_list() {
       (neo-cx165-listc-call (make-instance 'neo-cx165-listc)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored error)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx165_eieio_cl_defmethod_with_keyword_argument() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:class :a) (:class :b))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -224,13 +234,14 @@ fn div_cx165_eieio_cl_defmethod_with_keyword_argument() {
               (neo-cx165-kw-call inst :mode :b))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK ((:class :a) (:class :b))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx165_eieio_method_combination_max() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -245,13 +256,14 @@ fn div_cx165_eieio_method_combination_max() {
       (neo-cx165-maxc-call (make-instance 'neo-cx165-maxc)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored error)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx165_eieio_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -290,6 +302,6 @@ fn div_cx165_eieio_with_marker_overlay_undo_narrow_mega() {
                       (text-properties-at 1))))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     );
 }

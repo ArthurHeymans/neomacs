@@ -56,10 +56,8 @@ fn oracle_prop_adv_lisp_interpreter_in_lisp() {
                     (let1 (b 4)
                       (+ (* a a) (* b b)))) nil))
     (fmakunbound 'neovm--mini-eval)))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (3 30 yes 25)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 30 yes 25)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(3 30 yes 25)", &o, &n);
 }
 
@@ -86,10 +84,8 @@ fn oracle_prop_adv_closure_iterator() {
                         (setq result (cons val result))
                         (setq val (funcall iter))))
                     (nreverse result)))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (1 2 3 4 5)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 2 3 4 5)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(1 2 3 4 5)", &o, &n);
 }
 
@@ -122,10 +118,8 @@ fn oracle_prop_adv_observer_pattern() {
                     (funcall fire 'click)
                     (funcall fire 'hover)
                     (nreverse event-log)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((B click) (A click) (B hover) (A hover))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((B click) (A click) (B hover) (A hover))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -147,10 +141,8 @@ fn oracle_prop_adv_env_chain_lookup() {
                             (funcall lookup 'y env)
                             (funcall lookup 'z env)
                             (funcall lookup 'w env)))))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (10 2 30 nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (10 2 30 nil)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(10 2 30 nil)", &o, &n);
 }
 
@@ -173,10 +165,8 @@ fn oracle_prop_adv_matrix_transpose() {
       (funcall 'neovm--test-transpose
                '((1 2 3) (4 5 6) (7 8 9)))
     (fmakunbound 'neovm--test-transpose)))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 4 7) (2 5 8) (3 6 9))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 4 7) (2 5 8) (3 6 9))""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("((1 4 7) (2 5 8) (3 6 9))", &o, &n);
 }
 
@@ -193,8 +183,8 @@ fn oracle_prop_adv_matrix_multiply_row_col() {
                                         b (cdr b)))
                                 sum))))
                   (funcall dot '(1 2 3) '(4 5 6)))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 32""#]]);
+    let expect = expect_test::expect![[r#""OK 32""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("32", &o, &n);
 }
 
@@ -214,10 +204,8 @@ fn oracle_prop_adv_tokenizer() {
                       (while (re-search-forward "\\b\\w+\\b" nil t)
                         (setq words (cons (match-string 0) words)))
                       (nreverse words)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"hello\" \"world\" \"foo\" \"bar\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"hello\" \"world\" \"foo\" \"bar\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -247,8 +235,8 @@ fn oracle_prop_adv_trampoline_pattern() {
                                  (funcall 'neovm--test-tramp-sum
                                           100 0)))
                     (fmakunbound 'neovm--test-tramp-sum)))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 5050""#]]);
+    let expect = expect_test::expect![[r#""OK 5050""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("5050", &o, &n);
 }
 
@@ -274,10 +262,8 @@ fn oracle_prop_adv_cps_factorial() {
                10
                (lambda (x) x))
     (fmakunbound 'neovm--test-cps-fact)))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK 3628800""#]],
-    );
+    let expect = expect_test::expect![[r#""OK 3628800""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("3628800", &o, &n);
 }
 
@@ -305,10 +291,8 @@ fn oracle_prop_adv_church_numerals() {
                           (funcall to-int one)
                           (funcall to-int two)
                           (funcall to-int three))))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (0 1 2 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 1 2 3)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(0 1 2 3)", &o, &n);
 }
 

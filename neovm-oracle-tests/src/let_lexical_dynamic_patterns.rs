@@ -30,10 +30,8 @@ fn oracle_prop_let_lexical_closure_capture() {
       (dolist (fn closures)
         (setq results (cons (funcall fn) results)))
       (nreverse results))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (10 20 30 40 50)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (10 20 30 40 50)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -54,10 +52,8 @@ fn oracle_prop_let_lexical_closure_mutation() {
           (funcall inc 3)
           (funcall inc 2)
           (funcall get))))"#;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (0 5 5 8 10 10)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 5 5 8 10 10)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(0 5 5 8 10 10)", &o, &n);
 }
 
@@ -96,10 +92,9 @@ fn oracle_prop_let_dynamic_defvar_deep_call_stack() {
     (fmakunbound 'neovm--test-ldp-level2)
     (fmakunbound 'neovm--test-ldp-level3)
     (makunbound 'neovm--test-ldp-config)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"L1:L2:default\" \"L1:L2:custom\" \"L1:L2:default\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (\"L1:L2:default\" \"L1:L2:custom\" \"L1:L2:default\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -122,10 +117,8 @@ fn oracle_prop_let_star_sequential_chain() {
        (h (mapcar (lambda (x) (* x x)) f))  ; h = (4 16 36 576 484)
        (i (apply #'+ h)))    ; i = 1116
   (list f g h i))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((2 4 6 24 22) 58 (4 16 36 576 484) 1116)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((2 4 6 24 22) 58 (4 16 36 576 484) 1116)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -165,12 +158,10 @@ fn oracle_prop_let_nested_shadowing_lexical_dynamic() {
          (funcall 'neovm--test-ldp-reader lex-var)))
     (fmakunbound 'neovm--test-ldp-reader)
     (makunbound 'neovm--test-ldp-dyn)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((outer-lex outer-dyn) (inner-lex outer-dyn) (outer-lex inner-dyn) (inner-lex2 inner-dyn2) (outer-lex outer-dyn))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((outer-lex outer-dyn) (inner-lex outer-dyn) (outer-lex inner-dyn) (inner-lex2 inner-dyn2) (outer-lex outer-dyn))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -197,12 +188,10 @@ fn oracle_prop_let_closure_factory() {
        (mapcar negate inputs)
        ;; Composition: triple then double = *6
        (mapcar (lambda (x) (funcall double (funcall triple x))) inputs)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((2 4 6 8 10) (3 6 9 12 15) (-1 -2 -3 -4 -5) (6 12 18 24 30))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((2 4 6 8 10) (3 6 9 12 15) (-1 -2 -3 -4 -5) (6 12 18 24 30))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -259,12 +248,10 @@ fn oracle_prop_let_dynamic_configuration_pattern() {
     (makunbound 'neovm--test-ldp-indent)
     (makunbound 'neovm--test-ldp-prefix)
     (makunbound 'neovm--test-ldp-sep)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"a b c \" \">     a >     b >     c \" \"a, b, c, \" \"a b c \")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"a b c \" \">     a >     b >     c \" \"a, b, c, \" \"a b c \")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -328,12 +315,10 @@ fn oracle_prop_let_condition_case_scope() {
 
         (nreverse results))
     (makunbound 'neovm--test-ldp-flag)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((caught 42 \"boom\") initial (1 2 3 inner-handler) (arith t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((caught 42 \"boom\") initial (1 2 3 inner-handler) (arith t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -369,10 +354,8 @@ fn oracle_prop_let_star_closure_accumulator() {
      (funcall acc 'reset)
      (funcall acc 'get)
      (length (nreverse history)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (100 105 120 120 100 100 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (100 105 120 120 100 100 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -418,10 +401,8 @@ fn oracle_prop_let_dynamic_unwind_protect_nesting() {
                 (copy-sequence neovm--test-ldp-trace))))
     (fmakunbound 'neovm--test-ldp-log)
     (makunbound 'neovm--test-ldp-trace)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"innermost\") (\"cleanup-innermost\" \"inner\") (\"cleanup-inner\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"innermost\") (\"cleanup-innermost\" \"inner\") (\"cleanup-inner\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

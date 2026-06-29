@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx205_describe_functions_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'describe-function)
@@ -22,13 +23,14 @@ fn div_cx205_describe_functions_availability() {
       (fboundp 'describe-syntax)
       (fboundp 'describe-category))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t t t t t t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx205_finder_inf_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -38,13 +40,14 @@ fn div_cx205_finder_inf_availability() {
             (consp package--builtins)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx205_help_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -55,13 +58,14 @@ fn div_cx205_help_mode_availability() {
             (boundp 'help-xref-stack-item)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx205_info_node_navigation_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -75,13 +79,14 @@ fn div_cx205_info_node_navigation_availability() {
             (boundp 'Info-directory-list)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx205_man_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -92,13 +97,14 @@ fn div_cx205_man_mode_availability() {
             (boundp 'Man-notify-method)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx205_help_buffer_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -107,13 +113,14 @@ fn div_cx205_help_buffer_predicate() {
             (or (null buf) (buffer-live-p buf))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx205_apropos_internal_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (excessive-lisp-nesting 1601)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -126,13 +133,16 @@ fn div_cx205_apropos_internal_search() {
             (memq 'set-buffer results)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""ERR (excessive-lisp-nesting 1601)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx205_help_symbol_completion_via_obarray() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (t t (\"with-current-buffer\" \"with-help-window\" \"with-auto-compression-mode\" \"with-coding-priority\" \"with-file-modes\" \"with-window-non-dedicated\" \"with-timeout-unsuspend\" \"with-electric-help\" \"with-timeout-suspend\" \"with-category-table\" \"with-system-sleep-block\" \"with-restriction\" \"with-output-to-string\" \"with-work-buffer\" \"with-delayed-message\" \"with-minibuffer-selected-window\") (\"with-temp-buffer\" \"with-suppressed-warnings\" \"with-connection-local-variables\" \"with-eval-after-load\" \"with-temp-file\" \"with-no-warnings\" \"with-current-buffer\" \"with-help-window\" \"with-auto-compression-mode\" \"with-coding-priority\" \"with-file-modes\" \"with-window-non-dedicated\" \"with-timeout-unsuspend\" \"with-electric-help\" \"with-timeout-suspend\" \"with-category-table\" \"with-system-sleep-block\" \"with-restriction\" \"with-output-to-string\" \"with-work-buffer\" \"with-delayed-message\" \"with-minibuffer-selected-window\") (\"with-output-to-temp-buffer\" \"with-mutex\" \"with-timeout\" \"with-selected-window\" \"with-displayed-buffer-window\" \"with-syntax-table\" \"with-case-table\" \"with-undo-amalgamate\" \"with-connection-local-variables-1\" \"with-current-buffer-window\" \"with-isearch-suspended\" \"with-existing-directory\" \"with-temp-buffer-window\" \"with-temp-message\" \"with-environment-variables\" \"with-demoted-errors\" \"with-timeout-timers\" \"with-minibuffer-completions-window\" \"with-temp-buffer\" \"with-suppressed-warnings\" \"with-connection-local-variables\" \"with-eval-after-load\" \"with-temp-file\" \"with-no-warnings\" \"with-current-buffer\" \"with-help-window\" \"with-auto-compression-mode\" \"with-coding-priority\" \"with-file-modes\" \"with-window-non-dedicated\" \"with-timeout-unsuspend\" \"with-electric-help\" \"with-timeout-suspend\" \"with-category-table\" \"with-system-sleep-block\" \"with-restriction\" \"with-output-to-string\" \"with-work-buffer\" \"with-delayed-message\" \"with-minibuffer-selected-window\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((completions (all-completions "with-" obarray)))
@@ -142,28 +152,28 @@ fn div_cx205_help_symbol_completion_via_obarray() {
         (member "with-temp-buffer" completions)
         (member "with-output-to-temp-buffer" completions)))
 "##,
-        expect_test::expect![[
-            r#""OK (t t (\"with-current-buffer\" \"with-help-window\" \"with-auto-compression-mode\" \"with-coding-priority\" \"with-file-modes\" \"with-window-non-dedicated\" \"with-timeout-unsuspend\" \"with-electric-help\" \"with-timeout-suspend\" \"with-category-table\" \"with-system-sleep-block\" \"with-restriction\" \"with-output-to-string\" \"with-work-buffer\" \"with-delayed-message\" \"with-minibuffer-selected-window\") (\"with-temp-buffer\" \"with-suppressed-warnings\" \"with-connection-local-variables\" \"with-eval-after-load\" \"with-temp-file\" \"with-no-warnings\" \"with-current-buffer\" \"with-help-window\" \"with-auto-compression-mode\" \"with-coding-priority\" \"with-file-modes\" \"with-window-non-dedicated\" \"with-timeout-unsuspend\" \"with-electric-help\" \"with-timeout-suspend\" \"with-category-table\" \"with-system-sleep-block\" \"with-restriction\" \"with-output-to-string\" \"with-work-buffer\" \"with-delayed-message\" \"with-minibuffer-selected-window\") (\"with-output-to-temp-buffer\" \"with-mutex\" \"with-timeout\" \"with-selected-window\" \"with-displayed-buffer-window\" \"with-syntax-table\" \"with-case-table\" \"with-undo-amalgamate\" \"with-connection-local-variables-1\" \"with-current-buffer-window\" \"with-isearch-suspended\" \"with-existing-directory\" \"with-temp-buffer-window\" \"with-temp-message\" \"with-environment-variables\" \"with-demoted-errors\" \"with-timeout-timers\" \"with-minibuffer-completions-window\" \"with-temp-buffer\" \"with-suppressed-warnings\" \"with-connection-local-variables\" \"with-eval-after-load\" \"with-temp-file\" \"with-no-warnings\" \"with-current-buffer\" \"with-help-window\" \"with-auto-compression-mode\" \"with-coding-priority\" \"with-file-modes\" \"with-window-non-dedicated\" \"with-timeout-unsuspend\" \"with-electric-help\" \"with-timeout-suspend\" \"with-category-table\" \"with-system-sleep-block\" \"with-restriction\" \"with-output-to-string\" \"with-work-buffer\" \"with-delayed-message\" \"with-minibuffer-selected-window\"))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx205_describe_syntax_table_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'describe-syntax)
       (boundp 'syntax-code-table)
       (boundp 'syntax-mnemonic-table))
 "##,
-        expect_test::expect![[r#""OK (t nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx205_help_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((apropos-result (apropos-internal "overlay")))
@@ -190,6 +200,6 @@ fn div_cx205_help_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }

@@ -30,10 +30,8 @@ fn oracle_file_name_absolute_p_tilde_user_semantics() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t nil nil t t t nil nil (wrong-number-of-arguments (file-name-absolute-p 0)) (wrong-type-argument (stringp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t nil nil t t t nil nil (wrong-number-of-arguments (file-name-absolute-p 0)) (wrong-type-argument (stringp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

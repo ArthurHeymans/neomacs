@@ -11,6 +11,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_q0_complex_cl_loop_accumulators() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((5 ((e . 5) (d . 4) (c . 3) (b . 2) (a . 1))) ((2 4 6 8 10) (1 3 5 7 9)) 294)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (cl-loop for x in '(1 2 3 4 5)
@@ -28,15 +31,14 @@ fn div_q0_complex_cl_loop_accumulators() {
                do (setq sum (+ sum x))
                finally (return sum)))
 "##,
-        expect_test::expect![[
-            r#""OK ((5 ((e . 5) (d . 4) (c . 3) (b . 2) (a . 1))) ((2 4 6 8 10) (1 3 5 7 9)) 294)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_q0_pcase_combined_patterns() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function guard)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (pcase '(1 (2 3) "str")
@@ -49,26 +51,28 @@ fn div_q0_pcase_combined_patterns() {
       (pcase "hello"
         ((app length n) (when (> n 3) 'long))))
 "##,
-        expect_test::expect![[r#""ERR (void-function guard)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_q0_regex_on_cjk_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r##""OK (\"#テスト English\" 0 \"<a><b><c><d>\")""##]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (replace-regexp-in-string "[一-龯]+" "#" "日本語テスト English")
       (string-match-p "[[:alpha:]]+" "café日本")
       (replace-regexp-in-string "\\(.\\)\\1" "<\\1>" "aabbccdd"))
 "##,
-        expect_test::expect![[r##""OK (\"#テスト English\" 0 \"<a><b><c><d>\")""##]],
+        expect,
     );
 }
 
 #[test]
 fn div_q0_very_long_string_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (10000 \"xxxxx\" 10000 0 10000)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s (make-string 10000 ?x)))
@@ -78,20 +82,21 @@ fn div_q0_very_long_string_ops() {
         (string-match "xxxxx" s)
         (length (upcase s))))
 "##,
-        expect_test::expect![[r#""OK (10000 \"xxxxx\" 10000 0 10000)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_q0_deep_nesting_print_depth() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((((((((((((((((((((((((((((((((((((((((((((((((((0))))))))))))))))))))))))))))))))))))))))))))))))))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((deep 0))
   (dotimes (i 50 deep) (setq deep (list deep))))
 "##,
-        expect_test::expect![[
-            r#""OK ((((((((((((((((((((((((((((((((((((((((((((((((((0))))))))))))))))))))))))))))))))))))))))))))))))))""#
-        ]],
+        expect,
     );
 }

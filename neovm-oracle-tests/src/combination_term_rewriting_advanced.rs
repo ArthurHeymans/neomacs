@@ -66,12 +66,10 @@ fn oracle_prop_term_rewriting_string_rewrite_system() {
          (funcall 'neovm--srs-normalize rules "aaa" 10)))
     (fmakunbound 'neovm--srs-step)
     (fmakunbound 'neovm--srs-normalize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:result \"ba\" :steps 20) (:result \"bac\" :steps 20) (:result \"bac\" :steps 20) (:result \"bbaacc\" :steps 50) (:result \"a\" :steps 10) (:result \"aaa\" :steps 10))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:result \"ba\" :steps 20) (:result \"bac\" :steps 20) (:result \"bac\" :steps 20) (:result \"bbaacc\" :steps 50) (:result \"a\" :steps 10) (:result \"aaa\" :steps 10))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -139,10 +137,9 @@ fn oracle_prop_term_rewriting_ground_term_generation() {
                '((zero . 0) (s . 1) (plus . 2))
                2)
     (fmakunbound 'neovm--gt-generate)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (:depth-0 (zero) :depth-1-count 2 :total-count 15)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (:depth-0 (zero) :depth-1-count 2 :total-count 15)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -247,12 +244,10 @@ fn oracle_prop_term_rewriting_rule_composition() {
     (fmakunbound 'neovm--rc-step)
     (fmakunbound 'neovm--rc-normalize)
     (fmakunbound 'neovm--rc-compose)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((+ (* a 0) (+ b 0)) (not (not (and p true))) (and (+ 0 true) (or false q)) (or (and (not (not p)) true) (not (not (and q true)))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((+ (* a 0) (+ b 0)) (not (not (and p true))) (and (+ 0 true) (or false q)) (or (and (not (not p)) true) (not (not (and q true)))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -349,10 +344,8 @@ fn oracle_prop_term_rewriting_critical_pairs() {
     (fmakunbound 'neovm--cp-subst)
     (fmakunbound 'neovm--cp-rename)
     (fmakunbound 'neovm--cp-compute)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (:count 0 :pairs nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (:count 0 :pairs nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -457,12 +450,10 @@ fn oracle_prop_term_rewriting_confluence_check() {
     (fmakunbound 'neovm--cc-step)
     (fmakunbound 'neovm--cc-normalize)
     (fmakunbound 'neovm--cc-check-joinable)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:pair (0 0) :joinable t :nf1 0 :nf2 0) (:pair (0 0) :joinable t :nf1 0 :nf2 0) (:pair ((+ a 0) a) :joinable nil :nf1 (+ a 0) :nf2 a) (:pair ((* (+ b 0) 1) b) :joinable nil :nf1 (* (+ b 0) 1) :nf2 b))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:pair (0 0) :joinable t :nf1 0 :nf2 0) (:pair (0 0) :joinable t :nf1 0 :nf2 0) (:pair ((+ a 0) a) :joinable nil :nf1 (+ a 0) :nf2 a) (:pair ((* (+ b 0) 1) b) :joinable nil :nf1 (* (+ b 0) 1) :nf2 b))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -570,12 +561,10 @@ fn oracle_prop_term_rewriting_knuth_bendix_basic() {
     (fmakunbound 'neovm--kb-orient)
     (fmakunbound 'neovm--kb-step)
     (fmakunbound 'neovm--kb-normalize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:rules (((+ 120 0) . 120) ((+ 0 120) . 120) ((+ (+ 120 121) 122) + 120 (+ 121 122))) :test1 (+ (+ a 0) 0) :test2 (+ 0 (+ 0 b)) :test3 (+ (+ (+ a b) c) d) :test4 (+ (+ a 0) (+ 0 b)) :rule-count 3)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:rules (((+ 120 0) . 120) ((+ 0 120) . 120) ((+ (+ 120 121) 122) + 120 (+ 121 122))) :test1 (+ (+ a 0) 0) :test2 (+ 0 (+ 0 b)) :test3 (+ (+ (+ a b) c) d) :test4 (+ (+ a 0) (+ 0 b)) :rule-count 3)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -698,12 +687,10 @@ fn oracle_prop_term_rewriting_multi_sorted() {
     (fmakunbound 'neovm--ms-sort)
     (fmakunbound 'neovm--ms-step)
     (fmakunbound 'neovm--ms-normalize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((+ (* a 0) (+ b 0)) (and (not (not p)) (or q false)) (if (zero? 0) (+ a 0) (+ b 0)) (nat bool bool nat))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((+ (* a 0) (+ b 0)) (and (not (not p)) (or q false)) (if (zero? 0) (+ a 0) (+ b 0)) (nat bool bool nat))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -791,12 +778,10 @@ fn oracle_prop_term_rewriting_lambda_calculus() {
     (fmakunbound 'neovm--lc-subst)
     (fmakunbound 'neovm--lc-beta-step)
     (fmakunbound 'neovm--lc-normalize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:normal-form a :steps 10) (:normal-form (lam y a) :steps 10) (:normal-form a :steps 20) (:normal-form (app a a) :steps 10) (:normal-form a :steps 20) (:normal-form (app s (app s z)) :steps 20))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:normal-form a :steps 10) (:normal-form (lam y a) :steps 10) (:normal-form a :steps 20) (:normal-form (app a a) :steps 10) (:normal-form a :steps 20) (:normal-form (app s (app s z)) :steps 20))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -904,12 +889,10 @@ fn oracle_prop_term_rewriting_strategies() {
     (fmakunbound 'neovm--st-outer-step)
     (fmakunbound 'neovm--st-inner-step)
     (fmakunbound 'neovm--st-normalize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:outermost (:result (* 1 (+ (+ a 0) (* b 0))) :steps 50 :trace-length 0) :innermost (:result (* 1 (+ (+ a 0) (* b 0))) :steps 50 :trace-length 0))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:outermost (:result (* 1 (+ (+ a 0) (* b 0))) :steps 50 :trace-length 0) :innermost (:result (* 1 (+ (+ a 0) (* b 0))) :steps 50 :trace-length 0))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -982,10 +965,8 @@ fn oracle_prop_term_rewriting_ac_normalization() {
     (fmakunbound 'neovm--ac-flatten)
     (fmakunbound 'neovm--ac-sort-args)
     (fmakunbound 'neovm--ac-normalize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((+ a b c) (+ a b c) (+ a b c) (* a b c) (+ (* a b) (* c d)) (+ v w x y z) (- a b) (+ (- c d) a b))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((+ a b c) (+ a b c) (+ a b c) (* a b c) (+ (* a b) (* c d)) (+ v w x y z) (- a b) (+ (- c d) a b))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -5,6 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_entities_user_table_export_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -53,7 +54,7 @@ fn org_entities_user_table_export_combo() {
               (mapcar (lambda (needle)
                         (not (null (string-match-p needle latex))))
                       '("\\\\Rightarrow" "\\\\textsc{Neo}" "\\\\alpha" "--"))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -61,6 +62,9 @@ fn org_entities_user_table_export_combo() {
 fn org_subsuperscript_parse_export_modes_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((t ((subscript nil \"_2O \") (superscript t \"^{2+y} \") (subscript nil \"_b \") (subscript t \"_{d e} \") (subscript nil \"_underscore \") (subscript nil \"_a\")) \"<div id=\\\"outline-container-org-id\\\" class=\\\"outline-2\\\">\n<h2 id=\\\"org-id\\\"><span class=\\\"section-number-2\\\">1.</span> H</h2>\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\n<p>\nH<sub>2O</sub> x<sup>2+y</sup> a<sub>b</sub> c<sub>d e</sub> raw<sub>underscore</sub> email<sub>a</sub>@b.\n</p>\n</div>\n</div>\n\" \"1 H\n═══\n\n  H_2O x^{2+y} a_b c_{d e} raw_underscore email_a@b.\n\" \"\\\\section{H}\n\\\\label{sec:org-id}\nH\\\\textsubscript{2O} x\\\\textsuperscript{2+y} a\\\\textsubscript{b} c\\\\textsubscript{d e} raw\\\\textsubscript{underscore} email\\\\textsubscript{a}@b.\n\") ({} ((subscript nil \"_2O \") (superscript t \"^{2+y} \") (subscript nil \"_b \") (subscript t \"_{d e} \") (subscript nil \"_underscore \") (subscript nil \"_a\")) \"<div id=\\\"outline-container-org-id\\\" class=\\\"outline-2\\\">\n<h2 id=\\\"org-id\\\"><span class=\\\"section-number-2\\\">1.</span> H</h2>\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\n<p>\nH<sub>2O</sub> x<sup>2+y</sup> a<sub>b</sub> c<sub>d e</sub> raw<sub>underscore</sub> email<sub>a</sub>@b.\n</p>\n</div>\n</div>\n\" \"1 H\n═══\n\n  H_2O x^{2+y} a_b c_{d e} raw_underscore email_a@b.\n\" \"\\\\section{H}\n\\\\label{sec:org-id}\nH\\\\textsubscript{2O} x\\\\textsuperscript{2+y} a\\\\textsubscript{b} c\\\\textsubscript{d e} raw\\\\textsubscript{underscore} email\\\\textsubscript{a}@b.\n\") (nil ((subscript nil \"_2O \") (superscript t \"^{2+y} \") (subscript nil \"_b \") (subscript t \"_{d e} \") (subscript nil \"_underscore \") (subscript nil \"_a\")) \"<div id=\\\"outline-container-org-id\\\" class=\\\"outline-2\\\">\n<h2 id=\\\"org-id\\\"><span class=\\\"section-number-2\\\">1.</span> H</h2>\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\n<p>\nH<sub>2O</sub> x<sup>2+y</sup> a<sub>b</sub> c<sub>d e</sub> raw<sub>underscore</sub> email<sub>a</sub>@b.\n</p>\n</div>\n</div>\n\" \"1 H\n═══\n\n  H_2O x^{2+y} a_b c_{d e} raw_underscore email_a@b.\n\" \"\\\\section{H}\n\\\\label{sec:org-id}\nH\\\\textsubscript{2O} x\\\\textsuperscript{2+y} a\\\\textsubscript{b} c\\\\textsubscript{d e} raw\\\\textsubscript{underscore} email\\\\textsubscript{a}@b.\n\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -95,9 +99,7 @@ fn org_subsuperscript_parse_export_modes_combo() {
                     "sec:org-id"
                     (org-export-as 'latex nil nil t '(:with-toc nil))))))))
      '(t {} nil))))"##,
-        expect_test::expect![[
-            r#""OK ((t ((subscript nil \"_2O \") (superscript t \"^{2+y} \") (subscript nil \"_b \") (subscript t \"_{d e} \") (subscript nil \"_underscore \") (subscript nil \"_a\")) \"<div id=\\\"outline-container-org-id\\\" class=\\\"outline-2\\\">\n<h2 id=\\\"org-id\\\"><span class=\\\"section-number-2\\\">1.</span> H</h2>\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\n<p>\nH<sub>2O</sub> x<sup>2+y</sup> a<sub>b</sub> c<sub>d e</sub> raw<sub>underscore</sub> email<sub>a</sub>@b.\n</p>\n</div>\n</div>\n\" \"1 H\n═══\n\n  H_2O x^{2+y} a_b c_{d e} raw_underscore email_a@b.\n\" \"\\\\section{H}\n\\\\label{sec:org-id}\nH\\\\textsubscript{2O} x\\\\textsuperscript{2+y} a\\\\textsubscript{b} c\\\\textsubscript{d e} raw\\\\textsubscript{underscore} email\\\\textsubscript{a}@b.\n\") ({} ((subscript nil \"_2O \") (superscript t \"^{2+y} \") (subscript nil \"_b \") (subscript t \"_{d e} \") (subscript nil \"_underscore \") (subscript nil \"_a\")) \"<div id=\\\"outline-container-org-id\\\" class=\\\"outline-2\\\">\n<h2 id=\\\"org-id\\\"><span class=\\\"section-number-2\\\">1.</span> H</h2>\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\n<p>\nH<sub>2O</sub> x<sup>2+y</sup> a<sub>b</sub> c<sub>d e</sub> raw<sub>underscore</sub> email<sub>a</sub>@b.\n</p>\n</div>\n</div>\n\" \"1 H\n═══\n\n  H_2O x^{2+y} a_b c_{d e} raw_underscore email_a@b.\n\" \"\\\\section{H}\n\\\\label{sec:org-id}\nH\\\\textsubscript{2O} x\\\\textsuperscript{2+y} a\\\\textsubscript{b} c\\\\textsubscript{d e} raw\\\\textsubscript{underscore} email\\\\textsubscript{a}@b.\n\") (nil ((subscript nil \"_2O \") (superscript t \"^{2+y} \") (subscript nil \"_b \") (subscript t \"_{d e} \") (subscript nil \"_underscore \") (subscript nil \"_a\")) \"<div id=\\\"outline-container-org-id\\\" class=\\\"outline-2\\\">\n<h2 id=\\\"org-id\\\"><span class=\\\"section-number-2\\\">1.</span> H</h2>\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\n<p>\nH<sub>2O</sub> x<sup>2+y</sup> a<sub>b</sub> c<sub>d e</sub> raw<sub>underscore</sub> email<sub>a</sub>@b.\n</p>\n</div>\n</div>\n\" \"1 H\n═══\n\n  H_2O x^{2+y} a_b c_{d e} raw_underscore email_a@b.\n\" \"\\\\section{H}\n\\\\label{sec:org-id}\nH\\\\textsubscript{2O} x\\\\textsuperscript{2+y} a\\\\textsubscript{b} c\\\\textsubscript{d e} raw\\\\textsubscript{underscore} email\\\\textsubscript{a}@b.\n\"))""#
-        ]],
+        expect,
     );
 }
 
@@ -105,6 +107,7 @@ fn org_subsuperscript_parse_export_modes_combo() {
 fn org_pretty_entities_fontify_display_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -138,7 +141,7 @@ fn org_pretty_entities_fontify_display_combo() {
               org-pretty-entities
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -146,6 +149,7 @@ fn org_pretty_entities_fontify_display_combo() {
 fn org_markup_entities_fontlock_export_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -234,7 +238,7 @@ fn org_markup_entities_fontlock_export_combo() {
                         "\\\\texttt{verb" "\\\\sout{strike"
                         "\\\\alpha" "\\\\beta" "\\\\gamma"
                         "--" "\\\\mathsf{X}"))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -242,6 +246,7 @@ fn org_markup_entities_fontlock_export_combo() {
 fn org_emphasize_region_replace_remove_export_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function prop-at)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -323,7 +328,7 @@ fn org_emphasize_region_replace_remove_export_combo() {
                               '("Alpha beta gamma" "=code=" "α"))
                        (buffer-substring-no-properties
                         (point-min) (point-max))))))))))"##,
-        expect_test::expect![[r#""ERR (void-function prop-at)""#]],
+        expect,
     );
 }
 
@@ -331,6 +336,9 @@ fn org_emphasize_region_replace_remove_export_combo() {
 fn org_entity_latex_utf8_html_parse_element_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (((bold \"*bold*\" (bold)) (italic \"/italic/\" (italic)) (underline \"_underline_\" (underline)) (verbatim \"=code=\" (org-verbatim)) (code \"~verbatim~\" (org-code)) (strike-through \"+strike+\" ((:strike-through t))) (entity \"\\\\alpha \" nil) (entity \"\\\\beta \" nil) (entity \"\\\\gamma \" nil) (entity \"\\\\rightarrow \" nil) (entity \"\\\\nbsp \" nil) (entity \"\\\\copy \" nil) (entity \"\\\\infty\" nil) (subscript \"_2O \" nil) (superscript \"^2 \" nil) (subscript \"_{n+1} \" nil) (superscript \"^{b+c}\" nil) (bold \"*/bold italic/* \" (bold)) (italic \"/bold italic/\" (bold)) (bold \"*_bold underline_* \" (bold)) (underline \"_bold underline_\" (bold)) (code \"~=code verbatim=~\" (org-code))) ((\"alpha\" \"\\\\alpha\" \"&alpha;\" \"α\") (\"beta\" \"\\\\beta\" \"&beta;\" \"β\") (\"gamma\" \"\\\\gamma\" \"&gamma;\" \"γ\") (\"rightarrow\" \"\\\\rightarrow\" \"&rarr;\" \"→\") (\"nbsp\" \"~\" \"&nbsp;\" \"\u{a0}\") (\"copy\" \"\\\\textcopyright{}\" \"&copy;\" \"©\") (\"infty\" \"\\\\infty\" \"&infin;\" \"∞\")) (t t t t t nil t t) (t nil t t t t t t) \"* Markup Section\nText with *bold*, /italic/, _underline_, =code=, ~verbatim~, and +strike+.\n\nEntities: \\\\alpha \\\\beta \\\\gamma \\\\rightarrow \\\\nbsp \\\\copy \\\\infty\n\nSub/super: H_2O and E=mc^2 and x_{n+1} and a^{b+c}\n\nNested: */bold italic/* and *_bold underline_* and ~=code verbatim=~\n\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -384,9 +392,7 @@ fn org_entity_latex_utf8_html_parse_element_deep_state_combo() {
             latex-patterns
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
-        expect_test::expect![[
-            r#""OK (((bold \"*bold*\" (bold)) (italic \"/italic/\" (italic)) (underline \"_underline_\" (underline)) (verbatim \"=code=\" (org-verbatim)) (code \"~verbatim~\" (org-code)) (strike-through \"+strike+\" ((:strike-through t))) (entity \"\\\\alpha \" nil) (entity \"\\\\beta \" nil) (entity \"\\\\gamma \" nil) (entity \"\\\\rightarrow \" nil) (entity \"\\\\nbsp \" nil) (entity \"\\\\copy \" nil) (entity \"\\\\infty\" nil) (subscript \"_2O \" nil) (superscript \"^2 \" nil) (subscript \"_{n+1} \" nil) (superscript \"^{b+c}\" nil) (bold \"*/bold italic/* \" (bold)) (italic \"/bold italic/\" (bold)) (bold \"*_bold underline_* \" (bold)) (underline \"_bold underline_\" (bold)) (code \"~=code verbatim=~\" (org-code))) ((\"alpha\" \"\\\\alpha\" \"&alpha;\" \"α\") (\"beta\" \"\\\\beta\" \"&beta;\" \"β\") (\"gamma\" \"\\\\gamma\" \"&gamma;\" \"γ\") (\"rightarrow\" \"\\\\rightarrow\" \"&rarr;\" \"→\") (\"nbsp\" \"~\" \"&nbsp;\" \"\u{a0}\") (\"copy\" \"\\\\textcopyright{}\" \"&copy;\" \"©\") (\"infty\" \"\\\\infty\" \"&infin;\" \"∞\")) (t t t t t nil t t) (t nil t t t t t t) \"* Markup Section\nText with *bold*, /italic/, _underline_, =code=, ~verbatim~, and +strike+.\n\nEntities: \\\\alpha \\\\beta \\\\gamma \\\\rightarrow \\\\nbsp \\\\copy \\\\infty\n\nSub/super: H_2O and E=mc^2 and x_{n+1} and a^{b+c}\n\nNested: */bold italic/* and *_bold underline_* and ~=code verbatim=~\n\n\")""#
-        ]],
+        expect,
     );
 }
 
@@ -394,6 +400,9 @@ fn org_entity_latex_utf8_html_parse_element_deep_state_combo() {
 fn org_entity_markup_edit_reexport_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (((entity nil nil) (entity nil nil) (entity nil nil) (entity nil nil) (entity nil nil) (entity nil nil) (bold nil \"bold\") (italic nil \"italic\") (underline nil \"underline\") (strike-through nil \"strike\") (subscript nil \"2\") (superscript nil \"2\")) ((\"alpha\" \"\\\\alpha\" \"&alpha;\" \"α\") (\"beta\" \"\\\\beta\" \"&beta;\" \"β\") (\"gamma\" \"\\\\gamma\" \"&gamma;\" \"γ\") (\"infty\" \"\\\\infty\" \"&infin;\" \"∞\") (\"pm\" \"\\\\textpm{}\" \"&plusmn;\" \"±\") (\"times\" \"\\\\texttimes{}\" \"&times;\" \"×\")) (t t t nil nil t t t nil nil t t) (t nil t t t t t nil t nil t t) \"* Test Entities\n\nGreek: \\\\alpha \\\\beta \\\\gamma\n\nMath: \\\\infty \\\\pm \\\\times\n\nMarkup: *bold* /italic/ _underline_ +strike+\n\nSub/super: H_{2}O E=mc^{2}\n\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -447,8 +456,6 @@ fn org_entity_markup_edit_reexport_deep() {
       (list objects entity-vals html-checks latex-checks
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
-        expect_test::expect![[
-            r#""OK (((entity nil nil) (entity nil nil) (entity nil nil) (entity nil nil) (entity nil nil) (entity nil nil) (bold nil \"bold\") (italic nil \"italic\") (underline nil \"underline\") (strike-through nil \"strike\") (subscript nil \"2\") (superscript nil \"2\")) ((\"alpha\" \"\\\\alpha\" \"&alpha;\" \"α\") (\"beta\" \"\\\\beta\" \"&beta;\" \"β\") (\"gamma\" \"\\\\gamma\" \"&gamma;\" \"γ\") (\"infty\" \"\\\\infty\" \"&infin;\" \"∞\") (\"pm\" \"\\\\textpm{}\" \"&plusmn;\" \"±\") (\"times\" \"\\\\texttimes{}\" \"&times;\" \"×\")) (t t t nil nil t t t nil nil t t) (t nil t t t t t nil t nil t t) \"* Test Entities\n\nGreek: \\\\alpha \\\\beta \\\\gamma\n\nMath: \\\\infty \\\\pm \\\\times\n\nMarkup: *bold* /italic/ _underline_ +strike+\n\nSub/super: H_{2}O E=mc^{2}\n\n\")""#
-        ]],
+        expect,
     );
 }

@@ -22,12 +22,10 @@ fn oracle_base64_decode_string_url_and_ignore_invalid_args() {
  (base64-decode-string "!!!!" nil t))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"YStiLw\" \"a+b/\" (error (\"Invalid base64 data\")) \"\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"YStiLw\" \"a+b/\" (error (\"Invalid base64 data\")) \"\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -45,10 +43,8 @@ fn oracle_base64_encode_string_rejects_multibyte_non_ascii_like_gnu() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((error (\"Multibyte character in data for base64 encoding\")) \"6Q==\" (error (\"Multibyte character in data for base64 encoding\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((error (\"Multibyte character in data for base64 encoding\")) \"6Q==\" (error (\"Multibyte character in data for base64 encoding\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

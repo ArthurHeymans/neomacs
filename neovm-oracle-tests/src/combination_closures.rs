@@ -63,10 +63,8 @@ fn oracle_prop_closure_accumulator() {
                               ;; Add more
                               (progn (funcall add 'd) (funcall count))
                               (funcall get)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 (a b c d) 2 (c d))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 (a b c d) 2 (c d))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -96,8 +94,10 @@ fn oracle_prop_closure_compose() {
                        (funcall (funcall compose double inc) 3)  ;; (3+1)*2=8
                        (funcall (funcall compose inc double) 3)  ;; 3*2+1=7
                        ;; pipe: left-to-right
-                       (funcall (funcall pipe inc double square) 3))))"#; // ((3+1)*2)^2=64
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (8 7 64)""#]]);
+                       (funcall (funcall pipe inc double square) 3))))"#;
+    let expect = expect_test::expect![[r#""OK (8 7 64)""#]];
+    // ((3+1)*2)^2=64
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -132,10 +132,8 @@ fn oracle_prop_closure_iterator() {
                               (funcall make-range-iter 0 10 2))
                      (funcall iter-collect
                               (funcall make-range-iter 10 10))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((0 1 2 3 4) (0 2 4 6 8) nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((0 1 2 3 4) (0 2 4 6 8) nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -171,11 +169,10 @@ fn oracle_prop_closure_memoize() {
                          (funcall expensive 5 12) ;; 169, call
                          call-count               ;; 2
                          (funcall expensive 3 4)  ;; 25, cached
-                         call-count))))"#; // still 2
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (25 1 25 1 169 2 25 2)""#]],
-    );
+                         call-count))))"#;
+    let expect = expect_test::expect![[r#""OK (25 1 25 1 169 2 25 2)""#]];
+    // still 2
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -221,10 +218,8 @@ fn oracle_prop_closure_observable() {
                         (funcall set-val 30)
                         (list (funcall get-val)
                               (nreverse log)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (30 ((0 -> 10) (10 -> 20) (20 -> 30)))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (30 ((0 -> 10) (10 -> 20) (20 -> 30)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -263,8 +258,6 @@ fn oracle_prop_closure_middleware() {
                         (list
                          (funcall stack "hello")
                          (funcall stack "world")))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"OK:[HELLO\" \"OK:[WORLD\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"OK:[HELLO\" \"OK:[WORLD\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

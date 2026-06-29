@@ -48,10 +48,8 @@ fn oracle_file_newer_than_file_p_missing_and_timestamp_order() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t nil nil nil t nil t nil (wrong-number-of-arguments (file-newer-than-file-p 1)) (wrong-type-argument (stringp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t nil nil nil t nil t nil (wrong-number-of-arguments (file-newer-than-file-p 1)) (wrong-type-argument (stringp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -7,12 +7,13 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_auth_source() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'auth-source-search)
   (fboundp 'auth-source-forget)
   (featurep 'auth-source))"#,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
@@ -20,13 +21,14 @@ fn divergence_auth_source() {
 fn divergence_gnus_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'gnus)
   (fboundp 'gnus-group-list)
   (featurep 'gnus)
   (featurep 'gnus-group))"#,
-        expect_test::expect![[r#""OK (t nil nil nil)""#]],
+        expect,
     );
 }
 
@@ -34,12 +36,13 @@ fn divergence_gnus_functions() {
 fn divergence_message_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'message-mail)
   (fboundp 'message-reply)
   (featurep 'message))"#,
-        expect_test::expect![[r#""OK (t t nil)""#]],
+        expect,
     );
 }
 
@@ -47,12 +50,13 @@ fn divergence_message_mode() {
 fn divergence_sendmail() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'sendmail-send-it)
   (boundp 'send-mail-function)
   (featurep 'sendmail))"#,
-        expect_test::expect![[r#""OK (nil t nil)""#]],
+        expect,
     );
 }
 
@@ -60,11 +64,12 @@ fn divergence_sendmail() {
 fn divergence_smtpmail() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'smtpmail-send-it)
   (featurep 'smtpmail))"#,
-        expect_test::expect![[r#""OK (t nil)""#]],
+        expect,
     );
 }
 
@@ -72,6 +77,7 @@ fn divergence_smtpmail() {
 fn divergence_epa_gpg() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'epa-encrypt-file)
@@ -79,7 +85,7 @@ fn divergence_epa_gpg() {
   (fboundp 'epa-sign-file)
   (featurep 'epa)
   (featurep 'epg))"#,
-        expect_test::expect![[r#""OK (t t t nil nil)""#]],
+        expect,
     );
 }
 
@@ -87,12 +93,13 @@ fn divergence_epa_gpg() {
 fn divergence_erc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'erc)
   (fboundp 'erc-select)
   (featurep 'erc))"#,
-        expect_test::expect![[r#""OK (t t nil)""#]],
+        expect,
     );
 }
 
@@ -100,11 +107,12 @@ fn divergence_erc() {
 fn divergence_rcirc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'rcirc)
   (featurep 'rcirc))"#,
-        expect_test::expect![[r#""OK (t nil)""#]],
+        expect,
     );
 }
 
@@ -112,13 +120,14 @@ fn divergence_rcirc() {
 fn divergence_eww_shr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'eww)
   (fboundp 'eww-open-file)
   (featurep 'eww)
   (featurep 'shr))"#,
-        expect_test::expect![[r#""OK (t t nil nil)""#]],
+        expect,
     );
 }
 
@@ -126,11 +135,12 @@ fn divergence_eww_shr() {
 fn divergence_url_library() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'url-retrieve)
   (fboundp 'url-retrieve-synchronously)
   (featurep 'url))"#,
-        expect_test::expect![[r#""OK (t t nil)""#]],
+        expect,
     );
 }

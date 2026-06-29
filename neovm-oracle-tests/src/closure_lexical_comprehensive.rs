@@ -47,10 +47,8 @@ fn oracle_prop_closure_lexical_creation_invocation() {
           (funcall f-mixed 1 2)                  ;; 1 + 2 + 100 = 103
           (funcall f-mixed 1 2 3)                ;; 106
           (funcall f-mixed 1 2 3 4 5 6))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (109 105 115 135 303 330 103 106 121)""#],
-    );
+    let expect = expect_test::expect![r#""OK (109 105 115 135 303 330 103 106 121)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -85,10 +83,8 @@ fn oracle_prop_closure_lexical_captured_mutation() {
           (funcall get-kv 'w)   ;; nil (not found)
           (funcall keys)        ;; (x y z)
           (funcall size))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (10 2 3 nil (x y z) 3)""#],
-    );
+    let expect = expect_test::expect![r#""OK (10 2 3 nil (x y z) 3)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -117,12 +113,10 @@ fn oracle_prop_closure_lexical_shared_env_state_machine() {
           (funcall current)
           (length (funcall trail))
           (funcall trail))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (done 4 ((idle . running) (running . paused) (paused . running) (running . done)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (done 4 ((idle . running) (running . paused) (paused . running) (running . done)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -170,10 +164,8 @@ fn oracle_prop_closure_lexical_higher_order() {
           (funcall filter-map evenp square '(1 2 3 4 5 6 7 8))
           ;; pipe with multiple stages
           (funcall pipe 1 inc inc inc inc inc))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (11 49 (4 16 36 64) 6)""#],
-    );
+    let expect = expect_test::expect![r#""OK (11 49 (4 16 36 64) 6)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -210,10 +202,8 @@ fn oracle_prop_closure_lexical_factory_currying() {
           (funcall r2 'check 11)      ;; nil
           (funcall r2 'clamp -999)    ;; -10
           (funcall r2 'width))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (t nil 100 0 100 (0 100) t nil -10 20)""#],
-    );
+    let expect = expect_test::expect![r#""OK (t nil 100 0 100 (0 100) t nil -10 20)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -252,10 +242,8 @@ fn oracle_prop_closure_lexical_recursive_context() {
         (funcall fib 7)
         (funcall fib 10)
         (funcall flatten '(1 (2 (3 4) 5) (6 (7 (8)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (1 1 120 3628800 0 1 13 55 (1 2 3 4 5 6 7 8))""#],
-    );
+    let expect = expect_test::expect![r#""OK (1 1 120 3628800 0 1 13 55 (1 2 3 4 5 6 7 8))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -299,10 +287,8 @@ fn oracle_prop_closure_lexical_let_letstar_interaction() {
                (r (+ p q)))   ;; 12
           (let ((f (lambda () (list p q r))))
             (funcall f)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((1 11) 100 200 15 (3 9 12))""#],
-    );
+    let expect = expect_test::expect![r#""OK ((1 11) 100 200 15 (3 9 12))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -332,10 +318,8 @@ fn oracle_prop_closure_lexical_serialization() {
             (functionp f)
             ;; type-of for closures
             (type-of f)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (nil 2 9 nil t interpreted-function)""#],
-    );
+    let expect = expect_test::expect![r#""OK (nil 2 9 nil t interpreted-function)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -372,10 +356,8 @@ fn oracle_prop_closure_lexical_identity_equality() {
             (= (funcall a5 10) (funcall b5 10))
             ;; Different functional results
             (/= (funcall a5 10) (funcall a10 10))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (t nil nil t nil t nil t t)""#],
-    );
+    let expect = expect_test::expect![r#""OK (t nil nil t nil t nil t t)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -406,10 +388,8 @@ fn oracle_prop_closure_lexical_loop_capture() {
             (setq j (1+ j))))
         (let ((good-results (mapcar #'funcall (reverse good-closures))))
           (list bad-results good-results))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((5 5 5 5 5) (0 1 2 3 4))""#],
-    );
+    let expect = expect_test::expect![r#""OK ((5 5 5 5 5) (0 1 2 3 4))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -438,12 +418,10 @@ fn oracle_prop_closure_lexical_dolist_capture() {
           (funcall (nth 2 fns) "hello")
           ;; Cross-apply
           (mapcar (lambda (fn) (funcall fn "X")) fns))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"prefix-hello-suffix\" \"<<hello>>\" \"[hello]\" (\"prefix-X-suffix\" \"<<X>>\" \"[X]\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"prefix-hello-suffix\" \"<<hello>>\" \"[hello]\" (\"prefix-X-suffix\" \"<<X>>\" \"[X]\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -507,8 +485,6 @@ fn oracle_prop_closure_lexical_module_pattern() {
               (funcall dq 'size)
               (funcall dq 'peek-front)
               (funcall dq 'empty-p))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((-1 0) 5 -1 0 3 1 nil)""#],
-    );
+    let expect = expect_test::expect![r#""OK ((-1 0) 5 -1 0 3 1 nil)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

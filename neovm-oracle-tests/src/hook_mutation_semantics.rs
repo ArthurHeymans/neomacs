@@ -37,12 +37,10 @@ fn oracle_add_hook_depth_order_and_metadata() {
     (makunbound 'neomacs--oracle-hook-depth)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((neg-a zero-b zero-a pos-a pos-b legacy-depth) t t (-20 :missing :missing 10 10 90))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((neg-a zero-b zero-a pos-a pos-b legacy-depth) t t (-20 :missing :missing 10 10 90))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -68,7 +66,8 @@ fn oracle_add_hook_duplicate_detection_uses_equal() {
     (makunbound 'neomacs--oracle-hook-duplicates)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (1 t nil)""#]]);
+    let expect = expect_test::expect![[r#""OK (1 t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -99,10 +98,8 @@ fn oracle_remove_hook_removes_depth_metadata() {
     (makunbound 'neomacs--oracle-hook-remove)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((keep) 5 20 5 :missing)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((keep) 5 20 5 :missing)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -132,10 +129,9 @@ fn oracle_remove_hook_local_binding_cleanup() {
     (makunbound 'neomacs--oracle-hook-local)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil ((t local-fn) t) ((global-fn) nil (global-fn)))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (nil ((t local-fn) t) ((global-fn) nil (global-fn)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -162,12 +158,10 @@ fn oracle_add_hook_coerces_single_function_values() {
     (makunbound 'neomacs--oracle-hook-single)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((new-fn existing-fn) (new-fn existing-fn) ((closure (t) nil 'lambda-value) after-lambda))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((new-fn existing-fn) (new-fn existing-fn) ((closure (t) nil 'lambda-value) after-lambda))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -192,10 +186,8 @@ fn oracle_remove_hook_local_without_local_binding_is_noop() {
     (makunbound 'neomacs--oracle-hook-local-noop)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil nil (global-fn) (global-fn))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil nil (global-fn) (global-fn))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -221,12 +213,10 @@ fn oracle_add_hook_detects_legacy_local_hook_binding() {
     (makunbound 'neomacs--oracle-hook-legacy-local)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((legacy-local-fn new-local-fn) (legacy-local-fn new-local-fn) (global-fn) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((legacy-local-fn new-local-fn) (legacy-local-fn new-local-fn) (global-fn) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -265,10 +255,8 @@ fn oracle_add_hook_local_permanent_hook_property() {
     (makunbound 'neomacs--oracle-hook-permanent)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t neomacs--oracle-hook-permanent-fn) (t neomacs--oracle-hook-permanent-fn) t permanent-local-hook (t 7) (global-fn))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t neomacs--oracle-hook-permanent-fn) (t neomacs--oracle-hook-permanent-fn) t permanent-local-hook (t 7) (global-fn))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_change_class_with_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass shape ()
@@ -65,7 +66,7 @@ fn combo_eieio_change_class_with_buffer_ops() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 6)""#]],
+        expect,
     );
 }
 
@@ -73,6 +74,7 @@ fn combo_eieio_change_class_with_buffer_ops() {
 fn combo_eieio_change_class_setf_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass vehicle-base ()
@@ -116,7 +118,7 @@ fn combo_eieio_change_class_setf_marker_overlay() {
               (pickup-bed-size my-vehicle)
               my-vehicle)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 4)""#]],
+        expect,
     );
 }
 
@@ -124,6 +126,7 @@ fn combo_eieio_change_class_setf_marker_overlay() {
 fn combo_eieio_change_class_multi_instance_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass animal ()
@@ -183,7 +186,7 @@ fn combo_eieio_change_class_multi_instance_overlay() {
                 (buffer-string)
                 pets)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 4)""#]],
+        expect,
     );
 }
 
@@ -191,6 +194,7 @@ fn combo_eieio_change_class_multi_instance_overlay() {
 fn combo_eieio_change_class_with_hash_and_plist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass node ()
@@ -244,7 +248,7 @@ fn combo_eieio_change_class_with_hash_and_plist() {
                 (buffer-string)
                 node-table)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 4)""#]],
+        expect,
     );
 }
 
@@ -252,6 +256,7 @@ fn combo_eieio_change_class_with_hash_and_plist() {
 fn combo_eieio_change_class_setf_replace_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass metric ()
@@ -302,6 +307,6 @@ fn combo_eieio_change_class_setf_replace_roundtrip() {
                 (buffer-string)
                 current-metric)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 4)""#]],
+        expect,
     );
 }

@@ -23,10 +23,8 @@ fn oracle_remember_mouse_glyph_validates_frame_and_coordinates() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-type-argument frame-live-p \"not-a-frame\") (error \"Window system frame should be used\") (error \"Window system frame should be used\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-type-argument frame-live-p \"not-a-frame\") (error \"Window system frame should be used\") (error \"Window system frame should be used\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

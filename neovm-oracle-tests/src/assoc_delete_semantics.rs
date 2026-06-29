@@ -23,12 +23,10 @@ fn oracle_prop_assoc_delete_all_removes_equal_keys_destructively() {
         tail))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((loose (\"keep\" . 2)) nil ((\"keep\" . 2)) ((\"drop\" . 1) (\"drop\" . 3) loose (\"keep\" . 2)) ((\"drop\" . 3) loose (\"keep\" . 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((loose (\"keep\" . 2)) nil ((\"keep\" . 2)) ((\"drop\" . 1) (\"drop\" . 3) loose (\"keep\" . 2)) ((\"drop\" . 3) loose (\"keep\" . 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -48,10 +46,9 @@ fn oracle_prop_assoc_delete_all_custom_test_and_non_cons_elements() {
         alist))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((loose 42 (\"beta\" . 3)) t (loose 42 (\"beta\" . 3)))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((loose 42 (\"beta\" . 3)) t (loose 42 (\"beta\" . 3)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -68,10 +65,9 @@ fn oracle_assoc_delete_all_improper_alist_mutates_before_error() {
    alist))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((wrong-type-argument (listp tail)) ((keep . 1) . tail))""#],
-    );
+    let expect =
+        expect_test::expect![r#""OK ((wrong-type-argument (listp tail)) ((keep . 1) . tail))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -93,12 +89,10 @@ fn oracle_prop_assq_delete_all_uses_eq_not_equal() {
         alist))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((((k) . 2) loose ((k) . 4)) t (((k) . 1) ((k) . 2) loose ((k) . 4)))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((((k) . 2) loose ((k) . 4)) t (((k) . 1) ((k) . 2) loose ((k) . 4)))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -120,12 +114,10 @@ fn oracle_prop_rassq_delete_all_removes_eq_values() {
         tail))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (((b v) loose (d . 4)) t ((a v) (b v) loose (d . 4)) ((b v) loose (d . 4)))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (((b v) loose (d . 4)) t ((a v) (b v) loose (d . 4)) ((b v) loose (d . 4)))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -143,10 +135,8 @@ fn oracle_rassq_delete_all_improper_alist_mutates_before_error() {
    alist))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((wrong-type-argument (listp tail)) ((keep . other) . tail))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((wrong-type-argument (listp tail)) ((keep . other) . tail))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

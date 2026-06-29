@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_objects_as_hash_values_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function hash-table-keys)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass registry-entry ()
@@ -69,7 +70,7 @@ fn combo_eieio_objects_as_hash_values_buffer() {
                 (buffer-string)
                 registry entries)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function hash-table-keys)""#]],
+        expect,
     );
 }
 
@@ -77,6 +78,7 @@ fn combo_eieio_objects_as_hash_values_buffer() {
 fn combo_eieio_object_registry_hash_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 19 21)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tracked-item ()
@@ -134,7 +136,7 @@ fn combo_eieio_object_registry_hash_overlays() {
                 (buffer-string)
                 item-hash item-list)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 19 21)""#]],
+        expect,
     );
 }
 
@@ -142,6 +144,7 @@ fn combo_eieio_object_registry_hash_overlays() {
 fn combo_eieio_hash_maphash_with_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass metric-point ()
@@ -195,7 +198,7 @@ fn combo_eieio_hash_maphash_with_objects() {
                 (buffer-string)
                 metrics points)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -203,6 +206,7 @@ fn combo_eieio_hash_maphash_with_objects() {
 fn combo_eieio_hash_removal_with_object_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 12 28)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass session ()
@@ -260,7 +264,7 @@ fn combo_eieio_hash_removal_with_object_state() {
                 (buffer-string)
                 sessions session-list)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 12 28)""#]],
+        expect,
     );
 }
 
@@ -268,6 +272,7 @@ fn combo_eieio_hash_removal_with_object_state() {
 fn combo_eieio_hash_cl_loop_with_objects_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 30 35)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass node-info ()
@@ -337,6 +342,6 @@ fn combo_eieio_hash_cl_loop_with_objects_buffer() {
                 (buffer-string)
                 node-hash nodes)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 30 35)""#]],
+        expect,
     );
 }

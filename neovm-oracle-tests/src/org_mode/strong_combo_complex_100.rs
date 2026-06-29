@@ -2,6 +2,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo100_org_full_circle_create_parse_edit_export() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:export-ok t) (:headline-count 1))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode) (require 'ox-ascii)
  (let ((org-export-show-temporary-export-buffer nil))
@@ -12,12 +13,13 @@ fn combo100_org_full_circle_create_parse_edit_export() {
     (push (list :export-ok (> (length out) 0)) r)
     (push (list :headline-count (length (org-element-map (org-element-parse-buffer) 'headline #'identity))) r))
    (nreverse r))))"##,
-        expect_test::expect![[r#""OK ((:export-ok t) (:headline-count 1))""#]],
+        expect,
     );
 }
 #[test]
 fn combo100_org_babel_full_pipeline_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"AB\" \"AB\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode) (require 'ob-emacs-lisp)
  (let ((org-confirm-babel-evaluate nil))
@@ -27,12 +29,15 @@ fn combo100_org_babel_full_pipeline_output() {
    (push (org-babel-execute-src-block) r)
    (search-forward "#+begin_src emacs-lisp :results output :var in=base")
    (push (org-babel-execute-src-block) r) (nreverse r))))"##,
-        expect_test::expect![[r#""OK (\"AB\" \"AB\")""#]],
+        expect,
     );
 }
 #[test]
 fn combo100_org_agenda_complete_workflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:todos 2) (:dones 2) (:work 2) (:urgent 1) (:scheduled 1))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode) (require 'org-agenda) (require 'org-clock)
  (let ((org-clock-persist nil))
@@ -45,14 +50,15 @@ fn combo100_org_agenda_complete_workflow() {
    (push (list :urgent (length (org-map-entries (lambda () t) "urgent"))) r)
    (push (list :scheduled (length (org-map-entries (lambda () t) "SCHEDULED<>\"\""))) r)
    (nreverse r))))"##,
-        expect_test::expect![[
-            r#""OK ((:todos 2) (:dones 2) (:work 2) (:urgent 1) (:scheduled 1))""#
-        ]],
+        expect,
     );
 }
 #[test]
 fn combo100_org_element_create_document_from_scratch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:has-TODO 16) (:has-star nil) (:has-table 107) (:stable t))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode) (require 'org-element)
  (let* ((data (org-element-create 'org-data nil
@@ -78,14 +84,13 @@ fn combo100_org_element_create_document_from_scratch() {
          (t2 (length (org-element-map data2 'table #'identity))))
     (push (list :stable (= h2 (length (org-element-map data 'headline #'identity)))) r))
   (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:has-TODO 16) (:has-star nil) (:has-table 107) (:stable t))""#
-        ]],
+        expect,
     );
 }
 #[test]
 fn combo100_org_export_all_to_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((ascii t) (html t) (latex t))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode) (require 'ox)
  (let ((org-export-show-temporary-export-buffer nil)) (insert "* H\nBody *bold*.\n")
@@ -94,23 +99,25 @@ fn combo100_org_export_all_to_string() {
      (push (list b (and out (> (length out) 0))) r))
     (error nil)))
    (nreverse r))))"##,
-        expect_test::expect![[r#""OK ((ascii t) (html t) (latex t))""#]],
+        expect,
     );
 }
 #[test]
 fn combo100_org_table_eval_and_export_combined() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:ok t))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode) (require 'ox-ascii)
  (let ((org-export-show-temporary-export-buffer nil)) (insert "| a | b | c |\n| 1 | 2 |   |\n")
   (insert "#+TBLFM: $3=$1+$2\n") (goto-char (point-min)) (org-table-recalculate t)
   (let ((r '())) (let ((out (org-export-as 'ascii nil nil t))) (push (list :ok (> (length out) 0)) r)) (nreverse r))))"##,
-        expect_test::expect![[r#""OK ((:ok t))""#]],
+        expect,
     );
 }
 #[test]
 fn combo100_org_clock_effort_export_totals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:ok t))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode) (require 'org-clock) (require 'ox-ascii)
  (let ((org-clock-persist nil) (org-export-show-temporary-export-buffer nil))
@@ -121,12 +128,13 @@ fn combo100_org_clock_effort_export_totals() {
   (goto-char (point-min)) (insert "#+BEGIN: clocktable :maxlevel 2 :scope file\n#+END:\n")
   (goto-char (point-min)) (search-forward "#+BEGIN:") (beginning-of-line) (org-dblock-update)
   (let ((r '())) (let ((out (org-export-as 'ascii nil nil t))) (push (list :ok (> (length out) 0)) r)) (nreverse r))))"##,
-        expect_test::expect![[r#""OK ((:ok t))""#]],
+        expect,
     );
 }
 #[test]
 fn combo100_org_mixed_all_elements_soup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (setting-constant t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode)
  (insert "#+TITLE: Soup\n\n* TODO H :tag:\nSCHEDULED: <2024-01-01>\n:PROPERTIES:\n:KEY: val\n:END:\n")
@@ -136,12 +144,15 @@ fn combo100_org_mixed_all_elements_soup() {
    (org-element-map t t #'identity)))) (r '()))
   (dolist (type types) (push (list type (length (org-element-map t type #'identity))) r))
   (push (list :unique-types (length types)) r) (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (setting-constant t)""#]],
+        expect,
     );
 }
 #[test]
 fn combo100_org_property_with_inheritance_deep_3() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:color-direct nil) (:color-inherit \"red\") (:color-select nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode)
  (insert "* Root\n:PROPERTIES:\n:COLOR: red\n:END:\n** Mid\n*** Leaf\n")
@@ -151,14 +162,13 @@ fn combo100_org_property_with_inheritance_deep_3() {
   (push (list :color-inherit (org-entry-get nil "COLOR" t)) r)
   (push (list :color-select (org-entry-get nil "COLOR" 'selective)) r)
   (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:color-direct nil) (:color-inherit \"red\") (:color-select nil))""#
-        ]],
+        expect,
     );
 }
 #[test]
 fn combo100_org_sort_all_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (user-error \"Nothing to sort\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (org-mode)
  (insert "* B\n:PROPERTIES:\n:PRIO: 2\n:END:\n* A\n:PROPERTIES:\n:PRIO: 1\n:END:\n* C\n:PROPERTIES:\n:PRIO: 3\n:END:\n")
@@ -173,6 +183,6 @@ fn combo100_org_sort_all_combinations() {
   (push (list :prop-num (mapcar (lambda (h) (substring-no-properties (org-element-property :raw-value h)))
     (org-element-map (org-element-parse-buffer) 'headline #'identity))) r)
   (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (user-error \"Nothing to sort\")""#]],
+        expect,
     );
 }

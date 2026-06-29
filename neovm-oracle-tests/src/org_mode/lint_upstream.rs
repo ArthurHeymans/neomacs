@@ -8,6 +8,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn upstream_org_lint_add_checker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-lint)
@@ -21,7 +22,7 @@ fn upstream_org_lint_add_checker() {
      (org-lint-add-checker 'check "check" #'ignore)
      (org-lint-add-checker 'check "other check" #'ignore)
      (length org-lint--checkers))))"##,
-        expect_test::expect![[r#""OK (1 1)""#]],
+        expect,
     );
 }
 
@@ -30,6 +31,9 @@ fn upstream_org_lint_add_checker() {
 #[test]
 fn upstream_org_lint_duplicate_custom_id() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (((1 [#(\"3\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate CUSTOM_ID property \\\"foo\\\"\" #s(org-lint-checker duplicate-custom-id \"Report duplicate CUSTOM_ID properties\" org-lint-duplicate-custom-id nil (link))]) (2 [#(\"8\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate CUSTOM_ID property \\\"foo\\\"\" #s(org-lint-checker duplicate-custom-id \"Report duplicate CUSTOM_ID properties\" org-lint-duplicate-custom-id nil (link))])) nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-lint)
@@ -45,9 +49,7 @@ fn upstream_org_lint_duplicate_custom_id() {
        (insert "* H1\n:PROPERTIES:\n:CUSTOM_ID: foo\n:END:\n\n* H2\n:PROPERTIES:\n:CUSTOM_ID: bar\n:END:")
        (goto-char (point-min))
        (org-lint '(duplicate-custom-id))))))"##,
-        expect_test::expect![[
-            r#""OK (((1 [#(\"3\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate CUSTOM_ID property \\\"foo\\\"\" #s(org-lint-checker duplicate-custom-id \"Report duplicate CUSTOM_ID properties\" org-lint-duplicate-custom-id nil (link))]) (2 [#(\"8\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate CUSTOM_ID property \\\"foo\\\"\" #s(org-lint-checker duplicate-custom-id \"Report duplicate CUSTOM_ID properties\" org-lint-duplicate-custom-id nil (link))])) nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -56,6 +58,9 @@ fn upstream_org_lint_duplicate_custom_id() {
 #[test]
 fn upstream_org_lint_duplicate_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate NAME \\\"foo\\\"\" #s(org-lint-checker duplicate-name \"Report duplicate NAME values\" org-lint-duplicate-name nil (babel 'link))]) (2 [#(\"4\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate NAME \\\"foo\\\"\" #s(org-lint-checker duplicate-name \"Report duplicate NAME values\" org-lint-duplicate-name nil (babel 'link))])) nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-lint)
@@ -71,9 +76,7 @@ fn upstream_org_lint_duplicate_name() {
        (insert "#+name: foo\nParagraph1\n\n#+name: bar\nParagraph 2")
        (goto-char (point-min))
        (org-lint '(duplicate-name))))))"##,
-        expect_test::expect![[
-            r#""OK (((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate NAME \\\"foo\\\"\" #s(org-lint-checker duplicate-name \"Report duplicate NAME values\" org-lint-duplicate-name nil (babel 'link))]) (2 [#(\"4\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate NAME \\\"foo\\\"\" #s(org-lint-checker duplicate-name \"Report duplicate NAME values\" org-lint-duplicate-name nil (babel 'link))])) nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -82,6 +85,9 @@ fn upstream_org_lint_duplicate_name() {
 #[test]
 fn upstream_org_lint_duplicate_target() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate target <<foo>>\" #s(org-lint-checker duplicate-target \"Report duplicate targets\" org-lint-duplicate-target nil (link))]) (2 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate target <<foo>>\" #s(org-lint-checker duplicate-target \"Report duplicate targets\" org-lint-duplicate-target nil (link))])) nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-lint)
@@ -97,9 +103,7 @@ fn upstream_org_lint_duplicate_target() {
        (insert "<<foo>> <<bar>>")
        (goto-char (point-min))
        (org-lint '(duplicate-target))))))"##,
-        expect_test::expect![[
-            r#""OK (((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate target <<foo>>\" #s(org-lint-checker duplicate-target \"Report duplicate targets\" org-lint-duplicate-target nil (link))]) (2 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate target <<foo>>\" #s(org-lint-checker duplicate-target \"Report duplicate targets\" org-lint-duplicate-target nil (link))])) nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -108,6 +112,9 @@ fn upstream_org_lint_duplicate_target() {
 #[test]
 fn upstream_org_lint_duplicate_footnote_definition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate footnote definition \\\"1\\\"\" #s(org-lint-checker duplicate-footnote-definition \"Report duplicate footnote definitions\" org-lint-duplicate-footnote-definition nil (footnote))]) (2 [#(\"3\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate footnote definition \\\"1\\\"\" #s(org-lint-checker duplicate-footnote-definition \"Report duplicate footnote definitions\" org-lint-duplicate-footnote-definition nil (footnote))])) nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-lint)
@@ -123,9 +130,7 @@ fn upstream_org_lint_duplicate_footnote_definition() {
        (insert "[fn:1] Definition 1\n\n[fn:2] Definition 2")
        (goto-char (point-min))
        (org-lint '(duplicate-footnote-definition))))))"##,
-        expect_test::expect![[
-            r#""OK (((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate footnote definition \\\"1\\\"\" #s(org-lint-checker duplicate-footnote-definition \"Report duplicate footnote definitions\" org-lint-duplicate-footnote-definition nil (footnote))]) (2 [#(\"3\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Duplicate footnote definition \\\"1\\\"\" #s(org-lint-checker duplicate-footnote-definition \"Report duplicate footnote definitions\" org-lint-duplicate-footnote-definition nil (footnote))])) nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -134,6 +139,9 @@ fn upstream_org_lint_duplicate_footnote_definition() {
 #[test]
 fn upstream_org_lint_orphaned_affiliated_keywords() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"low\" \"Orphaned affiliated keyword: \\\"NAME\\\"\" #s(org-lint-checker orphaned-affiliated-keywords \"Report orphaned affiliated keywords\" org-lint-orphaned-affiliated-keywords low nil)]))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-lint)
@@ -142,9 +150,7 @@ fn upstream_org_lint_orphaned_affiliated_keywords() {
       (insert "#+name: foo")
       (goto-char (point-min))
       (org-lint '(orphaned-affiliated-keywords)))))"##,
-        expect_test::expect![[
-            r#""OK ((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"low\" \"Orphaned affiliated keyword: \\\"NAME\\\"\" #s(org-lint-checker orphaned-affiliated-keywords \"Report orphaned affiliated keywords\" org-lint-orphaned-affiliated-keywords low nil)]))""#
-        ]],
+        expect,
     );
 }
 
@@ -153,6 +159,9 @@ fn upstream_org_lint_orphaned_affiliated_keywords() {
 #[test]
 fn upstream_org_lint_deprecated_export_blocks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"low\" \"Deprecated syntax for export block.  Use \\\"BEGIN_EXPORT latex\\\" instead\" #s(org-lint-checker deprecated-export-blocks \"Report deprecated export block syntax\" org-lint-deprecated-export-blocks low (obsolete export))]))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-lint)
@@ -161,9 +170,7 @@ fn upstream_org_lint_deprecated_export_blocks() {
       (insert "#+begin_latex\n...\n#+end_latex")
       (goto-char (point-min))
       (org-lint '(deprecated-export-blocks)))))"##,
-        expect_test::expect![[
-            r#""OK ((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"low\" \"Deprecated syntax for export block.  Use \\\"BEGIN_EXPORT latex\\\" instead\" #s(org-lint-checker deprecated-export-blocks \"Report deprecated export block syntax\" org-lint-deprecated-export-blocks low (obsolete export))]))""#
-        ]],
+        expect,
     );
 }
 
@@ -172,6 +179,9 @@ fn upstream_org_lint_deprecated_export_blocks() {
 #[test]
 fn upstream_org_lint_deprecated_header_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"low\" \"Deprecated syntax for \\\"cache\\\".  Use header-args instead\" #s(org-lint-checker deprecated-header-syntax \"Report deprecated Babel header syntax\" org-lint-deprecated-header-syntax low (obsolete babel))])) ((1 [#(\"3\" 0 1 (org-lint-marker #<marker in no buffer>)) \"low\" \"Deprecated syntax for \\\"cache\\\".  Use :header-args: instead\" #s(org-lint-checker deprecated-header-syntax \"Report deprecated Babel header syntax\" org-lint-deprecated-header-syntax low (obsolete babel))])))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-lint)
@@ -187,9 +197,7 @@ fn upstream_org_lint_deprecated_header_syntax() {
        (insert "* H\n:PROPERTIES:\n:cache: yes\n:END:")
        (goto-char (point-min))
        (org-lint '(deprecated-header-syntax))))))"##,
-        expect_test::expect![[
-            r#""OK (((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"low\" \"Deprecated syntax for \\\"cache\\\".  Use header-args instead\" #s(org-lint-checker deprecated-header-syntax \"Report deprecated Babel header syntax\" org-lint-deprecated-header-syntax low (obsolete babel))])) ((1 [#(\"3\" 0 1 (org-lint-marker #<marker in no buffer>)) \"low\" \"Deprecated syntax for \\\"cache\\\".  Use :header-args: instead\" #s(org-lint-checker deprecated-header-syntax \"Report deprecated Babel header syntax\" org-lint-deprecated-header-syntax low (obsolete babel))])))""#
-        ]],
+        expect,
     );
 }
 
@@ -198,6 +206,9 @@ fn upstream_org_lint_deprecated_header_syntax() {
 #[test]
 fn upstream_org_lint_missing_language_in_src_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Missing language in source block\" #s(org-lint-checker missing-language-in-src-block \"Report missing language in source blocks\" org-lint-missing-language-in-src-block nil (babel))]))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-lint)
@@ -206,9 +217,7 @@ fn upstream_org_lint_missing_language_in_src_block() {
       (insert "#+begin_src\n...\n#+end_src")
       (goto-char (point-min))
       (org-lint '(missing-language-in-src-block)))))"##,
-        expect_test::expect![[
-            r#""OK ((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Missing language in source block\" #s(org-lint-checker missing-language-in-src-block \"Report missing language in source blocks\" org-lint-missing-language-in-src-block nil (babel))]))""#
-        ]],
+        expect,
     );
 }
 
@@ -217,6 +226,9 @@ fn upstream_org_lint_missing_language_in_src_block() {
 #[test]
 fn upstream_org_lint_missing_backend_in_export_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Missing backend in export block\" #s(org-lint-checker missing-backend-in-export-block \"Report missing backend in export blocks\" org-lint-missing-backend-in-export-block nil (export))]))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-lint)
@@ -225,9 +237,7 @@ fn upstream_org_lint_missing_backend_in_export_block() {
       (insert "#+begin_export\n...\n#+end_export")
       (goto-char (point-min))
       (org-lint '(missing-backend-in-export-block)))))"##,
-        expect_test::expect![[
-            r#""OK ((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"nil\" \"Missing backend in export block\" #s(org-lint-checker missing-backend-in-export-block \"Report missing backend in export blocks\" org-lint-missing-backend-in-export-block nil (export))]))""#
-        ]],
+        expect,
     );
 }
 
@@ -236,6 +246,7 @@ fn upstream_org_lint_missing_backend_in_export_block() {
 #[test]
 fn upstream_org_lint_special_block_no_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-lint)
@@ -244,7 +255,7 @@ fn upstream_org_lint_special_block_no_name() {
       (insert "#+BEGIN_SPECIAL*\nContents\n#+END_SPECIAL*")
       (goto-char (point-min))
       (org-lint '(special-block-with-parameters)))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -253,6 +264,9 @@ fn upstream_org_lint_special_block_no_name() {
 #[test]
 fn upstream_org_lint_obsolete_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"low\" \"Deprecated syntax for export block.  Use \\\"BEGIN_EXPORT HTML\\\" instead\" #s(org-lint-checker deprecated-export-blocks \"Report deprecated export block syntax\" org-lint-deprecated-export-blocks low (obsolete export))])) ((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"low\" \"Deprecated syntax for export block.  Use \\\"BEGIN_EXPORT LaTeX\\\" instead\" #s(org-lint-checker deprecated-export-blocks \"Report deprecated export block syntax\" org-lint-deprecated-export-blocks low (obsolete export))])))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-lint)
@@ -268,9 +282,7 @@ fn upstream_org_lint_obsolete_syntax() {
        (insert "#+BEGIN_LaTeX\n\\textbf{Text}\n#+END_LaTeX")
        (goto-char (point-min))
         (org-lint '(deprecated-export-blocks))))))"##,
-        expect_test::expect![[
-            r#""OK (((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"low\" \"Deprecated syntax for export block.  Use \\\"BEGIN_EXPORT HTML\\\" instead\" #s(org-lint-checker deprecated-export-blocks \"Report deprecated export block syntax\" org-lint-deprecated-export-blocks low (obsolete export))])) ((1 [#(\"1\" 0 1 (org-lint-marker #<marker in no buffer>)) \"low\" \"Deprecated syntax for export block.  Use \\\"BEGIN_EXPORT LaTeX\\\" instead\" #s(org-lint-checker deprecated-export-blocks \"Report deprecated export block syntax\" org-lint-deprecated-export-blocks low (obsolete export))])))""#
-        ]],
+        expect,
     );
 }
 
@@ -278,6 +290,9 @@ fn upstream_org_lint_obsolete_syntax() {
 fn org_lint_multi_checker_report_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (nil ((25 \"Missing language in source block\")) nil ((77 \"Deprecated syntax for export block.  Use \\\"BEGIN_EXPORT HTML\\\" instead\")) 0 1 0)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-lint)
@@ -304,8 +319,6 @@ fn org_lint_multi_checker_report_deep_state_combo() {
               (length dup-name)
               (length no-lang)
               (length undef-fn))))))"##,
-        expect_test::expect![[
-            r#""OK (nil ((25 \"Missing language in source block\")) nil ((77 \"Deprecated syntax for export block.  Use \\\"BEGIN_EXPORT HTML\\\" instead\")) 0 1 0)""#
-        ]],
+        expect,
     );
 }

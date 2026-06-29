@@ -59,12 +59,10 @@ fn oracle_prop_iteralgo_sieve_with_prime_gaps() {
               'between gap-start gap-end
               'first-5 (take 5 primes)
               'last-5 (last primes 5))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (count 25 max-gap 8 between 89 97 first-5 (2 3 5 7 11) last-5 (73 79 83 89 97))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (count 25 max-gap 8 between 89 97 first-5 (2 3 5 7 11) last-5 (73 79 83 89 97))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -100,12 +98,10 @@ fn oracle_prop_iteralgo_binary_search_insertion_point() {
      (funcall bsearch sorted 10)
      (funcall bsearch sorted 50)
      (funcall bsearch sorted 100))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t . 0) (t . 5) (t . 9) (nil . 0) (nil . 3) (nil . 7) (nil . 10))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t . 0) (t . 5) (t . 9) (nil . 0) (nil . 3) (nil . 7) (nil . 10))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -152,10 +148,8 @@ fn oracle_prop_iteralgo_rpn_calculator() {
        ;; 15 7 1 1 + - / 3 * 2 1 1 + + - => complex
        (funcall 'neovm--rpn-eval '(15 7 1 1 + - / 3 * 2 1 1 + + -)))
     (fmakunbound 'neovm--rpn-eval)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((7) (14) (100) (5))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((7) (14) (100) (5))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -201,12 +195,10 @@ fn oracle_prop_iteralgo_rle_with_frequency_table() {
             (list 'encoded encoded
                   'run-length-freq freq-list
                   'roundtrip-ok (equal input decoded))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (encoded ((a . 3) (b . 2) (c . 4) (a . 2) (d . 6) (b . 1)) run-length-freq ((1 . 1) (2 . 2) (3 . 1) (4 . 1) (6 . 1)) roundtrip-ok t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (encoded ((a . 3) (b . 2) (c . 4) (a . 2) (d . 6) (b . 1)) run-length-freq ((1 . 1) (2 . 2) (3 . 1) (4 . 1) (6 . 1)) roundtrip-ok t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -260,10 +252,8 @@ fn oracle_prop_iteralgo_topological_sort_kahn() {
       ;; Verify: result length should equal number of nodes (no cycle)
       (list 'order (nreverse result)
             'valid (= (length result) (length all-nodes))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (order (a b f c d e) valid nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (order (a b f c d e) valid nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -332,10 +322,8 @@ fn oracle_prop_iteralgo_matrix_transpose_multiply() {
     (fmakunbound 'neovm--mat-ref)
     (fmakunbound 'neovm--mat-transpose)
     (fmakunbound 'neovm--mat-multiply)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (transpose-of-a [[1 4] [2 5] [3 6]] double-transpose-eq t a-times-identity t product [[19 22] [43 50]])""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (transpose-of-a [[1 4] [2 5] [3 6]] double-transpose-eq t a-times-identity t product [[19 22] [43 50]])""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx107_generator_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -19,13 +20,14 @@ fn div_cx107_generator_availability() {
             (fboundp 'lambda-iter)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx107_generator_basic_iteration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -42,13 +44,14 @@ fn div_cx107_generator_basic_iteration() {
               (iter-next iter))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx107_generator_returns_stop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -63,13 +66,14 @@ fn div_cx107_generator_returns_stop() {
         (iter-next iter)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx107_generator_stateful_accumulator() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -86,13 +90,14 @@ fn div_cx107_generator_stateful_accumulator() {
               (iter-next iter))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx107_generator_collect_to_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -107,13 +112,14 @@ fn div_cx107_generator_collect_to_list() {
                  collect x)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx107_lazy_filter_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -131,13 +137,14 @@ fn div_cx107_lazy_filter_chain() {
           (nreverse results))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx107_generator_with_closure_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -153,13 +160,14 @@ fn div_cx107_generator_with_closure_capture() {
                 (iter-next iter)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx107_iter_close_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function lambda-iter)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -175,13 +183,14 @@ fn div_cx107_iter_close_availability() {
         (iter-next iter)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""ERR (void-function lambda-iter)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx107_generator_recurse_via_yield_from() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function lambda-iter)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -200,13 +209,14 @@ fn div_cx107_generator_recurse_via_yield_from() {
                 (iter-next iter)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""ERR (void-function lambda-iter)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx107_iter_defun_named_generator() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 10 20)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -221,13 +231,14 @@ fn div_cx107_iter_defun_named_generator() {
               (iter-next iter))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (0 10 20)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx107_generator_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -261,13 +272,14 @@ fn div_cx107_generator_with_marker_overlay_undo_narrow_mega() {
                       (text-properties-at 1))))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx107_iter_lambda_idiomatic_pipeline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -284,6 +296,6 @@ fn div_cx107_iter_lambda_idiomatic_pipeline() {
                    collect (iter-next infinite-counter)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }

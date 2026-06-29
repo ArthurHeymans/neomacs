@@ -9,9 +9,10 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_erase_buffer_returns_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (set-buffer (get-buffer-create "*eb1*")) (erase-buffer))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
     assert_ok_eq("nil", &o, &n);
 }
@@ -21,9 +22,10 @@ fn oracle_erase_buffer_returns_nil() {
 #[test]
 fn oracle_buffer_string_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"\"""#]];
     let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (set-buffer (get-buffer-create "*bs-e*")) (erase-buffer) (buffer-string))"#,
-        expect_test::expect![[r#""OK \"\"""#]],
+        expect,
     );
     assert_ok_eq("\"\"", &o, &n);
 }
@@ -33,9 +35,10 @@ fn oracle_buffer_string_empty() {
 #[test]
 fn oracle_insert_integers_as_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"ABC\"""#]];
     let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (set-buffer (get-buffer-create "*ins-ints*")) (erase-buffer) (insert 65 66 67) (buffer-string))"#,
-        expect_test::expect![[r#""OK \"ABC\"""#]],
+        expect,
     );
     assert_ok_eq("\"ABC\"", &o, &n);
 }
@@ -45,9 +48,10 @@ fn oracle_insert_integers_as_chars() {
 #[test]
 fn oracle_buffer_substring_no_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"bcd\"""#]];
     let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (set-buffer (get-buffer-create "*bsnp*")) (erase-buffer) (insert "abcdef") (buffer-substring-no-properties 2 5))"#,
-        expect_test::expect![[r#""OK \"bcd\"""#]],
+        expect,
     );
     assert_ok_eq("\"bcd\"", &o, &n);
 }
@@ -57,9 +61,10 @@ fn oracle_buffer_substring_no_properties() {
 #[test]
 fn oracle_buffer_size_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 0""#]];
     let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (set-buffer (get-buffer-create "*bsize*")) (erase-buffer) (buffer-size))"#,
-        expect_test::expect![[r#""OK 0""#]],
+        expect,
     );
     assert_ok_eq("0", &o, &n);
 }
@@ -67,9 +72,10 @@ fn oracle_buffer_size_empty() {
 #[test]
 fn oracle_buffer_size_after_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 5""#]];
     let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (set-buffer (get-buffer-create "*bsize2*")) (erase-buffer) (insert "hello") (buffer-size))"#,
-        expect_test::expect![[r#""OK 5""#]],
+        expect,
     );
     assert_ok_eq("5", &o, &n);
 }
@@ -79,9 +85,10 @@ fn oracle_buffer_size_after_insert() {
 #[test]
 fn oracle_point_min_max_empty_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 1)""#]];
     let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (set-buffer (get-buffer-create "*pmm*")) (erase-buffer) (list (point-min) (point-max)))"#,
-        expect_test::expect![[r#""OK (1 1)""#]],
+        expect,
     );
     assert_ok_eq("(1 1)", &o, &n);
 }
@@ -91,10 +98,11 @@ fn oracle_point_min_max_empty_buffer() {
 #[test]
 fn oracle_goto_char_beyond_max_goes_to_max() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 4""#]];
     // goto-char clamps to valid range
     let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (set-buffer (get-buffer-create "*gc*")) (erase-buffer) (insert "abc") (goto-char 100) (point))"#,
-        expect_test::expect![[r#""OK 4""#]],
+        expect,
     );
     assert_ok_eq("4", &o, &n);
 }
@@ -104,9 +112,10 @@ fn oracle_goto_char_beyond_max_goes_to_max() {
 #[test]
 fn oracle_narrow_to_region_and_widen() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 6 9)""#]];
     let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (set-buffer (get-buffer-create "*narrow*")) (erase-buffer) (insert "abcdefgh") (narrow-to-region 3 6) (list (point-min) (point-max) (progn (widen) (point-max))))"#,
-        expect_test::expect![[r#""OK (3 6 9)""#]],
+        expect,
     );
     assert_ok_eq("(3 6 9)", &o, &n);
 }

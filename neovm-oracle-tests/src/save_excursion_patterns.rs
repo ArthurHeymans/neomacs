@@ -51,10 +51,8 @@ fn oracle_prop_save_excursion_deeply_nested_restore() {
         ;; back from level 1
         (push (point) results)
         (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (5 10 20 30 37 1 37 30 20 10 5)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (5 10 20 30 37 1 37 30 20 10 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -98,12 +96,10 @@ fn oracle_prop_save_excursion_interleaved_insert_delete() {
         (push (point) results)
 
         (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"01XXX23456789ABCDEF\" 12 56 \"01X456789ABCDEF\" 4 \"01X456789ABCDEFYYYYY\" 4)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"01XXX23456789ABCDEF\" 12 56 \"01X456789ABCDEF\" 4 \"01X456789ABCDEFYYYYY\" 4)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -150,12 +146,10 @@ fn oracle_prop_save_excursion_loop_scan_collect() {
               (point)
               (> (point) orig)  ;; should have shifted right
               (buffer-substring (point-min) (+ (point-min) 9)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"line-A\" \"line-B\" \"line-C\" \"line-D\" \"line-E\") 5 15 25 t \"PREPENDED\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"line-A\" \"line-B\" \"line-C\" \"line-D\" \"line-E\") 5 15 25 t \"PREPENDED\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -192,12 +186,10 @@ fn oracle_prop_save_excursion_error_unwind() {
               error-caught
               (buffer-string)
               (= (point) pre-point))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (7 7 20 \"deliberate error at pos 28\" \"hello world of saveINSERTED-excursion error handling test\" t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (7 7 20 \"deliberate error at pos 28\" \"hello world of saveINSERTED-excursion error handling test\" t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -239,12 +231,10 @@ fn oracle_prop_save_excursion_restriction_nested_widen() {
                     (point) (= (point) outer-point))
               results)
         (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((widened 1 26 10) (inner-narrow 1 10 10) (after-inner 1 26 10) (restored 6 t 20 t 10 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((widened 1 26 10) (inner-narrow 1 10 10) (after-inner 1 26 10) (restored 6 t 20 t 10 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -304,12 +294,10 @@ fn oracle_prop_save_excursion_multi_buffer_switching() {
         (kill-buffer buf1)
         (kill-buffer buf2)
         (kill-buffer buf3)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((buf1-before 8 \"neovm--se-pat-1\") (in-buf2 15 \"neovm--se-pat-2\") (in-buf3 5 \"neovm--se-pat-3\") (buf3-after-insert 8 \"PREFIX-Buffer-Three-Here\") (back-to-buf2 45 \"neovm--se-pat-2\") (back-to-buf1 8 \"neovm--se-pat-1\") (buf2-content \"Buffer-Two-Content-Here-Extended MODIFIED-B2\") (buf3-content \"PREFIX-Buffer-Three-Here\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((buf1-before 8 \"neovm--se-pat-1\") (in-buf2 15 \"neovm--se-pat-2\") (in-buf3 5 \"neovm--se-pat-3\") (buf3-after-insert 8 \"PREFIX-Buffer-Three-Here\") (back-to-buf2 45 \"neovm--se-pat-2\") (back-to-buf1 8 \"neovm--se-pat-1\") (buf2-content \"Buffer-Two-Content-Here-Extended MODIFIED-B2\") (buf3-content \"PREFIX-Buffer-Three-Here\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -368,12 +356,10 @@ fn oracle_prop_save_excursion_multi_pass_transformer() {
                       (lambda (a b) (string-lessp (car a) (car b))))
                 (point)
                 (= (point) orig-point)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"THE [cat] sat on THE mat and THE [cat] ate THE rat\" 0 ((\"and\" . 1) (\"ate\" . 1) (\"cat\" . 2) (\"mat\" . 1) (\"on\" . 1) (\"rat\" . 1) (\"sat\" . 1) (\"the\" . 4)) 14 nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"THE [cat] sat on THE mat and THE [cat] ate THE rat\" 0 ((\"and\" . 1) (\"ate\" . 1) (\"cat\" . 2) (\"mat\" . 1) (\"on\" . 1) (\"rat\" . 1) (\"sat\" . 1) (\"the\" . 4)) 14 nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -410,8 +396,7 @@ fn oracle_prop_save_excursion_recursive_processing() {
                 (point)
                 orig-point)))
     (fmakunbound 'neovm--test-se-process)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"start [d0:n1] middle [d1:n2] end [d2:n3] tail\" 7 7)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (\"start [d0:n1] middle [d1:n2] end [d2:n3] tail\" 7 7)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

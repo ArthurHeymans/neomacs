@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx138_ediff_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -18,13 +19,14 @@ fn div_cx138_ediff_availability() {
             (boundp 'ediff-window-setup-function)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx138_smerge_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -35,13 +37,14 @@ fn div_cx138_smerge_mode_availability() {
             (fboundp 'smerge-ediff)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx138_diff_mode_parse_hunks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t diff-header diff-removed 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -55,13 +58,14 @@ fn div_cx138_diff_mode_parse_hunks() {
             (next-single-property-change 1 'face)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t diff-header diff-removed 5)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx138_smerge_parse_conflict() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -73,13 +77,14 @@ fn div_cx138_smerge_parse_conflict() {
             (next-single-property-change 1 'face)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx138_ediff_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -89,13 +94,14 @@ fn div_cx138_ediff_predicates() {
           (boundp 'ediff-split-window-function))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx138_diff_hunk_metadata() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil 29)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -108,13 +114,14 @@ fn div_cx138_diff_hunk_metadata() {
         (list hunk-beg (point))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil 29)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx138_smerge_resolve_keep_mine() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"mine\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -128,13 +135,14 @@ fn div_cx138_smerge_resolve_keep_mine() {
       (buffer-string))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK \"mine\n\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx138_smerge_resolve_keep_other() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"theirs\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -148,13 +156,14 @@ fn div_cx138_smerge_resolve_keep_other() {
       (buffer-string))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK \"theirs\n\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx138_diff_apply_hunk_to_source() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -164,13 +173,14 @@ fn div_cx138_diff_apply_hunk_to_source() {
           (boundp 'diff-refine-hunk))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx138_diff_reversed_direction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -183,13 +193,14 @@ fn div_cx138_diff_reversed_direction() {
       (buffer-substring 1 60))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx138_ediff_get_remote_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -198,13 +209,14 @@ fn div_cx138_ediff_get_remote_buffer() {
           (boundp 'ediff-meta-buffer))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx138_diff_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -230,6 +242,6 @@ fn div_cx138_diff_with_marker_overlay_undo_narrow_mega() {
                 (text-properties-at 1)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     );
 }

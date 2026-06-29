@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_field_beginning_end_of_field() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass field-boundary ()
@@ -63,7 +64,7 @@ fn combo_eieio_field_beginning_end_of_field() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -71,6 +72,7 @@ fn combo_eieio_field_beginning_end_of_field() {
 fn combo_eieio_field_overlay_priority_clash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass field-clash ()
@@ -123,7 +125,7 @@ fn combo_eieio_field_overlay_priority_clash() {
               (overlay-start ov1) (overlay-end ov1)
               (overlay-start ov2) (overlay-end ov2)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -131,6 +133,7 @@ fn combo_eieio_field_overlay_priority_clash() {
 fn combo_eieio_field_narrow_constrain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass narrow-field-snap ()
@@ -197,7 +200,7 @@ fn combo_eieio_field_narrow_constrain() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -205,6 +208,7 @@ fn combo_eieio_field_narrow_constrain() {
 fn combo_eieio_field_delete_field_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass field-edit ()
@@ -259,7 +263,7 @@ fn combo_eieio_field_delete_field_undo() {
                 (overlay-start ov) (overlay-end ov)
                 (get-text-property 3 'field)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -267,6 +271,8 @@ fn combo_eieio_field_delete_field_undo() {
 fn combo_eieio_field_line_beginning_field_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""ERR (wrong-number-of-arguments line-beginning-position 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass line-field-snap ()
@@ -324,6 +330,6 @@ fn combo_eieio_field_line_beginning_field_boundary() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments line-beginning-position 2)""#]],
+        expect,
     );
 }

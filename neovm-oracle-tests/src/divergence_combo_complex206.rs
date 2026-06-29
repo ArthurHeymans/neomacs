@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx206_regex_groups_full_match_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((0 24 0 5 6 9 10 14 15 18 19 24) \"alpha 123 beta 456 gamma\" \"alpha\" \"123\" \"beta\" \"456\" \"gamma\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "alpha 123 beta 456 gamma"))
@@ -15,15 +18,14 @@ fn div_cx206_regex_groups_full_match_data() {
         (match-string 0 s) (match-string 1 s) (match-string 2 s)
         (match-string 3 s) (match-string 4 s) (match-string 5 s)))
 "##,
-        expect_test::expect![[
-            r#""OK ((0 24 0 5 6 9 10 14 15 18 19 24) \"alpha 123 beta 456 gamma\" \"alpha\" \"123\" \"beta\" \"456\" \"gamma\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx206_backreference_in_regex_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 \"hello\" nil 0 \"42\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-match "\\(\\w+\\) \\1" "hello hello")
@@ -32,13 +34,14 @@ fn div_cx206_backreference_in_regex_match() {
       (string-match "\\([0-9]+\\)-\\1" "42-42")
       (match-string 1 "42-42"))
 "##,
-        expect_test::expect![[r#""OK (0 \"hello\" nil 0 \"42\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx206_word_boundary_across_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (6 \"世界\" 9 \"café\" 17 \"123\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "hello 世界 café 世界 123"))
@@ -49,13 +52,14 @@ fn div_cx206_word_boundary_across_multibyte() {
         (string-match "\\b[0-9]+\\b" s)
         (match-string 0 s)))
 "##,
-        expect_test::expect![[r#""OK (6 \"世界\" 9 \"café\" 17 \"123\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx206_looking_at_chain_then_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t \"First\" 6 \"First\" 13 \"Second\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -68,13 +72,14 @@ fn div_cx206_looking_at_chain_then_search() {
         (re-search-forward "[a-z]+" nil t)
         (match-string 0)))
 "##,
-        expect_test::expect![[r#""OK (t \"First\" 6 \"First\" 13 \"Second\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx206_replace_match_with_backref_in_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"alpha:name age:42 city:Tokyo\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -84,13 +89,14 @@ fn div_cx206_replace_match_with_backref_in_buffer() {
   (replace-match "\\2:\\1")
   (buffer-string))
 "##,
-        expect_test::expect![[r#""OK \"alpha:name age:42 city:Tokyo\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx206_skip_chars_forward_backward_combination() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (4 12 15 23 \"hello123\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -105,13 +111,14 @@ fn div_cx206_skip_chars_forward_backward_combination() {
         (skip-chars-forward "a-zA-Z0-9")
         (list p1 p2 p3 (point) (buffer-substring p1 p2))))))
 "##,
-        expect_test::expect![[r#""OK (4 12 15 23 \"hello123\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx206_match_data_save_restore_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 0 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (saved)
@@ -126,13 +133,16 @@ fn div_cx206_match_data_save_restore_set() {
           (match-string 2)
           (match-string 3))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 0 5)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx206_occur_with_multiple_matches() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK \"alpha line\nbeta line\nalpha again\ngamma line\nalpha third\n\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -145,15 +155,14 @@ fn div_cx206_occur_with_multiple_matches() {
           (when ob (kill-buffer ob)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK \"alpha line\nbeta line\nalpha again\ngamma line\nalpha third\n\"""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx206_case_fold_search_affects_re_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil 6 \"Hello\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -170,13 +179,14 @@ fn div_cx206_case_fold_search_affects_re_search() {
      (re-search-forward "[a-z]+" nil t)
      (match-string 0))))
 "##,
-        expect_test::expect![[r#""OK (nil 6 \"Hello\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx206_regex_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -204,6 +214,6 @@ fn div_cx206_regex_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1)))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

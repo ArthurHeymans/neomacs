@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_advice_on_buffer_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""LLOERR (void-function advice--cdar)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-aobf-log-xxx nil)
@@ -28,7 +29,7 @@ fn divergence_advice_on_buffer_functions() {
           (eq (car (nth 1 log)) 'before-delete)
           (buffer-string)
           (string= (buffer-string) "LLO")))) "#,
-        expect_test::expect![[r#""LLOERR (void-function advice--cdar)""#]],
+        expect,
     );
 }
 
@@ -36,6 +37,7 @@ fn divergence_advice_on_buffer_functions() {
 fn divergence_keymap_with_eieio_command() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t counter t 3 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-kwec-xxx ()
@@ -61,7 +63,7 @@ fn divergence_keymap_with_eieio_command() {
             (test-kwec-count obj)
             (= (test-kwec-count obj) 3)
             (commandp 'test-kwec-cmd-xxx))))) "#,
-        expect_test::expect![[r#""OK (t counter t 3 t t)""#]],
+        expect,
     );
 }
 
@@ -69,6 +71,7 @@ fn divergence_keymap_with_eieio_command() {
 fn divergence_undo_with_advised_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""PREFIX-MODIFIEDERR (void-function advice--cdar)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-uwai-count-xxx 0)
@@ -99,7 +102,7 @@ fn divergence_undo_with_advised_insert() {
             (eq (get-text-property 1 'tag) 'original)
             (overlay-get ov 'type)
             (eq (overlay-get ov 'type) 'wrapper))))) "#,
-        expect_test::expect![[r#""PREFIX-MODIFIEDERR (void-function advice--cdar)""#]],
+        expect,
     );
 }
 
@@ -107,6 +110,7 @@ fn divergence_undo_with_advised_insert() {
 fn divergence_eieio_with_advised_methods() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-ewam-xxx ()
@@ -129,7 +133,7 @@ fn divergence_eieio_with_advised_methods() {
             (= (test-ewam-value obj) 10)
             (let ((r2 (test-ewam-process-xxx obj)))
               (equal r2 '(result 20 before 10)))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -137,6 +141,8 @@ fn divergence_eieio_with_advised_methods() {
 fn divergence_closure_with_buffer_local_and_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""CONTENTINSERTED--HEREERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (make-local-variable 'test-cwblu-xxx)
@@ -167,7 +173,7 @@ fn divergence_closure_with_buffer_local_and_undo() {
             (overlay-get ov 'scope) (eq (overlay-get ov 'scope) 'local)
             (get-text-property 1 'section) (eq (get-text-property 1 'section) 'header)
             (get-text-property 8 'section) (eq (get-text-property 8 'section) 'body))))) "#,
-        expect_test::expect![[r#""CONTENTINSERTED--HEREERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -175,6 +181,8 @@ fn divergence_closure_with_buffer_local_and_undo() {
 fn divergence_keymap_advice_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""EDITABLEXX-MODIFIED-HEREERR (void-function advice--cdar)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "EDITABLE-CONTENT-HERE")
@@ -214,7 +222,7 @@ fn divergence_keymap_advice_undo_chain() {
             (get-text-property 1 'zone) (eq (get-text-property 1 'zone) 'editable)
             (get-text-property 9 'zone) (eq (get-text-property 9 'zone) 'content)
             (get-text-property 16 'zone) (eq (get-text-property 16 'zone) 'tail))))) "#,
-        expect_test::expect![[r#""EDITABLEXX-MODIFIED-HEREERR (void-function advice--cdar)""#]],
+        expect,
     );
 }
 
@@ -222,6 +230,9 @@ fn divergence_keymap_advice_undo_chain() {
 fn divergence_recursive_edit_with_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""STATE-BEFORE-APPENDEDOK (13 nil 6 t #(\"STATE-BEFORE\" 0 4 (part state) 5 10 (part before)) t state t #(\"STATE-BEFORE-APPENDED\" 0 4 (part state) 5 10 (part before) 11 12 (part appended) 12 19 (part appended)) t state t appended t modified t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "STATE-BEFORE")
@@ -247,9 +258,7 @@ fn divergence_recursive_edit_with_state() {
             (get-text-property 1 'part) (eq (get-text-property 1 'part) 'state)
             (get-text-property 12 'part) (eq (get-text-property 12 'part) 'appended)
             (overlay-get ov 'phase) (eq (overlay-get ov 'phase) 'modified))))) "#,
-        expect_test::expect![[
-            r#""STATE-BEFORE-APPENDEDOK (13 nil 6 t #(\"STATE-BEFORE\" 0 4 (part state) 5 10 (part before)) t state t #(\"STATE-BEFORE-APPENDED\" 0 4 (part state) 5 10 (part before) 11 12 (part appended) 12 19 (part appended)) t state t appended t modified t)""#
-        ]],
+        expect,
     );
 }
 
@@ -257,6 +266,7 @@ fn divergence_recursive_edit_with_state() {
 fn divergence_multibyte_undo_with_overlay_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCαβ�����ERR (args-out-of-range 4 9)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABC\x03B1\x03B2\x03B3DEF")
@@ -288,7 +298,7 @@ fn divergence_multibyte_undo_with_overlay_props() {
             (get-text-property 1 'script) (eq (get-text-property 1 'script) 'latin)
             (get-text-property 4 'script) (eq (get-text-property 4 'script) 'greek)
             (get-text-property 10 'script) (eq (get-text-property 10 'script) 'latin))))) "#,
-        expect_test::expect![[r#""ABCαβ�����ERR (args-out-of-range 4 9)""#]],
+        expect,
     );
 }
 
@@ -296,6 +306,7 @@ fn divergence_multibyte_undo_with_overlay_props() {
 fn divergence_edit_session_full_lifecycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""NEDIT1--MIDDLEERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "SESSION-START")
@@ -329,7 +340,7 @@ fn divergence_edit_session_full_lifecycle() {
             (overlay-get ov-session 'session) (eq (overlay-get ov-session 'session) 'active)
             (get-text-property 1 'region) (eq (get-text-property 1 'region) 'header)
             (get-text-property 8 'region) (eq (get-text-property 8 'region) 'body))))) "#,
-        expect_test::expect![[r#""NEDIT1--MIDDLEERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -337,6 +348,9 @@ fn divergence_edit_session_full_lifecycle() {
 fn divergence_propagate_props_through_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""aaa-REPLACED-ccc-REPLACED-eee-REPLACED-gggERR (wrong-type-argument listp t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "aaa-bbb-ccc-ddd-eee-fff-ggg")
@@ -370,8 +384,6 @@ fn divergence_propagate_props_through_replace() {
             (get-text-property 21 'idx) (= (get-text-property 21 'idx) 6)
             (get-text-property 25 'idx) (= (get-text-property 25 'idx) 7)
             (overlay-get ov 'scope) (eq (overlay-get ov 'scope) 'all))))) "#,
-        expect_test::expect![[
-            r#""aaa-REPLACED-ccc-REPLACED-eee-REPLACED-gggERR (wrong-type-argument listp t)""#
-        ]],
+        expect,
     );
 }

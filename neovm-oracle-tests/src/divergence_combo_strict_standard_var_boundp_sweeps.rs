@@ -11,6 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_i0_isearch_search_var_sweep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t nil t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'search-default-mode)
@@ -24,13 +25,14 @@ fn div_i0_isearch_search_var_sweep() {
       (boundp 'search-exit-option)
       (boundp 'isearch-yank-on-move))
 "##,
-        expect_test::expect![[r#""OK (t t t t nil t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_i0_standard_hooks_sweep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'find-file-hook)
@@ -42,13 +44,14 @@ fn div_i0_standard_hooks_sweep() {
       (boundp 'change-major-mode-after-body-hook)
       (boundp 'first-change-hook))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_i0_window_scroll_functions_missing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK t
     // Neomacs:   OK nil
@@ -58,13 +61,14 @@ fn div_i0_window_scroll_functions_missing() {
         r##"
 (boundp 'window-scroll-functions)
 "##,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_i0_misc_standard_vars_sweep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t nil t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'text-quoting-style)
@@ -80,13 +84,14 @@ fn div_i0_misc_standard_vars_sweep() {
       (boundp 'indicate-buffer-boundaries)
       (boundp 'glyphless-char-display))
 "##,
-        expect_test::expect![[r#""OK (t t t t t nil t t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_i0_face_and_display_vars_sweep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t nil t nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'face-font-family-alternatives)
@@ -98,13 +103,14 @@ fn div_i0_face_and_display_vars_sweep() {
       (boundp 'font-list-limit)
       (boundp 'x-gtk-use-system-tooltips))
 "##,
-        expect_test::expect![[r#""OK (t t t nil t nil nil t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_i0_coding_charset_vars_sweep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'charset-map)
@@ -116,6 +122,6 @@ fn div_i0_coding_charset_vars_sweep() {
       (boundp 'input-method-alist)
       (boundp 'coding-category-list))
 "##,
-        expect_test::expect![[r#""OK (nil nil t t t t t t)""#]],
+        expect,
     );
 }

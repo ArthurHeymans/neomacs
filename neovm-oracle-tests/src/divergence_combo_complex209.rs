@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx209_thread_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -18,13 +19,14 @@ fn div_cx209_thread_availability() {
           (boundp 'main-thread))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx209_mutex_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -35,13 +37,14 @@ fn div_cx209_mutex_availability() {
           (fboundp 'mutex-owner))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx209_condition_variable_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -51,13 +54,14 @@ fn div_cx209_condition_variable_availability() {
           (fboundp 'condition-broadcast))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx209_current_thread_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -68,13 +72,14 @@ fn div_cx209_current_thread_query() {
             (>= (length (all-threads)) 1)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx209_mutex_lock_unlock_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -87,13 +92,14 @@ fn div_cx209_mutex_lock_unlock_round_trip() {
                 (null owner-unlocked)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx209_with_mutex_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -105,13 +111,14 @@ fn div_cx209_with_mutex_macro() {
             (nreverse result)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx209_sqlite_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -122,13 +129,14 @@ fn div_cx209_sqlite_availability() {
           (boundp 'sqlite-sqlite-version))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx209_sqlite_values_validation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -137,13 +145,14 @@ fn div_cx209_sqlite_values_validation() {
           (boundp 'sqlite-default-directory))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx209_dynamic_library_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -153,13 +162,14 @@ fn div_cx209_dynamic_library_availability() {
           (boundp 'dynamic-library-alist))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx209_thread_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -187,6 +197,6 @@ fn div_cx209_thread_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     );
 }

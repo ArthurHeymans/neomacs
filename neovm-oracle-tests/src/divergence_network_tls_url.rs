@@ -7,12 +7,13 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_network_options() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'network-interface-list)
   (fboundp 'network-interface-info)
   (fboundp 'format-network-address)) "#,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
@@ -20,13 +21,14 @@ fn divergence_network_options() {
 fn divergence_socket_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'open-network-stream)
   (fboundp 'gnutls-available-p)
   (fboundp 'open-gnutls-stream)
   (featurep 'gnutls)) "#,
-        expect_test::expect![[r#""OK (t t nil nil)""#]],
+        expect,
     );
 }
 
@@ -34,6 +36,7 @@ fn divergence_socket_functions() {
 fn divergence_tls_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable gnutls-trustfiles)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'gnutls-trustfiles)
@@ -41,7 +44,7 @@ fn divergence_tls_vars() {
   (boundp 'gnutls-verify-error)
   (boundp 'gnutls-min-prime-bits)
   (integerp gnutls-min-prime-bits)) "#,
-        expect_test::expect![[r#""ERR (void-variable gnutls-trustfiles)""#]],
+        expect,
     );
 }
 
@@ -49,13 +52,14 @@ fn divergence_tls_vars() {
 fn divergence_url_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'url-configuration-directory)
   (boundp 'url-cookie-file)
   (boundp 'url-history-file)
   (fboundp 'url-insert-file-contents)) "#,
-        expect_test::expect![[r#""OK (nil nil nil t)""#]],
+        expect,
     );
 }
 
@@ -63,13 +67,14 @@ fn divergence_url_vars() {
 fn divergence_dns_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 5 26)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'dns-query)
   (fboundp 'dns-lookup-host)
   (fboundp 'network-lookup-address-info)
   (fboundp 'lookup-host)))) "#,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 5 26)""#]],
+        expect,
     );
 }
 
@@ -77,6 +82,9 @@ fn divergence_dns_functions() {
 fn divergence_network_lookup_numeric_hint() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (([127 0 0 1 0]) nil (error error \"Unsupported hints value\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (network-lookup-address-info "127.0.0.1" 'ipv4 'numeric)
@@ -84,9 +92,7 @@ fn divergence_network_lookup_numeric_hint() {
   (condition-case err
       (network-lookup-address-info "127.0.0.1" 'ipv4 'canonical)
     (error (list 'error (car err) (cadr err))))) "#,
-        expect_test::expect![[
-            r#""OK (([127 0 0 1 0]) nil (error error \"Unsupported hints value\"))""#
-        ]],
+        expect,
     );
 }
 
@@ -94,13 +100,14 @@ fn divergence_network_lookup_numeric_hint() {
 fn divergence_http_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'url-http-file-exists-p)
   (fboundp 'url-file-exists-p)
   (fboundp 'url-file-directory-p)
   (fboundp 'url-expand-file-name)) "#,
-        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
+        expect,
     );
 }
 
@@ -108,13 +115,14 @@ fn divergence_http_functions() {
 fn divergence_ldap_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'ldap-open)
   (fboundp 'ldap-close)
   (fboundp 'ldap-search)
   (featurep 'ldap)) "#,
-        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
+        expect,
     );
 }
 
@@ -122,13 +130,14 @@ fn divergence_ldap_functions() {
 fn divergence_mime_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'mime-edit)
   (fboundp 'mailcap-parse-mailcaps)
   (fboundp 'mailcap-mime-info)
   (featurep 'mailcap)) "#,
-        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
+        expect,
     );
 }
 
@@ -136,13 +145,14 @@ fn divergence_mime_functions() {
 fn divergence_mail_utils() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'mail-strip-quoted-names)
   (fboundp 'rfc822-addresses)
   (fboundp 'mail-header-parse-address)
   (featurep 'mail-utils)) "#,
-        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
+        expect,
     );
 }
 
@@ -150,12 +160,13 @@ fn divergence_mail_utils() {
 fn divergence_news_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'gnus)
   (fboundp 'gnus-group-read-news)
   (fboundp 'gnus-msg-mail)
   (featurep 'gnus)) "#,
-        expect_test::expect![[r#""OK (t nil t nil)""#]],
+        expect,
     );
 }

@@ -44,12 +44,10 @@ fn oracle_prop_maphash_collect_keys_values() {
                             total
                             max-key
                             max-val)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"alpha\" \"beta\" \"delta\" \"epsilon\" \"gamma\") (50 100 150 200 300) 5 800 \"delta\" 300)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"alpha\" \"beta\" \"delta\" \"epsilon\" \"gamma\") (50 100 150 200 300) 5 800 \"delta\" 300)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -74,10 +72,8 @@ fn oracle_prop_maphash_return_value() {
                       (let ((acc 0))
                         (list (maphash (lambda (k v) (setq acc (+ acc v))) h1)
                               acc))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p a)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p a)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -120,10 +116,8 @@ fn oracle_prop_maphash_count_predicates() {
                             user-count admin-count
                             above-30
                             user-total-age admin-total-age)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (4 4 3 3 117 96)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (4 4 3 3 117 96)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -165,10 +159,8 @@ fn oracle_prop_maphash_invert_hash_table() {
               (sort (gethash 20 inv2) #'string<)
               (gethash 30 inv2)
               (hash-table-count inv2))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((a b c d nil) (x z) (w y) (v) 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((a b c d nil) (x z) (w y) (v) 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -230,12 +222,10 @@ RESOLVE is a function (lambda (key val1 val2) -> merged-val)."
                   (list (hash-table-count m1) (hash-table-count m2)
                         (hash-table-count m3) (hash-table-count m4))))))))
     (fmakunbound 'neovm--ht-merge)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((10 20 30 40) (10 25 35 40) (10 45 65 40) (10 25 35 40) (4 4 4 4))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((10 20 30 40) (10 25 35 40) (10 45 65 40) (10 25 35 40) (4 4 4 4))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -285,12 +275,10 @@ fn oracle_prop_maphash_group_entries() {
                           (sort counts (lambda (a b)
                                          (string< (symbol-name (car a))
                                                   (symbol-name (car b)))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((alice dave) (bob grace) (carol frank) (eve) (hank) ((A . 2) (B . 2) (C . 2) (D . 1) (F . 1)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((alice dave) (bob grace) (carol frank) (eve) (hank) ((A . 2) (B . 2) (C . 2) (D . 1) (F . 1)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -349,12 +337,10 @@ fn oracle_prop_maphash_nested_hash_tables() {
                         company-total
                         company-count
                         (sort all-employees #'string<))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((eng 3 360 (alice bob carol)) (hr 2 175 (frank grace)) (sales 2 195 (dave eve))) 730 7 (alice bob carol dave eve frank grace))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((eng 3 360 (alice bob carol)) (hr 2 175 (frank grace)) (sales 2 195 (dave eve))) 730 7 (alice bob carol dave eve frank grace))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -398,12 +384,10 @@ fn oracle_prop_maphash_histogram_statistics() {
                               mode mode-count
                               unique-count total-entries
                               (sort singletons #'<)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 . 2) (2 . 2) (3 . 4) (4 . 2) (5 . 3) (6 . 1) (7 . 1) (8 . 2) (9 . 3)) 3 4 9 20 (6 7))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 . 2) (2 . 2) (3 . 4) (4 . 2) (5 . 3) (6 . 1) (7 . 1) (8 . 2) (9 . 3)) 3 4 9 20 (6 7))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -500,10 +484,8 @@ fn oracle_prop_maphash_set_operations() {
     (fmakunbound 'neovm--set-intersection)
     (fmakunbound 'neovm--set-difference)
     (fmakunbound 'neovm--set-symmetric-difference)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4 5 6 7) (3 4 5) (1 2) (6 7) (1 2 6 7) ((1 2 3 4 5) nil (1 2 3 4 5)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5 6 7) (3 4 5) (1 2) (6 7) (1 2 6 7) ((1 2 3 4 5) nil (1 2 3 4 5)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

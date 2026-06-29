@@ -7,13 +7,14 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_minibuffer_variables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable minibuf-window)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (booleanp minibuf-window)
   (windowp minibuf-window)
   (integerp minibuffer-depth-indicator-function)
   (booleanp enable-recursive-minibuffers))"#,
-        expect_test::expect![[r#""ERR (void-variable minibuf-window)""#]],
+        expect,
     );
 }
 
@@ -21,6 +22,7 @@ fn divergence_minibuffer_variables() {
 fn divergence_minibuffer_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (windowp (minibuffer-window))
@@ -28,7 +30,7 @@ fn divergence_minibuffer_window() {
   (bufferp (window-buffer (minibuffer-window)))
   (minibuffer-window-active-p (minibuffer-window))
   (window-minibuffer-p (minibuffer-window)))"#,
-        expect_test::expect![[r#""OK (t t t nil t)""#]],
+        expect,
     );
 }
 
@@ -36,12 +38,13 @@ fn divergence_minibuffer_window() {
 fn divergence_minibuffer_contents() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (stringp (minibuffer-prompt-width))
   (fboundp 'minibuffer-contents)
   (fboundp 'minibuffer-contents-no-properties))"#,
-        expect_test::expect![[r#""OK (nil t t)""#]],
+        expect,
     );
 }
 
@@ -49,13 +52,14 @@ fn divergence_minibuffer_contents() {
 fn divergence_completion_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'try-completion)
   (fboundp 'all-completions)
   (fboundp 'completion-boundaries)
   (string= (try-completion "fo" '(("foo") ("bar") ("foobar"))) "foobar"))"#,
-        expect_test::expect![[r#""OK (t t t nil)""#]],
+        expect,
     );
 }
 
@@ -63,11 +67,12 @@ fn divergence_completion_functions() {
 fn divergence_all_completions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((\"alpha\" \"alphabetic\") \"alpha\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((coll '(("alpha") ("beta") ("gamma") ("alphabetic"))))
   (list (sort (all-completions "al" coll) #'string<)
         (try-completion "al" coll)))"#,
-        expect_test::expect![[r#""OK ((\"alpha\" \"alphabetic\") \"alpha\")""#]],
+        expect,
     );
 }
 
@@ -75,11 +80,12 @@ fn divergence_all_completions() {
 fn divergence_completion_regexp_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((\"alpha\") (\"lph\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((completion-regexp-list '("lph")))
   (list (all-completions "" '(("alpha") ("beta") ("gamma")))
         completion-regexp-list))"#,
-        expect_test::expect![[r#""OK ((\"alpha\") (\"lph\"))""#]],
+        expect,
     );
 }
 
@@ -87,6 +93,7 @@ fn divergence_completion_regexp_list() {
 fn divergence_ring_create_and_access() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (c b a 3 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(require 'ring)
 (let ((r (make-ring 5)))
@@ -98,7 +105,7 @@ fn divergence_ring_create_and_access() {
         (ring-ref r 2)
         (ring-length r)
         (ring-size r)))"#,
-        expect_test::expect![[r#""OK (c b a 3 5)""#]],
+        expect,
     );
 }
 
@@ -106,6 +113,7 @@ fn divergence_ring_create_and_access() {
 fn divergence_ring_overflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (4 3 2 3 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(require 'ring)
 (let ((r (make-ring 3)))
@@ -116,7 +124,7 @@ fn divergence_ring_overflow() {
         (ring-ref r 2)
         (ring-length r)
         (ring-size r)))"#,
-        expect_test::expect![[r#""OK (4 3 2 3 3)""#]],
+        expect,
     );
 }
 
@@ -124,6 +132,7 @@ fn divergence_ring_overflow() {
 fn divergence_ring_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (c a 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(require 'ring)
 (let ((r (make-ring 5)))
@@ -134,7 +143,7 @@ fn divergence_ring_remove() {
   (list (ring-ref r 0)
         (ring-ref r 1)
         (ring-length r)))"#,
-        expect_test::expect![[r#""OK (c a 2)""#]],
+        expect,
     );
 }
 
@@ -142,6 +151,7 @@ fn divergence_ring_remove() {
 fn divergence_ring_elements() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((5 1 4 1 3) (0 5 . [3 1 4 1 5]))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(require 'ring)
 (let ((r (make-ring 5)))
@@ -152,6 +162,6 @@ fn divergence_ring_elements() {
   (ring-insert r 5)
   (list (ring-elements r)
         (ring-copy r)))"#,
-        expect_test::expect![[r#""OK ((5 1 4 1 3) (0 5 . [3 1 4 1 5]))""#]],
+        expect,
     );
 }

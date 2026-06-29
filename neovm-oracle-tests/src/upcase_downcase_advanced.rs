@@ -28,12 +28,10 @@ fn oracle_prop_case_mixed_with_non_alpha() {
       (downcase "mixed123CASE_test.value")
       (upcase "a1b2c3!@#d4e5")
       (downcase "A1B2C3!@#D4E5"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"HELLO, WORLD! 123 @#$%\" \"hello, world! 123 @#$%\" \"CAFÉ-AU-LAIT\" \"über-cool_stuff\" \"MIXED123CASE_TEST.VALUE\" \"mixed123case_test.value\" \"A1B2C3!@#D4E5\" \"a1b2c3!@#d4e5\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"HELLO, WORLD! 123 @#$%\" \"hello, world! 123 @#$%\" \"CAFÉ-AU-LAIT\" \"über-cool_stuff\" \"MIXED123CASE_TEST.VALUE\" \"mixed123case_test.value\" \"A1B2C3!@#D4E5\" \"a1b2c3!@#d4e5\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -58,12 +56,10 @@ fn oracle_prop_capitalize_word_boundaries() {
       (capitalize "mixed--double__separators..here")
       (capitalize "123hello-456world")
       (capitalize "  leading-spaces  trailing  "))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Hello-World-Foo\" \"Hello_World_Foo\" \"Hello.World.Foo\" \"Hello/World/Foo\" \"Hello World  Foo\" \"Hello-World-Foo\" \"Hello_World_Foo\" \"One.Two.Three.Four\" \"A-B-C-D-E\" \"Mixed--Double__Separators..Here\" \"123hello-456world\" \"  Leading-Spaces  Trailing  \")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Hello-World-Foo\" \"Hello_World_Foo\" \"Hello.World.Foo\" \"Hello/World/Foo\" \"Hello World  Foo\" \"Hello-World-Foo\" \"Hello_World_Foo\" \"One.Two.Three.Four\" \"A-B-C-D-E\" \"Mixed--Double__Separators..Here\" \"123hello-456world\" \"  Leading-Spaces  Trailing  \")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -88,12 +84,10 @@ fn oracle_prop_upcase_initials_multiword() {
       (upcase-initials "")
       (upcase-initials "   spaces   between   ")
       (upcase-initials "one"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Hello World Foo Bar\" \"HELLO WORLD\" \"Already Capitalized Words\" \"Hello-World-Test\" \"Hello_World_Test\" \"Hello.World.Test\" \"MixedCase CamelCase PascalCase\" \"123abc 456def\" \"A B C D E F\" \"\" \"   Spaces   Between   \" \"One\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Hello World Foo Bar\" \"HELLO WORLD\" \"Already Capitalized Words\" \"Hello-World-Test\" \"Hello_World_Test\" \"Hello.World.Test\" \"MixedCase CamelCase PascalCase\" \"123abc 456def\" \"A B C D E F\" \"\" \"   Spaces   Between   \" \"One\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -121,12 +115,10 @@ fn oracle_prop_case_char_integers() {
       ;; non-alpha roundtrip
       (= (upcase ?5) ?5)
       (= (downcase ?5) ?5))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (65 90 65 90 97 122 97 122 48 57 48 57 33 33 32 32 t t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (65 90 65 90 97 122 97 122 48 57 48 57 33 33 32 32 t t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -156,12 +148,10 @@ fn oracle_prop_case_preserves_structure() {
           (string-equal (downcase up) (downcase original))
           ;; upcase of downcase equals upcase of original
           (string-equal (upcase down) (upcase original))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t t \"  HELLO, WORLD! [TEST_123] {FOO-BAR}  \" \"  hello, world! [test_123] {foo-bar}  \" \"  Hello, World! [Test_123] {Foo-Bar}  \" \"  Hello, World! [Test_123] {Foo-Bar}  \" t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t t \"  HELLO, WORLD! [TEST_123] {FOO-BAR}  \" \"  hello, world! [test_123] {foo-bar}  \" \"  Hello, World! [Test_123] {Foo-Bar}  \" \"  Hello, World! [Test_123] {Foo-Bar}  \" t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -215,12 +205,10 @@ fn oracle_prop_case_fold_search_simulation() {
     (fmakunbound 'neovm--test-ci-member)
     (fmakunbound 'neovm--test-ci-assoc)
     (fmakunbound 'neovm--test-ci-sort)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t nil \"Hello\" nil (\"name\" . \"Alice\") (\"age\" . 30) (\"apple\" \"Banana\" \"Cherry\" \"date\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t nil \"Hello\" nil (\"name\" . \"Alice\") (\"age\" . 30) (\"apple\" \"Banana\" \"Cherry\" \"date\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -304,12 +292,10 @@ fn oracle_prop_case_style_converter() {
     (fmakunbound 'neovm--test-to-kebab)
     (fmakunbound 'neovm--test-to-camel)
     (fmakunbound 'neovm--test-to-pascal)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"hello_world\" \"hello_world\" \"hello_world\" \"hello_world\" \"hello-world\" \"hello-world\" \"hello-world\" \"helloWorld\" \"helloWorld\" \"helloWorld\" \"HelloWorld\" \"HelloWorld\" \"HelloWorldFoo\" \"my_variable_name\" \"my-function-name\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"hello_world\" \"hello_world\" \"hello_world\" \"hello_world\" \"hello-world\" \"hello-world\" \"hello-world\" \"helloWorld\" \"helloWorld\" \"helloWorld\" \"HelloWorld\" \"HelloWorld\" \"HelloWorldFoo\" \"my_variable_name\" \"my-function-name\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -365,10 +351,8 @@ fn oracle_prop_title_case_with_exceptions() {
         (funcall 'neovm--test-title-case "HELLO WORLD")
         (funcall 'neovm--test-title-case "single"))
     (fmakunbound 'neovm--test-title-case)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"The Lord of the Rings\" \"A Tale of Two Cities\" \"War and Peace\" \"The Catcher in the Rye\" \"To Kill a Mockingbird\" \"Pride and Prejudice\" \"The Art of War\" \"On the Origin of Species\" \"Hello World\" \"Single\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"The Lord of the Rings\" \"A Tale of Two Cities\" \"War and Peace\" \"The Catcher in the Rye\" \"To Kill a Mockingbird\" \"Pride and Prejudice\" \"The Art of War\" \"On the Origin of Species\" \"Hello World\" \"Single\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

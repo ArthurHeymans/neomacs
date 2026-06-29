@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx365_abbrev_define_with_hooks_and_case_fixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t \"neocx365-expanded\" neo)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -19,13 +20,14 @@ fn div_cx365_abbrev_define_with_hooks_and_case_fixed() {
             (abbrev-symbol "neo" table)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t \"neocx365-expanded\" neo)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx365_abbrev_case_fixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"alpha-beta-gamma\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -35,13 +37,14 @@ fn div_cx365_abbrev_case_fixed() {
             (abbrev-expansion "ABC" table)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"alpha-beta-gamma\" nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx365_abbrev_enable_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"conditional\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -52,13 +55,14 @@ fn div_cx365_abbrev_enable_function() {
       (list (abbrev-expansion "cond" table)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"conditional\")""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx365_pre_abbrev_expand_hook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -69,13 +73,14 @@ fn div_cx365_pre_abbrev_expand_hook() {
         (remove-hook 'pre-abbrev-expand-hook (lambda () (push :fired fired)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx365_abbrev_table_map_collect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"ab\" \"cd\" \"ef\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -91,13 +96,14 @@ fn div_cx365_abbrev_table_map_collect() {
         (sort collected #'string<)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"ab\" \"cd\" \"ef\")""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx365_global_abbrev_table_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'global-abbrev-table)
@@ -105,13 +111,14 @@ fn div_cx365_global_abbrev_table_query() {
       (boundp 'abbrev-file-name)
       (boundp 'save-abbrevs))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx365_abbrev_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'abbrev-mode)
@@ -120,13 +127,14 @@ fn div_cx365_abbrev_mode_availability() {
       (boundp 'abbrev-all-caps)
       (boundp 'abbrev-mode-hook))
 "##,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx365_dabbrev_hippie_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -141,13 +149,14 @@ fn div_cx365_dabbrev_hippie_availability() {
             (boundp 'hippie-expand-try-functions-list)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx365_abbrev_count_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((table (make-abbrev-table)))
@@ -159,13 +168,14 @@ fn div_cx365_abbrev_count_query() {
                             (cl-incf count))) table)
     count))
 "##,
-        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx365_abbrev_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -193,6 +203,6 @@ fn div_cx365_abbrev_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1)))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     )
 }

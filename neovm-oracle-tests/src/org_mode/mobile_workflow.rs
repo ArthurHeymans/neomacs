@@ -5,6 +5,9 @@ use crate::common::{assert_oracle_parity, assert_oracle_parity_with_shared_tempd
 fn org_mobile_files_index_checksums_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK (((\"org/main.org\" . \"main.org\") (\"org/nested/extra.org\" . \"nested/extra.org\") (\"outside.org\" . \"outside.org\")) ((\"index.org\" . \"7f678918c716cd019c40e324998face0\")) \"#+READONLY\n#+TODO: TODO WAIT | DONE\n#+TAGS: work home alpha beta zeta\n#+ALLPRIORITIES: A B C\n* [[file:main.org][main.org]]\n* [[file:nested/extra.org][nested/extra.org]]\n* [[file:outside.org][outside.org]]\n\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -55,9 +58,7 @@ fn org_mobile_files_index_checksums_combo() {
                           (lambda (a b) (string< (car a) (car b))))
                     index))))
       (delete-directory root t))))"##,
-        expect_test::expect![[
-            r##""OK (((\"org/main.org\" . \"main.org\") (\"org/nested/extra.org\" . \"nested/extra.org\") (\"outside.org\" . \"outside.org\")) ((\"index.org\" . \"7f678918c716cd019c40e324998face0\")) \"#+READONLY\n#+TODO: TODO WAIT | DONE\n#+TAGS: work home alpha beta zeta\n#+ALLPRIORITIES: A B C\n* [[file:main.org][main.org]]\n* [[file:nested/extra.org][nested/extra.org]]\n* [[file:outside.org][outside.org]]\n\")""##
-        ]],
+        expect,
     );
 }
 
@@ -65,6 +66,9 @@ fn org_mobile_files_index_checksums_combo() {
 fn org_mobile_move_capture_apply_edit_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK (t \"#+LAST_MOBILE_CHANGE: <TIME>\n#+TITLE: Tasks\n* DONE Task                                                      :new:mobile:\n:PROPERTIES:\n:ID: mobile-task\n:END:\nOld body line\n\" \"* Existing inbox\n* Body was changed in the mobile device and on the computer F(edit:body) [[id:mobile-task][Task]]\n** Old value\nOld body line\n** New value\nNew body line\nSecond line\n\" \"\" \"d41d8cd98f00b204e9800998ecf8427e  mobileorg.org\n\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -137,9 +141,7 @@ fn org_mobile_move_capture_apply_edit_combo() {
       (when (file-exists-p org-id-locations-file)
         (delete-file org-id-locations-file))
       (delete-directory root t))))"##,
-        expect_test::expect![[
-            r##""OK (t \"#+LAST_MOBILE_CHANGE: <TIME>\n#+TITLE: Tasks\n* DONE Task                                                      :new:mobile:\n:PROPERTIES:\n:ID: mobile-task\n:END:\nOld body line\n\" \"* Existing inbox\n* Body was changed in the mobile device and on the computer F(edit:body) [[id:mobile-task][Task]]\n** Old value\nOld body line\n** New value\nNew body line\nSecond line\n\" \"\" \"d41d8cd98f00b204e9800998ecf8427e  mobileorg.org\n\")""##
-        ]],
+        expect,
     );
 }
 
@@ -147,6 +149,7 @@ fn org_mobile_move_capture_apply_edit_combo() {
 fn org_mobile_olp_locate_edit_refile_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 34)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -194,7 +197,7 @@ fn org_mobile_olp_locate_edit_refile_combo() {
                      (point-min) (point-max)))))))
       (when (get-file-buffer file) (kill-buffer (get-file-buffer file)))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 34)""#]],
+        expect,
     );
 }
 
@@ -202,6 +205,9 @@ fn org_mobile_olp_locate_edit_refile_combo() {
 fn org_mobile_escape_compare_timestamp_checksum_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK ((\"Parent%2FOne\" \"Space Name\" \"hash#tag\" \"percent%value\") (nil nil) (t nil) \"Parse the entry at point for shortcuts and expand them.\nThese shortcuts are meant for fast and easy typing on the limited\nkeyboards of a mobile device.  Below we show a list of the shortcuts\ncurrently implemented.\n\nThe entry is expected to contain an inactive time stamp indicating when\nthe entry was created.  When setting dates and\ntimes (for example for deadlines), the time strings are interpreted\nrelative to that creation date.\nAbbreviations are expected to take up entire lines, just because it is so\neasy to type RET on a mobile device.  Abbreviations start with one or two\nletters, followed immediately by a dot and then additional information.\nGenerally the entire shortcut line is removed after action have been taken.\nTime stamps will be constructed using `org-read-date'.  So for example a\nline \\\"dd. 2tue\\\" will set a deadline on the second Tuesday after the\ncreation date.\n\nHere are the shortcuts currently implemented:\n\ndd. string             set deadline\nss. string             set scheduling\ntt. string             set time tamp, here.\nti. string             set inactive time\n\ntg. tag1 tag2 tag3     set all these tags, change case where necessary\ntd. kwd                set this todo keyword, change case where necessary\n\nFIXME: Hmmm, not sure if we can make his work against the\nauto-correction feature.  Needs a bit more thinking.  So this function\nis currently a noop.\" \"#+LAST_MOBILE_CHANGE: <TIME>\n* F(edit:body) [[olp:/Parent\\\\/One/Child%20Two][Child Two]]\n** Old value\nA body\n\n** New value\nA body\n\" \"eb1d29029f5c3885890a05393ef90384  mobileorg.org\n\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -261,9 +267,7 @@ fn org_mobile_escape_compare_timestamp_checksum_combo() {
       (when (get-file-buffer capture)
         (kill-buffer (get-file-buffer capture)))
       (delete-directory root t))))"##,
-        expect_test::expect![[
-            r##""OK ((\"Parent%2FOne\" \"Space Name\" \"hash#tag\" \"percent%value\") (nil nil) (t nil) \"Parse the entry at point for shortcuts and expand them.\nThese shortcuts are meant for fast and easy typing on the limited\nkeyboards of a mobile device.  Below we show a list of the shortcuts\ncurrently implemented.\n\nThe entry is expected to contain an inactive time stamp indicating when\nthe entry was created.  When setting dates and\ntimes (for example for deadlines), the time strings are interpreted\nrelative to that creation date.\nAbbreviations are expected to take up entire lines, just because it is so\neasy to type RET on a mobile device.  Abbreviations start with one or two\nletters, followed immediately by a dot and then additional information.\nGenerally the entire shortcut line is removed after action have been taken.\nTime stamps will be constructed using `org-read-date'.  So for example a\nline \\\"dd. 2tue\\\" will set a deadline on the second Tuesday after the\ncreation date.\n\nHere are the shortcuts currently implemented:\n\ndd. string             set deadline\nss. string             set scheduling\ntt. string             set time tamp, here.\nti. string             set inactive time\n\ntg. tag1 tag2 tag3     set all these tags, change case where necessary\ntd. kwd                set this todo keyword, change case where necessary\n\nFIXME: Hmmm, not sure if we can make his work against the\nauto-correction feature.  Needs a bit more thinking.  So this function\nis currently a noop.\" \"#+LAST_MOBILE_CHANGE: <TIME>\n* F(edit:body) [[olp:/Parent\\\\/One/Child%20Two][Child Two]]\n** Old value\nA body\n\n** New value\nA body\n\" \"eb1d29029f5c3885890a05393ef90384  mobileorg.org\n\")""##
-        ]],
+        expect,
     );
 }
 
@@ -271,6 +275,7 @@ fn org_mobile_escape_compare_timestamp_checksum_combo() {
 fn org_mobile_push_agenda_index_checksums_hooks_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 85 34)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -357,7 +362,7 @@ fn org_mobile_push_agenda_index_checksums_hooks_combo() {
         (when (get-file-buffer file) (kill-buffer (get-file-buffer file))))
       (when (get-buffer "*SUMO*") (kill-buffer "*SUMO*"))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 85 34)""#]],
+        expect,
     );
 }
 
@@ -365,6 +370,9 @@ fn org_mobile_push_agenda_index_checksums_hooks_combo() {
 fn org_mobile_apply_refile_delete_archive_flag_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK ((\"1 new, 4 edits, 1 flags, 4 errors\") \"BAD FLAG * F(refile:ignored) [[olp:tasks.org:/Source/Refile%20me][Refile me]]\n** Old value\nignored\n** New value\nolp:tasks.org:/Target\nBAD FLAG * F(delete:ignored) [[olp:tasks.org:/Source/Delete%20me][Delete me]]\n** Old value\nignored\n** New value\nignored\nBAD FLAG * F(archive-sibling:ignored) [[olp:tasks.org:/Source/Archive%20sibling][Archive sibling]]\n** Old value\nignored\n** New value\nignored\n* Heading not found on level 1: Missing F(delete:ignored) [[olp:tasks.org:/Missing][Missing]]\n** Old value\nignored\n** New value\nignored\n* New mobile capture\nCaptured body\n\" \"#+LAST_MOBILE_CHANGE: <TIME>\n#+TITLE: Mobile Actions\n* Source\n** TODO Refile me :old:\nBody refile\n** TODO Delete me\nBody delete\n** DONE Archive sibling\nBody archive\n** TODO Flag me                                                     :FLAGGED:\n:PROPERTIES:\n:THEFLAGGINGNOTE: Flag note line one\\\\nFlag note line two\\\\n\n:END:\nBody flag\n* Target\n** Existing child\n* Tail\n\" (\"/tmp/nix-shell.XcUf3d/neovm-inline-oracle-sf3ylzib/tmp-27100/tasks.org\") ((\"Source\" 1 nil nil nil) (\"Refile me\" 2 (\"old\") nil nil) (\"Delete me\" 2 nil nil nil) (\"Archive sibling\" 2 nil nil nil) (\"Flag me\" 2 (\"FLAGGED\") \"Flag note line one\\\\nFlag note line two\\\\n\" nil) (\"Target\" 1 nil nil nil) (\"Existing child\" 2 nil nil nil) (\"Tail\" 1 nil nil nil)))""##
+    ]];
     crate::common::assert_oracle_parity_with_shared_tempdir_expect(
         r##"(progn
   (require 'org)
@@ -434,9 +442,7 @@ fn org_mobile_apply_refile_delete_archive_flag_combo() {
                           nil nil)))))))
       (dolist (path (list file capture))
         (when (get-file-buffer path) (kill-buffer (get-file-buffer path)))))))"##,
-        expect_test::expect![[
-            r##""OK ((\"1 new, 4 edits, 1 flags, 4 errors\") \"BAD FLAG * F(refile:ignored) [[olp:tasks.org:/Source/Refile%20me][Refile me]]\n** Old value\nignored\n** New value\nolp:tasks.org:/Target\nBAD FLAG * F(delete:ignored) [[olp:tasks.org:/Source/Delete%20me][Delete me]]\n** Old value\nignored\n** New value\nignored\nBAD FLAG * F(archive-sibling:ignored) [[olp:tasks.org:/Source/Archive%20sibling][Archive sibling]]\n** Old value\nignored\n** New value\nignored\n* Heading not found on level 1: Missing F(delete:ignored) [[olp:tasks.org:/Missing][Missing]]\n** Old value\nignored\n** New value\nignored\n* New mobile capture\nCaptured body\n\" \"#+LAST_MOBILE_CHANGE: <TIME>\n#+TITLE: Mobile Actions\n* Source\n** TODO Refile me :old:\nBody refile\n** TODO Delete me\nBody delete\n** DONE Archive sibling\nBody archive\n** TODO Flag me                                                     :FLAGGED:\n:PROPERTIES:\n:THEFLAGGINGNOTE: Flag note line one\\\\nFlag note line two\\\\n\n:END:\nBody flag\n* Target\n** Existing child\n* Tail\n\" (\"/tmp/nix-shell.XcUf3d/neovm-inline-oracle-sf3ylzib/tmp-27100/tasks.org\") ((\"Source\" 1 nil nil nil) (\"Refile me\" 2 (\"old\") nil nil) (\"Delete me\" 2 nil nil nil) (\"Archive sibling\" 2 nil nil nil) (\"Flag me\" 2 (\"FLAGGED\") \"Flag note line one\\\\nFlag note line two\\\\n\" nil) (\"Target\" 1 nil nil nil) (\"Existing child\" 2 nil nil nil) (\"Tail\" 1 nil nil nil)))""##
-        ]],
+        expect,
     );
 }
 
@@ -444,6 +450,7 @@ fn org_mobile_apply_refile_delete_archive_flag_combo() {
 fn org_mobile_escape_pull_push_flagsync_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (\"A%2FB%3AC\" nil nil t nil ok nil \"\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -484,6 +491,6 @@ fn org_mobile_escape_pull_push_flagsync_deep_state_combo() {
                        (buffer-substring-no-properties
                         (point-min) (point-max))))))))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""OK (\"A%2FB%3AC\" nil nil t nil ok nil \"\")""#]],
+        expect,
     );
 }

@@ -36,12 +36,10 @@ fn oracle_prop_substring_positive_from_and_to() {
   (substring "hello world" 3 8)
   ;; Numeric-like content
   (substring "0123456789" 3 7))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"cde\" \"a\" \"j\" \"abcdefghij\" \"ab\" \"ef\" \"ij\" \"X\" \"lo wo\" \"3456\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"cde\" \"a\" \"j\" \"abcdefghij\" \"ab\" \"ef\" \"ij\" \"X\" \"lo wo\" \"3456\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -71,12 +69,10 @@ fn oracle_prop_substring_nil_to() {
   ;; On short string
   (substring "ab" 1 nil)
   (substring "ab" 1))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"hello world\" \" world\" \"d\" \"hello world\" \"world\" \"\" t \"b\" \"b\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"hello world\" \" world\" \"d\" \"hello world\" \"world\" \"\" t \"b\" \"b\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -110,12 +106,10 @@ fn oracle_prop_substring_negative_indices() {
   ;; Negative TO = -0 doesn't exist, but -1 skips last char
   (substring "hello" 0 -1)
   (substring "hello" 1 -1))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"hij\" \"j\" \"abcdefghij\" \"de\" \"fgh\" \"cdefgh\" \"abcdefghi\" \"fghi\" \"fgh\" \"hi\" \"abcde\" \"hello\" t \"hell\" \"ell\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"hij\" \"j\" \"abcdefghij\" \"de\" \"fgh\" \"cdefgh\" \"abcdefghi\" \"fghi\" \"fgh\" \"hi\" \"abcde\" \"hello\" t \"hell\" \"ell\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -142,10 +136,8 @@ fn oracle_prop_substring_from_equals_to() {
   ;; FROM=TO on single-char string
   (substring "X" 0 0)
   (substring "X" 1 1))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"\" \"\" \"\" \"\" \"\" t t t \"\" \"\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"\" \"\" \"\" \"\" \"\" t t t \"\" \"\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -173,10 +165,8 @@ fn oracle_prop_substring_empty_string() {
      ;; substring makes a copy
      (let ((sub (substring s 0)))
        (string= sub s)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"\" \"\" \"\" t t t (t t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"\" \"\" \"\" t t t (t t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -203,12 +193,10 @@ fn oracle_prop_substring_single_arg() {
   (string= (substring "test" 2) "st")
   (string= (substring "test" -2) "st")
   (string= (substring "test" 4) ""))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"programming\" \"gramming\" \"ming\" \"\" \"ming\" \"programming\" \"g\" t t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"programming\" \"gramming\" \"ming\" \"\" \"ming\" \"programming\" \"g\" t t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -269,12 +257,10 @@ fn oracle_prop_substring_string_splitting() {
     (fmakunbound 'neovm--split-at-pos)
     (fmakunbound 'neovm--find-char)
     (fmakunbound 'neovm--split-string-by-char)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"hello\" \"world\" \"foo\") (\"a\" \"b\" \"c\" \"d\") (\"nospace\") (\"a\" \"\" \"b\") (\"\" \"start\" \"end\" \"\") (\"abc\" . \"def\") (\"\" . \"abcdef\") (\"abcdef\" . \"\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"hello\" \"world\" \"foo\") (\"a\" \"b\" \"c\" \"d\") (\"nospace\") (\"a\" \"\" \"b\") (\"\" \"start\" \"end\" \"\") (\"abc\" . \"def\") (\"\" . \"abcdef\") (\"abcdef\" . \"\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -361,10 +347,8 @@ fn oracle_prop_substring_rotation_and_permutation() {
     (fmakunbound 'neovm--rotate-right)
     (fmakunbound 'neovm--reverse-string)
     (fmakunbound 'neovm--is-rotation-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable doubled)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable doubled)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -433,12 +417,10 @@ fn oracle_prop_substring_sliding_window_and_chunks() {
     (fmakunbound 'neovm--sliding-window)
     (fmakunbound 'neovm--chunk-string)
     (fmakunbound 'neovm--has-repeated-substring-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"abc\" \"bcd\" \"cde\") (\"a\" \"b\" \"c\") (\"abc\") (\"abc\" \"def\" \"ghi\" \"j\") (\"abcd\" \"efgh\" \"ij\") (\"abcdefghij\") (\"abcdefghij\") t nil t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"abc\" \"bcd\" \"cde\") (\"a\" \"b\" \"c\") (\"abc\") (\"abc\" \"def\" \"ghi\" \"j\") (\"abcd\" \"efgh\" \"ij\") (\"abcdefghij\") (\"abcdefghij\") t nil t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -467,10 +449,8 @@ fn oracle_prop_substring_on_vectors() {
   ;; Verify it returns a vector, not a string
   (vectorp (substring [1 2 3] 0 2))
   (stringp (substring "abc" 0 2)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ([2 3] [1 2 3 4 5] [3 4 5] [30 40 50] [30 40] [] [2] [] t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ([2 3] [1 2 3 4 5] [3 4 5] [30 40 50] [30 40] [] [2] [] t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

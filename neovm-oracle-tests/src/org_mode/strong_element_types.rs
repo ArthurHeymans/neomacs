@@ -7,6 +7,8 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn et_headline_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (\"Title\" \"TODO\" 65 (\"tag1\" \"tag2\") 1 1 35 31 35)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -22,13 +24,14 @@ fn et_headline_properties() {
           (org-element-property :end h)
           (org-element-property :contents-begin h)
           (org-element-property :contents-end h))))"##,
-        expect_test::expect![[r#""OK (\"Title\" \"TODO\" 65 (\"tag1\" \"tag2\") 1 1 35 31 35)""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_paragraph_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((nil 1 19) (nil 19 36))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -40,13 +43,16 @@ fn et_paragraph_properties() {
                           (org-element-property :begin p)
                           (org-element-property :end p))))))
     paras))"##,
-        expect_test::expect![[r#""OK ((nil 1 19) (nil 19 36))""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_planning_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((timestamp (:standard-properties [24 nil nil nil 36 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2026-01-15>\" :year-start 2026 :month-start 1 :day-start 15 :hour-start nil :minute-start nil :year-end 2026 :month-end 1 :day-end 15 :hour-end nil :minute-end nil)) nil nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -56,15 +62,16 @@ fn et_planning_properties() {
     (list (org-element-property :scheduled p)
           (org-element-property :deadline p)
           (org-element-property :closed p))))"##,
-        expect_test::expect![[
-            r#""OK ((timestamp (:standard-properties [24 nil nil nil 36 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2026-01-15>\" :year-start 2026 :month-start 1 :day-start 15 :hour-start nil :minute-start nil :year-end 2026 :month-end 1 :day-end 15 :hour-end nil :minute-end nil)) nil nil)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn et_timestamp_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (active-range 2026 1 15 10 0 2026 1 15 11 30 cumulate 1 week all 3 day)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -88,15 +95,16 @@ fn et_timestamp_properties() {
           (org-element-property :warning-type ts)
           (org-element-property :warning-value ts)
           (org-element-property :warning-unit ts))))"##,
-        expect_test::expect![[
-            r#""OK (active-range 2026 1 15 10 0 2026 1 15 11 30 cumulate 1 week all 3 day)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn et_link_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"https\" \"//example.com/path?q=1\" \"https://example.com/path?q=1\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -106,15 +114,16 @@ fn et_link_properties() {
     (list (org-element-property :type l)
           (org-element-property :path l)
           (org-element-property :raw-link l))))"##,
-        expect_test::expect![[
-            r#""OK (\"https\" \"//example.com/path?q=1\" \"https://example.com/path?q=1\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn et_keyword_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"TITLE\" \"My Title\") (\"AUTHOR\" \"Author\") (\"OPTIONS\" \"toc:nil\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -125,15 +134,16 @@ fn et_keyword_properties() {
                   (list (org-element-property :key k)
                         (org-element-property :value k))))))
     kws))"##,
-        expect_test::expect![[
-            r#""OK ((\"TITLE\" \"My Title\") (\"AUTHOR\" \"Author\") (\"OPTIONS\" \"toc:nil\"))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn et_src_block_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"emacs-lisp\" \"my-block\" \"-n\" \":results value :exports both\" \"(+ x 1)\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -145,15 +155,14 @@ fn et_src_block_properties() {
           (org-element-property :switches b)
           (org-element-property :parameters b)
           (org-element-property :value b))))"##,
-        expect_test::expect![[
-            r#""OK (\"emacs-lisp\" \"my-block\" \"-n\" \":results value :exports both\" \"(+ x 1)\n\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn et_example_block_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"-n\" \"Some example\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -162,13 +171,14 @@ fn et_example_block_properties() {
          (b (car (org-element-map tree 'example-block (lambda (b) b)))))
     (list (org-element-property :switches b)
           (org-element-property :value b))))"##,
-        expect_test::expect![[r#""OK (\"-n\" \"Some example\n\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_quote_block_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -176,13 +186,14 @@ fn et_quote_block_properties() {
   (let* ((tree (org-element-parse-buffer))
          (b (car (org-element-map tree 'quote-block (lambda (b) b)))))
     (org-element-property :value b))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_center_block_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -190,13 +201,14 @@ fn et_center_block_properties() {
   (let* ((tree (org-element-parse-buffer))
          (b (car (org-element-map tree 'center-block (lambda (b) b)))))
     (org-element-property :value b))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_plain_list_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -205,13 +217,14 @@ fn et_plain_list_properties() {
          (pl (car (org-element-map tree 'plain-list (lambda (l) l)))))
     (list (org-element-property :type pl)
           (length (org-element-contents pl))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_item_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -222,13 +235,14 @@ fn et_item_properties() {
                     (list (org-element-property :bullet it)
                           (org-element-property :checkbox it))))))
     items)"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_drawer_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"LOGBOOK\" 30 53))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -240,13 +254,14 @@ fn et_drawer_properties() {
                             (org-element-property :begin d)
                             (org-element-property :end d))))))
     drawers))"##,
-        expect_test::expect![[r#""OK ((\"LOGBOOK\" 30 53))""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_footnote_reference_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -257,13 +272,14 @@ fn et_footnote_reference_properties() {
                    (list (org-element-property :label f)
                          (org-element-property :type f))))))
     refs)"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_footnote_definition_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -275,13 +291,14 @@ fn et_footnote_definition_properties() {
                          (org-element-property :begin d)
                          (org-element-property :end d))))))
     defs)"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_radio_target_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -290,13 +307,14 @@ fn et_radio_target_properties() {
          (targets (org-element-map tree 'radio-target
                     (lambda (rt) (org-element-property :value rt)))))
     targets)"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_statistics_cookie_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -307,13 +325,14 @@ fn et_statistics_cookie_properties() {
                       (list (org-element-property :value sc)
                             (org-element-property :begin sc))))))
     cookies)"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_horizontal_rule_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -322,13 +341,14 @@ fn et_horizontal_rule_properties() {
          (hrs (org-element-map tree 'horizontal-rule
                 (lambda (hr) (org-element-property :begin hr)))))
     hrs)"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_table_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -337,13 +357,14 @@ fn et_table_properties() {
          (tbl (car (org-element-map tree 'table (lambda (t) t)))))
     (list (org-element-property :tblfm tbl)
           (length (org-element-contents tbl))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_table_row_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -354,13 +375,14 @@ fn et_table_row_properties() {
                    (list (org-element-property :type tr)
                          (length (org-element-contents tr)))))))
     rows)"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_table_cell_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -369,13 +391,14 @@ fn et_table_cell_properties() {
          (cells (org-element-map tree 'table-cell
                   (lambda (c) (org-element-property :value c)))))
     cells)"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_bold_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -383,13 +406,14 @@ fn et_bold_properties() {
   (let* ((tree (org-element-parse-buffer))
          (bold (car (org-element-map tree 'bold (lambda (b) b)))))
     (org-element-property :value bold))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_italic_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -397,13 +421,14 @@ fn et_italic_properties() {
   (let* ((tree (org-element-parse-buffer))
          (italic (car (org-element-map tree 'italic (lambda (i) i)))))
     (org-element-property :value italic))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_code_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -411,13 +436,14 @@ fn et_code_properties() {
   (let* ((tree (org-element-parse-buffer))
          (code (car (org-element-map tree 'code (lambda (c) c)))))
     (org-element-property :value code))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_verbatim_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -425,13 +451,14 @@ fn et_verbatim_properties() {
   (let* ((tree (org-element-parse-buffer))
          (verb (car (org-element-map tree 'verbatim (lambda (v) v)))))
     (org-element-property :value verb))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_underline_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -439,13 +466,14 @@ fn et_underline_properties() {
   (let* ((tree (org-element-parse-buffer))
          (u (car (org-element-map tree 'underline (lambda (u) u)))))
     (org-element-property :value u))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_strikethrough_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -453,13 +481,14 @@ fn et_strikethrough_properties() {
   (let* ((tree (org-element-parse-buffer))
          (s (car (org-element-map tree 'strike (lambda (s) s)))))
     (org-element-property :value s))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_superscript_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -467,13 +496,14 @@ fn et_superscript_properties() {
   (let* ((tree (org-element-parse-buffer))
          (sup (car (org-element-map tree 'superscript (lambda (s) s)))))
     (org-element-property :value sup))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_subscript_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -481,13 +511,14 @@ fn et_subscript_properties() {
   (let* ((tree (org-element-parse-buffer))
          (sub (car (org-element-map tree 'subscript (lambda (s) s)))))
     (org-element-property :value sub))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_entity_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -498,13 +529,14 @@ fn et_entity_properties() {
                        (list (org-element-property :name e)
                              (org-element-property :value e))))))
     entities)"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_latex_fragment_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -512,13 +544,14 @@ fn et_latex_fragment_properties() {
   (let* ((tree (org-element-parse-buffer))
          (frag (car (org-element-map tree 'latex-fragment (lambda (f) f)))))
     (org-element-property :value frag))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_macro_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -528,13 +561,14 @@ fn et_macro_properties() {
     (list (org-element-property :key mac)
           (org-element-property :value mac)
           (org-element-property :args mac)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_export_snippet_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -543,13 +577,14 @@ fn et_export_snippet_properties() {
          (snippet (car (org-element-map tree 'export-snippet (lambda (s) s)))))
     (list (org-element-property :back-end snippet)
           (org-element-property :value snippet)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_export_block_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -558,13 +593,14 @@ fn et_export_block_properties() {
          (block (car (org-element-map tree 'export-block (lambda (b) b)))))
     (list (org-element-property :type block)
           (org-element-property :value block)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_call_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -573,13 +609,14 @@ fn et_call_properties() {
          (call (car (org-element-map tree 'babel-call (lambda (c) c)))))
     (list (org-element-property :call call)
           (org-element-property :inside-header call)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn test_clock_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -588,13 +625,14 @@ fn test_clock_properties() {
          (clock (car (org-element-map tree 'clock (lambda (c) c)))))
     (list (org-element-property :value clock)
           (org-element-property :duration clock)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_comment_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -603,13 +641,14 @@ fn et_comment_properties() {
          (comments (org-element-map tree 'comment
                      (lambda (c) (org-element-property :value c)))))
     comments)"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_fixed_width_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -618,13 +657,14 @@ fn et_fixed_width_properties() {
          (fw (org-element-map tree 'fixed-width
                (lambda (f) (org-element-property :value f)))))
     fw)"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_diary_sexp_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -632,13 +672,14 @@ fn et_diary_sexp_properties() {
   (let* ((tree (org-element-parse-buffer))
          (sexp (car (org-element-map tree 'diary-sexp (lambda (s) s)))))
     (org-element-property :value sexp))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_inlinetask_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -652,13 +693,14 @@ fn et_inlinetask_properties() {
                             (org-element-property :todo-keyword h)
                             (org-element-property :level h)))))))
     tasks)"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_property_drawer_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -667,13 +709,14 @@ fn et_property_drawer_properties() {
          (pd (car (org-element-map tree 'property-drawer (lambda (pd) pd)))))
     (list (org-element-property :begin pd)
           (org-element-property :end pd)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn et_node_property_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -684,6 +727,6 @@ fn et_node_property_properties() {
                     (list (org-element-property :key np)
                           (org-element-property :value np))))))
     props)"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

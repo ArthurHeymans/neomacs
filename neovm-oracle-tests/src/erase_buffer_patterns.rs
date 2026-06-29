@@ -68,12 +68,10 @@ fn oracle_prop_erase_buffer_basic_cases() {
                         (= (point) 1))
                   results))))
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((non-empty (\"Hello, World!\" 13 14) \"\" 0 1 1 1 t t) (newlines-only \"\" 0 1) (already-empty 0 0 1 t t) (multibyte 3 0 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((non-empty (\"Hello, World!\" 13 14) \"\" 0 1 1 1 t t) (newlines-only \"\" 0 1) (already-empty 0 0 1 t t) (multibyte 3 0 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -121,10 +119,8 @@ fn oracle_prop_erase_buffer_point_markers_narrowing() {
         (set-marker m2 nil)
         (set-marker m-end nil)
         result))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"JKLMNOPQRS\" 10 20 \"\" 0 1 1 1 1 1 1 t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"JKLMNOPQRS\" 10 20 \"\" 0 1 1 1 1 1 1 t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -160,10 +156,8 @@ fn oracle_prop_erase_buffer_vs_delete_region_equivalence() {
   (list erase-result
         delete-result
         (equal erase-result delete-result)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((\"\" 0 1 1 1 t t) (\"\" 0 1 1 1 t t) t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((\"\" 0 1 1 1 t t) (\"\" 0 1 1 1 t t) t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -193,10 +187,8 @@ fn oracle_prop_erase_buffer_within_save_excursion() {
           ;; Point should be clamped to valid range
           (<= (point) (point-max))
           (>= (point) (point-min)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (10 16 \"NEW\" 3 1 t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (10 16 \"NEW\" 3 1 t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -238,12 +230,10 @@ fn oracle_prop_erase_buffer_recycling_pattern() {
                           (buffer-string))
                     all-results))))
     (nreverse all-results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"Alpha Bravo Charlie\" 3 (\"Alpha\" \"Bravo\" \"Charlie\") \"Parts: 3, Lengths: 5,5,7\") (\"one:two:three:four\" 4 (\"one\" \"two\" \"three\" \"four\") \"Parts: 4, Lengths: 3,3,5,4\") (\"X--Y--Z\" 3 (\"X\" \"Y\" \"Z\") \"Parts: 3, Lengths: 1,1,1\") (\"single\" 1 (\"single\") \"Parts: 1, Lengths: 6\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"Alpha Bravo Charlie\" 3 (\"Alpha\" \"Bravo\" \"Charlie\") \"Parts: 3, Lengths: 5,5,7\") (\"one:two:three:four\" 4 (\"one\" \"two\" \"three\" \"four\") \"Parts: 4, Lengths: 3,3,5,4\") (\"X--Y--Z\" 3 (\"X\" \"Y\" \"Z\") \"Parts: 3, Lengths: 1,1,1\") (\"single\" 1 (\"single\") \"Parts: 1, Lengths: 6\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -291,12 +281,10 @@ fn oracle_prop_erase_buffer_state_diff() {
         (set-marker m2 nil)
         (set-marker m3 nil)
         (list pre-state post-state)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"The quick brown fox jumps over the lazy dog\" 43 16 5 30 11 5 16) (\"\" 0 1 1 1 1 1 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"The quick brown fox jumps over the lazy dog\" 43 16 5 30 11 5 16) (\"\" 0 1 1 1 1 1 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -356,10 +344,8 @@ fn oracle_prop_erase_buffer_multi_buffer_pipeline() {
     (kill-buffer src)
     (kill-buffer xform)
     (kill-buffer out)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"apple 3\nbanana 7\ncherry 2\ndate 5\n\" \"APPLE:9\nBANANA:49\nCHERRY:4\nDATE:25\n\" \"=== REPORT ===\nItems: 4\nTotal: 87\n--- Detail ---\nAPPLE:9\nBANANA:49\nCHERRY:4\nDATE:25\n\" 84)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"apple 3\nbanana 7\ncherry 2\ndate 5\n\" \"APPLE:9\nBANANA:49\nCHERRY:4\nDATE:25\n\" \"=== REPORT ===\nItems: 4\nTotal: 87\n--- Detail ---\nAPPLE:9\nBANANA:49\nCHERRY:4\nDATE:25\n\" 84)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

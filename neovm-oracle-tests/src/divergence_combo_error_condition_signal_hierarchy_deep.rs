@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_condition_case_parent_error_catches_child() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (test-child \"child message\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (define-error 'test-parent \"Test parent error\")\n\
@@ -16,7 +17,7 @@ fn deficiency_condition_case_parent_error_catches_child() {
          (signal 'test-child '(\"child message\"))\n\
          (test-parent\n\
          (list (car err) (cadr err)))))",
-        expect_test::expect![[r#""OK (test-child \"child message\")""#]],
+        expect,
     );
 }
 
@@ -24,6 +25,7 @@ fn deficiency_condition_case_parent_error_catches_child() {
 fn deficiency_nested_condition_case_inner_handler_first() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (error \"re-signaled\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (condition-case outer\n\
@@ -33,7 +35,7 @@ fn deficiency_nested_condition_case_inner_handler_first() {
          (signal 'error '(\"re-signaled\"))))\n\
          (error\n\
          (list (car outer) (cadr outer)))))",
-        expect_test::expect![[r#""OK (error \"re-signaled\")""#]],
+        expect,
     );
 }
 
@@ -41,6 +43,7 @@ fn deficiency_nested_condition_case_inner_handler_first() {
 fn deficiency_error_with_buffer_cleanup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (error \"Invalid error symbol\" test-error)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ecb\"))\n\
@@ -59,7 +62,7 @@ fn deficiency_error_with_buffer_cleanup() {
          cleanup-log)))\n\
          cleanup-log)\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (error \"Invalid error symbol\" test-error)""#]],
+        expect,
     );
 }
 
@@ -67,6 +70,7 @@ fn deficiency_error_with_buffer_cleanup() {
 fn deficiency_condition_case_no_match_propagates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (wrong-type-argument \"expected integer\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (condition-case outer\n\
@@ -76,7 +80,7 @@ fn deficiency_condition_case_no_match_propagates() {
          'should-not-reach))\n\
          (wrong-type-argument\n\
          (list (car outer) (cadr outer)))))",
-        expect_test::expect![[r#""OK (wrong-type-argument \"expected integer\")""#]],
+        expect,
     );
 }
 
@@ -84,13 +88,14 @@ fn deficiency_condition_case_no_match_propagates() {
 fn deficiency_signal_with_multiple_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (condition-case err\n\
          (signal 'args-out-of-range '(\"my-vector\" 5 10))\n\
          (args-out-of-range\n\
          (list (car err) (cdr err))))",
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -98,6 +103,7 @@ fn deficiency_signal_with_multiple_args() {
 fn deficiency_user_error_vs_signal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((user-error \"user message\") nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((user-caught nil)\n\
@@ -106,7 +112,7 @@ fn deficiency_user_error_vs_signal() {
          (user-error \"user message\")\n\
          (error (setq error-caught (list (car err) (cadr err)))))\n\
          (list error-caught user-caught)))",
-        expect_test::expect![[r#""OK ((user-error \"user message\") nil)""#]],
+        expect,
     );
 }
 
@@ -114,6 +120,7 @@ fn deficiency_user_error_vs_signal() {
 fn deficiency_error_in_unwind_protect_still_runs_cleanup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (error \"Invalid error symbol\" test-error)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((log nil))\n\
@@ -126,7 +133,7 @@ fn deficiency_error_in_unwind_protect_still_runs_cleanup() {
          (test-error\n\
          (push (car err) log)))\n\
          (nreverse log)))",
-        expect_test::expect![[r#""ERR (error \"Invalid error symbol\" test-error)""#]],
+        expect,
     );
 }
 
@@ -134,13 +141,14 @@ fn deficiency_error_in_unwind_protect_still_runs_cleanup() {
 fn deficiency_error_message_formatting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (condition-case err\n\
          (signal 'wrong-number-of-arguments '(my-fn 3 2))\n\
          (wrong-number-of-arguments\n\
          (error-message-string err)))",
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -148,6 +156,7 @@ fn deficiency_error_message_formatting() {
 fn deficiency_condition_case_with_buffer_mods_and_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (error \"Invalid error symbol\" test-error)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ecm\")))\n\
@@ -168,7 +177,7 @@ fn deficiency_condition_case_with_buffer_mods_and_marker() {
          (marker-position m6)\n\
          (get-text-property 5 'zone))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (error \"Invalid error symbol\" test-error)""#]],
+        expect,
     );
 }
 
@@ -176,12 +185,14 @@ fn deficiency_condition_case_with_buffer_mods_and_marker() {
 fn deficiency_error_during_format_in_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""OK (error \"Format specifier doesn’t match argument type\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (condition-case err\n\
          (format \"Hello %s %d\" \"world\" 'not-a-number)\n\
          (error\n\
          (list (car err) (cadr err)))))",
-        expect_test::expect![[r#""OK (error \"Format specifier doesn’t match argument type\")""#]],
+        expect,
     );
 }

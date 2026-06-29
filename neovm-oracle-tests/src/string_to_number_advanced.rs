@@ -51,12 +51,10 @@ fn oracle_prop_string_to_number_multi_base() {
   (string-to-number "11111111" 2)
   (string-to-number "-101" 2)
   (string-to-number "10000000" 2))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (0 1 -1 42 -42 999999 -999999 0 10 10 255 255 3735928559 -255 16 256 0 7 8 63 511 -63 64 0 1 2 5 255 -5 128)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (0 1 -1 42 -42 999999 -999999 0 10 10 255 255 3735928559 -255 16 256 0 7 8 63 511 -63 64 0 1 2 5 255 -5 128)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -89,12 +87,10 @@ fn oracle_string_to_number_base_validation_and_integer_radix() {
      (string-to-number "42" -2)
    (error (list (car err) (cdr err)))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (10.75 16 100.0 482 437 (wrong-type-argument (stringp 42)) (wrong-type-argument (fixnump bad-base)) (args-out-of-range (1)) (args-out-of-range (17)) (args-out-of-range (-2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (10.75 16 100.0 482 437 (wrong-type-argument (stringp 42)) (wrong-type-argument (fixnump bad-base)) (args-out-of-range (1)) (args-out-of-range (17)) (args-out-of-range (-2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -133,10 +129,9 @@ fn oracle_prop_string_to_number_whitespace_and_garbage() {
   (string-to-number "	42")
   (string-to-number "
 42"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (42 -7 0 100 42 123 99.5 0 -5 42 -7 255 160 0 7 2 1 42 0)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (42 -7 0 100 42 123 99.5 0 -5 42 -7 255 160 0 7 2 1 42 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -179,12 +174,10 @@ fn oracle_prop_string_to_number_edge_cases() {
   ;; Max-ish integers
   (string-to-number "536870911")
   (string-to-number "-536870912"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (0 0 0 0 0 0 0 0 0 0 0 0 42 100 7 42 -7 0 5 9 536870911 -536870912)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (0 0 0 0 0 0 0 0 0 0 0 0 42 100 7 42 -7 0 5 9 536870911 -536870912)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -225,12 +218,10 @@ fn oracle_prop_string_to_number_floats() {
   ;; Comparison of parsed float
   (= (string-to-number "0.1") 0.1)
   (= (string-to-number "1.0") 1.0))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (3.14 -2.718 0.0 -0.0 1.0 0.5 -0.5 10000000000.0 10000000000.0 2500.0 -150.0 0.001 1.0 100000.0 0.0 100 t t t 3.14 10000000000.0 t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (3.14 -2.718 0.0 -0.0 1.0 0.5 -0.5 10000000000.0 10000000000.0 2500.0 -150.0 0.001 1.0 100000.0 0.0 100 t t t 3.14 10000000000.0 t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -253,12 +244,10 @@ fn oracle_string_to_number_trailing_dot_large_integers() {
           nums))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((5316911983139663491615228241121378304 5316911983139663491615228241121378304 t t) (-2305843009213693953 -2305843009213693953 t t) (0 0 t t) (0 0 t t) (-1 -1 t t) (0 0 t t) (1 1 t t) (0 0 t t) (0 0 t t) (2305843009213693952 2305843009213693952 t t) (5316911983139663487003542222693990401 5316911983139663487003542222693990401 t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((5316911983139663491615228241121378304 5316911983139663491615228241121378304 t t) (-2305843009213693953 -2305843009213693953 t t) (0 0 t t) (0 0 t t) (-1 -1 t t) (0 0 t t) (1 1 t t) (0 0 t t) (0 0 t t) (2305843009213693952 2305843009213693952 t t) (5316911983139663487003542222693990401 5316911983139663487003542222693990401 t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -292,12 +281,10 @@ fn oracle_prop_string_to_number_roundtrip() {
     (mapcar (lambda (n)
               (= n (string-to-number (number-to-string n))))
             nums)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (0 42 -42 1000000 -1000000 \"12345\" \"-12345\" \"0\" t t t 99 -99 (t t t t t t t t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (0 42 -42 1000000 -1000000 \"12345\" \"-12345\" \"0\" t t t 99 -99 (t t t t t t t t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -339,12 +326,10 @@ fn oracle_prop_string_to_number_in_pipelines() {
     (if (= val 0) 'zero 'nonzero))
   (let ((val (string-to-number "42")))
     (if (= val 0) 'zero 'nonzero)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (30 42 58 256 65 100 t t t (17 60 7) 255 255 255 zero nonzero)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (30 42 58 256 65 100 t t t (17 60 7) 255 255 255 zero nonzero)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -386,10 +371,8 @@ fn oracle_prop_string_to_number_large_and_boundary() {
   (numberp (string-to-number "42"))
   (numberp (string-to-number "3.14"))
   (numberp (string-to-number "")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (1000000000 999999999 -1000000000 -999999999 1e+100 -1e+100 9.99e+99 1e-100 -1e-100 256 512 16777215 1048576 t t 0 0 t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (1000000000 999999999 -1000000000 -999999999 1e+100 -1e+100 9.99e+99 1e-100 -1e-100 256 512 16777215 1048576 t t 0 0 t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

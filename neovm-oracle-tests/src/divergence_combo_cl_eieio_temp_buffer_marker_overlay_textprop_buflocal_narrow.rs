@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_temp_buffer_insert_from_main() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass temp-ctx ()
@@ -65,7 +66,7 @@ fn combo_eieio_temp_buffer_insert_from_main() {
               (overlay-start ov) (overlay-end ov)
               my-tb-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -73,6 +74,7 @@ fn combo_eieio_temp_buffer_insert_from_main() {
 fn combo_eieio_temp_buffer_with_overlay_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable my-toc-log)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass temp-ov-ctx ()
@@ -127,7 +129,7 @@ fn combo_eieio_temp_buffer_with_overlay_props() {
               (overlay-start ov) (overlay-end ov)
               my-toc-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-variable my-toc-log)""#]],
+        expect,
     );
 }
 
@@ -135,6 +137,7 @@ fn combo_eieio_temp_buffer_with_overlay_props() {
 fn combo_eieio_temp_buffer_marker_across_bufs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable my-cm-log)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass cross-mk ()
@@ -190,7 +193,7 @@ fn combo_eieio_temp_buffer_marker_across_bufs() {
               (cm-temp ctx)
               my-cm-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-variable my-cm-log)""#]],
+        expect,
     );
 }
 
@@ -198,6 +201,7 @@ fn combo_eieio_temp_buffer_marker_across_bufs() {
 fn combo_eieio_temp_buffer_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable my-tnc-log)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass temp-narrow-ctx ()
@@ -260,7 +264,7 @@ fn combo_eieio_temp_buffer_narrow_undo() {
               (tnc-temps ctx)
               my-tnc-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-variable my-tnc-log)""#]],
+        expect,
     );
 }
 
@@ -268,6 +272,7 @@ fn combo_eieio_temp_buffer_narrow_undo() {
 fn combo_eieio_temp_buffer_process_and_return() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass proc-ctx ()
@@ -327,6 +332,6 @@ fn combo_eieio_temp_buffer_process_and_return() {
               (pc-proc ctx)
               my-pc-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }

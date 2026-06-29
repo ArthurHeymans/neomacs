@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx156_tabulated_list_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -18,13 +19,14 @@ fn div_cx156_tabulated_list_availability() {
             (boundp 'tabulated-list-entries)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx156_derived_mode_define() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -38,13 +40,14 @@ fn div_cx156_derived_mode_define() {
             (fboundp 'neo-cx156-test-mode)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx156_derived_mode_inherits_syntax_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -59,13 +62,14 @@ fn div_cx156_derived_mode_inherits_syntax_table() {
               (eq (derived-mode-p 'neo-cx156-inherit-mode 'text-mode) nil))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx156_text_property_list_extraction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function text-property-list)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -76,13 +80,15 @@ fn div_cx156_text_property_list_extraction() {
     (list (consp plist)
           (plist-member plist 'face))))
 "##,
-        expect_test::expect![[r#""ERR (void-function text-property-list)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx156_add_text_properties_idempotent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((face bold) (face bold) (weight heavy face bold) t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -96,13 +102,14 @@ fn div_cx156_add_text_properties_idempotent() {
         (list first-add second-add third-add
               (equal first-add second-add))))))
 "##,
-        expect_test::expect![[r#""OK ((face bold) (face bold) (weight heavy face bold) t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx156_set_text_property_single_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (bold bold italic italic nil 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -116,13 +123,15 @@ fn div_cx156_set_text_property_single_replace() {
         (get-text-property 5 'face)
         (next-single-property-change 1 'face)))
 "##,
-        expect_test::expect![[r#""OK (bold bold italic italic nil 3)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx156_tabulated_list_format_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (t t (\"Name\" 30 t) (\"Value\" 10 nil :right-align t))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -135,13 +144,14 @@ fn div_cx156_tabulated_list_format_query() {
             (aref fmt 1)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t (\"Name\" 30 t) (\"Value\" 10 nil :right-align t))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx156_derived_mode_with_abbrev_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -157,13 +167,14 @@ fn div_cx156_derived_mode_with_abbrev_table() {
               (consp local-abbrev-table))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx156_derived_mode_with_after_hook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t (:fired))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -179,13 +190,14 @@ fn div_cx156_derived_mode_with_after_hook() {
           (remove-hook 'neo-cx156-hook-mode-hook (lambda () (push :fired hook-fired))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t (:fired))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx156_text_property_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -211,6 +223,6 @@ fn div_cx156_text_property_overlay_undo_narrow_mega() {
                 (text-properties-at 1)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }

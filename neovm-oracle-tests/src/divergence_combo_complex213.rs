@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx213_desktop_save_read_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -29,13 +30,14 @@ fn div_cx213_desktop_save_read_round_trip() {
           (list saved)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx213_session_save_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored file-missing)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -46,13 +48,14 @@ fn div_cx213_session_save_availability() {
             (boundp 'session-save-file)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored file-missing)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx213_savehist_save_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -66,13 +69,14 @@ fn div_cx213_savehist_save_availability() {
             (boundp 'savehist-coding-system)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t nil t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx213_recentf_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -88,13 +92,14 @@ fn div_cx213_recentf_mode_availability() {
             (boundp 'recentf-save-file)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx213_saveplace_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -108,13 +113,14 @@ fn div_cx213_saveplace_mode_availability() {
             (boundp 'save-place-version-control)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t nil t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx213_recentf_add_and_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"/tmp/neo-cx213-recentf.txt\") t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -126,13 +132,14 @@ fn div_cx213_recentf_add_and_query() {
               (recentf-include-p test-path))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK ((\"/tmp/neo-cx213-recentf.txt\") t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx213_savehist_variable_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -146,13 +153,14 @@ fn div_cx213_savehist_variable_capture() {
           (boundp 'shell-command-history))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx213_desktop_buffer_state_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -166,13 +174,14 @@ fn div_cx213_desktop_buffer_state_capture() {
             (boundp 'desktop-restore-in-desktop-display)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx213_saveplace_visited_buffers_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -184,13 +193,14 @@ fn div_cx213_saveplace_visited_buffers_query() {
             (fboundp 'toggle-save-place)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx213_persistence_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -220,6 +230,6 @@ fn div_cx213_persistence_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     );
 }

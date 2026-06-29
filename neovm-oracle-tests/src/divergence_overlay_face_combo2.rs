@@ -13,6 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_combo_read_only_insert_blocked() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK text-read-only""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -21,13 +22,14 @@ fn div_combo_read_only_insert_blocked() {
   (goto-char 2)
   (condition-case err (progn (insert "X") 'inserted) (error (car err))))
 "##,
-        expect_test::expect![[r#""OK text-read-only""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_combo_read_only_delete_blocked() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK text-read-only""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -36,13 +38,14 @@ fn div_combo_read_only_delete_blocked() {
   (goto-char 2)
   (condition-case err (progn (delete-char 1) 'deleted) (error (car err))))
 "##,
-        expect_test::expect![[r#""OK text-read-only""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_combo_read_only_kill_region_blocked() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK text-read-only""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -50,13 +53,14 @@ fn div_combo_read_only_kill_region_blocked() {
   (put-text-property 1 4 'read-only t)
   (condition-case err (progn (kill-region 1 3) 'killed) (error (car err))))
 "##,
-        expect_test::expect![[r#""OK text-read-only""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_combo_read_only_overlay_blocked() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK inserted""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -66,13 +70,14 @@ fn div_combo_read_only_overlay_blocked() {
     (goto-char 2)
     (condition-case err (progn (insert "X") 'inserted) (error (car err)))))
 "##,
-        expect_test::expect![[r#""OK inserted""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_combo_read_only_nonnil_value_blocked() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK text-read-only""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -81,13 +86,15 @@ fn div_combo_read_only_nonnil_value_blocked() {
   (goto-char 2)
   (condition-case err (progn (insert "X") 'inserted) (error (car err))))
 "##,
-        expect_test::expect![[r#""OK text-read-only""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_combo_read_only_inhibit_allows() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK #(\"hXello\" 0 1 (read-only t) 2 4 (read-only t))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -97,7 +104,7 @@ fn div_combo_read_only_inhibit_allows() {
     (goto-char 2)
     (condition-case err (progn (insert "X") (buffer-string)) (error (car err)))))
 "##,
-        expect_test::expect![[r#""OK #(\"hXello\" 0 1 (read-only t) 2 4 (read-only t))""#]],
+        expect,
     );
 }
 
@@ -106,6 +113,7 @@ fn div_combo_read_only_inhibit_allows() {
 #[test]
 fn div_combo_field_beginning_of_line_aware() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 7""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -116,13 +124,14 @@ fn div_combo_field_beginning_of_line_aware() {
     (beginning-of-line)
     (point)))
 "##,
-        expect_test::expect![[r#""OK 7""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_combo_field_end_of_line_aware() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 7""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -133,13 +142,14 @@ fn div_combo_field_end_of_line_aware() {
     (end-of-line)
     (point)))
 "##,
-        expect_test::expect![[r#""OK 7""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_combo_field_constrain_to_field() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -149,13 +159,14 @@ fn div_combo_field_constrain_to_field() {
   (list (constrain-to-field 5 1 nil t t)
         (constrain-to-field 1 5 nil t t)))
 "##,
-        expect_test::expect![[r#""OK (5 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_combo_field_inhibit_disables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 7""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -166,7 +177,7 @@ fn div_combo_field_inhibit_disables() {
     (beginning-of-line)
     (point)))
 "##,
-        expect_test::expect![[r#""OK 7""#]],
+        expect,
     );
 }
 
@@ -175,6 +186,8 @@ fn div_combo_field_inhibit_disables() {
 #[test]
 fn div_combo_invisible_buffer_substring_includes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (#(\"hello world\" 6 11 (invisible t)) \"hello world\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -183,13 +196,14 @@ fn div_combo_invisible_buffer_substring_includes() {
   (list (buffer-substring 1 12)
         (buffer-substring-no-properties 1 12)))
 "##,
-        expect_test::expect![[r#""OK (#(\"hello world\" 6 11 (invisible t)) \"hello world\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_combo_invisible_overlay_kill_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 9""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -198,13 +212,16 @@ fn div_combo_invisible_overlay_kill_line() {
   (goto-char 9)
   (condition-case err (progn (kill-line) (point)) (error (car err))))
 "##,
-        expect_test::expect![[r#""OK 9""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_combo_invisible_fill_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK #(\"alpha\nbravo charlie\ndelta echo\nfoxtrot\n\" 12 19 (invisible t))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -214,9 +231,7 @@ fn div_combo_invisible_fill_region() {
     (fill-region (point-min) (point-max))
     (buffer-string)))
 "##,
-        expect_test::expect![[
-            r#""OK #(\"alpha\nbravo charlie\ndelta echo\nfoxtrot\n\" 12 19 (invisible t))""#
-        ]],
+        expect,
     );
 }
 
@@ -225,6 +240,7 @@ fn div_combo_invisible_fill_region() {
 #[test]
 fn div_combo_intangible_backward_motion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 4 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -236,13 +252,14 @@ fn div_combo_intangible_backward_motion() {
         (p3 (progn (backward-char) (point))))
     (list p1 p2 p3)))
 "##,
-        expect_test::expect![[r#""OK (5 4 3)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_combo_intangible_overlay_motion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 6""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -253,7 +270,7 @@ fn div_combo_intangible_overlay_motion() {
     (forward-char 5)
     (point)))
 "##,
-        expect_test::expect![[r#""OK 6""#]],
+        expect,
     );
 }
 
@@ -262,6 +279,7 @@ fn div_combo_intangible_overlay_motion() {
 #[test]
 fn div_combo_insert_between_adjacent_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 4 4 7)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -274,13 +292,14 @@ fn div_combo_insert_between_adjacent_overlays() {
     (list (overlay-start o1) (overlay-end o1)
           (overlay-start o2) (overlay-end o2))))
 "##,
-        expect_test::expect![[r#""OK (2 4 4 7)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_combo_overlay_advance_after_insert_at_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 4)""#]];
     // Insert at overlay END: default does NOT advance (rear-sticky semantics).
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -292,13 +311,14 @@ fn div_combo_overlay_advance_after_insert_at_end() {
     (insert "X")
     (list (overlay-start ov) (overlay-end ov))))
 "##,
-        expect_test::expect![[r#""OK (2 4)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_combo_delete_removing_overlay_extent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 4 \"abdef\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -308,13 +328,14 @@ fn div_combo_delete_removing_overlay_extent() {
     (delete-region 3 4)
     (list (overlay-start ov) (overlay-end ov) (buffer-string))))
 "##,
-        expect_test::expect![[r#""OK (2 4 \"abdef\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_combo_nested_overlays_edit_then_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -332,7 +353,7 @@ fn div_combo_nested_overlays_edit_then_undo() {
             (overlay-start o1) (overlay-end o1)
             (overlay-start o2) (overlay-end o2)))))
 "##,
-        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
+        expect,
     );
 }
 
@@ -341,18 +362,21 @@ fn div_combo_nested_overlays_edit_then_undo() {
 #[test]
 fn div_combo_propertize_property_order_preserved() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (a 1 b 2 c 3 d 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s (propertize "x" 'a 1 'b 2 'c 3 'd 4)))
   (text-properties-at 0 s))
 "##,
-        expect_test::expect![[r#""OK (a 1 b 2 c 3 d 4)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_combo_put_text_property_appends_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (font-lock-face keyword mouse-face highlight face bold)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -362,13 +386,14 @@ fn div_combo_put_text_property_appends_order() {
   (put-text-property 1 4 'font-lock-face 'keyword)
   (text-properties-at 2))
 "##,
-        expect_test::expect![[r#""OK (font-lock-face keyword mouse-face highlight face bold)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_combo_sticky_insert_between_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     // Inserting between two differently-propertized regions: which props stick?
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -380,7 +405,7 @@ fn div_combo_sticky_insert_between_props() {
   (insert "X")
   (list (get-text-property 3 'face) (get-text-property 4 'face)))
 "##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
@@ -389,6 +414,7 @@ fn div_combo_sticky_insert_between_props() {
 #[test]
 fn div_combo_font_lock_like_apply_faces_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (keyword nil 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -400,6 +426,6 @@ fn div_combo_font_lock_like_apply_faces_multibyte() {
         (get-text-property 11 'face)
         (next-single-property-change 1 'face)))
 "##,
-        expect_test::expect![[r#""OK (keyword nil 2)""#]],
+        expect,
     );
 }

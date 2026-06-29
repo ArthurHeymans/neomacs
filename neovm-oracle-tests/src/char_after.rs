@@ -12,15 +12,17 @@ use super::common::{
 fn oracle_prop_char_after_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""abcOK 97""#]];
     let (oracle_at_point, neovm_at_point) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (erase-buffer) (insert "abc") (goto-char 1) (char-after))"#,
-        expect_test::expect![[r#""abcOK 97""#]],
+        expect,
     );
     assert_ok_eq("97", &oracle_at_point, &neovm_at_point);
 
+    let expect = expect_test::expect![[r#""abcOK 98""#]];
     let (oracle_pos, neovm_pos) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (erase-buffer) (insert "abc") (char-after 2))"#,
-        expect_test::expect![[r#""abcOK 98""#]],
+        expect,
     );
     assert_ok_eq("98", &oracle_pos, &neovm_pos);
 }
@@ -29,15 +31,17 @@ fn oracle_prop_char_after_basics() {
 fn oracle_prop_char_after_nil_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""abcOK nil""#]];
     let (oracle_nonpositive, neovm_nonpositive) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (erase-buffer) (insert "abc") (char-after 0))"#,
-        expect_test::expect![[r#""abcOK nil""#]],
+        expect,
     );
     assert_ok_eq("nil", &oracle_nonpositive, &neovm_nonpositive);
 
+    let expect = expect_test::expect![[r#""abcOK nil""#]];
     let (oracle_end, neovm_end) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (erase-buffer) (insert "abc") (char-after 4))"#,
-        expect_test::expect![[r#""abcOK nil""#]],
+        expect,
     );
     assert_ok_eq("nil", &oracle_end, &neovm_end);
 }
@@ -46,10 +50,9 @@ fn oracle_prop_char_after_nil_cases() {
 fn oracle_prop_char_after_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(char-after "x")"#,
-        expect_test::expect![[r#""ERR (wrong-type-argument integer-or-marker-p \"x\")""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument integer-or-marker-p \"x\")""#]];
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(r#"(char-after "x")"#, expect);
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
@@ -62,7 +65,8 @@ fn oracle_prop_char_after_bignum_position_saturates_like_gnu() {
     let form = r#"(with-temp-buffer
   (insert "abc")
   (char-after 1000000000000000000000000000000))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK nil""#]);
+    let expect = expect_test::expect![r#""OK nil""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 proptest! {

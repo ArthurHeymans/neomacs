@@ -39,10 +39,8 @@ fn oracle_prop_goto_char_adv_boundaries() {
         (progn (goto-char (point-min)) (point))
         ;; Return value is the position
         (goto-char 7)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (5 1 11 11 1 1 11 1 7)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (5 1 11 11 1 1 11 1 7)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -96,10 +94,8 @@ fn oracle_prop_goto_char_adv_forward_backward_char() {
                (condition-case err
                    (backward-char 5)
                  (error (list 'hit-begin (point)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (6 8 2 13 5 7 6 (hit-end 14) (hit-begin 1))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (6 8 2 13 5 7 6 (hit-end 14) (hit-begin 1))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -134,10 +130,8 @@ fn oracle_prop_goto_char_adv_bol_eol_with_n() {
         ;; Multiple lines: bol from middle of line3
         (progn (goto-char 16) (beginning-of-line 1)
                (buffer-substring (point) (progn (end-of-line) (point))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (7 7 13 6 12 7 7 12 \"line3\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (7 7 13 6 12 7 7 12 \"line3\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -186,12 +180,10 @@ fn oracle_prop_goto_char_adv_forward_line_directions() {
         (progn (goto-char 17) ;; last line "eee" (no trailing \n)
                (let ((ret (forward-line 1)))
                  (list ret (point))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 5) (0 5 \"bbb\") (0 13) (95 20) (0 9) (0 1) (-97 1) (0 20))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 5) (0 5 \"bbb\") (0 13) (95 20) (0 9) (0 1) (-97 1) (0 20))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -238,12 +230,10 @@ fn oracle_prop_goto_char_adv_skip_chars_complex() {
         (progn (goto-char 13) ;; at '_'
                (let ((n (skip-chars-forward "_+---")))
                  (list n (point))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((6 7 \"abc123\") (9 10 68) (6 7) (-3 19 \"xyz\") (3 4) (-3 19) (0 7) (0 13))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((6 7 \"abc123\") (9 10 68) (6 7) (-3 19 \"xyz\") (3 4) (-3 19) (0 7) (0 13))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -287,12 +277,10 @@ fn oracle_prop_goto_char_adv_word_navigation() {
                   bwords
                   ;; Should match
                   (equal (mapcar #'car forward-words) bwords))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"hello\" 3 8) (\"world\" 11 16) (\"foo-bar\" 19 26) (\"baz_qux\" 28 35) (\"123num\" 37 43)) (\"hello\" \"world\" \"foo-bar\" \"baz_qux\" \"123num\") t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"hello\" 3 8) (\"world\" 11 16) (\"foo-bar\" 19 26) (\"baz_qux\" 28 35) (\"123num\" 37 43)) (\"hello\" \"world\" \"foo-bar\" \"baz_qux\" \"123num\") t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -338,12 +326,10 @@ fn oracle_prop_goto_char_adv_paragraph_navigation() {
         (let ((result (nreverse paragraphs)))
           (list (length result)
                 result))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (3 (\"First paragraph line one. First paragraph line two.\" \"Second paragraph here. Still second paragraph.\" \"Third after double blank.\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (3 (\"First paragraph line one. First paragraph line two.\" \"Second paragraph here. Still second paragraph.\" \"Third after double blank.\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -393,8 +379,6 @@ fn oracle_prop_goto_char_adv_balanced_parens() {
                       (cons (buffer-substring start (point))
                             groups))))))
         (nreverse groups)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"a\" \"(b c)\" \"(d (e f) g)\" \"h\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"a\" \"(b c)\" \"(d (e f) g)\" \"h\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx149_image_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -17,13 +18,14 @@ fn div_cx149_image_mode_availability() {
             (boundp 'image-animate-loop)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx149_image_dired_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -34,13 +36,16 @@ fn div_cx149_image_dired_availability() {
             (boundp 'image-dired-thumbnail-storage)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx149_image_type_available_p_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((png t) (jpeg t) (gif t) (tiff t) (xpm t) (xbm t) (svg t) (imagemagick nil) (webp t))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -48,15 +53,14 @@ fn div_cx149_image_type_available_p_matrix() {
             '(png jpeg gif tiff xpm xbm svg imagemagick webp))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK ((png t) (jpeg t) (gif t) (tiff t) (xpm t) (xbm t) (svg t) (imagemagick nil) (webp t))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx149_image_create_with_various_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t image png \"test.png\" 90)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -68,13 +72,14 @@ fn div_cx149_image_create_with_various_types() {
             (plist-get (cdr img) :ascent)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t image png \"test.png\" 90)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx149_image_size_query_various() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t :err :err)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -88,13 +93,14 @@ fn div_cx149_image_size_query_various() {
               (error :err))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t :err :err)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx149_imagemagick_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -103,13 +109,14 @@ fn div_cx149_imagemagick_availability() {
           (boundp 'imagemagick-enabled-types))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx149_image_animate_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t :err)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -118,13 +125,16 @@ fn div_cx149_image_animate_predicate() {
             (condition-case err (image-animated-p img) (error :err))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t :err)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx149_image_wrap_display_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((image :type png :file \"fake.png\" :scale default) nil t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -135,15 +145,14 @@ fn div_cx149_image_wrap_display_property() {
           (get-text-property 1 'display)
           (imagep (get-text-property 7 'display)))))
 "##,
-        expect_test::expect![[
-            r#""OK ((image :type png :file \"fake.png\" :scale default) nil t)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx149_image_transform_avail() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -153,13 +162,14 @@ fn div_cx149_image_transform_avail() {
           (fboundp 'image-increase-size))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t nil t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx149_image_refresh() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -168,13 +178,14 @@ fn div_cx149_image_refresh() {
           (boundp 'image-cache-eviction-delay))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx149_svg_create_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t image svg)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -189,13 +200,14 @@ fn div_cx149_svg_create_basic() {
                 (plist-get (cdr img) :type)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t image svg)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx149_image_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -223,6 +235,6 @@ fn div_cx149_image_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     );
 }

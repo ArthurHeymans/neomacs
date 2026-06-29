@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx202_button_make_and_query_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -25,13 +26,14 @@ fn div_cx202_button_make_and_query_properties() {
               (length (overlays-in 1 20)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx202_insert_button_with_action() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -46,13 +48,14 @@ fn div_cx202_insert_button_with_action() {
             (button-get (button-at 1) 'help-echo)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx202_button_next_previous_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (6 16 26 16)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -72,13 +75,14 @@ fn div_cx202_button_next_previous_navigation() {
                     (and back (button-start back))))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (6 16 26 16)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx202_button_at_edge_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -94,13 +98,14 @@ fn div_cx202_button_at_edge_boundaries() {
             (button-end (button-at 3))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx202_button_category_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -114,13 +119,14 @@ fn div_cx202_button_category_properties() {
               (button-get btn 'face))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored error)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx202_button_delete_overlay_removes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -133,13 +139,14 @@ fn div_cx202_button_delete_overlay_removes() {
               (length (overlays-in 1 10)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx202_button_with_multiple_in_same_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 \"alpha\" \"beta\" \"gamma\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -154,13 +161,14 @@ fn div_cx202_button_with_multiple_in_same_buffer() {
             (button-get (button-at 13) 'help-echo)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (3 \"alpha\" \"beta\" \"gamma\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx202_button_overlay_face_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (link highlight \"Click\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -177,13 +185,14 @@ fn div_cx202_button_overlay_face_query() {
               (overlay-get ov 'button))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (link highlight \"Click\" t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx202_button_edit_button_label() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"click here for more\" 1 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -195,13 +204,14 @@ fn div_cx202_button_edit_button_label() {
             (button-end (button-at 1))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"click here for more\" 1 5)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx202_button_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -231,6 +241,6 @@ fn div_cx202_button_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }

@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_eieio_method_error_after_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (6 ((before 3 4) completed (after 4) (before 4 5) completed (after 5) (before 5 6)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-eieio-log-xxx nil)
@@ -26,9 +29,7 @@ fn divergence_eieio_method_error_after_state() {
     (ignore-errors (test-inc-and-check-xxx o))
     (list (slot-value o 'val)
           (nreverse test-eieio-log-xxx)))) "#,
-        expect_test::expect![[
-            r#""OK (6 ((before 3 4) completed (after 4) (before 4 5) completed (after 5) (before 5 6)))""#
-        ]],
+        expect,
     );
 }
 
@@ -36,6 +37,7 @@ fn divergence_eieio_method_error_after_state() {
 fn divergence_eieio_initform_dynamic_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (15 test-eieio-dyn-xxx 105 test-eieio-dyn-xxx)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-eieio-dyn-xxx 10)
@@ -47,7 +49,7 @@ fn divergence_eieio_initform_dynamic_binding() {
       (let ((o2 (test-dyn-init-xxx "o2")))
         (list (slot-value o1 'derived) (slot-value o1 'captured)
               (slot-value o2 'derived) (slot-value o2 'captured)))))) "#,
-        expect_test::expect![[r#""OK (15 test-eieio-dyn-xxx 105 test-eieio-dyn-xxx)""#]],
+        expect,
     );
 }
 
@@ -55,6 +57,9 @@ fn divergence_eieio_initform_dynamic_binding() {
 fn divergence_cl_labels_recursive_with_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((1 0) (2 1) (4 2) (8 3) (9 3) (5 2) (10 3) (11 3) (3 1) (6 2) (12 3) (13 3) (7 2) (14 3) (15 3))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((visited nil))
   (cl-labels ((visit (n depth)
@@ -66,9 +71,7 @@ fn divergence_cl_labels_recursive_with_condition_case() {
                    (error (push (list 'caught n) visited)))))
     (visit 1 0))
   (nreverse visited)) "#,
-        expect_test::expect![[
-            r#""OK ((1 0) (2 1) (4 2) (8 3) (9 3) (5 2) (10 3) (11 3) (3 1) (6 2) (12 3) (13 3) (7 2) (14 3) (15 3))""#
-        ]],
+        expect,
     );
 }
 
@@ -76,6 +79,7 @@ fn divergence_cl_labels_recursive_with_condition_case() {
 fn divergence_eieio_defclass_with_validation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (50 0 100 test-valid-xxx)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-valid-xxx ()
@@ -91,7 +95,7 @@ fn divergence_eieio_defclass_with_validation() {
           (slot-value o2 'value)
           (slot-value o3 'value)
           (eieio-object-class-name o1)))) "#,
-        expect_test::expect![[r#""OK (50 0 100 test-valid-xxx)""#]],
+        expect,
     );
 }
 
@@ -99,6 +103,7 @@ fn divergence_eieio_defclass_with_validation() {
 fn divergence_eieio_clone_after_mutation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (99 10 20 20 nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-pair-xxx ()
@@ -112,7 +117,7 @@ fn divergence_eieio_clone_after_mutation() {
           (eq orig cloned)
           (equal (eieio-object-class-name orig)
                  (eieio-object-class-name cloned))))) "#,
-        expect_test::expect![[r#""OK (99 10 20 20 nil t)""#]],
+        expect,
     );
 }
 
@@ -120,6 +125,7 @@ fn divergence_eieio_clone_after_mutation() {
 fn divergence_advice_on_generic_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (150 50 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-adv-eieio-xxx () ((v :initarg :v :initform 1)))
@@ -136,7 +142,7 @@ fn divergence_advice_on_generic_method() {
             (test-compute-xxx o)
             (= result 150)
             (= (test-compute-xxx o) 50))))) "#,
-        expect_test::expect![[r#""OK (150 50 t t)""#]],
+        expect,
     );
 }
 
@@ -144,6 +150,7 @@ fn divergence_advice_on_generic_method() {
 fn divergence_unwind_protect_in_constructor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (error \"test error in ctor\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-ctor-log-xxx nil)
@@ -157,7 +164,7 @@ fn divergence_unwind_protect_in_constructor() {
         (error "test error in ctor"))
     (push 'cleanup test-ctor-log-xxx))
   (nreverse test-ctor-log-xxx)) "#,
-        expect_test::expect![[r#""ERR (error \"test error in ctor\")""#]],
+        expect,
     );
 }
 
@@ -165,6 +172,8 @@ fn divergence_unwind_protect_in_constructor() {
 fn divergence_dynamic_var_in_method_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""OK ((a default) (b default) ((a overridden) (b overridden)))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-dispatch-ctx-xxx 'default)
@@ -182,7 +191,7 @@ fn divergence_dynamic_var_in_method_dispatch() {
           (test-handle-xxx b)
           (let ((test-dispatch-ctx-xxx 'overridden))
             (list (test-handle-xxx a) (test-handle-xxx b)))))) "#,
-        expect_test::expect![[r#""OK ((a default) (b default) ((a overridden) (b overridden)))""#]],
+        expect,
     );
 }
 
@@ -190,6 +199,9 @@ fn divergence_dynamic_var_in_method_dispatch() {
 fn divergence_cl_defmethod_eql_specializer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((the-answer 42) (special :special) (default 99) (default anything))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defgeneric test-eql-dispatch-xxx (x) "EQL dispatch.")
@@ -203,9 +215,7 @@ fn divergence_cl_defmethod_eql_specializer() {
         (test-eql-dispatch-xxx :special)
         (test-eql-dispatch-xxx 99)
         (test-eql-dispatch-xxx 'anything))) "#,
-        expect_test::expect![[
-            r#""OK ((the-answer 42) (special :special) (default 99) (default anything))""#
-        ]],
+        expect,
     );
 }
 
@@ -213,6 +223,9 @@ fn divergence_cl_defmethod_eql_specializer() {
 fn divergence_eieio_object_with_overridden_equal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK (1 2 nil t \"#s(test-eq-obj-xxx 1 (x y z))\" \"#s(test-eq-obj-xxx 2 (x y z))\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (defclass test-eq-obj-xxx ()
@@ -229,8 +242,6 @@ fn divergence_eieio_object_with_overridden_equal() {
             (equal (slot-value a 'data) (slot-value b 'data))
             (format \"%s\" a)
             (format \"%s\" b))))) ",
-        expect_test::expect![[
-            r##""OK (1 2 nil t \"#s(test-eq-obj-xxx 1 (x y z))\" \"#s(test-eq-obj-xxx 2 (x y z))\")""##
-        ]],
+        expect,
     );
 }

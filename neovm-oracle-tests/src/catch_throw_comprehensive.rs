@@ -48,12 +48,10 @@ fn oracle_prop_catch_comprehensive_same_tag_nesting() {
         'inner-no-throw)
       (throw 'tag 'hit-outer))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((outer-before inner-caught outer-after) (L1 (L2 L3-caught L2-after) L1-after) 103 hit-outer)""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((outer-before inner-caught outer-after) (L1 (L2 L3-caught L2-after) L1-after) 103 hit-outer)""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -96,12 +94,10 @@ fn oracle_prop_catch_comprehensive_different_tag_nesting() {
         (catch 'level-3
           (throw 'level-0 'escaped-all))))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (skipped-inner (before inner-val after) hit-b (beta-val gamma-val alpha-continues) escaped-all)""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (skipped-inner (before inner-val after) hit-b (beta-val gamma-val alpha-continues) escaped-all)""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -145,10 +141,8 @@ fn oracle_prop_catch_comprehensive_throw_across_functions() {
     (fmakunbound 'neovm--test-ctc-indirect)
     (fmakunbound 'neovm--test-ctc-deep)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (direct indirect from-depth-5 from-nested-lambda)""#],
-    );
+    let expect = expect_test::expect![r#""OK (direct indirect from-depth-5 from-nested-lambda)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -188,12 +182,10 @@ fn oracle_prop_catch_comprehensive_throw_value_types() {
   ;; character
   (catch 'tag (throw 'tag ?A)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil 42 -999 3.14 \"hello world\" some-symbol (a . b) (1 2 3 4 5) ((a b) (c d) (e (f g))) [1 2 3] [1 \"two\" three (4 5)] t 65)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil 42 -999 3.14 \"hello world\" some-symbol (a . b) (1 2 3 4 5) ((a b) (c d) (e (f g))) [1 2 3] [1 \"two\" three (4 5)] t 65)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -232,10 +224,8 @@ fn oracle_prop_catch_comprehensive_no_throw() {
   ;; Empty catch body
   (catch 'tag))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (42 3 nil 300 yes 15 30 nil)""#],
-    );
+    let expect = expect_test::expect![r#""OK (42 3 nil 300 yes 15 30 nil)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -280,12 +270,10 @@ fn oracle_prop_catch_comprehensive_unwind_protect() {
     ;; Complete log
     (nreverse log)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (thrown deep-throw normal-exit (released) (cleanup1 inner-cleanup mid-cleanup outer-cleanup normal-cleanup released))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (thrown deep-throw normal-exit (released) (cleanup1 inner-cleanup mid-cleanup outer-cleanup normal-cleanup released))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -337,12 +325,10 @@ fn oracle_prop_catch_comprehensive_condition_case_interaction() {
           (signal 'void-variable '(undefined-var))
         (void-variable 'signal-caught)))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (thrown-past-handler error-caught error-then-throw inner-throw escaped-via-handler (numberp signal-caught))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (thrown-past-handler error-caught error-then-throw inner-throw escaped-via-handler (numberp signal-caught))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -379,10 +365,8 @@ fn oracle_prop_catch_comprehensive_tag_identity() {
   (catch (car '(found-it))
     (throw (car '(found-it)) 'car-tag-works)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""ERR (no-catch nil nil-tag-works)""#],
-    );
+    let expect = expect_test::expect![r#""ERR (no-catch nil nil-tag-works)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -417,10 +401,8 @@ fn oracle_prop_catch_comprehensive_dynamic_extent() {
           (neovm--test-ctc-dyn-call-in-catch (lambda () 4))))
     (fmakunbound 'neovm--test-ctc-dyn-call-in-catch)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (caught no-throw (1 2 3 4))""#],
-    );
+    let expect = expect_test::expect![r#""OK (caught no-throw (1 2 3 4))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -475,12 +457,10 @@ fn oracle_prop_catch_comprehensive_early_return_complex() {
     (fmakunbound 'neovm--test-ctc-accum-until)
     (fmakunbound 'neovm--test-ctc-nested-search)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((b . 5) nil (1 4 9) (1 4 9 16 25) (found-in (4 5 6) at 5) not-found)""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((b . 5) nil (1 4 9) (1 4 9 16 25) (found-in (4 5 6) at 5) not-found)""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -520,10 +500,8 @@ fn oracle_prop_catch_comprehensive_complex_throw_values() {
                 (* n (funcall factorial (1- n))))))
       (throw 'tag (funcall factorial 6)))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((30 200 10) (2 3 4 5 6) (2 6 8) (from inner) 720)""#],
-    );
+    let expect = expect_test::expect![r#""OK ((30 200 10) (2 3 4 5 6) (2 6 8) (from inner) 720)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -568,10 +546,8 @@ fn oracle_prop_catch_comprehensive_signal_vs_throw() {
       (throw 'no-such-catch-tag 'value)
     (no-catch (list 'no-catch-error (car (cdr err))))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((condition-case-caught \"test error\") catch-caught ((before error-handled) final) signal-escaped-catch (no-catch-error no-such-catch-tag))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((condition-case-caught \"test error\") catch-caught ((before error-handled) final) signal-escaped-catch (no-catch-error no-such-catch-tag))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

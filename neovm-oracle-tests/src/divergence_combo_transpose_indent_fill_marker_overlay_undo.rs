@@ -15,6 +15,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_transpose_chars_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-tc")))
@@ -52,7 +53,7 @@ fn combo_transpose_chars_marker_overlay_undo() {
                                 (get-text-property 16 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
+        expect,
     );
 }
 
@@ -60,6 +61,7 @@ fn combo_transpose_chars_marker_overlay_undo() {
 fn combo_transpose_words_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 27 35)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-tw")))
@@ -100,7 +102,7 @@ fn combo_transpose_words_marker_overlay_undo() {
                                 (get-text-property 27 'word))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (args-out-of-range 27 35)""#]],
+        expect,
     );
 }
 
@@ -108,6 +110,7 @@ fn combo_transpose_words_marker_overlay_undo() {
 fn combo_transpose_lines_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-tl")))
@@ -148,7 +151,7 @@ fn combo_transpose_lines_marker_overlay_undo() {
                                 (get-text-property 25 'line))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
+        expect,
     );
 }
 
@@ -156,6 +159,7 @@ fn combo_transpose_lines_marker_overlay_undo() {
 fn combo_indent_region_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-ir")))
@@ -188,7 +192,7 @@ fn combo_indent_region_marker_overlay_undo() {
                                 (get-text-property 31 'code))))
             (kill-buffer buf)
             (list after restored)))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -196,6 +200,7 @@ fn combo_indent_region_marker_overlay_undo() {
 fn combo_indent_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-inar")))
@@ -235,6 +240,6 @@ fn combo_indent_narrow_marker_overlay_undo() {
                                 (get-text-property 21 'sect))))
             (kill-buffer buf)
             (list after restored)))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

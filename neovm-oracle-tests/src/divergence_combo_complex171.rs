@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx171_cl_incf_decf_with_places() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ([2 12 2 -1 5] (11 120 30 39))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((v (vector 1 2 3 4 5))
@@ -20,39 +21,42 @@ fn div_cx171_cl_incf_decf_with_places() {
   (cl-decf (nth 3 lst))
   (list v lst))
 "##,
-        expect_test::expect![[r#""OK ([2 12 2 -1 5] (11 120 30 39))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx171_cl_rotatef_three_places_in_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK [3 2 5 4 1]""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((v [1 2 3 4 5]))
   (cl-rotatef (aref v 0) (aref v 2) (aref v 4))
   v)
 "##,
-        expect_test::expect![[r#""OK [3 2 5 4 1]""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx171_cl_shiftf_chain_through_places() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ([2 3 4 99 5])""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((v [1 2 3 4 5]))
   (cl-shiftf (aref v 0) (aref v 1) (aref v 2) (aref v 3) 99)
   (list v))
 "##,
-        expect_test::expect![[r#""OK ([2 3 4 99 5])""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx171_setf_on_plist_getf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:d 40 :a 99 :b 2 :c 3) 99 2 40)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (list :a 1 :b 2 :c 3)))
@@ -60,13 +64,14 @@ fn div_cx171_setf_on_plist_getf() {
   (setf (cl-getf p :d) 40)
   (list p (cl-getf p :a) (cl-getf p :b) (cl-getf p :d)))
 "##,
-        expect_test::expect![[r#""OK ((:d 40 :a 99 :b 2 :c 3) 99 2 40)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx171_setf_on_car_cdr_cons() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (100 200 300 400)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lst (list 1 2 3 4)))
@@ -75,13 +80,14 @@ fn div_cx171_setf_on_car_cdr_cons() {
   (setf (cddr lst) (list 300 400))
   lst)
 "##,
-        expect_test::expect![[r#""OK (100 200 300 400)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx171_setf_on_nthcdr_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (10 2 30 4 50)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lst (list 1 2 3 4 5)))
@@ -90,13 +96,14 @@ fn div_cx171_setf_on_nthcdr_chain() {
   (setf (nth 4 lst) 50)
   lst)
 "##,
-        expect_test::expect![[r#""OK (10 2 30 4 50)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx171_cl_letf_with_symbol_function_temp_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (500 void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((result-list nil))
@@ -106,13 +113,14 @@ fn div_cx171_cl_letf_with_symbol_function_temp_override() {
   (push (condition-case e (neo-cx171-temp-fn 5) (error (car e))) result-list)
   (nreverse result-list))
 "##,
-        expect_test::expect![[r#""OK (500 void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx171_cl_letf_with_buffer_local_var_temp_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK :orig""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx171-letf*")))
@@ -125,13 +133,14 @@ fn div_cx171_cl_letf_with_buffer_local_var_temp_override() {
   (prog1 (buffer-local-value 'neo-cx171-local buf)
     (kill-buffer buf)))
 "##,
-        expect_test::expect![[r#""OK :orig""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx171_cl_letf_star_with_dependencies() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK [1 2 3 4]""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((v [1 2 3 4]))
@@ -140,13 +149,14 @@ fn div_cx171_cl_letf_star_with_dependencies() {
              ((aref v 2) (* (aref v 1) 2)))
     v))
 "##,
-        expect_test::expect![[r#""OK [1 2 3 4]""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx171_setf_through_indirect_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defsetf)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((v [1 2 3 4]))
@@ -156,13 +166,14 @@ fn div_cx171_setf_through_indirect_function() {
   (setf (neo-cx171-access v 0) 100)
   v)
 "##,
-        expect_test::expect![[r#""ERR (void-function cl-defsetf)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx171_setf_on_text_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ get-text-property\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -174,13 +185,14 @@ fn div_cx171_setf_on_text_properties() {
         (text-properties-at 5)
         (text-properties-at 7)))
 "##,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ get-text-property\\))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx171_setf_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((v [1 2 3 4 5])
@@ -207,6 +219,6 @@ fn div_cx171_setf_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }

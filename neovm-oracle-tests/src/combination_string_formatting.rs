@@ -65,12 +65,10 @@ fn oracle_prop_strfmt_table_aligned_columns() {
                   (unless (= (length line) expected-len)
                     (setq all-same nil)))
                 (list all-same expected-len)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Name  | Age | Score | City         \" \"------+-----+-------+--------------\" (\"Alice |  30 |  95.2 | New York     \" \"Bob   |  25 |  87.6 | Los Angeles  \" \"Carol |  35 |  91.8 | Chicago      \" \"Dave  |  28 |  78.3 | San Francisco\" \"Eve   |  32 |  99.1 | Boston       \") (t 35))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Name  | Age | Score | City         \" \"------+-----+-------+--------------\" (\"Alice |  30 |  95.2 | New York     \" \"Bob   |  25 |  87.6 | Los Angeles  \" \"Carol |  35 |  91.8 | Chicago      \" \"Dave  |  28 |  78.3 | San Francisco\" \"Eve   |  32 |  99.1 | Boston       \") (t 35))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -119,12 +117,10 @@ fn oracle_prop_strfmt_box_drawing() {
             (length box-parts)
             ;; Top and bottom should match
             (string= top bottom)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"+-----------------+\n| Hello, World!   |\n| This is a box.  |\n| Multiple lines! |\n| End.            |\n+-----------------+\" (t 19) 6 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"+-----------------+\n| Hello, World!   |\n| This is a box.  |\n| Multiple lines! |\n| End.            |\n+-----------------+\" (t 19) 6 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -185,12 +181,10 @@ fn oracle_prop_strfmt_tree_visualization() {
           (list (mapconcat #'identity lines "\n")
                 (length lines))))
     (fmakunbound 'neovm--test-render-tree)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"project\n|-- src\n|   |-- main.rs\n|   |-- lib.rs\n|   `-- utils\n|       |-- helpers.rs\n|       `-- math.rs\n|-- tests\n|   `-- test_main.rs\n`-- Cargo.toml\" 10)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"project\n|-- src\n|   |-- main.rs\n|   |-- lib.rs\n|   `-- utils\n|       |-- helpers.rs\n|       `-- math.rs\n|-- tests\n|   `-- test_main.rs\n`-- Cargo.toml\" 10)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -236,12 +230,10 @@ fn oracle_prop_strfmt_progress_bar() {
               ;; Verify boundary cases
               (funcall render-progress -5 10 ?# ?.)
               (funcall render-progress 150 10 ?# ?.))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"[..............................]   0%\" \"[###...........................]  10%\" \"[#######.......................]  25%\" \"[#########.....................]  33%\" \"[###############...............]  50%\" \"[####################..........]  67%\" \"[######################........]  75%\" \"[###########################...]  90%\" \"[##############################] 100%\") (\"[--------------------]   0%\" \"[==========----------]  50%\" \"[====================] 100%\") t \"[..........]   0%\" \"[##########] 100%\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"[..............................]   0%\" \"[###...........................]  10%\" \"[#######.......................]  25%\" \"[#########.....................]  33%\" \"[###############...............]  50%\" \"[####################..........]  67%\" \"[######################........]  75%\" \"[###########################...]  90%\" \"[##############################] 100%\") (\"[--------------------]   0%\" \"[==========----------]  50%\" \"[====================] 100%\") t \"[..........]   0%\" \"[##########] 100%\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -328,12 +320,10 @@ fn oracle_prop_strfmt_unified_diff() {
               (= (- additions deletions)
                  (- (length new) (length old)))))
     (fmakunbound 'neovm--test-diff-lcs)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"--- old\" \"+++ new\" \"@@ -1,5 +1,6 @@\" \" alpha\" \"-bravo\" \"+BRAVO\" \" charlie\" \"-delta\" \"+foxtrot\" \" echo\" \"+golf\") (add 3 del 2 same 3) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"--- old\" \"+++ new\" \"@@ -1,5 +1,6 @@\" \" alpha\" \"-bravo\" \"+BRAVO\" \" charlie\" \"-delta\" \"+foxtrot\" \" echo\" \"+golf\") (add 3 del 2 same 3) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -411,12 +401,10 @@ fn oracle_prop_strfmt_log_formatter() {
             by-component
             (length entries)
             (length warn-up)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"[0010] DEBUG [parser  ] Tokenizing input\" \"[0011] INFO  [server  ] Listening on port 8080\" \"[0012] DEBUG [parser  ] Parsed 42 tokens\" \"[0015] WARN  [memory  ] Usage above 80%\" \"[0016] INFO  [server  ] Request received\" \"[0018] ERROR [db      ] Connection timeout\" \"[0019] DEBUG [cache   ] Cache miss for key xyz\" \"[0020] FATAL [server  ] Out of memory\" \"[0021] INFO  [server  ] Restarting...\") (\"[0015] WARN  [memory  ] Usage above 80%\" \"[0018] ERROR [db      ] Connection timeout\" \"[0020] FATAL [server  ] Out of memory\") ((debug . 3) (info . 3) (warn . 1) (error . 1) (fatal . 1)) ((\"cache\" . 1) (\"db\" . 1) (\"memory\" . 1) (\"parser\" . 2) (\"server\" . 4)) 9 3)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"[0010] DEBUG [parser  ] Tokenizing input\" \"[0011] INFO  [server  ] Listening on port 8080\" \"[0012] DEBUG [parser  ] Parsed 42 tokens\" \"[0015] WARN  [memory  ] Usage above 80%\" \"[0016] INFO  [server  ] Request received\" \"[0018] ERROR [db      ] Connection timeout\" \"[0019] DEBUG [cache   ] Cache miss for key xyz\" \"[0020] FATAL [server  ] Out of memory\" \"[0021] INFO  [server  ] Restarting...\") (\"[0015] WARN  [memory  ] Usage above 80%\" \"[0018] ERROR [db      ] Connection timeout\" \"[0020] FATAL [server  ] Out of memory\") ((debug . 3) (info . 3) (warn . 1) (error . 1) (fatal . 1)) ((\"cache\" . 1) (\"db\" . 1) (\"memory\" . 1) (\"parser\" . 2) (\"server\" . 4)) 9 3)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -514,10 +502,8 @@ fn oracle_prop_strfmt_markdown_table() {
                                     (append (list header-line sep-line)
                                             data-lines))))
                   (apply #'= lens))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"| Language   | Year | Typing  | Score |\n| :--------- | ---: | :-----: | ----: |\n| Rust       | 2010 | Static  |    95 |\n| Python     | 1991 | Dynamic |    88 |\n| Haskell    | 1990 | Static  |    82 |\n| JavaScript | 1995 | Dynamic |    79 |\n| C          | 1972 | Static  |    91 |\" 5 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"| Language   | Year | Typing  | Score |\n| :--------- | ---: | :-----: | ----: |\n| Rust       | 2010 | Static  |    95 |\n| Python     | 1991 | Dynamic |    88 |\n| Haskell    | 1990 | Static  |    82 |\n| JavaScript | 1995 | Dynamic |    79 |\n| C          | 1972 | Static  |    91 |\" 5 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

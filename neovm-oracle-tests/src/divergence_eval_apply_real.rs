@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_eval_defun_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (12 0 2 (closure (t) (x) (+ x (* x x))) \"Return X plus its square.\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (defun test-eval-nested-xxx (x)
@@ -17,9 +20,7 @@ fn divergence_eval_defun_nested() {
         (test-eval-nested-xxx -2)
         (symbol-function 'test-eval-nested-xxx)
         (documentation 'test-eval-nested-xxx))) ",
-        expect_test::expect![[
-            r#""OK (12 0 2 (closure (t) (x) (+ x (* x x))) \"Return X plus its square.\")""#
-        ]],
+        expect,
     );
 }
 
@@ -27,6 +28,7 @@ fn divergence_eval_defun_nested() {
 fn divergence_apply_with_spread() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (10 3 (a b c) [1 2 3 4 5] t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (apply '+ 1 2 '(3 4))
@@ -34,7 +36,7 @@ fn divergence_apply_with_spread() {
   (apply 'list '(a b c))
   (apply 'vector 1 2 '(3 4 5))
   (= (apply '* 2 3 '(4 5)) 120)) ",
-        expect_test::expect![[r#""OK (10 3 (a b c) [1 2 3 4 5] t)""#]],
+        expect,
     );
 }
 
@@ -42,6 +44,7 @@ fn divergence_apply_with_spread() {
 fn divergence_funcall_with_lambda_closure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (1 2 11 3 12)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((make-counter
        (lambda (start)
@@ -54,7 +57,7 @@ fn divergence_funcall_with_lambda_closure() {
           (funcall c2)
           (funcall c1)
           (funcall c2)))) ",
-        expect_test::expect![[r#""OK (1 2 11 3 12)""#]],
+        expect,
     );
 }
 
@@ -62,6 +65,7 @@ fn divergence_funcall_with_lambda_closure() {
 fn divergence_recursive_lambda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable fib)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((fib
        (lambda (n self)
@@ -72,7 +76,7 @@ fn divergence_recursive_lambda() {
         (funcall fib 1 fib)
         (funcall fib 5 fib)
         (funcall fib 10 fib))) ",
-        expect_test::expect![[r#""ERR (void-variable fib)""#]],
+        expect,
     );
 }
 
@@ -80,6 +84,9 @@ fn divergence_recursive_lambda() {
 fn divergence_condition_case_signal_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-type-argument (listp \"not-a-list\")) (args-out-of-range (\"abc\" 10)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (condition-case err
@@ -90,9 +97,7 @@ fn divergence_condition_case_signal_data() {
       (aref \"abc\" 10)
     (args-out-of-range
      (list (car err) (cdr err))))) ",
-        expect_test::expect![[
-            r#""OK ((wrong-type-argument (listp \"not-a-list\")) (args-out-of-range (\"abc\" 10)))""#
-        ]],
+        expect,
     );
 }
 
@@ -100,6 +105,7 @@ fn divergence_condition_case_signal_data() {
 fn divergence_unwind_protect_cleanup_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (result (cleanup body))""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((x nil))
   (list
@@ -107,7 +113,7 @@ fn divergence_unwind_protect_cleanup_values() {
        (progn (push 'body x) 'result)
      (push 'cleanup x))
    x)) ",
-        expect_test::expect![[r#""OK (result (cleanup body))""#]],
+        expect,
     );
 }
 
@@ -115,6 +121,7 @@ fn divergence_unwind_protect_cleanup_values() {
 fn divergence_nested_condition_unwind_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (cleanup handler body)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((log nil))
   (ignore-errors
@@ -124,7 +131,7 @@ fn divergence_nested_condition_unwind_order() {
           (error (push 'handler log) (signal (car err) (cdr err))))
       (push 'cleanup log)))
   log) ",
-        expect_test::expect![[r#""OK (cleanup handler body)""#]],
+        expect,
     );
 }
 
@@ -132,6 +139,7 @@ fn divergence_nested_condition_unwind_order() {
 fn divergence_defmacro_expand() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable \\`)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (defmacro test-swap-xxx (a b)
@@ -140,7 +148,7 @@ fn divergence_defmacro_expand() {
     (test-swap-xxx x y)
     (list x y
           (macroexpand '(test-swap-xxx x y))))) ",
-        expect_test::expect![[r#""ERR (void-variable \\`)""#]],
+        expect,
     );
 }
 
@@ -148,6 +156,7 @@ fn divergence_defmacro_expand() {
 fn divergence_backquote_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable \\`)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((a 1) (b '(2 3)))
   (list
@@ -156,7 +165,7 @@ fn divergence_backquote_edge() {
    \\`(list ,(+ 1 2) ,@(mapcar '1+ '(4 5)))
    (equal \\`(list ,(+ 1 2) ,@(mapcar '1+ '(4 5)))
           '(list 3 5 6)))) ",
-        expect_test::expect![[r#""ERR (void-variable \\`)""#]],
+        expect,
     );
 }
 
@@ -164,6 +173,7 @@ fn divergence_backquote_edge() {
 fn divergence_setf_generalized() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ([10 99 30] 10 99 30)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((v [10 20 30]))
   (setf (aref v 1) 99)
@@ -171,6 +181,6 @@ fn divergence_setf_generalized() {
         (aref v 0)
         (aref v 1)
         (aref v 2))) ",
-        expect_test::expect![[r#""OK ([10 99 30] 10 99 30)""#]],
+        expect,
     );
 }

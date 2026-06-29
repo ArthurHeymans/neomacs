@@ -5,6 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_cycle_visibility_state_transitions_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -44,7 +45,7 @@ fn org_cycle_visibility_state_transitions_deep() {
                 (list v0 v1 v2 v3 v4
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 57)""#]],
+        expect,
     );
 }
 
@@ -52,6 +53,7 @@ fn org_cycle_visibility_state_transitions_deep() {
 fn org_cycle_then_edit_preserves_visibility_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 51)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -92,7 +94,7 @@ fn org_cycle_then_edit_preserves_visibility_deep() {
             (list after-cycle after-edit after-re-cycle
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 51)""#]],
+        expect,
     );
 }
 
@@ -100,6 +102,7 @@ fn org_cycle_then_edit_preserves_visibility_deep() {
 fn org_global_cycle_with_hidden_edits_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -143,7 +146,7 @@ fn org_global_cycle_with_hidden_edits_deep() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 57)""#]],
+        expect,
     );
 }
 
@@ -151,6 +154,7 @@ fn org_global_cycle_with_hidden_edits_deep() {
 fn org_cycle_property_drawer_visibility_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -198,7 +202,7 @@ fn org_cycle_property_drawer_visibility_deep() {
               (list v1 v2 v3 v4
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 54)""#]],
+        expect,
     );
 }
 
@@ -206,6 +210,7 @@ fn org_cycle_property_drawer_visibility_deep() {
 fn org_cycle_clock_logbook_visibility_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -251,7 +256,7 @@ fn org_cycle_clock_logbook_visibility_deep() {
               (list v1 v2 v3 v4
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 54)""#]],
+        expect,
     );
 }
 
@@ -259,6 +264,7 @@ fn org_cycle_clock_logbook_visibility_deep() {
 fn org_cycle_tag_toggle_visibility_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 51)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -302,7 +308,7 @@ fn org_cycle_tag_toggle_visibility_deep() {
             (list v1 v2 v3
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 51)""#]],
+        expect,
     );
 }
 
@@ -310,6 +316,7 @@ fn org_cycle_tag_toggle_visibility_deep() {
 fn org_cycle_font_lock_after_cycle_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 50 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -361,7 +368,7 @@ fn org_cycle_font_lock_after_cycle_deep() {
                 (list v0 v1 v2 v3
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 50 57)""#]],
+        expect,
     );
 }
 
@@ -369,6 +376,7 @@ fn org_cycle_font_lock_after_cycle_deep() {
 fn org_cycle_multi_level_nested_visibility_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 56 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -426,7 +434,7 @@ fn org_cycle_multi_level_nested_visibility_deep() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 56 57)""#]],
+        expect,
     );
 }
 
@@ -434,6 +442,7 @@ fn org_cycle_multi_level_nested_visibility_deep() {
 fn org_cycle_after_hide_all_show_all_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -476,7 +485,7 @@ fn org_cycle_after_hide_all_show_all_deep() {
                   (list v1 v2 v3 v4 v5 v6
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
+        expect,
     );
 }
 
@@ -484,6 +493,7 @@ fn org_cycle_after_hide_all_show_all_deep() {
 fn org_cycle_then_refile_preserves_state_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 64 34)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -549,7 +559,7 @@ fn org_cycle_then_refile_preserves_state_deep() {
         (when (get-file-buffer f) (kill-buffer (get-file-buffer f)))
         (when (file-exists-p f) (delete-file f)))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 64 34)""#]],
+        expect,
     );
 }
 
@@ -557,6 +567,7 @@ fn org_cycle_then_refile_preserves_state_deep() {
 fn org_cycle_then_edit_then_cycle_again_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -602,7 +613,7 @@ fn org_cycle_then_edit_then_cycle_again_deep() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 57)""#]],
+        expect,
     );
 }
 
@@ -610,6 +621,7 @@ fn org_cycle_then_edit_then_cycle_again_deep() {
 fn org_global_cycle_three_state_with_edits_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -653,7 +665,7 @@ fn org_global_cycle_three_state_with_edits_deep() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 57)""#]],
+        expect,
     );
 }
 
@@ -661,6 +673,7 @@ fn org_global_cycle_three_state_with_edits_deep() {
 fn org_cycle_subtree_then_hide_show_cycle_again() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -707,7 +720,7 @@ fn org_cycle_subtree_then_hide_show_cycle_again() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 57)""#]],
+        expect,
     );
 }
 
@@ -715,6 +728,7 @@ fn org_cycle_subtree_then_hide_show_cycle_again() {
 fn org_cycle_with_todo_state_changes_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -761,7 +775,7 @@ fn org_cycle_with_todo_state_changes_deep() {
               (list v1 v2 v3 v4
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 54)""#]],
+        expect,
     );
 }
 
@@ -769,6 +783,7 @@ fn org_cycle_with_todo_state_changes_deep() {
 fn org_cycle_with_priority_changes_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -812,7 +827,7 @@ fn org_cycle_with_priority_changes_deep() {
             (list v1 v2 v3
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 2)""#]],
+        expect,
     );
 }
 
@@ -820,6 +835,7 @@ fn org_cycle_with_priority_changes_deep() {
 fn org_cycle_with_tag_and_property_changes_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 49 51)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -870,7 +886,7 @@ fn org_cycle_with_tag_and_property_changes_deep() {
             (list v1 v2 v3
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 49 51)""#]],
+        expect,
     );
 }
 
@@ -878,6 +894,7 @@ fn org_cycle_with_tag_and_property_changes_deep() {
 fn org_cycle_after_fold_hide_all_then_global_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -918,7 +935,7 @@ fn org_cycle_after_fold_hide_all_then_global_cycle() {
                   (list v1 v2 v3 v4 v5 v6
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
+        expect,
     );
 }
 
@@ -926,6 +943,7 @@ fn org_cycle_after_fold_hide_all_then_global_cycle() {
 fn org_cycle_with_insert_between_cycles_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 50 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -977,7 +995,7 @@ fn org_cycle_with_insert_between_cycles_deep() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 50 57)""#]],
+        expect,
     );
 }
 
@@ -985,6 +1003,7 @@ fn org_cycle_with_insert_between_cycles_deep() {
 fn org_cycle_with_clock_in_out_between_cycles() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1031,7 +1050,7 @@ fn org_cycle_with_clock_in_out_between_cycles() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 57)""#]],
+        expect,
     );
 }
 
@@ -1039,6 +1058,9 @@ fn org_cycle_with_clock_in_out_between_cycles() {
 fn org_cycle_with_drawer_toggle_between_cycles() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (((\"Alpha\" 2) (\"Effort\" 2) (\"Body alpha\" 2) (\"Beta\" 2)) ((\"Alpha\" nil) (\"Effort\" nil) (\"Body alpha\" nil) (\"Beta\" 2)) ((\"Alpha\" nil) (\"Effort\" nil) (\"Body alpha\" nil) (\"Beta\" nil)) ((\"Alpha\" 2) (\"Effort\" 2) (\"Body alpha\" 2) (\"Beta\" 2)) ((\"Alpha\" nil) (\"Effort\" nil) (\"Body alpha\" nil) (\"Beta\" nil)) ((\"Alpha\" 2) (\"Effort\" 2) (\"Body alpha\" 2) (\"Beta\" 2)) \"* TODO Alpha\n:PROPERTIES:\n:Effort: 2h\n:END:\nBody alpha.\n\n** DONE Beta\n:PROPERTIES:\n:Effort: 1h\n:END:\nBody beta.\n\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1090,9 +1112,7 @@ fn org_cycle_with_drawer_toggle_between_cycles() {
                   (list v1 v2 v3 v4 v5 v6
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[
-            r#""OK (((\"Alpha\" 2) (\"Effort\" 2) (\"Body alpha\" 2) (\"Beta\" 2)) ((\"Alpha\" nil) (\"Effort\" nil) (\"Body alpha\" nil) (\"Beta\" 2)) ((\"Alpha\" nil) (\"Effort\" nil) (\"Body alpha\" nil) (\"Beta\" nil)) ((\"Alpha\" 2) (\"Effort\" 2) (\"Body alpha\" 2) (\"Beta\" 2)) ((\"Alpha\" nil) (\"Effort\" nil) (\"Body alpha\" nil) (\"Beta\" nil)) ((\"Alpha\" 2) (\"Effort\" 2) (\"Body alpha\" 2) (\"Beta\" 2)) \"* TODO Alpha\n:PROPERTIES:\n:Effort: 2h\n:END:\nBody alpha.\n\n** DONE Beta\n:PROPERTIES:\n:Effort: 1h\n:END:\nBody beta.\n\n\")""#
-        ]],
+        expect,
     );
 }
 
@@ -1100,6 +1120,7 @@ fn org_cycle_with_drawer_toggle_between_cycles() {
 fn org_cycle_with_subtree_promote_demote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 57 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1158,7 +1179,7 @@ fn org_cycle_with_subtree_promote_demote() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 57 57)""#]],
+        expect,
     );
 }
 
@@ -1166,6 +1187,7 @@ fn org_cycle_with_subtree_promote_demote() {
 fn org_cycle_with_move_subtree_between_cycles() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1211,7 +1233,7 @@ fn org_cycle_with_move_subtree_between_cycles() {
               (list v1 v2 v3 v4
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 54)""#]],
+        expect,
     );
 }
 
@@ -1219,6 +1241,7 @@ fn org_cycle_with_move_subtree_between_cycles() {
 fn org_cycle_with_narrow_widen_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1262,7 +1285,7 @@ fn org_cycle_with_narrow_widen_deep() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 57)""#]],
+        expect,
     );
 }
 
@@ -1270,6 +1293,7 @@ fn org_cycle_with_narrow_widen_deep() {
 fn org_cycle_with_copy_paste_subtree_between_cycles() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 50 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1321,7 +1345,7 @@ fn org_cycle_with_copy_paste_subtree_between_cycles() {
               (list v1 v2 v3 v4
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 50 54)""#]],
+        expect,
     );
 }
 
@@ -1329,6 +1353,7 @@ fn org_cycle_with_copy_paste_subtree_between_cycles() {
 fn org_cycle_with_cut_paste_subtree_between_cycles() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 58 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1388,7 +1413,7 @@ fn org_cycle_with_cut_paste_subtree_between_cycles() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 58 57)""#]],
+        expect,
     );
 }
 
@@ -1396,6 +1421,7 @@ fn org_cycle_with_cut_paste_subtree_between_cycles() {
 fn org_cycle_with_sort_children_between_cycles() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1441,7 +1467,7 @@ fn org_cycle_with_sort_children_between_cycles() {
               (list v1 v2 v3 v4
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 54)""#]],
+        expect,
     );
 }
 
@@ -1449,6 +1475,7 @@ fn org_cycle_with_sort_children_between_cycles() {
 fn org_cycle_with_todo_cycle_between_cycles() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 57 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1507,7 +1534,7 @@ fn org_cycle_with_todo_cycle_between_cycles() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 57 57)""#]],
+        expect,
     );
 }
 
@@ -1515,6 +1542,7 @@ fn org_cycle_with_todo_cycle_between_cycles() {
 fn org_cycle_with_tag_toggle_between_cycles() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 57 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1573,7 +1601,7 @@ fn org_cycle_with_tag_toggle_between_cycles() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 57 57)""#]],
+        expect,
     );
 }
 
@@ -1581,6 +1609,7 @@ fn org_cycle_with_tag_toggle_between_cycles() {
 fn org_cycle_with_property_set_between_cycles() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 61 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1643,7 +1672,7 @@ fn org_cycle_with_property_set_between_cycles() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 61 57)""#]],
+        expect,
     );
 }
 
@@ -1651,6 +1680,7 @@ fn org_cycle_with_property_set_between_cycles() {
 fn org_cycle_with_property_delete_between_cycles() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 60 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1712,7 +1742,7 @@ fn org_cycle_with_property_delete_between_cycles() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 60 57)""#]],
+        expect,
     );
 }
 
@@ -1720,6 +1750,7 @@ fn org_cycle_with_property_delete_between_cycles() {
 fn org_cycle_with_schedule_between_cycles() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1763,7 +1794,7 @@ fn org_cycle_with_schedule_between_cycles() {
               (list v1 v2 v3 v4
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 54)""#]],
+        expect,
     );
 }
 
@@ -1771,6 +1802,7 @@ fn org_cycle_with_schedule_between_cycles() {
 fn org_cycle_with_deadline_between_cycles() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1814,7 +1846,7 @@ fn org_cycle_with_deadline_between_cycles() {
               (list v1 v2 v3 v4
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 54)""#]],
+        expect,
     );
 }
 
@@ -1822,6 +1854,7 @@ fn org_cycle_with_deadline_between_cycles() {
 fn org_cycle_global_cycle_rapid_toggle_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1857,7 +1890,7 @@ fn org_cycle_global_cycle_rapid_toggle_deep() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 57)""#]],
+        expect,
     );
 }
 
@@ -1865,6 +1898,7 @@ fn org_cycle_global_cycle_rapid_toggle_deep() {
 fn org_cycle_local_cycle_rapid_toggle_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1900,7 +1934,7 @@ fn org_cycle_local_cycle_rapid_toggle_deep() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 57)""#]],
+        expect,
     );
 }
 
@@ -1908,6 +1942,7 @@ fn org_cycle_local_cycle_rapid_toggle_deep() {
 fn org_cycle_mixed_local_global_toggle_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1953,7 +1988,7 @@ fn org_cycle_mixed_local_global_toggle_deep() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 57)""#]],
+        expect,
     );
 }
 
@@ -1961,6 +1996,7 @@ fn org_cycle_mixed_local_global_toggle_deep() {
 fn org_cycle_with_fold_subtree_hide_show_between() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2011,7 +2047,7 @@ fn org_cycle_with_fold_subtree_hide_show_between() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
+        expect,
     );
 }
 
@@ -2019,6 +2055,7 @@ fn org_cycle_with_fold_subtree_hide_show_between() {
 fn org_cycle_with_fold_hide_entry_between() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 43 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2063,7 +2100,7 @@ fn org_cycle_with_fold_hide_entry_between() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 43 57)""#]],
+        expect,
     );
 }
 
@@ -2071,6 +2108,7 @@ fn org_cycle_with_fold_hide_entry_between() {
 fn org_cycle_with_fold_hide_leaves_between() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function org-fold-hide-leaves)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2116,7 +2154,7 @@ fn org_cycle_with_fold_hide_leaves_between() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (void-function org-fold-hide-leaves)""#]],
+        expect,
     );
 }
 
@@ -2124,6 +2162,7 @@ fn org_cycle_with_fold_hide_leaves_between() {
 fn org_cycle_with_multiple_headings_different_levels() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2167,7 +2206,7 @@ fn org_cycle_with_multiple_headings_different_levels() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 57)""#]],
+        expect,
     );
 }
 
@@ -2175,6 +2214,7 @@ fn org_cycle_with_multiple_headings_different_levels() {
 fn org_cycle_with_insert_subtree_between() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2228,7 +2268,7 @@ fn org_cycle_with_insert_subtree_between() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 57)""#]],
+        expect,
     );
 }
 
@@ -2236,6 +2276,7 @@ fn org_cycle_with_insert_subtree_between() {
 fn org_cycle_with_delete_subtree_between() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2281,7 +2322,7 @@ fn org_cycle_with_delete_subtree_between() {
               (list v1 v2 v3 v4
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 54)""#]],
+        expect,
     );
 }
 
@@ -2289,6 +2330,7 @@ fn org_cycle_with_delete_subtree_between() {
 fn org_cycle_with_copy_subtree_and_cycle_destination() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 51)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2336,7 +2378,7 @@ fn org_cycle_with_copy_subtree_and_cycle_destination() {
             (list v1 v2 v3
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 51)""#]],
+        expect,
     );
 }
 
@@ -2344,6 +2386,7 @@ fn org_cycle_with_copy_subtree_and_cycle_destination() {
 fn org_cycle_with_global_cycle_and_local_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2389,7 +2432,7 @@ fn org_cycle_with_global_cycle_and_local_override() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 57)""#]],
+        expect,
     );
 }
 
@@ -2397,6 +2440,7 @@ fn org_cycle_with_global_cycle_and_local_override() {
 fn org_cycle_with_fold_show_children_between() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2446,7 +2490,7 @@ fn org_cycle_with_fold_show_children_between() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 57)""#]],
+        expect,
     );
 }
 
@@ -2454,6 +2498,7 @@ fn org_cycle_with_fold_show_children_between() {
 fn org_cycle_with_fold_show_branches_between() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2494,7 +2539,7 @@ fn org_cycle_with_fold_show_branches_between() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
+        expect,
     );
 }
 
@@ -2502,6 +2547,7 @@ fn org_cycle_with_fold_show_branches_between() {
 fn org_cycle_with_multiple_cycles_different_roots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2551,7 +2597,7 @@ fn org_cycle_with_multiple_cycles_different_roots() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 57)""#]],
+        expect,
     );
 }
 
@@ -2559,6 +2605,7 @@ fn org_cycle_with_multiple_cycles_different_roots() {
 fn org_cycle_with_fold_show_all_from_hidden() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2602,7 +2649,7 @@ fn org_cycle_with_fold_show_all_from_hidden() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
+        expect,
     );
 }
 
@@ -2610,6 +2657,7 @@ fn org_cycle_with_fold_show_all_from_hidden() {
 fn org_cycle_with_fold_hide_subtree_from_children_visible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2659,7 +2707,7 @@ fn org_cycle_with_fold_hide_subtree_from_children_visible() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
+        expect,
     );
 }
 
@@ -2667,6 +2715,7 @@ fn org_cycle_with_fold_hide_subtree_from_children_visible() {
 fn org_cycle_with_global_cycle_overview_then_local_subtree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2714,7 +2763,7 @@ fn org_cycle_with_global_cycle_overview_then_local_subtree() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 57)""#]],
+        expect,
     );
 }
 
@@ -2722,6 +2771,7 @@ fn org_cycle_with_global_cycle_overview_then_local_subtree() {
 fn org_cycle_with_insert_delete_insert_cycle_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 51 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2774,7 +2824,7 @@ fn org_cycle_with_insert_delete_insert_cycle_pattern() {
               (list v1 v2 v3 v4
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 51 54)""#]],
+        expect,
     );
 }
 
@@ -2782,6 +2832,7 @@ fn org_cycle_with_insert_delete_insert_cycle_pattern() {
 fn org_cycle_with_fold_hide_drawer_between_cycles() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2827,7 +2878,7 @@ fn org_cycle_with_fold_hide_drawer_between_cycles() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 44 57)""#]],
+        expect,
     );
 }
 
@@ -2835,6 +2886,9 @@ fn org_cycle_with_fold_hide_drawer_between_cycles() {
 fn org_cycle_with_org_overview_content_all_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) ((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) ((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) ((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) ((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) \"* A\nBody A.\n\n** A1\nBody A1.\n\n* B\nBody B.\n\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2876,9 +2930,7 @@ fn org_cycle_with_org_overview_content_all_deep() {
               (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[
-            r#""OK (((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) ((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) ((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) ((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) ((\"A\" 2) (\"Body A\" 2) (\"A1\" 2) (\"B\" 2) (\"Body B\" 2)) \"* A\nBody A.\n\n** A1\nBody A1.\n\n* B\nBody B.\n\n\")""#
-        ]],
+        expect,
     );
 }
 
@@ -2886,6 +2938,7 @@ fn org_cycle_with_org_overview_content_all_deep() {
 fn org_cycle_with_global_cycle_and_insert_at_each_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 43 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2930,7 +2983,7 @@ fn org_cycle_with_global_cycle_and_insert_at_each_state() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 43 57)""#]],
+        expect,
     );
 }
 
@@ -2938,6 +2991,7 @@ fn org_cycle_with_global_cycle_and_insert_at_each_state() {
 fn org_cycle_with_local_cycle_insert_local_cycle_again() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2985,7 +3039,7 @@ fn org_cycle_with_local_cycle_insert_local_cycle_again() {
               (list v1 v2 v3 v4
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 54)""#]],
+        expect,
     );
 }
 
@@ -2993,6 +3047,7 @@ fn org_cycle_with_local_cycle_insert_local_cycle_again() {
 fn org_cycle_with_fold_hide_all_global_cycle_hide_all_again() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3030,7 +3085,7 @@ fn org_cycle_with_fold_hide_all_global_cycle_hide_all_again() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
+        expect,
     );
 }
 
@@ -3038,6 +3093,7 @@ fn org_cycle_with_fold_hide_all_global_cycle_hide_all_again() {
 fn org_cycle_with_show_all_then_global_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 36 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3075,7 +3131,7 @@ fn org_cycle_with_show_all_then_global_cycle() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 36 57)""#]],
+        expect,
     );
 }
 
@@ -3083,6 +3139,7 @@ fn org_cycle_with_show_all_then_global_cycle() {
 fn org_cycle_with_local_cycle_at_different_headings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3136,7 +3193,7 @@ fn org_cycle_with_local_cycle_at_different_headings() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 57)""#]],
+        expect,
     );
 }
 
@@ -3144,6 +3201,9 @@ fn org_cycle_with_local_cycle_at_different_headings() {
 fn org_cycle_with_global_cycle_three_times_rapid() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (((\"A\" 2) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) ((\"A\" 2) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) ((\"A\" 2) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) ((\"A\" 2) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) ((\"A\" 2) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) ((\"A\" 2) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) \"* A\n** A1\nBody.\n\n* B\n** B1\nBody.\n\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3180,9 +3240,7 @@ fn org_cycle_with_global_cycle_three_times_rapid() {
                   (list v1 v2 v3 v4 v5 v6
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[
-            r#""OK (((\"A\" 2) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) ((\"A\" 2) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) ((\"A\" 2) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) ((\"A\" 2) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) ((\"A\" 2) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) ((\"A\" 2) (\"A1\" 2) (\"B\" 2) (\"B1\" 2)) \"* A\n** A1\nBody.\n\n* B\n** B1\nBody.\n\n\")""#
-        ]],
+        expect,
     );
 }
 
@@ -3190,6 +3248,7 @@ fn org_cycle_with_global_cycle_three_times_rapid() {
 fn org_cycle_with_outline_next_visible_heading() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3236,7 +3295,7 @@ fn org_cycle_with_outline_next_visible_heading() {
                       pos-after-next pos-after-next2
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 57)""#]],
+        expect,
     );
 }
 
@@ -3244,6 +3303,7 @@ fn org_cycle_with_outline_next_visible_heading() {
 fn org_cycle_with_outline_previous_visible_heading() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 49 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3294,7 +3354,7 @@ fn org_cycle_with_outline_previous_visible_heading() {
                     pos-after-prev pos-after-prev2
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 49 54)""#]],
+        expect,
     );
 }
 
@@ -3302,6 +3362,7 @@ fn org_cycle_with_outline_previous_visible_heading() {
 fn org_cycle_with_fold_hide_other_then_show_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function org-fold-hide-other)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3347,7 +3408,7 @@ fn org_cycle_with_fold_hide_other_then_show_all() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (void-function org-fold-hide-other)""#]],
+        expect,
     );
 }
 
@@ -3355,6 +3416,7 @@ fn org_cycle_with_fold_hide_other_then_show_all() {
 fn org_cycle_with_fold_toggle_children_visibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function org-fold-hide-children)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3397,7 +3459,7 @@ fn org_cycle_with_fold_toggle_children_visibility() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (void-function org-fold-hide-children)""#]],
+        expect,
     );
 }
 
@@ -3405,6 +3467,7 @@ fn org_cycle_with_fold_toggle_children_visibility() {
 fn org_cycle_with_fold_show_hidden_subtree_from_overview() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3454,7 +3517,7 @@ fn org_cycle_with_fold_show_hidden_subtree_from_overview() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 57)""#]],
+        expect,
     );
 }
 
@@ -3462,6 +3525,7 @@ fn org_cycle_with_fold_show_hidden_subtree_from_overview() {
 fn org_cycle_with_fold_show_entry_from_hidden() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 43 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3506,7 +3570,7 @@ fn org_cycle_with_fold_show_entry_from_hidden() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 43 57)""#]],
+        expect,
     );
 }
 
@@ -3514,6 +3578,7 @@ fn org_cycle_with_fold_show_entry_from_hidden() {
 fn org_cycle_with_multiple_roots_and_global_local_interleave() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3560,7 +3625,7 @@ fn org_cycle_with_multiple_roots_and_global_local_interleave() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 57)""#]],
+        expect,
     );
 }
 
@@ -3568,6 +3633,7 @@ fn org_cycle_with_multiple_roots_and_global_local_interleave() {
 fn org_cycle_with_fold_hide_all_then_local_cycle_different_heads() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3617,7 +3683,7 @@ fn org_cycle_with_fold_hide_all_then_local_cycle_different_heads() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (void-function org-fold-hide-all)""#]],
+        expect,
     );
 }
 
@@ -3625,6 +3691,7 @@ fn org_cycle_with_fold_hide_all_then_local_cycle_different_heads() {
 fn org_cycle_with_global_cycle_four_times_rapid() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 30 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3656,7 +3723,7 @@ fn org_cycle_with_global_cycle_four_times_rapid() {
               (list v1 v2 v3 v4
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 30 54)""#]],
+        expect,
     );
 }
 
@@ -3664,6 +3731,7 @@ fn org_cycle_with_global_cycle_four_times_rapid() {
 fn org_cycle_with_global_cycle_with_three_roots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3700,7 +3768,7 @@ fn org_cycle_with_global_cycle_with_three_roots() {
               (list v1 v2 v3 v4
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 54)""#]],
+        expect,
     );
 }
 
@@ -3708,6 +3776,7 @@ fn org_cycle_with_global_cycle_with_three_roots() {
 fn org_cycle_with_local_cycle_overview_children_subtree_overview() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3747,7 +3816,7 @@ fn org_cycle_with_local_cycle_overview_children_subtree_overview() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 57)""#]],
+        expect,
     );
 }
 
@@ -3755,6 +3824,7 @@ fn org_cycle_with_local_cycle_overview_children_subtree_overview() {
 fn org_cycle_with_local_cycle_four_times_rapid() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 31 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3787,7 +3857,7 @@ fn org_cycle_with_local_cycle_four_times_rapid() {
               (list v1 v2 v3 v4
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 31 54)""#]],
+        expect,
     );
 }
 
@@ -3795,6 +3865,7 @@ fn org_cycle_with_local_cycle_four_times_rapid() {
 fn org_cycle_with_local_cycle_five_times_rapid() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 57)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3829,7 +3900,7 @@ fn org_cycle_with_local_cycle_five_times_rapid() {
                 (list v1 v2 v3 v4 v5
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 57)""#]],
+        expect,
     );
 }
 
@@ -3837,6 +3908,7 @@ fn org_cycle_with_local_cycle_five_times_rapid() {
 fn org_cycle_with_global_cycle_and_three_roots_with_children() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3876,6 +3948,6 @@ fn org_cycle_with_global_cycle_and_three_roots_with_children() {
               (list v1 v2 v3 v4
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 54)""#]],
+        expect,
     );
 }

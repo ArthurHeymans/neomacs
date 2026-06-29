@@ -12,6 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_h7_ucs_normalize_nfc_nfd() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"é\" \"é\" \"e\u{301}\" 2 \"ö\" \"o\u{308}\")""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK ("é" "é" "é" 2 "ö" "ö")
     // Neomacs:   OK ("é" "é" "é" 1 "ö" "ö")
@@ -28,13 +29,14 @@ fn div_h7_ucs_normalize_nfc_nfd() {
       (ucs-normalize-NFD-string "ö"))
 "##,
         &["international/ucs-normalize.el"],
-        expect_test::expect![[r#""OK (\"é\" \"é\" \"e\u{301}\" 2 \"ö\" \"o\u{308}\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_h7_ucs_normalize_nfkc_compat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"fi\" \"ffi\" \"1⁄2\" \"°C\" \"(株)\")""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK ("fi" "ffi" "1⁄2" "°C" "(株)")
     // Neomacs:   OK ("fi" "ffi" "½" "°C" "(株)")
@@ -50,13 +52,14 @@ fn div_h7_ucs_normalize_nfkc_compat() {
       (ucs-normalize-NFKC-string "㈱"))
 "##,
         &["international/ucs-normalize.el"],
-        expect_test::expect![[r#""OK (\"fi\" \"ffi\" \"1⁄2\" \"°C\" \"(株)\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_h7_ucs_normalize_canonical() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"ﾊ\u{ff9e}\" \"カ\u{3099}\" 2)""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK ("ﾊﾞ" "ガ" 2)
     // Neomacs:   OK ("ﾊﾞ" "ガ" 1)
@@ -69,13 +72,16 @@ fn div_h7_ucs_normalize_canonical() {
       (length (ucs-normalize-HFS-NFD-string "ガ")))
 "##,
         &["international/ucs-normalize.el"],
-        expect_test::expect![[r#""OK (\"ﾊ\u{ff9e}\" \"カ\u{3099}\" 2)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_h7_cl_extra_floor_ceiling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((1 1.7000000000000002) (2 -0.7999999999999998) (2 0.5) (4 -0.5) (2 1) (2 1))""#
+    ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (cl-floor 3.7 2)
@@ -86,15 +92,14 @@ fn div_h7_cl_extra_floor_ceiling() {
       (cl-floor 7 3))
 "##,
         &["emacs-lisp/cl-extra.el"],
-        expect_test::expect![[
-            r#""OK ((1 1.7000000000000002) (2 -0.7999999999999998) (2 0.5) (4 -0.5) (2 1) (2 1))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_h7_ucs_normalize_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 \"é\" t \"À\")""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK (2 "é" t "À")
     // Neomacs:   OK (1 "é" t "À")
@@ -111,6 +116,6 @@ fn div_h7_ucs_normalize_roundtrip() {
         (ucs-normalize-NFC-string "À")))
 "##,
         &["international/ucs-normalize.el"],
-        expect_test::expect![[r#""OK (2 \"é\" t \"À\")""#]],
+        expect,
     );
 }

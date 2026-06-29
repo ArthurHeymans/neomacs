@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx133_proced_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -17,13 +18,14 @@ fn div_cx133_proced_availability() {
             (boundp 'proced-filter)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx133_ibuffer_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -34,13 +36,14 @@ fn div_cx133_ibuffer_availability() {
             (boundp 'ibuffer-show-empty-filter-groups)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx133_info_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -51,13 +54,14 @@ fn div_cx133_info_availability() {
             (boundp 'Info-default-directory-list)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx133_woman_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -68,13 +72,14 @@ fn div_cx133_woman_availability() {
             (boundp 'woman-path)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx133_help_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -88,13 +93,14 @@ fn div_cx133_help_availability() {
           (fboundp 'apropos-command))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx133_apropos_basic_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (excessive-lisp-nesting 1601)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -104,13 +110,14 @@ fn div_cx133_apropos_basic_search() {
             (memq 'buffer results)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""ERR (excessive-lisp-nesting 1601)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx133_info_lookup_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -119,13 +126,14 @@ fn div_cx133_info_lookup_symbol() {
           (boundp 'info-lookup-alist))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx133_describe_function_in_temp_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -134,13 +142,16 @@ fn div_cx133_describe_function_in_temp_buffer() {
             (buffer-live-p buf)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx133_apropos_with_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (t (marker marker-buffer marker-insertion-type marker-last-position marker-position markerp move-marker number-or-marker number-or-marker-p point-marker point-max-marker point-min-marker proced-marker-char proced-marker-regexp project-vc-extra-root-markers set-marker set-marker-insertion-type widget--prepare-markers-for-inside-insertion widget--revert-markers-for-outside-insertion xref-location-marker xref-marker-stack-empty-p xref-pop-marker-stack) (set-marker set-marker-insertion-type widget--prepare-markers-for-inside-insertion widget--revert-markers-for-outside-insertion xref-location-marker xref-marker-stack-empty-p xref-pop-marker-stack))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -150,15 +161,14 @@ fn div_cx133_apropos_with_predicate() {
             (memq 'set-marker all)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (t (marker marker-buffer marker-insertion-type marker-last-position marker-position markerp move-marker number-or-marker number-or-marker-p point-marker point-max-marker point-min-marker proced-marker-char proced-marker-regexp project-vc-extra-root-markers set-marker set-marker-insertion-type widget--prepare-markers-for-inside-insertion widget--revert-markers-for-outside-insertion xref-location-marker xref-marker-stack-empty-p xref-pop-marker-stack) (set-marker set-marker-insertion-type widget--prepare-markers-for-inside-insertion widget--revert-markers-for-outside-insertion xref-location-marker xref-marker-stack-empty-p xref-pop-marker-stack))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx133_help_echo_via_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"this is help text\" nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -168,13 +178,14 @@ fn div_cx133_help_echo_via_property() {
         (get-text-property 5 'help-echo)
         (get-text-property 6 'help-echo)))
 "##,
-        expect_test::expect![[r#""OK (\"this is help text\" nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx133_help_symbol_complete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -184,13 +195,14 @@ fn div_cx133_help_symbol_complete() {
             (memq 'buffer coll)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx133_help_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments mapconcat 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((sym-list (apropos-internal "buffer")))
@@ -215,6 +227,6 @@ fn div_cx133_help_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments mapconcat 5)""#]],
+        expect,
     );
 }

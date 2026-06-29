@@ -26,10 +26,8 @@ fn oracle_prop_dolist_dotimes_comp_dolist_result_form_captures_state() {
                       (setq sum (+ sum x))
                       (setq product (* product x))
                       (setq items-seen (cons x items-seen))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable x)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable x)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -47,10 +45,9 @@ fn oracle_prop_dolist_dotimes_comp_dotimes_result_form_index_value() {
                                         :final-k k
                                         :length (length cubes)))
                       (setq cubes (cons (* k k k) cubes))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (:cubes (0 1 8 27 64 125 216 343) :final-k 8 :length 1)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (:cubes (0 1 8 27 64 125 216 343) :final-k 8 :length 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -70,10 +67,8 @@ fn oracle_prop_dolist_dotimes_comp_dolist_early_throw() {
                         (when (and (> x 20) (= (% x 5) 0))
                           (throw 'found (list :value x :inspected inspected))))
                       (list :value nil :inspected inspected)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (:value 25 :inspected 5)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (:value 25 :inspected 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -92,10 +87,8 @@ fn oracle_prop_dolist_dotimes_comp_dotimes_early_throw() {
                         (when (>= cumsum 50)
                           (throw 'threshold (list :index i :cumsum cumsum))))
                       (list :index -1 :cumsum cumsum)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (:index 10 :cumsum 55)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (:index 10 :cumsum 55)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -118,10 +111,9 @@ fn oracle_prop_dolist_dotimes_comp_nested_mixed() {
                           (setq table (cons (cons label (nreverse row)) table)))
                         (setq row-idx (1+ row-idx))))
                     (nreverse table))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((alpha 1 2 3 4 5) (beta 2 4 6 8 10) (gamma 3 6 9 12 15))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((alpha 1 2 3 4 5) (beta 2 4 6 8 10) (gamma 3 6 9 12 15))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,12 +141,10 @@ fn oracle_prop_dolist_dotimes_comp_accumulation_stats() {
                       (when (< n running-min) (setq running-min n))
                       (when (> n running-max) (setq running-max n))
                       (setq trace (cons (list n running-min running-max running-sum) trace))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:final-min 3 :final-max 93 :final-sum 468 :count 10 :trace ((42 42 42 42) (17 17 42 59) (93 17 93 152) (8 8 93 160) (55 8 93 215) (71 8 93 286) (3 3 93 289) (66 3 93 355) (29 3 93 384) (84 3 93 468)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:final-min 3 :final-max 93 :final-sum 468 :count 10 :trace ((42 42 42 42) (17 17 42 59) (93 17 93 152) (8 8 93 160) (55 8 93 215) (71 8 93 286) (3 3 93 289) (66 3 93 355) (29 3 93 384) (84 3 93 468)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -179,12 +169,10 @@ fn oracle_prop_dolist_dotimes_comp_dolist_various_list_types() {
                     (dolist (x '(foo bar baz quux))
                       (setq results (cons (length (symbol-name x)) results)))
                     (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (3 7 11 integer string symbol symbol cons vector sole-item 3 3 3 4)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (3 7 11 integer string symbol symbol cons vector sole-item 3 3 3 4)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -220,12 +208,10 @@ fn oracle_prop_dolist_dotimes_comp_dotimes_index_patterns() {
                           :triangular (nreverse triangular)
                           :even-indices (nreverse even-indices)
                           :vec-results (nreverse vec-results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:powers (1 2 4 8 16 32 64 128 256 512) :triangular (0 1 3 6 10 15 21 28 36 45) :even-indices (0 2 4 6 8) :vec-results (a b c d e f g h i j))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:powers (1 2 4 8 16 32 64 128 256 512) :triangular (0 1 3 6 10 15 21 28 36 45) :even-indices (0 2 4 6 8) :vec-results (a b c d e f g h i j))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -247,12 +233,10 @@ fn oracle_prop_dolist_dotimes_comp_variable_scoping() {
                         ;; x restored after inner let
                         (setq log (cons (list :restored x) log))))
                     (nreverse log))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:shadowed 1000 :outer 10) (:restored 10) (:shadowed 2000 :outer 20) (:restored 20) (:shadowed 3000 :outer 30) (:restored 30))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:shadowed 1000 :outer 10) (:restored 10) (:shadowed 2000 :outer 20) (:restored 20) (:shadowed 3000 :outer 30) (:restored 30))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -281,12 +265,10 @@ fn oracle_prop_dolist_dotimes_comp_side_effects_in_body() {
                           :ht-c (gethash "c" ht)
                           :pairs pairs
                           :vec vec))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:ht-a 10 :ht-b 20 :ht-c 30 :pairs ((a . 11) (b . 22) (c . 33)) :vec [1 2 5 10 17])""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:ht-a 10 :ht-b 20 :ht-c 30 :pairs ((a . 11) (b . 22) (c . 33)) :vec [1 2 5 10 17])""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -316,10 +298,8 @@ fn oracle_prop_dolist_dotimes_comp_sieve_of_eratosthenes() {
                         (when (aref sieve i)
                           (setq primes (cons i primes))))
                       (nreverse primes)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (2 3 5 7 11 13 17 19 23 29 31 37 41 43 47)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 3 5 7 11 13 17 19 23 29 31 37 41 43 47)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -344,8 +324,6 @@ fn oracle_prop_dolist_dotimes_comp_nested_dotimes_catch() {
                                          :values (list (aref nums i) (aref nums j))
                                          :sum target)))))
                       nil))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (:indices (0 4) :values (11 3) :sum 14)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (:indices (0 4) :values (11 3) :sum 14)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -73,12 +73,10 @@ fn oracle_prop_consensus_majority_vote() {
     (fmakunbound 'neovm--test-boyer-moore-candidate)
     (fmakunbound 'neovm--test-verify-majority)
     (fmakunbound 'neovm--test-majority-vote)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((majority a 3 5) (no-majority a 3 7) (majority x 5 5) (majority z 1 1) (empty) (majority a 3 5) (majority 1 6 9) (majority \"yes\" 4 6))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((majority a 3 5) (no-majority a 3 7) (majority x 5 5) (majority z 1 1) (empty) (majority a 3 5) (majority 1 6 9) (majority \"yes\" 4 6))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -180,12 +178,10 @@ fn oracle_prop_consensus_ranked_choice() {
     (fmakunbound 'neovm--test-count-first-choices)
     (fmakunbound 'neovm--test-find-loser)
     (fmakunbound 'neovm--test-instant-runoff)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:winner carol :rounds ((:round 1 :counts ((alice . 3) (dave . 2) (carol . 2) (bob . 2))) (:round 2 :counts ((alice . 4) (carol . 3) (dave . 2))) (:round 3 :counts ((carol . 5) (alice . 4)))) :eliminated (dave bob)) (:winner x :rounds ((:round 1 :counts ((x . 3) (y . 0)))) :eliminated nil) (:winner a :rounds ((:round 1 :counts ((a . 3) (b . 2)))) :eliminated nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:winner carol :rounds ((:round 1 :counts ((alice . 3) (dave . 2) (carol . 2) (bob . 2))) (:round 2 :counts ((alice . 4) (carol . 3) (dave . 2))) (:round 3 :counts ((carol . 5) (alice . 4)))) :eliminated (dave bob)) (:winner x :rounds ((:round 1 :counts ((x . 3) (y . 0)))) :eliminated nil) (:winner a :rounds ((:round 1 :counts ((a . 3) (b . 2)))) :eliminated nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -266,12 +262,10 @@ fn oracle_prop_consensus_borda_count() {
                    '((alpha beta) (beta alpha) (alpha beta))
                    '(alpha beta))))
     (fmakunbound 'neovm--test-borda-count)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:winner alpha :scores ((alpha . 14) (beta . 14) (gamma . 12) (delta . 2)) :total-ballots 7 :max-possible-score 21) (:winner alpha :scores ((alpha . 9) (beta . 6) (gamma . 3) (delta . 0)) :total-ballots 3 :max-possible-score 9) (:winner beta :scores ((beta . 10) (gamma . 8) (alpha . 7) (delta . 5)) :total-ballots 5 :max-possible-score 15) (:winner alpha :scores ((alpha . 2) (beta . 1)) :total-ballots 3 :max-possible-score 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:winner alpha :scores ((alpha . 14) (beta . 14) (gamma . 12) (delta . 2)) :total-ballots 7 :max-possible-score 21) (:winner alpha :scores ((alpha . 9) (beta . 6) (gamma . 3) (delta . 0)) :total-ballots 3 :max-possible-score 9) (:winner beta :scores ((beta . 10) (gamma . 8) (alpha . 7) (delta . 5)) :total-ballots 5 :max-possible-score 15) (:winner alpha :scores ((alpha . 2) (beta . 1)) :total-ballots 3 :max-possible-score 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -377,12 +371,10 @@ fn oracle_prop_consensus_plurality_elimination() {
                    '(ann ben))))
     (fmakunbound 'neovm--test-tally-votes)
     (fmakunbound 'neovm--test-plurality-elimination)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:winner ben :rounds ((1 ((cal . 3) (ben . 3) (ann . 3) (dee . 2))) (2 ((cal . 4) (ben . 4) (ann . 3))) (3 ((ben . 6) (cal . 5)))) :eliminated (dee ann)) (:winner ann :rounds ((1 ((ann . 3) (cal . 1) (ben . 1)))) :eliminated nil) (:winner ben :rounds ((1 ((ben . 1) (ann . 1)))) :eliminated (ann)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:winner ben :rounds ((1 ((cal . 3) (ben . 3) (ann . 3) (dee . 2))) (2 ((cal . 4) (ben . 4) (ann . 3))) (3 ((ben . 6) (cal . 5)))) :eliminated (dee ann)) (:winner ann :rounds ((1 ((ann . 3) (cal . 1) (ben . 1)))) :eliminated nil) (:winner ben :rounds ((1 ((ben . 1) (ann . 1)))) :eliminated (ann)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -469,12 +461,10 @@ fn oracle_prop_consensus_approval_voting() {
                    '((apple banana cherry date))
                    candidates)))
     (fmakunbound 'neovm--test-approval-vote)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:winner apple :results ((apple 4 57) (banana 4 57) (cherry 4 57) (date 3 42)) :voters 7 :majority-approved 3) (:winner apple :results ((apple 3 100) (banana 3 100) (cherry 3 100) (date 3 100)) :voters 3 :majority-approved 4) (:winner apple :results ((apple 2 40) (banana 2 40) (cherry 1 20) (date 0 0)) :voters 5 :majority-approved 0) (:winner apple :results ((apple 0 0) (banana 0 0) (cherry 0 0) (date 0 0)) :voters 3 :majority-approved 0) (:winner apple :results ((apple 1 100) (banana 1 100) (cherry 1 100) (date 1 100)) :voters 1 :majority-approved 4))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:winner apple :results ((apple 4 57) (banana 4 57) (cherry 4 57) (date 3 42)) :voters 7 :majority-approved 3) (:winner apple :results ((apple 3 100) (banana 3 100) (cherry 3 100) (date 3 100)) :voters 3 :majority-approved 4) (:winner apple :results ((apple 2 40) (banana 2 40) (cherry 1 20) (date 0 0)) :voters 5 :majority-approved 0) (:winner apple :results ((apple 0 0) (banana 0 0) (cherry 0 0) (date 0 0)) :voters 3 :majority-approved 0) (:winner apple :results ((apple 1 100) (banana 1 100) (cherry 1 100) (date 1 100)) :voters 1 :majority-approved 4))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -611,10 +601,8 @@ fn oracle_prop_consensus_election_simulation() {
     (fmakunbound 'neovm--test-sim-borda)
     (fmakunbound 'neovm--test-sim-condorcet)
     (fmakunbound 'neovm--test-sim-anti-plurality)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:plurality (w . 3)) (:borda (x . 18)) (:condorcet x) (:anti-plurality (x . 0)) :all-agree nil :distinct-winners 2 :winner-set (w x))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:plurality (w . 3)) (:borda (x . 18)) (:condorcet x) (:anti-plurality (x . 0)) :all-agree nil :distinct-winners 2 :winner-set (w x))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

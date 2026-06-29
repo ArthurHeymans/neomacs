@@ -62,12 +62,10 @@ fn oracle_prop_template_variable_interpolation() {
           ;; Numeric value interpolation
           (funcall 'neovm--tpl-interpolate "Age: {{age}}" ctx)))
     (fmakunbound 'neovm--tpl-interpolate)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Hello, Alice! You are 30 years old.\" \"Alice lives in Paris. Alice is 30.\" \"Alice works at {{company}}.\" \"Just plain text.\" \"AliceParis\" \"\" \"Hello Alice!\" \"Age: 30\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Hello, Alice! You are 30 years old.\" \"Alice lives in Paris. Alice is 30.\" \"Alice works at {{company}}.\" \"Just plain text.\" \"AliceParis\" \"\" \"Hello Alice!\" \"Age: 30\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -137,12 +135,10 @@ fn oracle_prop_template_conditional_blocks() {
                    "{%if premium%}VIP{%else%}Free{%endif%}"
                    ctx-admin)))
     (fmakunbound 'neovm--tpl-eval-cond)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Welcome! [Admin Panel]\" \"Welcome! [User Dashboard]\" \"Hello, you are logged in.\" \"Hello.\" \"A-L\" \"U-G\" \"Free\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Welcome! [Admin Panel]\" \"Welcome! [User Dashboard]\" \"Hello, you are logged in.\" \"Hello.\" \"A-L\" \"U-G\" \"Free\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -215,12 +211,10 @@ fn oracle_prop_template_loop_blocks() {
           ;; No foreach blocks - pass through
           (funcall 'neovm--tpl-foreach "no loops here" ctx)))
     (fmakunbound 'neovm--tpl-foreach)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Items: [apple] [banana] [cherry] \" \"1, 2, 3, 4, 5, \" \"List: end\" \"F:apple;banana;cherry; U:Alice;Bob;\" \"<ul><li>apple</li><li>banana</li><li>cherry</li></ul>\" \"no loops here\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Items: [apple] [banana] [cherry] \" \"1, 2, 3, 4, 5, \" \"List: end\" \"F:apple;banana;cherry; U:Alice;Bob;\" \"<ul><li>apple</li><li>banana</li><li>cherry</li></ul>\" \"no loops here\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -326,12 +320,10 @@ fn oracle_prop_template_combined_features() {
     (fmakunbound 'neovm--tpl-eval-cond)
     (fmakunbound 'neovm--tpl-foreach)
     (fmakunbound 'neovm--tpl-render)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"My Page - Bob [ADMIN] Items: Sword Shield Potion \" \"Page - Guest [USER]\" \"Inventory: [Sword][Shield][Potion]\" \"No items\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"My Page - Bob [ADMIN] Items: Sword Shield Potion \" \"Page - Guest [USER]\" \"Inventory: [Sword][Shield][Potion]\" \"No items\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -391,12 +383,10 @@ fn oracle_prop_template_inheritance_include() {
                    "{%include nav%} | {%include nav%}"
                    templates)))
     (fmakunbound 'neovm--tpl-include)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"<header>SITE HEADER</header><main>Content</main><footer>Copyright 2026</footer>\" \"<header>SITE HEADER</header><nav>Home | About | Contact</nav><p>Body</p><footer>Copyright 2026</footer>\" \"<header>SITE HEADER</header><aside><nav>Home | About | Contact</nav></aside><footer>Copyright 2026</footer>\" \"Before  After\" \"No includes here\" \"<nav>Home | About | Contact</nav> | <nav>Home | About | Contact</nav>\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"<header>SITE HEADER</header><main>Content</main><footer>Copyright 2026</footer>\" \"<header>SITE HEADER</header><nav>Home | About | Contact</nav><p>Body</p><footer>Copyright 2026</footer>\" \"<header>SITE HEADER</header><aside><nav>Home | About | Contact</nav></aside><footer>Copyright 2026</footer>\" \"Before  After\" \"No includes here\" \"<nav>Home | About | Contact</nav> | <nav>Home | About | Contact</nav>\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -475,12 +465,10 @@ fn oracle_prop_template_escape_sequences() {
           (funcall 'neovm--tpl-html-escape "a < b & c > d \"quoted\" it's")))
     (fmakunbound 'neovm--tpl-html-escape)
     (fmakunbound 'neovm--tpl-render-escaped)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Hello, O&#39;Brien!\" \"Content: <b>Bold</b>\" \"Escaped: &lt;b&gt;Bold&lt;/b&gt; Raw: <b>Bold</b>\" \"Company: AT&amp;T\" \"plain text\" \"&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;\" \"a &lt; b &amp; c &gt; d &quot;quoted&quot; it&#39;s\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Hello, O&#39;Brien!\" \"Content: <b>Bold</b>\" \"Escaped: &lt;b&gt;Bold&lt;/b&gt; Raw: <b>Bold</b>\" \"Company: AT&amp;T\" \"plain text\" \"&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;\" \"a &lt; b &amp; c &gt; d &quot;quoted&quot; it&#39;s\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -561,10 +549,8 @@ fn oracle_prop_template_compile_to_ops() {
           (length (funcall 'neovm--tpl-compile "a{{b}}c{{d}}e{{f}}g"))))
     (fmakunbound 'neovm--tpl-compile)
     (fmakunbound 'neovm--tpl-exec-ops)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((text \"Hello, \") (var \"name\") (text \"! Count: \") (var \"count\") (text \".\")) \"Dear Sir Charlie,\" ((text \"Just plain text\")) ((var \"name\") (var \"title\")) \"Hi Charlie, role: \" \"Sir Charlie has 42 items\" 7)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((text \"Hello, \") (var \"name\") (text \"! Count: \") (var \"count\") (text \".\")) \"Dear Sir Charlie,\" ((text \"Just plain text\")) ((var \"name\") (var \"title\")) \"Hi Charlie, role: \" \"Sir Charlie has 42 items\" 7)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

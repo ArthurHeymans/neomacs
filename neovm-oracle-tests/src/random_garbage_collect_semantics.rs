@@ -10,10 +10,9 @@ use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
 fn oracle_random_returns_integer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(integerp (random 100))",
-        expect_test::expect![[r#""OK t""#]],
-    );
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect("(integerp (random 100))", expect);
     assert_ok_eq("t", &oracle, &neovm);
 }
 
@@ -21,10 +20,8 @@ fn oracle_random_returns_integer() {
 fn oracle_random_with_limit_returns_value_in_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(< (random 10) 10)",
-        expect_test::expect![[r#""OK t""#]],
-    );
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect("(< (random 10) 10)", expect);
     assert_ok_eq("t", &oracle, &neovm);
 }
 
@@ -32,10 +29,9 @@ fn oracle_random_with_limit_returns_value_in_range() {
 fn oracle_random_with_t_uses_most_positive_fixnum() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(integerp (random t))",
-        expect_test::expect![[r#""OK t""#]],
-    );
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect("(integerp (random t))", expect);
     assert_ok_eq("t", &oracle, &neovm);
 }
 
@@ -43,9 +39,8 @@ fn oracle_random_with_t_uses_most_positive_fixnum() {
 fn oracle_garbage_collect_returns_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(listp (garbage-collect))",
-        expect_test::expect![[r#""OK t""#]],
-    );
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect("(listp (garbage-collect))", expect);
     assert_ok_eq("t", &oracle, &neovm);
 }

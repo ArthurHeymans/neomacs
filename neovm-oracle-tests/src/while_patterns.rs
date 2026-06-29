@@ -34,10 +34,8 @@ fn oracle_prop_while_pattern_multi_exit_conditions() {
                     (list count sum
                           (if remaining (car remaining) 'exhausted)
                           result))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (6 55 4 overflow)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (6 55 4 overflow)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -68,10 +66,8 @@ fn oracle_prop_while_pattern_collect_nreverse_sieve() {
                         (setq primes (cons i primes)))
                       (setq i (1+ i)))
                     (nreverse primes))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (2 3 5 7 11 13 17 19 23 29 31 37 41 43 47)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 3 5 7 11 13 17 19 23 29 31 37 41 43 47)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -108,10 +104,8 @@ fn oracle_prop_while_pattern_catch_throw_early_exit() {
                               (setq entries (cdr entries))))
                           (setq tables (cdr tables))))
                       'not-found))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (match carol visited (users))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (match carol visited (users))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -154,10 +148,8 @@ fn oracle_prop_while_pattern_nested_2d_matrix_multiply() {
                     ;; Convert to lists for comparison
                     (list (append (aref result 0) nil)
                           (append (aref result 1) nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((58 64) (139 154))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((58 64) (139 154))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -190,10 +182,8 @@ fn oracle_prop_while_pattern_accumulator_run_length_encode() {
                     (when current
                       (setq result (cons (cons count current) result)))
                     (nreverse result))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((3 . a) (2 . b) (1 . c) (2 . a) (4 . d))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((3 . a) (2 . b) (1 . c) (2 . a) (4 . d))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -238,10 +228,9 @@ fn oracle_prop_while_pattern_buffer_csv_parser() {
                             (gethash "A" grades 0)
                             (gethash "B" grades 0)
                             (gethash "C" grades 0))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((\"alice\" \"bob\" \"carol\" \"dave\") 346 4 2 1 1)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((\"alice\" \"bob\" \"carol\" \"dave\") 346 4 2 1 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -308,12 +297,10 @@ fn oracle_prop_while_pattern_merge_sorted_lists() {
     (fmakunbound 'neovm--test-merge)
     (fmakunbound 'neovm--test-split)
     (fmakunbound 'neovm--test-msort)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4 5 6 7 8) (1 2 2 2 3 4 5) (3 9 10 27 38 43 82) (1 2 3 4 5) (1 2 3 4 5))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5 6 7 8) (1 2 2 2 3 4 5) (3 9 10 27 38 43 82) (1 2 3 4 5) (1 2 3 4 5))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -370,8 +357,6 @@ fn oracle_prop_while_pattern_binary_search() {
           (funcall 'neovm--test-bisect-left sorted 100)))
     (fmakunbound 'neovm--test-bsearch)
     (fmakunbound 'neovm--test-bisect-left)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (5 0 9 nil nil 5 6 0 10)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (5 0 9 nil nil 5 6 0 10)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

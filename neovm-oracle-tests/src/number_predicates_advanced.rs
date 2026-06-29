@@ -42,12 +42,10 @@ fn oracle_prop_number_predicates_advanced_zerop_edges() {
                    (zerop (- 5.0 5.0))
                    (zerop (* 0 999999))
                    (zerop (* 0.0 1.0e300)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t t t t nil nil nil nil nil nil nil nil t nil t t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t t t t nil nil nil nil nil nil nil nil t nil t t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -89,12 +87,10 @@ fn oracle_prop_number_predicates_advanced_natnump_comprehensive() {
                    (eq (natnump 0) (wholenump 0))
                    (eq (natnump -1) (wholenump -1))
                    (eq (natnump 3.14) (wholenump 3.14)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t t nil nil nil nil nil nil nil nil nil nil nil nil nil t t nil nil t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t t nil nil nil nil nil nil nil nil nil nil nil nil nil t t nil nil t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -143,12 +139,10 @@ fn oracle_prop_number_predicates_advanced_type_boundaries() {
                    (floatp (/ 1.0 3))
                    ;; Integer division stays integer
                    (integerp (/ 10 3)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t t t nil nil nil nil nil nil t t t nil nil t t t t t nil nil t t t t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t t t nil nil nil nil nil nil t t t nil nil t t t t t nil nil t t t t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -188,12 +182,10 @@ fn oracle_prop_number_predicates_advanced_numberp_discrimination() {
                               (integerp v)
                               (floatp v)))
                       values)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((int-zero t t nil) (nat t t nil) (neg-int t t nil) (nat t t nil) (neg-int t t nil) (float-zero t nil t) (float-zero t nil t) (pos-float t nil t) (neg-float t nil t) (pos-float t nil t) (nat t t nil) (neg-int t t nil) (boolean nil nil nil) (boolean nil nil nil) (symbol nil nil nil) (string nil nil nil) (cons nil nil nil) (cons nil nil nil) (vector nil nil nil) (vector nil nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((int-zero t t nil) (nat t t nil) (neg-int t t nil) (nat t t nil) (neg-int t t nil) (float-zero t nil t) (float-zero t nil t) (pos-float t nil t) (neg-float t nil t) (pos-float t nil t) (nat t t nil) (neg-int t t nil) (boolean nil nil nil) (boolean nil nil nil) (symbol nil nil nil) (string nil nil nil) (cons nil nil nil) (cons nil nil nil) (vector nil nil nil) (vector nil nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -233,12 +225,10 @@ fn oracle_prop_number_predicates_advanced_booleanp_strict() {
                    ;; and/or can return non-boolean truthy values
                    (booleanp (and 1 2 3))
                    (booleanp (or 1 2 3)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t nil nil nil nil nil nil nil t nil t t t t t t t t t t nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t nil nil nil nil nil nil nil t nil t t t t t t t t t t nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -287,12 +277,10 @@ fn oracle_prop_number_predicates_advanced_filter_partition() {
                           (when (numberp x)
                             (setq num-sum (+ num-sum x))))
                         num-sum))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((zeros (0 0.0 -0.0) 1) (nats (1 42 100) 1) (negs (-5 -100) 1) (floats (3.14 -2.7 2.718) 1) (non-nums (nil t 'sym \"str\") 1) nil 41.158)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((zeros (0 0.0 -0.0) 1) (nats (1 42 100) 1) (negs (-5 -100) 1) (floats (3.14 -2.7 2.718) 1) (non-nums (nil t 'sym \"str\") 1) nil 41.158)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -377,12 +365,10 @@ fn oracle_prop_number_predicates_advanced_coercion_framework() {
            (list start as-float as-str back-to-int
                  (= start back-to-int)))))
     (fmakunbound 'neovm--test-coerce)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 1 -5 3 -2 0 42 3 (error . \"not a number\") 0 (error . \"cannot convert nil to integer\") (error . \"cannot convert t to integer\") (error . \"cannot convert sym to integer\")) (0.0 1.0 -5.0 3.14 -2.7 0.0 42.0 3.14 (error . \"not a number\") 0.0 (error . \"cannot convert nil to float\") (error . \"cannot convert t to float\") (error . \"cannot convert sym to float\")) (\"0\" \"1\" \"-5\" \"3.14\" \"-2.7\" \"0.0\" \"42\" \"3.14\" \"hello\" \"0\" \"nil\" \"t\" \"sym\") (nil t t t t nil t t t t nil t t) (42 42.0 \"42.0\" 42 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 1 -5 3 -2 0 42 3 (error . \"not a number\") 0 (error . \"cannot convert nil to integer\") (error . \"cannot convert t to integer\") (error . \"cannot convert sym to integer\")) (0.0 1.0 -5.0 3.14 -2.7 0.0 42.0 3.14 (error . \"not a number\") 0.0 (error . \"cannot convert nil to float\") (error . \"cannot convert t to float\") (error . \"cannot convert sym to float\")) (\"0\" \"1\" \"-5\" \"3.14\" \"-2.7\" \"0.0\" \"42\" \"3.14\" \"hello\" \"0\" \"nil\" \"t\" \"sym\") (nil t t t t nil t t t t nil t t) (42 42.0 \"42.0\" 42 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -431,10 +417,8 @@ fn oracle_prop_number_predicates_advanced_dispatch_accumulator() {
                     ;; Verify all accounted for
                     (= (length data)
                        (+ int-count float-count non-num-count))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((int-count 7 int-sum 8) (int-range -99 99) (float-count 6 float-sum 8.84) (zero-count 4) (non-num-count 3) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((int-count 7 int-sum 8) (int-range -99 99) (float-count 6 float-sum 8.84) (zero-count 4) (non-num-count 3) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

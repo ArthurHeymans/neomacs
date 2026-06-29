@@ -8,6 +8,8 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn upstream_ox_parse_option_keyword() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (1 t t t t t t t t t t t t t t t t t t t t nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -39,7 +41,7 @@ stat:t title:t")))
           (plist-get options :with-inlinetasks)
           (plist-get options :with-statistics-cookies)
           (plist-get options :with-title))))"##,
-        expect_test::expect![[r#""OK (1 t t t t t t t t t t t t t t t t t t t t nil t t)""#]],
+        expect,
     );
 }
 
@@ -48,6 +50,9 @@ stat:t title:t")))
 #[test]
 fn upstream_ox_get_inbuffer_options() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((#(\"Test Title\" 0 10 (:parent (#(\"Test Title\" 0 10 (:parent #4)))))) (#(\"Test Author\" 0 11 (:parent (#(\"Test Author\" 0 11 (:parent #4)))))) \"test@example.org\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -60,9 +65,7 @@ fn upstream_ox_get_inbuffer_options() {
         (list (plist-get info :title)
               (plist-get info :author)
               (plist-get info :email))))))"##,
-        expect_test::expect![[
-            r#""OK ((#(\"Test Title\" 0 10 (:parent (#(\"Test Title\" 0 10 (:parent #4)))))) (#(\"Test Author\" 0 11 (:parent (#(\"Test Author\" 0 11 (:parent #4)))))) \"test@example.org\")""#
-        ]],
+        expect,
     );
 }
 
@@ -71,6 +74,7 @@ fn upstream_ox_get_inbuffer_options() {
 #[test]
 fn upstream_ox_get_subtree_options() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-export-get-subtree-options)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -80,7 +84,7 @@ fn upstream_ox_get_subtree_options() {
       (insert "* Heading\n:PROPERTIES:\n:EXPORT_TITLE: Sub Title\n:EXPORT_AUTHOR: Sub Author\n:END:")
       (goto-char (point-min))
       (org-export-get-subtree-options))))"##,
-        expect_test::expect![[r#""ERR (void-function org-export-get-subtree-options)""#]],
+        expect,
     );
 }
 
@@ -89,6 +93,7 @@ fn upstream_ox_get_subtree_options() {
 #[test]
 fn upstream_ox_get_relative_level() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 2 3 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -106,7 +111,7 @@ fn upstream_ox_get_relative_level() {
         (mapcar (lambda (h)
                   (org-export-get-relative-level h info))
                 (org-element-map tree 'headline #'identity))))))"##,
-        expect_test::expect![[r#""OK (1 2 3 1)""#]],
+        expect,
     );
 }
 
@@ -115,6 +120,9 @@ fn upstream_ox_get_relative_level() {
 #[test]
 fn upstream_ox_number_to_roman() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"I\" \"IV\" \"IX\" \"XIV\" \"XXXIX\" \"XL\" \"XLIX\" \"L\" \"MCMLXXXIV\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -128,9 +136,7 @@ fn upstream_ox_number_to_roman() {
    (org-export-number-to-roman 49)
    (org-export-number-to-roman 50)
    (org-export-number-to-roman 1984)))"##,
-        expect_test::expect![[
-            r#""OK (\"I\" \"IV\" \"IX\" \"XIV\" \"XXXIX\" \"XL\" \"XLIX\" \"L\" \"MCMLXXXIV\")""#
-        ]],
+        expect,
     );
 }
 
@@ -139,6 +145,7 @@ fn upstream_ox_number_to_roman() {
 #[test]
 fn upstream_ox_low_level_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -156,7 +163,7 @@ fn upstream_ox_low_level_p() {
         (mapcar (lambda (h)
                   (org-export-low-level-p h info))
                 (org-element-map tree 'headline #'identity))))))"##,
-        expect_test::expect![[r#""OK (nil nil nil)""#]],
+        expect,
     );
 }
 
@@ -165,6 +172,7 @@ fn upstream_ox_low_level_p() {
 #[test]
 fn upstream_ox_first_last_sibling_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -178,7 +186,7 @@ fn upstream_ox_first_last_sibling_p() {
         (list
          (mapcar #'org-export-first-sibling-p headlines)
          (mapcar #'org-export-last-sibling-p headlines))))))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 1)""#]],
+        expect,
     );
 }
 
@@ -187,6 +195,7 @@ fn upstream_ox_first_last_sibling_p() {
 #[test]
 fn upstream_ox_get_node_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"myid\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -198,7 +207,7 @@ fn upstream_ox_get_node_property() {
       (let* ((tree (org-element-parse-buffer))
              (headline (car (org-element-map tree 'headline #'identity))))
         (org-export-get-node-property :CUSTOM_ID headline)))))"##,
-        expect_test::expect![[r#""OK \"myid\"""#]],
+        expect,
     );
 }
 
@@ -207,6 +216,7 @@ fn upstream_ox_get_node_property() {
 #[test]
 fn upstream_ox_get_category() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"Work\" \"???\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -238,7 +248,7 @@ fn upstream_ox_get_category() {
                       tree (org-export-get-environment))))
               (headline (car (org-element-map tree 'headline #'identity))))
          (org-export-get-category headline info))))))"##,
-        expect_test::expect![[r#""OK (\"Work\" \"???\")""#]],
+        expect,
     );
 }
 
@@ -247,6 +257,7 @@ fn upstream_ox_get_category() {
 #[test]
 fn upstream_ox_get_tags() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 4) 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -258,7 +269,7 @@ fn upstream_ox_get_tags() {
       (let* ((tree (org-element-parse-buffer))
              (headline (car (org-element-map tree 'headline #'identity))))
         (org-export-get-tags headline)))))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 4) 1)""#]],
+        expect,
     );
 }
 
@@ -267,6 +278,9 @@ fn upstream_ox_get_tags() {
 #[test]
 fn upstream_ox_get_date() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((#(\"2023-10-13\" 0 10 (:parent (#(\"2023-10-13\" 0 10 (:parent #4)))))) nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -296,9 +310,7 @@ fn upstream_ox_get_date() {
                      (org-export--collect-tree-properties
                       tree (org-export-get-environment)))))
          (org-export-get-date info))))))"##,
-        expect_test::expect![[
-            r#""OK ((#(\"2023-10-13\" 0 10 (:parent (#(\"2023-10-13\" 0 10 (:parent #4)))))) nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -307,6 +319,7 @@ fn upstream_ox_get_date() {
 #[test]
 fn upstream_ox_get_footnote_number() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -324,7 +337,7 @@ fn upstream_ox_get_footnote_number() {
         (mapcar (lambda (fn)
                   (org-export-get-footnote-number fn info))
                 (org-element-map tree 'footnote-reference #'identity))))))"##,
-        expect_test::expect![[r#""OK (1 2)""#]],
+        expect,
     );
 }
 
@@ -333,6 +346,7 @@ fn upstream_ox_get_footnote_number() {
 #[test]
 fn upstream_ox_export_block_filter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 2""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -348,7 +362,7 @@ fn upstream_ox_export_block_filter() {
                     (org-export--collect-tree-properties
                      tree (org-export-get-environment)))))
         (length (org-element-map tree 'export-block #'identity))))))"##,
-        expect_test::expect![[r#""OK 2""#]],
+        expect,
     );
 }
 
@@ -357,6 +371,7 @@ fn upstream_ox_export_block_filter() {
 #[test]
 fn upstream_ox_export_snippet_filter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"html\" \"latex\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -368,7 +383,7 @@ fn upstream_ox_export_snippet_filter() {
       (let* ((tree (org-element-parse-buffer))
              (snippets (org-element-map tree 'export-snippet #'identity)))
         (mapcar (lambda (s) (org-element-property :back-end s)) snippets)))))"##,
-        expect_test::expect![[r#""OK (\"html\" \"latex\")""#]],
+        expect,
     );
 }
 
@@ -377,6 +392,7 @@ fn upstream_ox_export_snippet_filter() {
 #[test]
 fn upstream_ox_comments_handling() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 2""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -388,7 +404,7 @@ fn upstream_ox_comments_handling() {
       (let* ((tree (org-element-parse-buffer))
              (comments (org-element-map tree 'comment #'identity)))
         (length comments)))))"##,
-        expect_test::expect![[r#""OK 2""#]],
+        expect,
     );
 }
 
@@ -397,6 +413,7 @@ fn upstream_ox_comments_handling() {
 #[test]
 fn upstream_ox_comment_tree() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 2""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -413,7 +430,7 @@ fn upstream_ox_comment_tree() {
                      tree (org-export-get-environment)))))
         (org-export--delete-comment-trees)
         (length (org-element-map tree 'headline #'identity))))))"##,
-        expect_test::expect![[r#""OK 2""#]],
+        expect,
     );
 }
 
@@ -422,6 +439,7 @@ fn upstream_ox_comment_tree() {
 #[test]
 fn upstream_ox_handle_options() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments #<subr identity> 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -451,7 +469,7 @@ fn upstream_ox_handle_options() {
        (goto-char (point-min))
        (let ((info (org-export-get-environment)))
          (plist-get info :email))))))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments #<subr identity> 2)""#]],
+        expect,
     );
 }
 
@@ -460,6 +478,7 @@ fn upstream_ox_handle_options() {
 #[test]
 fn upstream_ox_get_optional_title() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-export-get-optional-title)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -475,7 +494,7 @@ fn upstream_ox_get_optional_title() {
                     (org-export--collect-tree-properties
                      tree (org-export-get-environment)))))
         (org-export-get-optional-title (car (org-element-map tree 'headline #'identity)) info)))))"##,
-        expect_test::expect![[r#""ERR (void-function org-export-get-optional-title)""#]],
+        expect,
     );
 }
 
@@ -484,6 +503,7 @@ fn upstream_ox_get_optional_title() {
 #[test]
 fn upstream_ox_numbered_headline_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -501,7 +521,7 @@ fn upstream_ox_numbered_headline_p() {
         (mapcar (lambda (h)
                   (org-export-numbered-headline-p h info))
                 (org-element-map tree 'headline #'identity))))))"##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -510,6 +530,7 @@ fn upstream_ox_numbered_headline_p() {
 #[test]
 fn upstream_ox_get_headline_number() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((1) (1 1) (1 2) (2))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -527,7 +548,7 @@ fn upstream_ox_get_headline_number() {
         (mapcar (lambda (h)
                   (org-export-get-headline-number h info))
                 (org-element-map tree 'headline #'identity))))))"##,
-        expect_test::expect![[r#""OK ((1) (1 1) (1 2) (2))""#]],
+        expect,
     );
 }
 
@@ -536,6 +557,9 @@ fn upstream_ox_get_headline_number() {
 #[test]
 fn upstream_ox_get_caption() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((#(\"long caption\" 0 12 (:parent (#(\"long caption\" 0 12 (:parent #4)))))) nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -557,9 +581,7 @@ fn upstream_ox_get_caption() {
        (let* ((tree (org-element-parse-buffer))
               (table (car (org-element-map tree 'table #'identity))))
           (org-export-get-caption table t))))))"##,
-        expect_test::expect![[
-            r#""OK ((#(\"long caption\" 0 12 (:parent (#(\"long caption\" 0 12 (:parent #4)))))) nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -567,6 +589,7 @@ fn upstream_ox_get_caption() {
 fn org_export_headline_number_category_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function org-export-get-todo-keyword)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -602,7 +625,7 @@ fn org_export_headline_number_category_deep_state_combo() {
                       (list (org-element-property :level h)
                             (org-element-property :raw-value h)))
                      headlines)))))"##,
-        expect_test::expect![[r#""ERR (void-function org-export-get-todo-keyword)""#]],
+        expect,
     );
 }
 
@@ -610,6 +633,7 @@ fn org_export_headline_number_category_deep_state_combo() {
 fn org_export_headline_number_category_tags_todo_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function org-export-get-todo-keyword)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -645,7 +669,7 @@ fn org_export_headline_number_category_tags_todo_deep_combo() {
                       (list (org-element-property :level h)
                             (org-element-property :raw-value h)))
                     headlines)))))"##,
-        expect_test::expect![[r#""ERR (void-function org-export-get-todo-keyword)""#]],
+        expect,
     );
 }
 
@@ -653,6 +677,7 @@ fn org_export_headline_number_category_tags_todo_deep_combo() {
 fn org_export_headline_numbering_edit_reexport_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function org-export-get-todo-keyword)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -688,7 +713,7 @@ fn org_export_headline_numbering_edit_reexport_deep() {
           (list before after
                 (buffer-substring-no-properties
                  (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (void-function org-export-get-todo-keyword)""#]],
+        expect,
     );
 }
 
@@ -696,6 +721,7 @@ fn org_export_headline_numbering_edit_reexport_deep() {
 fn org_export_todo_tags_planning_edit_reexport_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function org-export-get-todo-keyword)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -742,7 +768,7 @@ fn org_export_todo_tags_planning_edit_reexport_deep() {
             (list before after html
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))))"##,
-        expect_test::expect![[r#""ERR (void-function org-export-get-todo-keyword)""#]],
+        expect,
     );
 }
 
@@ -750,6 +776,7 @@ fn org_export_todo_tags_planning_edit_reexport_deep() {
 fn org_export_tags_property_planning_edit_reexport_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function org-export-get-todo-keyword)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -800,7 +827,7 @@ fn org_export_tags_property_planning_edit_reexport_deep() {
               (list before after html latex
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (void-function org-export-get-todo-keyword)""#]],
+        expect,
     );
 }
 
@@ -808,6 +835,7 @@ fn org_export_tags_property_planning_edit_reexport_deep() {
 fn org_export_footnote_citation_edit_reexport_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 51)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -844,7 +872,7 @@ fn org_export_footnote_citation_edit_reexport_deep() {
             (list before after html
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 51)""#]],
+        expect,
     );
 }
 
@@ -852,6 +880,7 @@ fn org_export_footnote_citation_edit_reexport_deep() {
 fn org_export_todo_tag_property_planning_html_latex_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function org-export-get-todo-keyword)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -897,7 +926,7 @@ fn org_export_todo_tag_property_planning_html_latex_deep() {
             (list before after html latex
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))))"##,
-        expect_test::expect![[r#""ERR (void-function org-export-get-todo-keyword)""#]],
+        expect,
     );
 }
 
@@ -905,6 +934,7 @@ fn org_export_todo_tag_property_planning_html_latex_deep() {
 fn org_export_separate_scheduled_deadline_html_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function org-export-get-todo-keyword)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -943,6 +973,6 @@ fn org_export_separate_scheduled_deadline_html_deep() {
             (list before after html
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))))"##,
-        expect_test::expect![[r#""ERR (void-function org-export-get-todo-keyword)""#]],
+        expect,
     );
 }

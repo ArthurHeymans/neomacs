@@ -13,6 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_pcase_let_marker_overlay_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     // pcase-let with edit inside; markers/overlays track.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -50,7 +51,7 @@ fn combo_pcase_let_marker_overlay_textprop_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -58,6 +59,7 @@ fn combo_pcase_let_marker_overlay_textprop_undo() {
 fn combo_pcase_match_marker_overlay_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     // pcase match with edit inside; markers/overlays track.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -93,7 +95,7 @@ fn combo_pcase_match_marker_overlay_textprop_undo() {
                                 (get-text-property 7 'word))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -101,6 +103,7 @@ fn combo_pcase_match_marker_overlay_textprop_undo() {
 fn combo_pcase_dolist_marker_overlay_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     // pcase-dolist with edit inside; markers/overlays track.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -139,7 +142,7 @@ fn combo_pcase_dolist_marker_overlay_textprop_undo() {
                                 (get-text-property 16 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -147,6 +150,7 @@ fn combo_pcase_dolist_marker_overlay_textprop_undo() {
 fn combo_pcase_exhaustive_marker_overlay_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     // pcase-exhaustive with edit inside; markers/overlays track.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -187,7 +191,7 @@ fn combo_pcase_exhaustive_marker_overlay_textprop_undo() {
                                 (get-text-property 14 'part))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -195,6 +199,7 @@ fn combo_pcase_exhaustive_marker_overlay_textprop_undo() {
 fn combo_pcase_lambda_marker_overlay_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     // pcase in lambda with edit inside; markers/overlays track.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -232,6 +237,6 @@ fn combo_pcase_lambda_marker_overlay_textprop_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }

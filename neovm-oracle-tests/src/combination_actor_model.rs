@@ -149,7 +149,8 @@ fn oracle_prop_actor_basic_mailbox() {
     (fmakunbound 'neovm--test-run-round)
     (makunbound 'neovm--test-actor-registry)
     (makunbound 'neovm--test-actor-log)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (2 (2) 6 6)""#]]);
+    let expect = expect_test::expect![[r#""OK (2 (2) 6 6)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -276,12 +277,10 @@ fn oracle_prop_actor_become_behavior() {
     (fmakunbound 'neovm--test-ab-step)
     (makunbound 'neovm--test-ab-registry)
     (makunbound 'neovm--test-ab-log)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (red 9 18 (red red green green yellow red red red green green yellow red red red green green yellow red))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (red 9 18 (red red green green yellow red red red green green yellow red red red green green yellow red))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -400,12 +399,10 @@ fn oracle_prop_actor_supervision() {
     (fmakunbound 'neovm--test-sup-process)
     (makunbound 'neovm--test-sup-actors)
     (makunbound 'neovm--test-sup-log)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (stopped 3 (:total 0) ((worker :processed (:value 10)) (worker :processed (:value 20)) (worker :restarted \"negative value: -5\" 1) (worker :processed (:value 30)) (worker :restarted \"negative value: -1\" 2) (worker :restarted \"negative value: -1\" 3) (worker :stopped \"negative value: -1\")) 1)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (stopped 3 (:total 0) ((worker :processed (:value 10)) (worker :processed (:value 20)) (worker :restarted \"negative value: -5\" 1) (worker :processed (:value 30)) (worker :restarted \"negative value: -1\" 2) (worker :restarted \"negative value: -1\" 3) (worker :stopped \"negative value: -1\")) 1)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -538,12 +535,10 @@ fn oracle_prop_actor_registry_broadcast() {
     (fmakunbound 'neovm--test-reg-group-states)
     (makunbound 'neovm--test-reg-actors)
     (makunbound 'neovm--test-reg-groups)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (9 ((w3 (:sum 30) 2) (w2 (:sum 30) 2) (w1 (:sum 130) 3)) ((m2 (:last-event :health-check) 1) (m1 (:last-event :health-check) 1)) 3 2 3)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (9 ((w3 (:sum 30) 2) (w2 (:sum 30) 2) (w1 (:sum 130) 3)) ((m2 (:last-event :health-check) 1) (m1 (:last-event :health-check) 1)) 3 2 3)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -676,10 +671,8 @@ fn oracle_prop_actor_request_reply() {
     (fmakunbound 'neovm--test-rr-get-reply)
     (makunbound 'neovm--test-rr-actors)
     (makunbound 'neovm--test-rr-next-id)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (60 24 49 \"hello world\" \"HELLO\" (1 2 3 4 5))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (60 24 49 \"hello world\" \"HELLO\" (1 2 3 4 5))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -786,10 +779,9 @@ fn oracle_prop_actor_pipeline() {
     (fmakunbound 'neovm--test-pipe-send)
     (fmakunbound 'neovm--test-pipe-tick)
     (makunbound 'neovm--test-pipe-actors)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (error \"Format specifier doesn’t match argument type\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""ERR (error \"Format specifier doesn’t match argument type\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -922,10 +914,8 @@ fn oracle_prop_actor_stash_pattern() {
     (fmakunbound 'neovm--test-stash-unstash)
     (fmakunbound 'neovm--test-stash-step)
     (makunbound 'neovm--test-stash-actors)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t 3 1 (\"stashed :query\" \"stashed :write\" \"stashed :query\" \"initialized\" \"query: SELECT 1\" \"write: users\" \"query: SELECT 2\" \"query: SELECT 3\") 0)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t 3 1 (\"stashed :query\" \"stashed :write\" \"stashed :query\" \"initialized\" \"query: SELECT 1\" \"write: users\" \"query: SELECT 2\" \"query: SELECT 3\") 0)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

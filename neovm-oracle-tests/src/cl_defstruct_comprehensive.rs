@@ -47,10 +47,8 @@ fn oracle_prop_cl_defstruct_basic_constructor_and_access() {
     (fmakunbound 'neovm--test-point-x)
     (fmakunbound 'neovm--test-point-y)
     (fmakunbound 'neovm--test-point-z)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (t nil nil 10 20 30 (5 nil nil) (10 20 t nil))""#],
-    );
+    let expect = expect_test::expect![r#""OK (t nil nil 10 20 30 (5 nil nil) (10 20 t nil))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -88,10 +86,8 @@ fn oracle_prop_cl_defstruct_setf_slots() {
     (fmakunbound 'neovm--test-counter-name)
     (fmakunbound 'neovm--test-counter-value)
     (fmakunbound 'neovm--test-counter-step)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (42 43 \"misses\" 10 43)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (42 43 \"misses\" 10 43)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -126,10 +122,8 @@ fn oracle_prop_cl_defstruct_type_list() {
     (fmakunbound 'make-neovm--test-pair)
     (fmakunbound 'neovm--test-pair-first)
     (fmakunbound 'neovm--test-pair-second)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (t (x b) a b a b x x (x b) 2)""#],
-    );
+    let expect = expect_test::expect![r#""OK (t (x b) a b a b x x (x b) 2)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -166,10 +160,8 @@ fn oracle_prop_cl_defstruct_type_vector() {
     (fmakunbound 'neovm--test-rgb-red)
     (fmakunbound 'neovm--test-rgb-green)
     (fmakunbound 'neovm--test-rgb-blue)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (t [255 128 64] 255 128 0 255 128 0 64 64 3)""#],
-    );
+    let expect = expect_test::expect![r#""OK (t [255 128 64] 255 128 0 255 128 0 64 64 3)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -214,12 +206,10 @@ fn oracle_prop_cl_defstruct_named_option() {
     (fmakunbound 'neovm--test-tagged-vec-p)
     (fmakunbound 'neovm--test-tagged-vec-alpha)
     (fmakunbound 'neovm--test-tagged-vec-beta)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((neovm--test-tagged-pair 1 2) neovm--test-tagged-pair 1 2 t nil [neovm--test-tagged-vec 10 20] neovm--test-tagged-vec 10 20 t nil)""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((neovm--test-tagged-pair 1 2) neovm--test-tagged-pair 1 2 t nil [neovm--test-tagged-vec 10 20] neovm--test-tagged-vec 10 20 t nil)""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -253,10 +243,9 @@ fn oracle_prop_cl_defstruct_initial_offset() {
     (fmakunbound 'make-neovm--test-offset-rec)
     (fmakunbound 'neovm--test-offset-rec-name)
     (fmakunbound 'neovm--test-offset-rec-value)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((nil nil \"foo\" 42) 4 \"foo\" 42 nil nil \"foo\" 42)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((nil nil \"foo\" 42) 4 \"foo\" 42 nil nil \"foo\" 42)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -290,10 +279,8 @@ fn oracle_prop_cl_defstruct_conc_name() {
     (fmakunbound 'neovm--test-item/id)
     (fmakunbound 'neovm--test-item/label)
     (fmakunbound 'neovm--test-item/priority)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 \"urgent\" 5 t 10 10)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 \"urgent\" 5 t 10 10)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -336,10 +323,8 @@ fn oracle_prop_cl_defstruct_boa_constructor() {
     (fmakunbound 'neovm--test-range-start)
     (fmakunbound 'neovm--test-range-end)
     (fmakunbound 'neovm--test-range-step)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((0 10 1) (0 100 5) (0 2 4 6 8))""#],
-    );
+    let expect = expect_test::expect![r#""OK ((0 10 1) (0 100 5) (0 2 4 6 8))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -397,12 +382,10 @@ fn oracle_prop_cl_defstruct_include_inheritance() {
     (fmakunbound 'neovm--test-rect-p)
     (fmakunbound 'neovm--test-rect-width)
     (fmakunbound 'neovm--test-rect-height)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"circle\" 314 10 \"rect\" 200 10 20 t t t t nil nil 628 628)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"circle\" 314 10 \"rect\" 200 10 20 t t t t nil nil 628 628)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -453,12 +436,10 @@ fn oracle_prop_cl_defstruct_slot_defaults() {
     (fmakunbound 'neovm--test-config-debug)
     (fmakunbound 'neovm--test-config-tags)
     (fmakunbound 'neovm--test-config-retries)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"localhost\" 8080 nil (default) 3) (\"localhost\" 443 t 3) (\"example.com\" 9090 t (prod live) 0))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"localhost\" 8080 nil (default) 3) (\"localhost\" 443 t 3) (\"example.com\" 9090 t (prod live) 0))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -502,10 +483,9 @@ fn oracle_prop_cl_defstruct_slot_info_and_value() {
     (fmakunbound 'neovm--test-record-id)
     (fmakunbound 'neovm--test-record-label)
     (fmakunbound 'neovm--test-record-active)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""ERR (cl-struct-unknown-slot neovm--test-record cl-tag-slot)""#],
-    );
+    let expect =
+        expect_test::expect![r#""ERR (cl-struct-unknown-slot neovm--test-record cl-tag-slot)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -587,8 +567,6 @@ fn oracle_prop_cl_defstruct_as_data_structure() {
     (fmakunbound 'neovm--test-bst-insert)
     (fmakunbound 'neovm--test-bst-inorder)
     (fmakunbound 'neovm--test-bst-search)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((1 2 3 4 5 6 7 8) t nil t 5 t nil)""#],
-    );
+    let expect = expect_test::expect![r#""OK ((1 2 3 4 5 6 7 8) t nil t 5 t nil)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -9,6 +9,9 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo55_capture_template_expand() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:template-count 2) (:keys (\"t\" \"n\")) (:descs (\"Todo\" \"Note\")) (:types (entry item)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -26,15 +29,14 @@ fn combo55_capture_template_expand() {
     ;; each template type
     (push (list :types (mapcar (lambda (tpl) (nth 2 tpl)) templates)) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:template-count 2) (:keys (\"t\" \"n\")) (:descs (\"Todo\" \"Note\")) (:types (entry item)))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo55_refile_targets_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (0 . 1) 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -50,13 +52,14 @@ fn combo55_refile_targets_complex() {
     (let ((targets2 (org-refile-get-targets nil nil)))
       (push (list :buffer-target-count (length targets2)) r))
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (0 . 1) 2)""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo55_pcomplete_completions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:completions-A 0) (:org-pcomplete-loaded t))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -74,13 +77,15 @@ fn combo55_pcomplete_completions() {
     ;; check org-pcomplete is available
     (push (list :org-pcomplete-loaded (fboundp 'pcomplete-completions)) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""OK ((:completions-A 0) (:org-pcomplete-loaded t))""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo55_timer_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((:started t) (:paused t) (:stopped-seconds nil))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -102,13 +107,14 @@ fn combo55_timer_operations() {
           (push (list :stopped-seconds (numberp seconds)) r))
       (error (push (list :stop-error t) r)))
     (nreverse r)))"##,
-        expect_test::expect![[r#""OK ((:started t) (:paused t) (:stopped-seconds nil))""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo55_element_create_all_gross_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument char-or-string-p nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -143,13 +149,16 @@ fn combo55_element_create_all_gross_types() {
       (push (list :re-example (length (org-element-map reparsed 'example-block #'identity))) r)
       (push (list :re-list (length (org-element-map reparsed 'plain-list #'identity))) r))
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (wrong-type-argument char-or-string-p nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo55_export_dispatcher_backends() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:registered-backends (texinfo md org odt latex icalendar html ascii)) (:has-ascii nil) (:has-html nil) (:has-latex nil) (:has-md nil) (:has-texinfo nil) (:has-man nil) (:has-icalendar nil) (:has-beamer nil) (:total-backends 8))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -171,15 +180,14 @@ fn combo55_export_dispatcher_backends() {
     ;; total backend count
     (push (list :total-backends (length org-export-registered-backends)) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:registered-backends (texinfo md org odt latex icalendar html ascii)) (:has-ascii nil) (:has-html nil) (:has-latex nil) (:has-md nil) (:has-texinfo nil) (:has-man nil) (:has-icalendar nil) (:has-beamer nil) (:total-backends 8))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo55_subtree_boundary_precision() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-beginning-of-subtree)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -211,13 +219,14 @@ fn combo55_subtree_boundary_precision() {
                                   (point))))
       (push (list :a-contains-a1 (> a-end a1-end)) r))
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (void-function org-beginning-of-subtree)""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo55_babel_noweb_cross_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (double 42 (:result-count 0))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -239,13 +248,16 @@ fn combo55_babel_noweb_cross_block() {
       ;; result count
       (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (nreverse r))))"##,
-        expect_test::expect![[r#""OK (double 42 (:result-count 0))""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo55_insert_todo_subheading_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:after-todo-sub ((1 \"Projects\" nil) (2 \"Subproject A\" \"TODO\"))) (:after-sub ((1 \"Projects\" nil) (2 \"Subproject A\" \"TODO\") (3 \"Subproject B\" nil))) (:total-headlines 3))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -274,15 +286,16 @@ fn combo55_insert_todo_subheading_cycle() {
     ;; headline count
     (push (list :total-headlines (length (org-element-map (org-element-parse-buffer) 'headline #'identity))) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:after-todo-sub ((1 \"Projects\" nil) (2 \"Subproject A\" \"TODO\"))) (:after-sub ((1 \"Projects\" nil) (2 \"Subproject A\" \"TODO\") (3 \"Subproject B\" nil))) (:total-headlines 3))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo55_tree_to_indirect_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:indirect-created nil) (:indirect-name nil) (:orig-headlines 0))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -301,8 +314,6 @@ fn combo55_tree_to_indirect_buffer() {
     ;; original buffer should be unaffected
     (push (list :orig-headlines (length (org-element-map (org-element-parse-buffer) 'headline #'identity))) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:indirect-created nil) (:indirect-name nil) (:orig-headlines 0))""#
-        ]],
+        expect,
     );
 }

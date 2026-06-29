@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_eieio_around_before_after_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defclass test-node nil\n\
@@ -62,7 +63,7 @@ fn deficiency_eieio_around_before_after_undo() {
          (get-text-property 10 'modified)\n\
          (get-text-property 1 'bracket)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -70,6 +71,7 @@ fn deficiency_eieio_around_before_after_undo() {
 fn deficiency_eieio_deep_inheritance_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defclass animal nil ((name :initarg :name :accessor animal-name)))\n\
@@ -101,7 +103,7 @@ fn deficiency_eieio_deep_inheritance_dispatch() {
          (get-text-property 1 'type)\n\
          (length (buffer-string)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -109,6 +111,7 @@ fn deficiency_eieio_deep_inheritance_dispatch() {
 fn deficiency_eieio_slot_access_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defclass test-doc nil\n\
@@ -144,7 +147,7 @@ fn deficiency_eieio_slot_access_undo() {
          (get-text-property 1 'field)\n\
          (get-text-property 8 'field))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -152,6 +155,7 @@ fn deficiency_eieio_slot_access_undo() {
 fn deficiency_eieio_polymorphic_sort_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defclass sortable-item nil\n\
@@ -182,7 +186,7 @@ fn deficiency_eieio_polymorphic_sort_undo() {
          (list (mapcar #'item-label sorted)\n\
          (mapcar (lambda (i) (item-sort-key i)) sorted)\n\
          (= (length sorted) 5))))",
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -190,6 +194,7 @@ fn deficiency_eieio_polymorphic_sort_undo() {
 fn deficiency_eieio_static_methods_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defclass test-factory nil\n\
@@ -230,7 +235,7 @@ fn deficiency_eieio_static_methods_undo() {
          (get-text-property 1 'section)\n\
          (get-text-property 20 'section)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -238,6 +243,7 @@ fn deficiency_eieio_static_methods_undo() {
 fn deficiency_eieio_cl_defmethod_multiple_specializers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defclass test-shape nil\n\
@@ -275,7 +281,7 @@ fn deficiency_eieio_cl_defmethod_multiple_specializers() {
          (get-text-property 1 'layer)\n\
          (get-text-property 10 'modified)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -283,6 +289,7 @@ fn deficiency_eieio_cl_defmethod_multiple_specializers() {
 fn deficiency_eieio_constructor_validation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defclass test-range nil\n\
@@ -310,7 +317,7 @@ fn deficiency_eieio_constructor_validation() {
          (= (range-start (caddr ranges)) 50)\n\
          (= (range-end (caddr ranges)) 100))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -318,6 +325,7 @@ fn deficiency_eieio_constructor_validation() {
 fn deficiency_eieio_object_assoc_list_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defclass test-entry nil\n\
@@ -349,7 +357,7 @@ fn deficiency_eieio_object_assoc_list_undo() {
          (get-text-property 30 'section)\n\
          (get-text-property 31 'section))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -357,6 +365,7 @@ fn deficiency_eieio_object_assoc_list_undo() {
 fn deficiency_eieio_with_cl_print_object() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function cl-print)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defclass test-point nil\n\
@@ -388,7 +397,7 @@ fn deficiency_eieio_with_cl_print_object() {
          (get-text-property 1 'type)\n\
          (get-text-property 5 'type)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-function cl-print)""#]],
+        expect,
     );
 }
 
@@ -396,6 +405,7 @@ fn deficiency_eieio_with_cl_print_object() {
 fn deficiency_eieio_composition_deep_tree_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defclass test-component nil\n\
@@ -442,6 +452,6 @@ fn deficiency_eieio_composition_deep_tree_undo() {
          (get-text-property 20 'layer)\n\
          (get-text-property 5 'added)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }

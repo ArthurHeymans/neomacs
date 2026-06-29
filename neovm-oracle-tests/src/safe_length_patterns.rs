@@ -26,12 +26,10 @@ fn oracle_prop_safe_length_patterns_proper_list_range() {
             results)))
   (nreverse results))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 0 0 t) (1 1 1 t) (2 2 2 t) (3 3 3 t) (4 4 4 t) (5 5 5 t) (6 6 6 t) (7 7 7 t) (8 8 8 t) (9 9 9 t) (10 10 10 t) (11 11 11 t) (12 12 12 t) (13 13 13 t) (14 14 14 t) (15 15 15 t) (16 16 16 t) (17 17 17 t) (18 18 18 t) (19 19 19 t) (20 20 20 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 0 0 t) (1 1 1 t) (2 2 2 t) (3 3 3 t) (4 4 4 t) (5 5 5 t) (6 6 6 t) (7 7 7 t) (8 8 8 t) (9 9 9 t) (10 10 10 t) (11 11 11 t) (12 12 12 t) (13 13 13 t) (14 14 14 t) (15 15 15 t) (16 16 16 t) (17 17 17 t) (18 18 18 t) (19 19 19 t) (20 20 20 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -63,10 +61,8 @@ fn oracle_prop_safe_length_patterns_dotted_lists() {
  ;; Deeply nested dotted
  (safe-length (cons 'a (cons 'b (cons 'c (cons 'd 'e))))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 2 5 1 1 1 3 (3 2) 4)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 2 5 1 1 1 3 (3 2) 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -104,12 +100,10 @@ fn oracle_prop_safe_length_patterns_circular_various() {
     (push (list 'cycle-10 (safe-length c10)) results))
   (nreverse results))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((cycle-1 1) (cycle-2 4) (cycle-5 11) (lasso 10) (cycle-10 24))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((cycle-1 1) (cycle-2 4) (cycle-5 11) (lasso 10) (cycle-10 24))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -146,10 +140,8 @@ fn oracle_prop_safe_length_patterns_atoms() {
  ;; Hash-table
  (safe-length (make-hash-table)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 0 0 0 0 0 0 0 0 0 0 0 0 0)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 0 0 0 0 0 0 0 0 0 0 0 0 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -211,12 +203,10 @@ fn oracle_prop_safe_length_patterns_detect_circular() {
         (nreverse results))
     (fmakunbound 'neovm--sl-classify)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 2 3) proper-list) (nil empty) (42 non-list) (\"str\" non-list) ((a . b) dotted-list) ((1 2 . 3) dotted-list) (circular-3 circular) (lasso-circ circular))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 2 3) proper-list) (nil empty) (42 non-list) (\"str\" non-list) ((a . b) dotted-list) ((1 2 . 3) dotted-list) (circular-3 circular) (lasso-circ circular))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -302,12 +292,10 @@ fn oracle_prop_safe_length_patterns_validation() {
     (fmakunbound 'neovm--sl-validate-record)
     (fmakunbound 'neovm--sl-validate-table)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((valid-rec t t) (invalid-rec nil nil nil nil nil nil) (valid-tbl t t) (invalid-tbl nil nil) (circular-tbl nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((valid-rec t t) (invalid-rec nil nil nil nil nil nil) (valid-tbl t t) (invalid-tbl nil nil) (circular-tbl nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -363,10 +351,9 @@ fn oracle_prop_safe_length_patterns_tree_size() {
        (car (funcall 'neovm--sl-tree-size (make-list 50 'x) 10)))
     (fmakunbound 'neovm--sl-tree-size)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((5 . t) (6 . t) (1 . t) (1 . t) (0 . t) (1) (3) 50)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((5 . t) (6 . t) (1 . t) (1 . t) (0 . t) (1) (3) 50)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -410,10 +397,8 @@ fn oracle_prop_safe_length_patterns_mutation_tracking() {
           results))
   (nreverse results))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((cons 0 1) (cons 1 2) (cons 2 3) (cons 3 4) (cons 4 5) (append 8 5) (nconc 7) (truncated 3) (dotted 3) (proper-vs-dotted 5 4))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((cons 0 1) (cons 1 2) (cons 2 3) (cons 3 4) (cons 4 5) (append 8 5) (nconc 7) (truncated 3) (dotted 3) (proper-vs-dotted 5 4))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

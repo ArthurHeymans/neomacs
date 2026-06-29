@@ -24,12 +24,10 @@ fn oracle_prop_url_unhex_string_newlines_plus_and_invalid_escapes() {
    (url-unhex-string "%zz%4G%")))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"\" \"a b+c\" \"line feed carriage\" \"line\nfeed\\rcarriage\" \"plus+is+literal\" \"%zz%4G%\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"\" \"a b+c\" \"line feed carriage\" \"line\nfeed\\rcarriage\" \"plus+is+literal\" \"%zz%4G%\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -49,12 +47,10 @@ fn oracle_prop_url_hexify_string_default_utf8_and_allowed_masks() {
    (url-hexify-string "%already" url--query-key-value-preserved-chars)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"AZaz09-_.~\" \"a%20b%2Bc%26d%3De\" \"snowman%20%E2%98%83\" \"a/b%3Fc=d&e\" \"a/b?c=d&e\" \"a/b?c%3Dd%26e\" \"%25already\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"AZaz09-_.~\" \"a%20b%2Bc%26d%3De\" \"snowman%20%E2%98%83\" \"a/b%3Fc=d&e\" \"a/b?c=d&e\" \"a/b?c%3Dd%26e\" \"%25already\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -73,12 +69,10 @@ fn oracle_prop_url_parse_query_string_grouping_and_downcase() {
    (url-parse-query-string "line=x%0Ay" nil t)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"c\" \"3\") (\"b\" \"two\") (\"a\" \"1\")) ((\"a\" \"2\" \"1\")) ((\"repeat\" \"two\" \"one\") (\"missing\" \"\") (\"empty\" \"\")) ((\"space\" \"a b\") (\"plus\" \"a+b\")) ((\"line\" \"x y\")) ((\"line\" \"x\ny\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"c\" \"3\") (\"b\" \"two\") (\"a\" \"1\")) ((\"a\" \"2\" \"1\")) ((\"repeat\" \"two\" \"one\") (\"missing\" \"\") (\"empty\" \"\")) ((\"space\" \"a b\") (\"plus\" \"a+b\")) ((\"line\" \"x y\")) ((\"line\" \"x\ny\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -104,10 +98,8 @@ fn oracle_prop_url_build_query_string_empty_values_and_separators() {
    (url-build-query-string '((percent "%already") (slash "a/b")))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"key1=val1&key2=two%20words&key3=a%26b&key3=c%3Dd&key4&key5\" \"key1=val1;key2=two%20words;key3=a%26b;key3=c%3Dd;key4;key5\" \"key4=&key5=\" \":keyword=value&string%20key=string%20value\" \"percent=%25already&slash=a/b\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"key1=val1&key2=two%20words&key3=a%26b&key3=c%3Dd&key4&key5\" \"key1=val1;key2=two%20words;key3=a%26b;key3=c%3Dd;key4;key5\" \"key4=&key5=\" \":keyword=value&string%20key=string%20value\" \"percent=%25already&slash=a/b\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

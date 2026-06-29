@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_sort_buffer_lines_with_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 29 35)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass line-item ()
@@ -59,7 +60,7 @@ fn combo_eieio_sort_buffer_lines_with_objects() {
                 (buffer-string)
                 my-items))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 29 35)""#]],
+        expect,
     );
 }
 
@@ -67,6 +68,7 @@ fn combo_eieio_sort_buffer_lines_with_objects() {
 fn combo_eieio_seq_filter_map_with_buffer_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 80 96)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass event ()
@@ -121,7 +123,7 @@ fn combo_eieio_seq_filter_map_with_buffer_state() {
                   (buffer-string)
                   my-events))))
     (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 80 96)""#]],
+        expect,
     );
 }
 
@@ -129,6 +131,7 @@ fn combo_eieio_seq_filter_map_with_buffer_state() {
 fn combo_eieio_sort_substring_by_object_slot() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass word-entry ()
@@ -183,7 +186,7 @@ fn combo_eieio_sort_substring_by_object_slot() {
                   (buffer-string)
                   my-entries))))
     (kill-buffer buf))))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -191,6 +194,7 @@ fn combo_eieio_sort_substring_by_object_slot() {
 fn combo_eieio_sort_with_buffer_narrow_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass segment ()
@@ -256,7 +260,7 @@ fn combo_eieio_sort_with_buffer_narrow_marker() {
                   (buffer-string)
                   my-segs))))
     (kill-buffer buf)))))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -264,6 +268,7 @@ fn combo_eieio_sort_with_buffer_narrow_marker() {
 fn combo_eieio_seq_reduce_accumulate_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 21 26)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass metric ()
@@ -326,6 +331,6 @@ fn combo_eieio_seq_reduce_accumulate_buffer() {
                   (buffer-string)
                   my-metrics))))
     (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 21 26)""#]],
+        expect,
     );
 }

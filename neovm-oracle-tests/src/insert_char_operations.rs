@@ -19,10 +19,8 @@ fn oracle_prop_insert_char_basic_single() {
       (insert-char ?B)
       (insert-char ?C)
       (list (buffer-string) (buffer-size) (point)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"ABC\" 3 4)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"ABC\" 3 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -42,12 +40,10 @@ fn oracle_prop_insert_char_with_count() {
       (list (buffer-string)
             (buffer-size)
             (count-lines (point-min) (point-max))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"========================================\nXXXXX\n========================================\" 87 3)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"========================================\nXXXXX\n========================================\" 87 3)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -68,10 +64,8 @@ fn oracle_prop_insert_char_with_inherit() {
       (let ((result-str (buffer-string))
             (face-at-end (get-text-property (- (point-max) 1) 'face)))
         (list result-str face-at-end (buffer-size))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (#(\"hello!!!\" 0 8 (face bold)) bold 8)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (#(\"hello!!!\" 0 8 (face bold)) bold 8)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -87,10 +81,8 @@ fn oracle_prop_insert_char_zero_count() {
       (insert-char ?Z 0)
       (insert "after")
       (list (buffer-string) (buffer-size) (point)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"beforeafter\" 11 12)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"beforeafter\" 11 12)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -119,10 +111,8 @@ fn oracle_prop_insert_char_unicode() {
         (list content
               (length content)
               (string-bytes content))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"世界 ééé αβγ ∑∑\" 13 27)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"世界 ééé αβγ ∑∑\" 13 27)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -150,10 +140,8 @@ fn oracle_prop_insert_char_positions() {
       (goto-char (point-min))
       (insert-char ?> 1)
       (list (buffer-string) (buffer-size) (point)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\">[ABC|||DE]\" 11 2)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\">[ABC|||DE]\" 11 2)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -199,12 +187,10 @@ fn oracle_prop_insert_char_build_ruler() {
         (insert-char ?\n 1)
         (list (buffer-string)
               (count-lines (point-min) (point-max)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"+----------+\n|..........|\n|          |\n|..........|\n|          |\n|..........|\n+----------+\n 0123456789\n\" 8)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"+----------+\n|..........|\n|          |\n|..........|\n|          |\n|..........|\n+----------+\n 0123456789\n\" 8)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -244,12 +230,10 @@ fn oracle_prop_insert_char_dispatch_table() {
          (funcall 'neovm--test-ic-dispatch separator-spec)
          (length barcode-spec)))
     (fmakunbound 'neovm--test-ic-dispatch)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r####""OK (\"*** BARCODE ***\" \"-------------------------\" \"###  # ####  ## #   #####\" \"-------------------------\" 11)""####
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r####""OK (\"*** BARCODE ***\" \"-------------------------\" \"###  # ####  ## #   #####\" \"-------------------------\" 11)""####
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -268,8 +252,6 @@ fn oracle_prop_insert_char_large_count() {
               (string= (substring str 0 3) "AAA")
               (string= (substring str 499 502) "ABB")
               (string= (substring str 997 1000) "BBB"))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1000 t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1000 t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

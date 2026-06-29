@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx235_shr_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -18,13 +19,16 @@ fn div_cx235_shr_availability() {
             (boundp 'shr-max-image-proportion)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx235_shr_render_simple_html() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (t t #(\"Hello\nWorld\n\" 0 1 (face shr-text shr-indentation nil) 1 5 (face shr-text) 5 6 (face nil) 6 11 (face (shr-text bold))))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -42,15 +46,14 @@ fn div_cx235_shr_render_simple_html() {
                   result)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (t t #(\"Hello\nWorld\n\" 0 1 (face shr-text shr-indentation nil) 1 5 (face shr-text) 5 6 (face nil) 6 11 (face (shr-text bold))))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx235_eww_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -64,13 +67,14 @@ fn div_cx235_eww_availability() {
             (boundp 'eww-history-limit)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx235_dom_query_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -88,13 +92,14 @@ fn div_cx235_dom_query_functions() {
               (dom-text (car (dom-by-tag dom 'child))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx235_url_retrieve_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -106,13 +111,14 @@ fn div_cx235_url_retrieve_availability() {
             (boundp 'url-privacy-level)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx235_svg_create_basic_shapes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t image svg)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -129,13 +135,14 @@ fn div_cx235_svg_create_basic_shapes() {
                 (plist-get (cdr img) :type)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t image svg)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx235_svg_path_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -151,13 +158,14 @@ fn div_cx235_svg_path_creation() {
           (list (imagep img)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx235_libxml_parse_html_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -166,13 +174,14 @@ fn div_cx235_libxml_parse_html_availability() {
           (fboundp 'shr-insert-document))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx235_dom_child_text_extraction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"Hello World !\" (\"Hello\" \"World\") 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -188,13 +197,14 @@ fn div_cx235_dom_child_text_extraction() {
               (length (dom-by-tag dom 'p)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"Hello World !\" (\"Hello\" \"World\") 2)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx235_shr_eww_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -231,6 +241,6 @@ fn div_cx235_shr_eww_with_marker_overlay_undo_narrow_mega() {
                     (text-properties-at 1)))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     );
 }

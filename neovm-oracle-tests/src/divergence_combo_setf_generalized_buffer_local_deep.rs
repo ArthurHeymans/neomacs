@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_setf_on_alist_get() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (((c . 3) (a . 99) (b . 2)) 99 2 3)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((alist '((a . 1) (b . 2))))\n\
@@ -17,7 +18,7 @@ fn deficiency_setf_on_alist_get() {
          (alist-get 'a alist)\n\
          (alist-get 'b alist)\n\
          (alist-get 'c alist))))",
-        expect_test::expect![[r#""OK (((c . 3) (a . 99) (b . 2)) 99 2 3)""#]],
+        expect,
     );
 }
 
@@ -25,6 +26,7 @@ fn deficiency_setf_on_alist_get() {
 fn deficiency_setf_on_plist_get() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((a 1 b 99 c 3) 1 99 3)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((pl '(a 1 b 2 c 3)))\n\
@@ -33,7 +35,7 @@ fn deficiency_setf_on_plist_get() {
          (plist-get pl 'a)\n\
          (plist-get pl 'b)\n\
          (plist-get pl 'c))))",
-        expect_test::expect![[r#""OK ((a 1 b 99 c 3) 1 99 3)""#]],
+        expect,
     );
 }
 
@@ -41,6 +43,7 @@ fn deficiency_setf_on_plist_get() {
 fn deficiency_setf_on_gethash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (99 20 nil 2)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ht (make-hash-table :test 'eql)))\n\
@@ -51,7 +54,7 @@ fn deficiency_setf_on_gethash() {
          (gethash 'y ht)\n\
          (gethash 'z ht)\n\
          (hash-table-count ht))))",
-        expect_test::expect![[r#""OK (99 20 nil 2)""#]],
+        expect,
     );
 }
 
@@ -59,13 +62,14 @@ fn deficiency_setf_on_gethash() {
 fn deficiency_setf_on_aref_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ([0 2 99 4 5] 0 99 5)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((v (vector 1 2 3 4 5)))\n\
          (setf (aref v 2) 99)\n\
          (setf (aref v 0) 0)\n\
          (list v (aref v 0) (aref v 2) (aref v 4))))",
-        expect_test::expect![[r#""OK ([0 2 99 4 5] 0 99 5)""#]],
+        expect,
     );
 }
 
@@ -73,6 +77,7 @@ fn deficiency_setf_on_aref_vector() {
 fn deficiency_setf_on_buffer_substring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"sbs\")))\n\
@@ -84,7 +89,7 @@ fn deficiency_setf_on_buffer_substring() {
          (get-text-property 1 'face)\n\
          (get-text-property 6 'face)))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -92,6 +97,7 @@ fn deficiency_setf_on_buffer_substring() {
 fn deficiency_setf_on_nth_and_car_cdr() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((X Y Z) X Y)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((lst (list 'a 'b 'c 'd 'e)))\n\
@@ -100,7 +106,7 @@ fn deficiency_setf_on_nth_and_car_cdr() {
          (setf (car lst) 'X)\n\
          (setf (cdr lst) '(Y Z))\n\
          (list lst (nth 0 lst) (nth 1 lst))))",
-        expect_test::expect![[r#""OK ((X Y Z) X Y)""#]],
+        expect,
     );
 }
 
@@ -108,6 +114,7 @@ fn deficiency_setf_on_nth_and_car_cdr() {
 fn deficiency_setf_on_symbol_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (99 99 t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (set 'test-sym-val 10)\n\
@@ -115,7 +122,7 @@ fn deficiency_setf_on_symbol_value() {
          (list test-sym-val\n\
          (symbol-value 'test-sym-val)\n\
          (boundp 'test-sym-val)))",
-        expect_test::expect![[r#""OK (99 99 t)""#]],
+        expect,
     );
 }
 
@@ -123,6 +130,7 @@ fn deficiency_setf_on_symbol_value() {
 fn deficiency_push_via_setf_on_alist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (((c . 3) (b . 99) (a . 1)) 1 99)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((alist nil))\n\
@@ -133,7 +141,7 @@ fn deficiency_push_via_setf_on_alist() {
          (list alist\n\
          (alist-get 'a alist)\n\
          (alist-get 'b alist))))",
-        expect_test::expect![[r#""OK (((c . 3) (b . 99) (a . 1)) 1 99)""#]],
+        expect,
     );
 }
 
@@ -141,6 +149,7 @@ fn deficiency_push_via_setf_on_alist() {
 fn deficiency_cl_incf_cl_decf_on_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (4)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ht (make-hash-table :test 'eql)))\n\
@@ -149,7 +158,7 @@ fn deficiency_cl_incf_cl_decf_on_hash() {
          (cl-incf (gethash 'count ht) 5)\n\
          (cl-decf (gethash 'count ht) 2)\n\
          (list (gethash 'count ht))))",
-        expect_test::expect![[r#""OK (4)""#]],
+        expect,
     );
 }
 
@@ -157,6 +166,7 @@ fn deficiency_cl_incf_cl_decf_on_hash() {
 fn deficiency_setf_on_multiple_places() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((2) (3) (99))""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((a (list 1))\n\
@@ -164,6 +174,6 @@ fn deficiency_setf_on_multiple_places() {
          (c (list 3)))\n\
          (cl-shiftf (car a) (car b) (car c) 99)\n\
          (list a b c)))",
-        expect_test::expect![[r#""OK ((2) (3) (99))""#]],
+        expect,
     );
 }

@@ -107,10 +107,9 @@ fn oracle_prop_interp_pattern_arith_eval_with_vars() {
            (funcall 'neovm--test-arith-eval '(var z) nil)
          (error (list 'caught (cadr err)))))
     (fmakunbound 'neovm--test-arith-eval)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (11 190 40 10 5 11 55 (caught \"unbound variable\"))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (11 190 40 10 5 11 55 (caught \"unbound variable\"))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -297,10 +296,8 @@ fn oracle_prop_interp_pattern_stack_bytecode_vm() {
                  '(load 1)    ;; 21: push a (result)
                  '(halt))))   ;; 22
     (fmakunbound 'neovm--test-stack-vm)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -410,12 +407,10 @@ fn oracle_prop_interp_pattern_destructure() {
                 '((point . nil) (10 20))
                 nil))
     (fmakunbound 'neovm--test-pmatch)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((x . 42)) nil nil no-match ((y . 2) (x . 1)) ((c . 30) (b . 20) (a . 10)) ((z . 300) (y . 200) (x . 100)) ((c . 3) (b . 2) (a . 1)) ((x . 5)) no-match ((b . 20) (a . 10) (tag . point)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((x . 42)) nil nil no-match ((y . 2) (x . 1)) ((c . 30) (b . 20) (a . 10)) ((z . 300) (y . 200) (x . 100)) ((c . 3) (b . 2) (a . 1)) ((x . 5)) no-match ((b . 20) (a . 10) (tag . point)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -591,12 +586,10 @@ fn oracle_prop_interp_pattern_type_checker() {
                            (eq-check (lit-int 1) (lit-int 2)))
                 nil))
     (fmakunbound 'neovm--test-typecheck)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (int string (type-error add-requires-int int string) int (type-error if-branches-differ int string) (type-error if-condition-not-bool int) int (type-error binding-type-mismatch x int string) string bool)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (int string (type-error add-requires-int int string) int (type-error if-branches-differ int string) (type-error if-condition-not-bool int) int (type-error binding-type-mismatch x int string) string bool)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -768,8 +761,6 @@ fn oracle_prop_interp_pattern_recursive_descent() {
                      (+ (apply f) x)))
                 nil))
     (fmakunbound 'neovm--test-rdeval)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (17 30 \"yes\" 15 720 \"Hello, World!\" 23 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (17 30 \"yes\" 15 720 \"Hello, World!\" 23 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

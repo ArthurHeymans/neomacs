@@ -13,6 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_plist_put_get_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-plpg")))
@@ -52,7 +53,7 @@ fn combo_plist_put_get_marker_overlay_undo() {
             (put 'combo--sym 'count nil)
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -60,6 +61,7 @@ fn combo_plist_put_get_marker_overlay_undo() {
 fn combo_plist_remprop_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-plrm")))
@@ -100,7 +102,7 @@ fn combo_plist_remprop_marker_overlay_undo() {
             (put 'combo--rm-sym 'drop nil)
             (kill-buffer buf)
             (list after restored)))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -108,6 +110,7 @@ fn combo_plist_remprop_marker_overlay_undo() {
 fn combo_symbol_plist_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-sympl")))
@@ -150,7 +153,7 @@ fn combo_symbol_plist_marker_overlay_undo() {
             (setplist 'combo--pl-sym nil)
             (kill-buffer buf)
             (list after restored)))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -158,6 +161,7 @@ fn combo_symbol_plist_marker_overlay_undo() {
 fn combo_plist_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-plnar")))
@@ -205,7 +209,7 @@ fn combo_plist_narrow_marker_overlay_undo() {
             (setplist 'combo--nar-sym nil)
             (kill-buffer buf)
             (list after restored)))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -213,6 +217,7 @@ fn combo_plist_narrow_marker_overlay_undo() {
 fn combo_plist_buffer_local_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-plbl")))
@@ -253,6 +258,6 @@ fn combo_plist_buffer_local_marker_overlay_undo() {
             (setplist 'combo--bl-sym nil)
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }

@@ -33,10 +33,8 @@ fn oracle_prop_dynamic_vs_lexical_scoping() {
                                 ;; Lexical: still sees 'global-lex (defining scope)
                                 (funcall read-lex))))))
                     (makunbound 'neovm--test-dyn-scope)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (local-dyn global-lex)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (local-dyn global-lex)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -74,10 +72,8 @@ fn oracle_prop_dynamic_deeply_nested_same_var() {
                         (setq results (cons (funcall reader) results))
                         (nreverse results))
                     (makunbound 'neovm--test-nest-v)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 10 20 30 40 50 30 20 10 0)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 10 20 30 40 50 30 20 10 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -121,10 +117,9 @@ fn oracle_prop_dynamic_unwind_on_error_cascade() {
                                       neovm--test-ue-b)))
                     (makunbound 'neovm--test-ue-a)
                     (makunbound 'neovm--test-ue-b)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (level1-a level1-b level1-a level1-b base-a base-b)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (level1-a level1-b level1-a level1-b base-a base-b)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -156,12 +151,10 @@ fn oracle_prop_dynamic_closure_capture_vs_dynamic() {
                                 ;; Verify prefix (lexical) stays, mode (dynamic) changes
                                 (list r1 r2 r3 r4))))))
                     (makunbound 'neovm--test-dc-mode)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"LOG[default]: hello\" \"ERR[default]: world\" \"LOG[verbose]: hello\" \"ERR[verbose]: world\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"LOG[default]: hello\" \"ERR[default]: world\" \"LOG[verbose]: hello\" \"ERR[verbose]: world\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -204,10 +197,9 @@ fn oracle_prop_dynamic_environment_context_system() {
                         (setq results (cons (funcall get-context) results))
                         (nreverse results))
                     (makunbound 'neovm--test-ctx-stack)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"app\" \"app/http\" \"app/http/handler\" \"app\" \"\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (\"app\" \"app/http\" \"app/http/handler\" \"app\" \"\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -241,12 +233,10 @@ fn oracle_prop_dynamic_aspect_oriented_tracing() {
                             (let ((r2 (funcall traced-call 'mul mul r1 5)))
                               (list r1 r2 (nreverse neovm--test-trace-log))))))
                     (makunbound 'neovm--test-trace-log)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (7 35 ((enter add (3 4)) (exit add 7) (enter mul (7 5)) (exit mul 35)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (7 35 ((enter add (3 4)) (exit add 7) (enter mul (7 5)) (exit mul 35)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -295,12 +285,10 @@ fn oracle_prop_dynamic_condition_case_unwind_protect_interaction() {
                         (nreverse neovm--test-cwu-log))
                     (makunbound 'neovm--test-cwu-val)
                     (makunbound 'neovm--test-cwu-log)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((before-inner . outer-let) (in-inner . inner-let) (inner-cleanup . outer-let) (handler . initial) (outer-cleanup . initial))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((before-inner . outer-let) (in-inner . inner-let) (inner-cleanup . outer-let) (handler . initial) (outer-cleanup . initial))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -326,8 +314,6 @@ fn oracle_prop_dynamic_binding_catch_throw_unwind() {
                         ;; After catch, dynamic binding should be restored to 'base
                         (list result neovm--test-ct-v))
                     (makunbound 'neovm--test-ct-v)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((thrown-at level3) base)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((thrown-at level3) base)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

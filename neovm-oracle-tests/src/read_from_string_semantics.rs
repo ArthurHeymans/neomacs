@@ -23,12 +23,10 @@ fn oracle_read_from_string_start_end_positions() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((αβ . 4) ((a b) . 8) (two . 7) (two . 7) (args-out-of-range (\"abc\" 4 nil)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((αβ . 4) ((a b) . 8) (two . 7) (two . 7) (args-out-of-range (\"abc\" 4 nil)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -52,12 +50,10 @@ fn oracle_read_from_string_malformed_error_payloads() {
    cases))
 "###;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r##""OK ((\"(1 2 3\" end-of-file nil) (\"\\\"unterminated\" end-of-file nil) (\"[1 2\" end-of-file nil) (\"#<buffer foo>\" invalid-read-syntax (\"#<\")) (\"#1=#1#\" invalid-read-syntax (\"nonsensical self-reference\")) (\"#1#\" invalid-read-syntax (\"#1#\")) (\"#@5abc\" end-of-file nil))""##
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r##""OK ((\"(1 2 3\" end-of-file nil) (\"\\\"unterminated\" end-of-file nil) (\"[1 2\" end-of-file nil) (\"#<buffer foo>\" invalid-read-syntax (\"#<\")) (\"#1=#1#\" invalid-read-syntax (\"nonsensical self-reference\")) (\"#1#\" invalid-read-syntax (\"#1#\")) (\"#@5abc\" end-of-file nil))""##
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -82,12 +78,10 @@ fn oracle_read_from_string_hash_skip_lazy_string_semantics() {
    (read-from-string zero-zero)))
 "###;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r##""OK (((\"#@\" end-of-file nil) (\"#@x\" end-of-file nil) (\"#@0x\" end-of-file nil) (\"#@01abc\" end-of-file nil) (\"#@4data42\" end-of-file nil) (\"#@5abc\" end-of-file nil)) (nil . 7))""##
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r##""OK (((\"#@\" end-of-file nil) (\"#@x\" end-of-file nil) (\"#@0x\" end-of-file nil) (\"#@01abc\" end-of-file nil) (\"#@4data42\" end-of-file nil) (\"#@5abc\" end-of-file nil)) (nil . 7))""##
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -109,12 +103,10 @@ fn oracle_read_from_string_read_circle_and_radix_precedence() {
    inputs))
 "###;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r##""OK ((\"#1=(a)\" invalid-read-syntax (\"#1=\")) (\"#1#\" invalid-read-syntax (\"#1#\")) (5 . 6) (35 . 5) (\"#37r10\" invalid-read-syntax (\"integer, radix 37\")))""##
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r##""OK ((\"#1=(a)\" invalid-read-syntax (\"#1=\")) (\"#1#\" invalid-read-syntax (\"#1#\")) (5 . 6) (35 . 5) (\"#37r10\" invalid-read-syntax (\"integer, radix 37\")))""##
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -131,12 +123,10 @@ fn oracle_read_from_string_empty_and_whitespace_errors() {
    cases))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"\" end-of-file nil) (\"   \" end-of-file nil) (\"\n\t \" end-of-file nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"\" end-of-file nil) (\"   \" end-of-file nil) (\"\n\t \" end-of-file nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -153,12 +143,10 @@ fn oracle_read_from_string_reader_macro_positions() {
    (list (car r) (cdr r) (eq (car r) (car (read-from-string "#:same"))))))
 "###;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (('foo . 4) (#'car . 5) (`(a ,b ,@c) . 11) (uninterned . 12) (same 6 nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (('foo . 4) (#'car . 5) (`(a ,b ,@c) . 11) (uninterned . 12) (same 6 nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -175,8 +163,6 @@ fn oracle_read_from_string_preserves_text_properties_on_read_strings() {
           (substring-no-properties (car r)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((\"abc\" . 5) nil nil \"abc\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((\"abc\" . 5) nil nil \"abc\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

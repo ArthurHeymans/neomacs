@@ -10,11 +10,12 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx446_url_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"https\" \"example.com\" \"/path?q=1\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'url-parse)
   (let ((url (url-generic-parse-url "https://example.com/path?q=1#frag")))
     (list (url-type url) (url-host url) (url-filename url))))"##,
-        expect_test::expect![[r#""OK (\"https\" \"example.com\" \"/path?q=1\")""#]],
+        expect,
     );
 }
 
@@ -22,11 +23,12 @@ fn div_cx446_url_parse() {
 #[test]
 fn div_cx446_url_encode_decode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function url-decode-url)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'url-util)
   (list (url-encode-url "https://example.com/path with spaces")
         (url-decode-url "https%3A%2F%2Fexample.com")))"##,
-        expect_test::expect![[r#""ERR (void-function url-decode-url)""#]],
+        expect,
     );
 }
 
@@ -34,13 +36,15 @@ fn div_cx446_url_encode_decode() {
 #[test]
 fn div_cx446_url_hexify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (\"hello%20world\" \"hello world\" \"caf%C3%A9\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'url-util)
   (list (url-hexify-string "hello world")
         (url-unhex-string "hello%20world")
         (url-hexify-string "café")))
 "##,
-        expect_test::expect![[r#""OK (\"hello%20world\" \"hello world\" \"caf%C3%A9\")""#]],
+        expect,
     );
 }
 
@@ -48,14 +52,15 @@ fn div_cx446_url_hexify() {
 #[test]
 fn div_cx446_url_path_base() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-type-argument url \"https://example.com/a/b?q=1\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'url)
   (list (url-path-and-query "https://example.com/a/b?q=1")
         (url-basepath "https://example.com/a/b/c")))
 "##,
-        expect_test::expect![[
-            r#""ERR (wrong-type-argument url \"https://example.com/a/b?q=1\")""#
-        ]],
+        expect,
     );
 }
 
@@ -63,11 +68,12 @@ fn div_cx446_url_path_base() {
 #[test]
 fn div_cx446_url_file_ext() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \".png\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'url)
   (url-file-extension "image.png"))
 "##,
-        expect_test::expect![[r#""OK \".png\"""#]],
+        expect,
     );
 }
 
@@ -75,11 +81,12 @@ fn div_cx446_url_file_ext() {
 #[test]
 fn div_cx446_text_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (text-mode text-mode)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (text-mode)
   (list major-mode (derived-mode-p 'text-mode)))"##,
-        expect_test::expect![[r#""OK (text-mode text-mode)""#]],
+        expect,
     );
 }
 
@@ -87,11 +94,12 @@ fn div_cx446_text_mode() {
 #[test]
 fn div_cx446_prog_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (prog-mode prog-mode)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (prog-mode)
   (list major-mode (derived-mode-p 'prog-mode)))"##,
-        expect_test::expect![[r#""OK (prog-mode prog-mode)""#]],
+        expect,
     );
 }
 
@@ -99,11 +107,12 @@ fn div_cx446_prog_mode() {
 #[test]
 fn div_cx446_fundamental_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK fundamental-mode""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (fundamental-mode)
   major-mode)"##,
-        expect_test::expect![[r#""OK fundamental-mode""#]],
+        expect,
     );
 }
 
@@ -111,12 +120,13 @@ fn div_cx446_fundamental_mode() {
 #[test]
 fn div_cx446_special_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (special-mode special-mode)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'simple)
   (with-temp-buffer
     (special-mode)
     (list major-mode (derived-mode-p 'special-mode))))"##,
-        expect_test::expect![[r#""OK (special-mode special-mode)""#]],
+        expect,
     );
 }
 
@@ -124,12 +134,13 @@ fn div_cx446_special_mode() {
 #[test]
 fn div_cx446_outline_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (outline-mode outline-mode)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'outline)
   (with-temp-buffer
     (outline-mode)
     (list major-mode (derived-mode-p 'outline-mode))))"##,
-        expect_test::expect![[r#""OK (outline-mode outline-mode)""#]],
+        expect,
     );
 }
 
@@ -137,11 +148,12 @@ fn div_cx446_outline_mode() {
 #[test]
 fn div_cx446_emacs_lisp_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (emacs-lisp-mode t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (emacs-lisp-mode)
   (list major-mode (boundp 'emacs-lisp-mode-map)))"##,
-        expect_test::expect![[r#""OK (emacs-lisp-mode t)""#]],
+        expect,
     );
 }
 
@@ -149,11 +161,12 @@ fn div_cx446_emacs_lisp_mode() {
 #[test]
 fn div_cx446_lisp_interaction_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (lisp-interaction-mode t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (lisp-interaction-mode)
   (list major-mode (boundp 'lisp-interaction-mode-map)))"##,
-        expect_test::expect![[r#""OK (lisp-interaction-mode t)""#]],
+        expect,
     );
 }
 
@@ -161,10 +174,11 @@ fn div_cx446_lisp_interaction_mode() {
 #[test]
 fn div_cx446_hexl_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'hexl)
   (list (fboundp 'hexl-mode) (fboundp 'hexl-find-file)))"##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
@@ -172,12 +186,13 @@ fn div_cx446_hexl_mode() {
 #[test]
 fn div_cx446_view_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'view)
   (with-temp-buffer
     (view-mode 1)
     (list view-mode (boundp 'view-mode-map))))"##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
@@ -185,12 +200,13 @@ fn div_cx446_view_mode() {
 #[test]
 fn div_cx446_read_only_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t buffer-read-only)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (insert "test")
   (read-only-mode 1)
   (list buffer-read-only
         (condition-case e (insert "x") (error (car e)))))"##,
-        expect_test::expect![[r#""OK (t buffer-read-only)""#]],
+        expect,
     );
 }

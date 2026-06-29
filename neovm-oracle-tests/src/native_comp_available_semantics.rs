@@ -10,8 +10,6 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn oracle_native_comp_available_matches_gnu_build_capability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    crate::common::assert_oracle_parity_expect(
-        r#"(native-comp-available-p)"#,
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    crate::common::assert_oracle_parity_expect(r#"(native-comp-available-p)"#, expect);
 }

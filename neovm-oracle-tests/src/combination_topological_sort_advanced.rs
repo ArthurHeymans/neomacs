@@ -79,12 +79,10 @@ fn oracle_prop_toposort_adv_kahn_with_steps() {
         (funcall 'neovm--tsa-kahn-steps
                  '(("a" . ()) ("b" . ()) ("c" . ()))))
     (fmakunbound 'neovm--tsa-kahn-steps)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ok (\"a\" \"b\" \"c\" \"d\") ((dequeue \"a\" remaining nil) (dequeue \"b\" remaining (\"c\")) (dequeue \"c\" remaining nil) (dequeue \"d\" remaining nil))) (ok (\"a\" \"b\" \"c\") ((dequeue \"a\" remaining (\"b\" \"c\")) (dequeue \"b\" remaining (\"c\")) (dequeue \"c\" remaining nil))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ok (\"a\" \"b\" \"c\" \"d\") ((dequeue \"a\" remaining nil) (dequeue \"b\" remaining (\"c\")) (dequeue \"c\" remaining nil) (dequeue \"d\" remaining nil))) (ok (\"a\" \"b\" \"c\") ((dequeue \"a\" remaining (\"b\" \"c\")) (dequeue \"b\" remaining (\"c\")) (dequeue \"c\" remaining nil))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -175,12 +173,10 @@ fn oracle_prop_toposort_adv_dfs_based() {
         (funcall 'neovm--tsa-dfs-toposort
                  '(("x" . ("x")))))
     (fmakunbound 'neovm--tsa-dfs-toposort)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ok \"a\" \"b\" \"c\" \"d\") (ok \"a\" \"c\" \"b\" \"d\") (ok \"c\" \"d\" \"a\" \"b\") (cycle . \"a\") (cycle . \"x\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ok \"a\" \"b\" \"c\" \"d\") (ok \"a\" \"c\" \"b\" \"d\") (ok \"c\" \"d\" \"a\" \"b\") (cycle . \"a\") (cycle . \"x\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -258,12 +254,10 @@ fn oracle_prop_toposort_adv_all_orderings() {
         (funcall 'neovm--tsa-all-toposorts
                  '(("a" . ("b" "c")) ("b" . ()) ("c" . ()))))
     (fmakunbound 'neovm--tsa-all-toposorts)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"a\" \"b\" \"c\" \"d\") (\"a\" \"c\" \"b\" \"d\")) 6 ((\"a\" \"b\" \"c\")) ((\"a\" \"b\" \"c\") (\"a\" \"c\" \"b\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"a\" \"b\" \"c\" \"d\") (\"a\" \"c\" \"b\" \"d\")) 6 ((\"a\" \"b\" \"c\")) ((\"a\" \"b\" \"c\") (\"a\" \"c\" \"b\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -350,12 +344,10 @@ fn oracle_prop_toposort_adv_cycle_report() {
                                  ("c" . ("d")) ("d" . ("c"))))))
           (list 'found-cycle (not (null result)))))
     (fmakunbound 'neovm--tsa-find-cycle)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"c\" \"a\" \"b\" \"a\") nil (\"x\" \"x\") (\"c\" \"a\" \"b\" \"a\") (found-cycle t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"c\" \"a\" \"b\" \"a\") nil (\"x\" \"x\") (\"c\" \"a\" \"b\" \"a\") (found-cycle t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -430,12 +422,10 @@ fn oracle_prop_toposort_adv_lexicographic_smallest() {
                  '(("f" . ()) ("e" . ("f")) ("d" . ("f"))
                    ("c" . ("d" "e")) ("b" . ("c")) ("a" . ("b" "c")))))
     (fmakunbound 'neovm--tsa-lex-smallest)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"a\" \"b\" \"c\" \"d\") (\"a\" \"b\" \"c\") (\"a\" \"b\" \"c\" \"d\" \"e\") (\"z\" \"y\" \"x\" \"w\") (\"a\" \"b\" \"c\" \"d\" \"e\" \"f\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"a\" \"b\" \"c\" \"d\") (\"a\" \"b\" \"c\") (\"a\" \"b\" \"c\" \"d\" \"e\") (\"z\" \"y\" \"x\" \"w\") (\"a\" \"b\" \"c\" \"d\" \"e\" \"f\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -538,12 +528,10 @@ fn oracle_prop_toposort_adv_package_dependency() {
                    ("parser"  . ())
                    ("math-lib" . ()))))
     (fmakunbound 'neovm--tsa-resolve-deps)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ok (\"connection-pool\" \"db-driver\" \"http-lib\" \"template-engine\" \"web-framework\" \"app\")) (error circular-deps (\"a\" \"b\" \"c\")) (error missing-deps ((\"app\" requires \"missing-lib\") (\"other\" requires \"also-missing\"))) (ok (\"standalone\")) (ok (\"events\" \"math-lib\" \"parser\" \"cli\" \"renderer\" \"ui\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ok (\"connection-pool\" \"db-driver\" \"http-lib\" \"template-engine\" \"web-framework\" \"app\")) (error circular-deps (\"a\" \"b\" \"c\")) (error missing-deps ((\"app\" requires \"missing-lib\") (\"other\" requires \"also-missing\"))) (ok (\"standalone\")) (ok (\"events\" \"math-lib\" \"parser\" \"cli\" \"renderer\" \"ui\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -640,10 +628,8 @@ fn oracle_prop_toposort_adv_critical_path() {
                    ("c" 5 "a")
                    ("d" 1 "b" "c"))))
     (fmakunbound 'neovm--tsa-critical-path)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((11 (\"design\" \"build\" \"test\" \"deploy\") ((\"design\" . 0) (\"build\" . 3) (\"test\" . 8) (\"deploy\" . 10))) (8 (\"a\" \"c\" \"d\") ((\"a\" . 0) (\"b\" . 2) (\"c\" . 2) (\"d\" . 7))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((11 (\"design\" \"build\" \"test\" \"deploy\") ((\"design\" . 0) (\"build\" . 3) (\"test\" . 8) (\"deploy\" . 10))) (8 (\"a\" \"c\" \"d\") ((\"a\" . 0) (\"b\" . 2) (\"c\" . 2) (\"d\" . 7))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

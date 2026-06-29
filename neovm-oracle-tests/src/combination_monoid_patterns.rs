@@ -71,7 +71,8 @@ fn oracle_prop_monoid_definition_and_laws() {
     (fmakunbound 'neovm--monoid-identity)
     (fmakunbound 'neovm--monoid-combine)
     (fmakunbound 'neovm--monoid-check-laws)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t)""#]]);
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -120,12 +121,10 @@ fn oracle_prop_monoid_string_concatenation() {
                  (mapcar (lambda (n) (number-to-string n)) '(1 2 3 4 5))))
     (fmakunbound 'neovm--str-mconcat)
     (fmakunbound 'neovm--str-intersperse)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Hello World!\" \"\" \"alone\" \"alpha, beta, gamma, delta\" \"2026-03-02\" \"\" \"only\" \"1,2,3,4,5\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Hello World!\" \"\" \"alone\" \"alpha, beta, gamma, delta\" \"2026-03-02\" \"\" \"only\" \"1,2,3,4,5\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -180,12 +179,10 @@ fn oracle_prop_monoid_list_append() {
                  '(1 2 3 4 5 6 7 8)))
     (fmakunbound 'neovm--list-mconcat)
     (fmakunbound 'neovm--list-flatmap)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4 5 6) (1 2 3 4) nil nil (1 2 3 1 1 2 3 4 1 2) (a a b b c c d d) (4 16 36 64))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5 6) (1 2 3 4) nil nil (1 2 3 1 1 2 3 4 1 2) (a a b b c c d d) (4 16 36 64))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -245,10 +242,8 @@ fn oracle_prop_monoid_sum_product() {
           (funcall 'neovm--monoid-power (cons (lambda (a b) (concat a b)) "") "ha" 3)))
     (fmakunbound 'neovm--generic-mconcat)
     (fmakunbound 'neovm--monoid-power)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (55 720 0 1 9 1 20 32 \"hahaha\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (55 720 0 1 9 1 20 32 \"hahaha\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -316,10 +311,8 @@ fn oracle_prop_monoid_endomorphism_composition() {
     (fmakunbound 'neovm--endo-compose)
     (fmakunbound 'neovm--endo-mconcat)
     (fmakunbound 'neovm--endo-pipeline)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (19 1 64 42 -7 5 15 24)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (19 1 64 42 -7 5 15 24)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -389,12 +382,10 @@ fn oracle_prop_monoid_free_monoid() {
     (fmakunbound 'neovm--free-unit)
     (fmakunbound 'neovm--free-combine)
     (fmakunbound 'neovm--free-homomorphism)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((a) (a b) (a b c) nil t t t \"hello\" 13 ((cat . 3) (dog . 3) (bird . 4)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((a) (a b) (a b c) nil t t t \"hello\" 13 ((cat . 3) (dog . 3) (bird . 4)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -453,10 +444,8 @@ fn oracle_prop_monoid_aggregation_report() {
             ;; Average (integer division)
             (/ (nth 1 result) (nth 0 result)))))
     (fmakunbound 'neovm--multi-mconcat)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((5 411 95 (\"Alice\" \"Bob\" \"Charlie\" \"Diana\" \"Eve\")) 5 411 95 5 82)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((5 411 95 (\"Alice\" \"Bob\" \"Charlie\" \"Diana\" \"Eve\")) 5 411 95 5 82)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

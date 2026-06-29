@@ -12,6 +12,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo48_full_heading_lifecycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument stringp 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -53,7 +54,7 @@ fn combo48_full_heading_lifecycle() {
     ;; step 8: final buffer
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (wrong-type-argument stringp 1)""#]],
+        expect,
     );
 }
 
@@ -64,6 +65,7 @@ fn combo48_full_heading_lifecycle() {
 #[test]
 fn combo48_table_multi_edit_cascade() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range [nil 0 1] 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -96,7 +98,7 @@ fn combo48_table_multi_edit_cascade() {
     (push (list :tables (length (org-element-map (org-element-parse-buffer) 'table #'identity))) r)
     (push (list :cells (length (org-element-map (org-element-parse-buffer) 'table-cell #'identity))) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (args-out-of-range [nil 0 1] 3)""#]],
+        expect,
     );
 }
 
@@ -107,6 +109,9 @@ fn combo48_table_multi_edit_cascade() {
 #[test]
 fn combo48_babel_multilang_header_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"ob-sh\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -143,9 +148,7 @@ fn combo48_babel_multilang_header_args() {
       (search-forward "#+begin_src sh")
       (push (org-babel-execute-src-block) r)
       (nreverse r))))"##,
-        expect_test::expect![[
-            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"ob-sh\")""#
-        ]],
+        expect,
     );
 }
 
@@ -156,6 +159,9 @@ fn combo48_babel_multilang_header_args() {
 #[test]
 fn combo48_visibility_parse_reparse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:init-headlines (\"A\" \"A1\" \"A2\" \"B\" \"B1\" \"B2\" \"C\")) (:init-sections 5) (:overview-headlines (\"A\" \"A1\" \"A2\" \"B\" \"B1\" \"B2\" \"C\")) (:after-cycle1-headlines (\"A\" \"A1\" \"A2\" \"B\" \"B1\" \"B2\" \"C\")) (:after-cycle2-headlines (\"A\" \"A1\" \"A2\" \"B\" \"B1\" \"B2\" \"C\")) (:after-showall-headlines (\"A\" \"A1\" \"A2\" \"B\" \"B1\" \"B2\" \"C\")))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -183,9 +189,7 @@ fn combo48_visibility_parse_reparse() {
     (push (list :after-showall-headlines (mapcar (lambda (h) (substring-no-properties (org-element-property :raw-value h)))
                                                  (org-element-map (org-element-parse-buffer) 'headline #'identity))) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:init-headlines (\"A\" \"A1\" \"A2\" \"B\" \"B1\" \"B2\" \"C\")) (:init-sections 5) (:overview-headlines (\"A\" \"A1\" \"A2\" \"B\" \"B1\" \"B2\" \"C\")) (:after-cycle1-headlines (\"A\" \"A1\" \"A2\" \"B\" \"B1\" \"B2\" \"C\")) (:after-cycle2-headlines (\"A\" \"A1\" \"A2\" \"B\" \"B1\" \"B2\" \"C\")) (:after-showall-headlines (\"A\" \"A1\" \"A2\" \"B\" \"B1\" \"B2\" \"C\")))""#
-        ]],
+        expect,
     );
 }
 
@@ -196,6 +200,9 @@ fn combo48_visibility_parse_reparse() {
 #[test]
 fn combo48_macro_expand_export() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:raw-value \"{{{name}}} Report\") (:exported \"1 Project NeoMACS Report\n========================\n\n  Version: 0.1.0.  Hello from Matrix\n\n\n1.1 Sub-section\n~~~~~~~~~~~~~~~\n\n  More about Project NeoMACS 0.1.0.\n\") (:macro-count 3))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -222,9 +229,7 @@ fn combo48_macro_expand_export() {
                   (length (org-element-map (org-element-parse-buffer) 'keyword
                             (lambda (k) (when (equal "MACRO" (org-element-property :key k)) k))))) r)
       (nreverse r))))"##,
-        expect_test::expect![[
-            r#""OK ((:raw-value \"{{{name}}} Report\") (:exported \"1 Project NeoMACS Report\n========================\n\n  Version: 0.1.0.  Hello from Matrix\n\n\n1.1 Sub-section\n~~~~~~~~~~~~~~~\n\n  More about Project NeoMACS 0.1.0.\n\") (:macro-count 3))""#
-        ]],
+        expect,
     );
 }
 
@@ -235,6 +240,8 @@ fn combo48_macro_expand_export() {
 #[test]
 fn combo48_map_entries_deep_mutate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (user-error \"State ‘WAIT’ not valid in this file\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -276,7 +283,7 @@ fn combo48_map_entries_deep_mutate() {
     ;; final buffer
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (user-error \"State ‘WAIT’ not valid in this file\")""#]],
+        expect,
     );
 }
 
@@ -287,6 +294,9 @@ fn combo48_map_entries_deep_mutate() {
 #[test]
 fn combo48_export_struct_compare() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:initial-struct ((1 \"Org Document\" 1) (2 \"Section A\" 16) (2 \"Section B\" 59))) (:html1 t) (:after-insert-struct ((1 \"Org Document\") (2 \"Section A\") (2 \"Section A2\") (2 \"Section B\"))) (:html2 t))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -319,9 +329,7 @@ fn combo48_export_struct_compare() {
       (push (list :html2 (let ((e (org-export-as 'html nil nil t)))
                            (when e (> (length e) 0)))) r)
       (nreverse r))))"##,
-        expect_test::expect![[
-            r#""OK ((:initial-struct ((1 \"Org Document\" 1) (2 \"Section A\" 16) (2 \"Section B\" 59))) (:html1 t) (:after-insert-struct ((1 \"Org Document\") (2 \"Section A\") (2 \"Section A2\") (2 \"Section B\"))) (:html2 t))""#
-        ]],
+        expect,
     );
 }
 
@@ -332,6 +340,7 @@ fn combo48_export_struct_compare() {
 #[test]
 fn combo48_mixed_list_reshape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -363,7 +372,7 @@ fn combo48_mixed_list_reshape() {
     (push (list :final-items (length (org-element-map (org-element-parse-buffer) 'item #'identity))) r)
     (push (list :final-plain-lists (length (org-element-map (org-element-parse-buffer) 'plain-list #'identity))) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
+        expect,
     );
 }
 
@@ -374,6 +383,9 @@ fn combo48_mixed_list_reshape() {
 #[test]
 fn combo48_src_block_mutate_reexecute() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (12 (:modified-src-value \"(+ 100 200 300)\n\") 600 (:result-count 0))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -401,9 +413,7 @@ fn combo48_src_block_mutate_reexecute() {
       (push (list :result-count
                   (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (nreverse r))))"##,
-        expect_test::expect![[
-            r#""OK (12 (:modified-src-value \"(+ 100 200 300)\n\") 600 (:result-count 0))""#
-        ]],
+        expect,
     );
 }
 
@@ -414,6 +424,9 @@ fn combo48_src_block_mutate_reexecute() {
 #[test]
 fn combo48_drawer_insert_populate_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:props (\"abc-123\" \"h1\")) (:drawers 1) (:prop-drawers 0) (:note-contents \":ID:       abc-123\n:CUSTOM_ID: h1\n:NOTES:\nNote line 1.\nNote line 2.\n\n\") (:buffer \"* H1\n:PROPERTIES:\n:ID:       abc-123\n:CUSTOM_ID: h1\n:NOTES:\nNote line 1.\nNote line 2.\n\n:END:\n:END:\n\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -445,8 +458,6 @@ fn combo48_drawer_insert_populate_cycle() {
     ;; final buffer
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:props (\"abc-123\" \"h1\")) (:drawers 1) (:prop-drawers 0) (:note-contents \":ID:       abc-123\n:CUSTOM_ID: h1\n:NOTES:\nNote line 1.\nNote line 2.\n\n\") (:buffer \"* H1\n:PROPERTIES:\n:ID:       abc-123\n:CUSTOM_ID: h1\n:NOTES:\nNote line 1.\nNote line 2.\n\n:END:\n:END:\n\"))""#
-        ]],
+        expect,
     );
 }

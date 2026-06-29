@@ -42,12 +42,10 @@ fn oracle_prop_subr_misc_package_unmsys_prefix_apropos_edges() {
          (apropos-internal "\\`nmo-" #'boundp))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"pkg-pkg.el\" \"pkg-pkg.el\" \"pkg-pkg.el\" \"pkg-pkg.el\" \"hidden-pkg.el\" \"pkg-nover-pkg.el\" \"pkg-1.2.3-extra-pkg.el\" \"pkg-pkg.el\") (\"/c/foo/bar\" \"/C/foo\" \"/notdrive/foo\" \"relative\") (\"c:/foo/bar\" \"C:/foo\" \"/notdrive/foo\" \"relative\") ((\"b.el\" \"a.el\") (\"a.el\") nil) ((nmo-alpha nmo-beta) (nmo-alpha)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"pkg-pkg.el\" \"pkg-pkg.el\" \"pkg-pkg.el\" \"pkg-pkg.el\" \"hidden-pkg.el\" \"pkg-nover-pkg.el\" \"pkg-1.2.3-extra-pkg.el\" \"pkg-pkg.el\") (\"/c/foo/bar\" \"/C/foo\" \"/notdrive/foo\" \"relative\") (\"c:/foo/bar\" \"C:/foo\" \"/notdrive/foo\" \"relative\") ((\"b.el\" \"a.el\") (\"a.el\") nil) ((nmo-alpha nmo-beta) (nmo-alpha)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -71,12 +69,10 @@ fn oracle_prop_system_type_dynamic_binding_reaches_functions() {
      (fmakunbound 'neomacs--oracle-system-type-reader))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t (windows-nt windows-nt windows-nt) (windows-nt windows-nt))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t (windows-nt windows-nt windows-nt) (windows-nt windows-nt))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -116,12 +112,10 @@ fn oracle_prop_defvar_lisp_runtime_variables_are_special() {
          (funcall (lambda () overriding-plist-environment)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((system-type t t) (system-configuration t t) (system-configuration-options t t) (system-configuration-features t t) (emacs-version t t) (system-name t t) (operating-system-release t t) (command-line-args t t) (user-full-name t t) (user-login-name t t) (user-real-login-name t t) (overriding-plist-environment t t)) (\"oracle-config\" \"oracle-options\" \"99.99-oracle\" \"oracle-host\" \"oracle-kernel\" (\"oracle-emacs\" \"--flag\") ((oracle-symbol oracle-prop oracle-value)) ((oracle-symbol oracle-prop oracle-value))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((system-type t t) (system-configuration t t) (system-configuration-options t t) (system-configuration-features t t) (emacs-version t t) (system-name t t) (operating-system-release t t) (command-line-args t t) (user-full-name t t) (user-login-name t t) (user-real-login-name t t) (overriding-plist-environment t t)) (\"oracle-config\" \"oracle-options\" \"99.99-oracle\" \"oracle-host\" \"oracle-kernel\" (\"oracle-emacs\" \"--flag\") ((oracle-symbol oracle-prop oracle-value)) ((oracle-symbol oracle-prop oracle-value))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -158,12 +152,10 @@ fn oracle_prop_defvar_bool_int_runtime_variables_are_special() {
          purify-flag)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((case-fold-search t t) (debug-on-error t t) (gc-cons-threshold t t) (max-lisp-eval-depth t t) (max-specpdl-size t t) (inhibit-quit t t) (noninteractive t t) (purify-flag t t)) (nil t 1234567 9876 8765 t nil t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((case-fold-search t t) (debug-on-error t t) (gc-cons-threshold t t) (max-lisp-eval-depth t t) (max-specpdl-size t t) (inhibit-quit t t) (noninteractive t t) (purify-flag t t)) (nil t 1234567 9876 8765 t nil t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -207,10 +199,8 @@ fn oracle_prop_defvar_per_buffer_special_and_local_edges() {
          (default-value 'fill-column))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((major-mode t t t) (mode-name t t t) (fill-column t t nil) (tab-width t t nil) (default-directory t t t) (buffer-file-name t t t) (buffer-read-only t t t) (buffer-undo-list t t t) (cursor-type t t nil) (truncate-lines t t nil)) (17 3 oracle-mode \"Oracle\") (33 5 temp-oracle-mode \"Temp Oracle\" t t 33 70))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((major-mode t t t) (mode-name t t t) (fill-column t t nil) (tab-width t t nil) (default-directory t t t) (buffer-file-name t t t) (buffer-read-only t t t) (buffer-undo-list t t t) (cursor-type t t nil) (truncate-lines t t nil)) (17 3 oracle-mode \"Oracle\") (33 5 temp-oracle-mode \"Temp Oracle\" t t 33 70))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

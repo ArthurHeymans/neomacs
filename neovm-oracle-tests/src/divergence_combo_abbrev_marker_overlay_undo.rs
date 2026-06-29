@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_abbrev_expand_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"aeu\"))\n\
@@ -44,7 +45,7 @@ fn combo_abbrev_expand_marker_overlay_undo() {
          (overlay-start ov)\n\
          (overlay-end ov)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -52,6 +53,7 @@ fn combo_abbrev_expand_marker_overlay_undo() {
 fn combo_abbrev_narrow_expand_with_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ane\"))\n\
@@ -81,7 +83,7 @@ fn combo_abbrev_narrow_expand_with_textprop() {
          (buffer-string)\n\
          (marker-position m)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -89,6 +91,7 @@ fn combo_abbrev_narrow_expand_with_textprop() {
 fn combo_abbrev_overlay_priority_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"aop\"))\n\
@@ -125,7 +128,7 @@ fn combo_abbrev_overlay_priority_undo() {
          (overlay-start ov1)\n\
          (overlay-end ov1)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -133,6 +136,7 @@ fn combo_abbrev_overlay_priority_undo() {
 fn combo_abbrev_multi_buffer_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((b1 (generate-new-buffer \"ab1\"))\n\
@@ -171,7 +175,7 @@ fn combo_abbrev_multi_buffer_state() {
          (list s1 mp1 k1 os oe s2 mp2 k2))))\n\
          (kill-buffer b1)\n\
          (kill-buffer b2)))",
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -179,6 +183,7 @@ fn combo_abbrev_multi_buffer_state() {
 fn combo_abbrev_textprop_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"atu\"))\n\
@@ -212,6 +217,6 @@ fn combo_abbrev_textprop_replace_undo() {
          (get-text-property 1 'tag)\n\
          (get-text-property 1 'expanded)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

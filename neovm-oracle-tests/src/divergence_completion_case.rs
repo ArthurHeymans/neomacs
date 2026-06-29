@@ -11,83 +11,91 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_ccase_prefix_upper_input_lower_candidates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"ab\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((completion-ignore-case t)) (try-completion "A" '("abc" "abd")))
 "##,
-        expect_test::expect![[r#""OK \"ab\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_ccase_prefix_lower_input_upper_candidates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"AB\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((completion-ignore-case t)) (try-completion "a" '("ABC" "ABD")))
 "##,
-        expect_test::expect![[r#""OK \"AB\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_ccase_mixed_case_input() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"ab\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((completion-ignore-case t)) (try-completion "Ab" '("abc" "abd")))
 "##,
-        expect_test::expect![[r#""OK \"ab\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_ccase_all_completions_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"apple\" \"APPLE\" \"apricot\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((completion-ignore-case t)) (all-completions "A" '("apple" "APPLE" "apricot")))
 "##,
-        expect_test::expect![[r#""OK (\"apple\" \"APPLE\" \"apricot\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_ccase_exact_match_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"abc\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((completion-ignore-case t)) (try-completion "ABC" '("abc")))
 "##,
-        expect_test::expect![[r#""OK \"abc\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_ccase_single_candidate_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"apple\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((completion-ignore-case t)) (try-completion "A" '("apple")))
 "##,
-        expect_test::expect![[r#""OK \"apple\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_ccase_flex_style_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((completion-ignore-case t) (completion-styles '(flex))) (try-completion "AB" '("axby")))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_ccase_test_completion_ignore_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t \"FOOBAR\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((completion-ignore-case t))
@@ -95,30 +103,32 @@ fn div_ccase_test_completion_ignore_case() {
         (test-completion "abc" '("ABC"))
         (try-completion "FOO" '("foobar" "FOOBAR"))))
 "##,
-        expect_test::expect![[r#""OK (t t \"FOOBAR\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_ccase_upper_collection_diverse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"BA\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((completion-ignore-case t))
   (try-completion "BA" '("banana" "BANANA" "bagel")))
 "##,
-        expect_test::expect![[r#""OK \"BA\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_ccase_completion_pcm_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((completion-ignore-case t) (completion-styles '(partial)))
   (all-completions "B" '("abc" "aBd")))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

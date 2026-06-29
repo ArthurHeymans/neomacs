@@ -44,12 +44,10 @@ fn oracle_prop_catch_throw_deep_nonlocal_return() {
                       (let ((result (catch 'escape
                                       (funcall level1 level2 level3 level4 level5))))
                         (list result (nreverse trail)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((from-level-5) (enter-3 enter-4 unwind-5 unwind-4 unwind-3 unwind-2))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((from-level-5) (enter-3 enter-4 unwind-5 unwind-4 unwind-3 unwind-2))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -80,12 +78,10 @@ fn oracle_prop_catch_throw_same_tag_innermost_catches() {
                                   ;; This throw goes to outer
                                   (throw 'done (list 'from-outer r2))))))
                       (list r1 (nreverse results))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((from-outer (from-middle inner-val)) (outer-body middle-body inner-body after-inner after-middle))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((from-outer (from-middle inner-val)) (outer-body middle-body inner-body after-inner after-middle))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -118,10 +114,9 @@ fn oracle_prop_catch_throw_complex_values() {
                     (catch 'tag
                       (throw 'tag nil)
                       'never-reached))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((1 2) (1 (2 (3 (4 (5))))) [a b c d e] (30 2 3 4) nil)""#],
-    );
+    let expect =
+        expect_test::expect![r#""OK ((1 2) (1 (2 (3 (4 (5))))) [a b c d e] (30 2 3 4) nil)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -157,12 +152,10 @@ fn oracle_prop_catch_throw_crossing_condition_case() {
                                   (setq log (cons 'caught-signal log))
                                   'signal-caught)))))
                         (list result result2 (nreverse log)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (thrown-value signal-caught (before-throw before-signal caught-signal))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (thrown-value signal-caught (before-throw before-signal caught-signal))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -209,12 +202,10 @@ fn oracle_prop_catch_throw_crossing_unwind_protect() {
                       (list result
                             (nreverse cleanups)
                             resources)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((aborted (res-3 res-2 res-1)) (clean-3 clean-2 clean-1) nil)""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((aborted (res-3 res-2 res-1)) (clean-3 clean-2 clean-1) nil)""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -251,10 +242,8 @@ fn oracle_prop_catch_no_throw_return_values() {
                       (if (> 3 2)
                           'yes
                         (throw 'tag 'no))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (6 9 (10 20 30) (no throw happened) nil yes)""#],
-    );
+    let expect = expect_test::expect![r#""OK (6 9 (10 20 30) (no throw happened) nil yes)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -284,10 +273,8 @@ fn oracle_prop_catch_throw_coroutine_simulation() {
                             (setq collected (cons val collected)))))
                       (list (nreverse collected)
                             gen-current)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((0 1 2 3 4) 5)""#],
-    );
+    let expect = expect_test::expect![r#""OK ((0 1 2 3 4) 5)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -347,8 +334,7 @@ fn oracle_prop_catch_throw_exception_handling() {
                        (if (and (consp exc) (eq (car exc) 'ok))
                            (cadr exc)
                          (funcall handle-exception exc)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 \"DivError: 10 / 0\" \"SqrtError: sqrt(-4)\" 5.0)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (3 \"DivError: 10 / 0\" \"SqrtError: sqrt(-4)\" 5.0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

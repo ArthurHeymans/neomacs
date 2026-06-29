@@ -47,10 +47,8 @@ fn oracle_prop_eq_all_value_types() {
                      ;; Characters: same char is eq (fixnum)
                      (eq ch ?A)
                      (eq ?Z ?Z)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t nil t t nil t nil t t nil t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t nil t t nil t nil t t nil t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -87,10 +85,8 @@ fn oracle_prop_eql_vs_eq_number_semantics() {
                      (eql (+ 1.0 2.0) (- 5.0 2.0))
                      ;; but NOT eq
                      (eq (+ 1.0 2.0) (- 5.0 2.0))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t nil nil nil nil t t t t t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t nil nil nil nil t t t t t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -123,10 +119,8 @@ fn oracle_prop_equal_deeply_nested_mixed() {
                    ;; Dotted pairs nested
                    (equal '((a . 1) (b . (c . 2)))
                           '((a . 1) (b . (c . 2)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t nil t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -156,10 +150,8 @@ fn oracle_prop_equal_hash_tables_not_equal() {
                      ;; But hash table values can be retrieved and compared
                      (equal (gethash 'a h1) (gethash 'a h2))
                      (equal (gethash 'b h1) (gethash 'b h2))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil t nil t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil t nil t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -191,10 +183,8 @@ fn oracle_prop_string_equal_case_and_properties() {
                    (string-equal "a\nb" "a\tb")
                    ;; Unicode
                    (string-equal "\u00e9" "\u00e9"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil nil t nil t t t nil t t nil t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil nil t nil t t t nil t t nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -228,10 +218,9 @@ fn oracle_prop_not_equal_numeric() {
                    ;; Computed values
                    (/= (+ 2 3) (* 1 5))
                    (/= (+ 2 3) (* 1 6)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil nil t t nil nil nil t nil nil nil t nil t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (t nil nil t t nil nil nil t nil nil nil t nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -291,10 +280,8 @@ fn oracle_prop_equality_custom_structural() {
                        ;; Compare with built-in equal for reference
                        (equal rec1 rec2)
                        (equal nested1 nested2))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil nil t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil nil t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -363,10 +350,8 @@ fn oracle_prop_equality_bst_with_equal_keys() {
                        (funcall bst-search tree 42)
                        ;; In-order traversal
                        (funcall bst-to-sorted-list tree))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"FIVE\" \"one\" \"nine\" nil ((1 . \"one\") (3 . \"three\") (4 . \"four\") (5 . \"FIVE\") (6 . \"six\") (7 . \"seven\") (9 . \"nine\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"FIVE\" \"one\" \"nine\" nil ((1 . \"one\") (3 . \"three\") (4 . \"four\") (5 . \"FIVE\") (6 . \"six\") (7 . \"seven\") (9 . \"nine\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx187_generate_new_buffer_name_unique() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"neo-cx187-buf<3>\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create "neo-cx187-buf"))
@@ -17,13 +18,14 @@ fn div_cx187_generate_new_buffer_name_unique() {
     (kill-buffer buf-b)
     next))
 "##,
-        expect_test::expect![[r#""OK \"neo-cx187-buf<3>\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx187_rename_buffer_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"neo-cx187-renamed\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx187-orig*")))
@@ -33,13 +35,14 @@ fn div_cx187_rename_buffer_round_trip() {
     (prog1 name
       (kill-buffer buf))))
 "##,
-        expect_test::expect![[r#""OK \"neo-cx187-renamed\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx187_indirect_buffer_shares_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"shared text\" \"shared text\" t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((base (get-buffer-create " *neo-cx187-base*"))
@@ -54,13 +57,14 @@ fn div_cx187_indirect_buffer_shares_text() {
       (kill-buffer ind)
       (kill-buffer base))))
 "##,
-        expect_test::expect![[r#""OK (\"shared text\" \"shared text\" t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx187_bury_buffer_reorders_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (11 12 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx187-bury-a*"))
@@ -75,13 +79,14 @@ fn div_cx187_bury_buffer_reorders_list() {
       (list pos-a-before pos-a-after
             (> pos-a-after pos-a-before)))))
 "##,
-        expect_test::expect![[r#""OK (11 12 t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx187_buffer_list_predicate_and_other_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx187-other-a*"))
@@ -94,13 +99,14 @@ fn div_cx187_buffer_list_predicate_and_other_buffer() {
       (kill-buffer buf-a)
       (kill-buffer buf-b))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx187_buffer_modified_p_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx187-mod*")))
@@ -114,13 +120,14 @@ fn div_cx187_buffer_modified_p_round_trip() {
       (prog1 (list mod-after-insert mod-after-clear)
         (kill-buffer buf)))))
 "##,
-        expect_test::expect![[r#""OK (t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx187_buffer_file_name_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx187-file*")))
@@ -128,13 +135,14 @@ fn div_cx187_buffer_file_name_query() {
         (buffer-file-name)
         (null (buffer-file-name buf))))
 "##,
-        expect_test::expect![[r#""OK (nil nil t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx187_kill_buffer_removes_from_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((#<killed buffer>) t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx187-kill*")))
@@ -143,13 +151,14 @@ fn div_cx187_kill_buffer_removes_from_list() {
     (let ((in-list-after (memq buf (buffer-list))))
       (list in-list-before (null in-list-after) (buffer-live-p buf)))))
 "##,
-        expect_test::expect![[r#""OK ((#<killed buffer>) t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx187_get_buffer_create_unique() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t \" *neo-cx187-gc*\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-1 (get-buffer-create " *neo-cx187-gc*"))
@@ -158,13 +167,14 @@ fn div_cx187_get_buffer_create_unique() {
                (buffer-name buf-1))
     (kill-buffer buf-1)))
 "##,
-        expect_test::expect![[r#""OK (t \" *neo-cx187-gc*\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx187_buffer_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((base (get-buffer-create " *neo-cx187-mega-base*"))
@@ -190,6 +200,6 @@ fn div_cx187_buffer_with_marker_overlay_undo_narrow_mega() {
         (kill-buffer base)
         (list state (buffer-live-p base) (buffer-live-p ind))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }

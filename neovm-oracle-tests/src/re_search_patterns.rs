@@ -32,10 +32,9 @@ fn oracle_prop_re_search_forward_count_param() {
         (let ((r4 (progn (goto-char (point-min))
                          (re-search-forward "[a-z]+-[0-9]+" nil t 7))))
           (list r1 r2 r3 r4))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((\"aa-11\" 6) (\"cc-33\" 18) (\"ff-66\" 36) nil)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((\"aa-11\" 6) (\"cc-33\" 18) (\"ff-66\" 36) nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -62,12 +61,10 @@ fn oracle_prop_re_search_forward_bound_param() {
           (while (re-search-forward "\\([a-z]+\\):\\([0-9]+\\)" nil t)
             (setq remaining (cons (list (match-string 1) (match-string 2)) remaining)))
           (list r1-match r2-match r3 (nreverse remaining)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"apple\" \"100\") (\"banana\" \"200\") nil ((\"cherry\" \"300\") (\"date\" \"400\") (\"elderberry\" \"500\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"apple\" \"100\") (\"banana\" \"200\") nil ((\"cherry\" \"300\") (\"date\" \"400\") (\"elderberry\" \"500\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -110,12 +107,10 @@ fn oracle_prop_re_search_capturing_groups_match_data() {
                 verify1 verify2 verify3
                 (length md)
                 kw expr))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"func add(x int, y int) int\" \"add\" \"x int, y int\" \"int\" t t t 8 \"return\" \"x + y }\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"func add(x int, y int) int\" \"add\" \"x int, y int\" \"int\" t t t 8 \"return\" \"x + y }\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -137,12 +132,10 @@ fn oracle_prop_re_search_replace_loop() {
         (replace-match replacement t t)
         (setq count (1+ count))))
     (list (buffer-string) count)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"price: 1000 cents, discount: 500 cents, total: 1500 cents, tax: 200 cents, fee: 300 cents\" 5)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"price: 1000 cents, discount: 500 cents, total: 1500 cents, tax: 200 cents, fee: 300 cents\" 5)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -172,10 +165,9 @@ fn oracle_prop_re_search_multiline_patterns() {
       (list (nreverse blocks)
             (length blocks)
             line-count))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((\"line one\nline two\" \"alpha\nbeta\ngamma\") 1 9)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((\"line one\nline two\" \"alpha\nbeta\ngamma\") 1 9)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -217,12 +209,10 @@ fn oracle_prop_re_search_with_narrowing() {
                   narrow-max
                   (point-min)
                   (point-max))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"ALPHA\" . 1) (\"BETA\" . 2) (\"GAMMA\" . 3)) 3 14 54 1 67)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"ALPHA\" . 1) (\"BETA\" . 2) (\"GAMMA\" . 3)) 3 14 54 1 67)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -294,12 +284,10 @@ Diana,28,Boston"))
                 (cdr (assoc "city" (car (last rows)))))))
     (fmakunbound 'neovm--test-parse-csv-line)
     (fmakunbound 'neovm--test-parse-csv)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"name\" \"age\" \"city\") 4 \"Alice\" \"30\" \"Diana\" \"Boston\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"name\" \"age\" \"city\") 4 \"Alice\" \"30\" \"Diana\" \"Boston\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -339,10 +327,8 @@ fn oracle_prop_re_search_interleaved_save_excursion() {
             (mapcar (lambda (s) (length (cdr s))) result)
             ;; Full data
             result))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (3 (\"section-A\" \"section-B\" \"section-C\") (2 2 1) ((\"section-A\" (\"key1\" . \"val1\") (\"key2\" . \"val2\")) (\"section-B\" (\"key3\" . \"val3\") (\"key4\" . \"val4\")) (\"section-C\" (\"key5\" . \"val5\"))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (3 (\"section-A\" \"section-B\" \"section-C\") (2 2 1) ((\"section-A\" (\"key1\" . \"val1\") (\"key2\" . \"val2\")) (\"section-B\" (\"key3\" . \"val3\") (\"key4\" . \"val4\")) (\"section-C\" (\"key5\" . \"val5\"))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

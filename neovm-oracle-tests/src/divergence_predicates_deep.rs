@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_type_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (integer string cons vector symbol integer)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (type-of 42)
@@ -15,7 +16,7 @@ fn divergence_type_predicates() {
   (type-of [1 2])
   (type-of 'foo)
   (type-of ?A)) "#,
-        expect_test::expect![[r#""OK (integer string cons vector symbol integer)""#]],
+        expect,
     );
 }
 
@@ -23,6 +24,7 @@ fn divergence_type_predicates() {
 fn divergence_equality_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (equal '(1 2 3) '(1 2 3))
@@ -30,7 +32,7 @@ fn divergence_equality_deep() {
   (eq 'foo 'foo)
   (eql 42 42)
   (equal-including-properties "abc" "abc")) "#,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
@@ -38,6 +40,7 @@ fn divergence_equality_deep() {
 fn divergence_number_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t nil t nil t nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (numberp 42)
@@ -49,7 +52,7 @@ fn divergence_number_predicates() {
   (floatp 42)
   (natnump 5)
   (natnump -1)) "#,
-        expect_test::expect![[r#""OK (t t nil t nil t nil t nil)""#]],
+        expect,
     );
 }
 
@@ -57,6 +60,7 @@ fn divergence_number_predicates() {
 fn divergence_sequence_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (sequencep '(1 2 3))
@@ -68,7 +72,7 @@ fn divergence_sequence_predicates() {
   (arrayp [1 2])
   (arrayp "abc")
   (stringp "abc")) "#,
-        expect_test::expect![[r#""OK (t t t t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -76,6 +80,7 @@ fn divergence_sequence_predicates() {
 fn divergence_nil_t_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t nil t nil t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (null nil)
@@ -85,7 +90,7 @@ fn divergence_nil_t_predicates() {
   (booleanp nil)
   (booleanp t)
   (booleanp 0)) "#,
-        expect_test::expect![[r#""OK (t nil t nil t t nil)""#]],
+        expect,
     );
 }
 
@@ -93,6 +98,7 @@ fn divergence_nil_t_predicates() {
 fn divergence_char_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (characterp ?A)
@@ -101,7 +107,7 @@ fn divergence_char_predicates() {
   (characterp ?\n)
   (wholenump 5)
   (wholenump -1)) "#,
-        expect_test::expect![[r#""OK (t t t t t nil)""#]],
+        expect,
     );
 }
 
@@ -109,6 +115,7 @@ fn divergence_char_predicates() {
 fn divergence_function_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t nil nil t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (functionp 'car)
@@ -117,7 +124,7 @@ fn divergence_function_predicates() {
   (subrp (symbol-function 'car))
   (byte-code-function-p (symbol-function 'car))
   (commandp 'car)) "#,
-        expect_test::expect![[r#""OK (t nil nil t nil nil)""#]],
+        expect,
     );
 }
 
@@ -125,6 +132,7 @@ fn divergence_function_predicates() {
 fn divergence_buffer_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t nil t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (bufferp (current-buffer))
@@ -132,7 +140,7 @@ fn divergence_buffer_predicates() {
   (buffer-live-p (current-buffer))
   (buffer-modified-p (current-buffer))
   (buffer-file-name (current-buffer))) "#,
-        expect_test::expect![[r#""OK (t nil t nil nil)""#]],
+        expect,
     );
 }
 
@@ -140,6 +148,9 @@ fn divergence_buffer_predicates() {
 fn divergence_marker_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (t nil nil #<marker at 1 in  *neovm-oracle-stdout*> 1 nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((m (make-marker)))
   (list (markerp m)
@@ -148,9 +159,7 @@ fn divergence_marker_predicates() {
         (set-marker m 1 (current-buffer))
         (marker-position m)
         (markerp 42))) "#,
-        expect_test::expect![[
-            r#""OK (t nil nil #<marker at 1 in  *neovm-oracle-stdout*> 1 nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -158,6 +167,7 @@ fn divergence_marker_predicates() {
 fn divergence_window_frame_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (windowp (selected-window))
@@ -165,7 +175,7 @@ fn divergence_window_frame_predicates() {
   (window-valid-p (selected-window))
   (framep (selected-frame))
   (frame-live-p (selected-frame))) "#,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
@@ -173,11 +183,12 @@ fn divergence_window_frame_predicates() {
 fn divergence_process_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'processp)
   (processp nil)
   (fboundp 'process-live-p)) "#,
-        expect_test::expect![[r#""OK (t nil t)""#]],
+        expect,
     );
 }

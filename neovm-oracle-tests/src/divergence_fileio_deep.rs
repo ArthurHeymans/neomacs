@@ -11,6 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_fid_write_region_append() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"abcdef\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-fid-app-")))
@@ -19,13 +20,14 @@ fn div_fid_write_region_append() {
   (prog1 (with-temp-buffer (insert-file-contents f) (buffer-string))
     (ignore-errors (delete-file f))))
 "##,
-        expect_test::expect![[r#""OK \"abcdef\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_fid_write_region_coding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"café\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-fid-cod-")))
@@ -35,13 +37,14 @@ fn div_fid_write_region_coding() {
            (buffer-string))
     (ignore-errors (delete-file f))))
 "##,
-        expect_test::expect![[r#""OK \"café\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_fid_insert_file_contents_offsets() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"bcd\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-fid-off-")))
@@ -49,13 +52,15 @@ fn div_fid_insert_file_contents_offsets() {
   (prog1 (with-temp-buffer (insert-file-contents f nil 1 4) (buffer-string))
     (ignore-errors (delete-file f))))
 "##,
-        expect_test::expect![[r#""OK \"bcd\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_fid_file_name_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (\"c.txt\" \"/a/b/\" \"c.txt\" \"gz\" \".gz\" \"c\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (file-name-nondirectory "/a/b/c.txt")
@@ -65,13 +70,14 @@ fn div_fid_file_name_ops() {
       (file-name-extension "c.tar.gz" t)
       (file-name-base "/a/b/c.txt"))
 "##,
-        expect_test::expect![[r#""OK (\"c.txt\" \"/a/b/\" \"c.txt\" \"gz\" \".gz\" \"c\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_fid_expand_file_name_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"/a/b/x\" \"/a/b/x\" \"/a/b/x\" \"/a/b\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (expand-file-name "x" "/a/b")
@@ -79,13 +85,14 @@ fn div_fid_expand_file_name_edges() {
       (expand-file-name "x" "/a/b/")
       (expand-file-name "" "/a/b"))
 "##,
-        expect_test::expect![[r#""OK (\"/a/b/x\" \"/a/b/x\" \"/a/b/x\" \"/a/b\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_fid_substitute_in_file_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"/h/x\" \"/b\" \"~/c\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((process-environment (cons "HOME=/h" process-environment)))
@@ -93,13 +100,14 @@ fn div_fid_substitute_in_file_name() {
         (substitute-in-file-name "/a//b")
         (substitute-in-file-name "/a/~/c")))
 "##,
-        expect_test::expect![[r#""OK (\"/h/x\" \"/b\" \"~/c\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_fid_file_name_completion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"ap\" (\"apple\" \"apricot\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((dir (make-temp-file "neo-fid-comp-" t)))
@@ -109,13 +117,14 @@ fn div_fid_file_name_completion() {
                (sort (file-name-all-completions "ap" dir) 'string<))
     (ignore-errors (delete-directory dir t))))
 "##,
-        expect_test::expect![[r#""OK (\"ap\" (\"apple\" \"apricot\"))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_fid_file_newer_than_file_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((a (make-temp-file "neo-fid-a-")) (b (make-temp-file "neo-fid-b-")))
@@ -123,13 +132,14 @@ fn div_fid_file_newer_than_file_p() {
                (eq (file-newer-than-file-p b a) nil))
     (ignore-errors (delete-file a)) (ignore-errors (delete-file b))))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_fid_file_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-fid-p-")))
@@ -138,13 +148,14 @@ fn div_fid_file_predicates() {
                (file-regular-p f) (file-symlink-p f) (file-directory-p f))
     (ignore-errors (delete-file f))))
 "##,
-        expect_test::expect![[r#""OK (t t t t nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_fid_copy_file_overwrite() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"data\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((a (make-temp-file "neo-fid-ca-")) (b (make-temp-file "neo-fid-cb-")))
@@ -153,13 +164,14 @@ fn div_fid_copy_file_overwrite() {
   (prog1 (with-temp-buffer (insert-file-contents b) (buffer-string))
     (ignore-errors (delete-file a)) (ignore-errors (delete-file b))))
 "##,
-        expect_test::expect![[r#""OK \"data\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_fid_symlink_truename() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((dir (make-temp-file "neo-fid-sl-" t)))
@@ -171,13 +183,14 @@ fn div_fid_symlink_truename() {
                  (eq (file-truename link) (file-truename target)))
       (ignore-errors (delete-directory dir t)))))
 "##,
-        expect_test::expect![[r#""OK (t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_fid_directory_files_and_attributes_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 2""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((dir (make-temp-file "neo-fid-dfa-" t)))
@@ -186,52 +199,56 @@ fn div_fid_directory_files_and_attributes_count() {
   (prog1 (length (directory-files-and-attributes dir nil "^[^.]"))
     (ignore-errors (delete-directory dir t))))
 "##,
-        expect_test::expect![[r#""OK 2""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_fid_file_size() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function file-size)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-fid-sz-")))
   (write-region "hello" nil f nil 0)
   (prog1 (file-size f) (ignore-errors (delete-file f))))
 "##,
-        expect_test::expect![[r#""ERR (void-function file-size)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_fid_set_file_modes_explicit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 420""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-fid-sm-")))
   (set-file-modes f #o644)
   (prog1 (file-modes f) (ignore-errors (delete-file f))))
 "##,
-        expect_test::expect![[r#""OK 420""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_fid_file_name_version() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"x.txt~\" void-function void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (file-name-sans-versions "x.txt~" 2)
       (condition-case e (file-name-version "x.txt.~3~") (error (car e)))
       (condition-case e (file-name-version "plain") (error (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"x.txt~\" void-function void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_fid_temp_file_dir_and_make_nearby() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-nearby-temp-file "neo-fid-mnt-")))
@@ -240,6 +257,6 @@ fn div_fid_temp_file_dir_and_make_nearby() {
                (string-prefix-p "neo-fid-mnt-" (file-name-nondirectory f)))
     (ignore-errors (delete-file f))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }

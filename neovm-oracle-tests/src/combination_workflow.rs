@@ -111,12 +111,10 @@ fn oracle_prop_workflow_etl_pipeline() {
     (fmakunbound 'neovm--test-etl-extract)
     (fmakunbound 'neovm--test-etl-transform)
     (fmakunbound 'neovm--test-etl-load)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (7 (:total 7 :grades ((\"A\" . 2) (\"B\" . 2) (\"C\" . 1) (\"D\" . 1) (\"F\" . 1)) :groups ((\"adult\" 75 2) (\"senior\" 91 2) (\"young-adult\" 67 2) (\"youth\" 78 1))) (\"Alice\" \"Bob\" \"Carol\" \"Eve\" \"Frank\" \"Grace\" \"Heidi\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (7 (:total 7 :grades ((\"A\" . 2) (\"B\" . 2) (\"C\" . 1) (\"D\" . 1) (\"F\" . 1)) :groups ((\"adult\" 75 2) (\"senior\" 91 2) (\"young-adult\" 67 2) (\"youth\" 78 1))) (\"Alice\" \"Bob\" \"Carol\" \"Eve\" \"Frank\" \"Grace\" \"Heidi\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -191,12 +189,10 @@ fn oracle_prop_workflow_validation_short_circuit() {
           (funcall 'neovm--test-run-pipeline validators "OK")))
     (fmakunbound 'neovm--test-make-validator)
     (fmakunbound 'neovm--test-run-pipeline)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ok \"HELLO WORLD\" (\"type-check\" \"non-empty\" \"trim\" \"length-check\" \"upcase\")) (error (validation-error \"type-check\" 42) (\"type-check\")) (error (validation-error \"non-empty\" \"\") (\"type-check\" \"non-empty\")) (error (validation-error \"length-check\" \"this is a very long string that exceeds twenty chars\") (\"type-check\" \"non-empty\" \"trim\" \"length-check\")) (ok \"OK\" (\"type-check\" \"non-empty\" \"trim\" \"length-check\" \"upcase\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ok \"HELLO WORLD\" (\"type-check\" \"non-empty\" \"trim\" \"length-check\" \"upcase\")) (error (validation-error \"type-check\" 42) (\"type-check\")) (error (validation-error \"non-empty\" \"\") (\"type-check\" \"non-empty\")) (error (validation-error \"length-check\" \"this is a very long string that exceeds twenty chars\") (\"type-check\" \"non-empty\" \"trim\" \"length-check\")) (ok \"OK\" (\"type-check\" \"non-empty\" \"trim\" \"length-check\" \"upcase\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -299,12 +295,10 @@ fn oracle_prop_workflow_map_reduce() {
     (fmakunbound 'neovm--test-reduce-phase)
     (fmakunbound 'neovm--test-word-freq-mapper)
     (fmakunbound 'neovm--test-word-freq-reducer)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (4 4 ((\"the\" . 6) (\"cat\" . 3) (\"mat\" . 2) (\"on\" . 2) (\"sat\" . 2) (\"ate\" . 1) (\"rat\" . 1)) 17 ((\"the\" . 6) (\"cat\" . 3) (\"mat\" . 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (4 4 ((\"the\" . 6) (\"cat\" . 3) (\"mat\" . 2) (\"on\" . 2) (\"sat\" . 2) (\"ate\" . 1) (\"rat\" . 1)) 17 ((\"the\" . 6) (\"cat\" . 3) (\"mat\" . 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -373,12 +367,10 @@ fn oracle_prop_workflow_error_recovery_pipeline() {
              (input '("25" "0" "abc" "16" "-3" "100" "49" "" "9")))
         (funcall 'neovm--test-resilient-pipeline stages input))
     (fmakunbound 'neovm--test-resilient-pipeline)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:results ((9 . 300) (49 . 700) (100 . 1000) (16 . 400) (25 . 500)) :errors ((\"parse\" \"0\" \"cannot parse: 0\") (\"parse\" \"abc\" \"cannot parse: abc\") (\"parse\" \"\" \"cannot parse: \") (\"positive-check\" -3 \"not positive: -3\")) :input-count 9 :output-count 1 :error-count 4)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:results ((9 . 300) (49 . 700) (100 . 1000) (16 . 400) (25 . 500)) :errors ((\"parse\" \"0\" \"cannot parse: 0\") (\"parse\" \"abc\" \"cannot parse: abc\") (\"parse\" \"\" \"cannot parse: \") (\"positive-check\" -3 \"not positive: -3\")) :input-count 9 :output-count 1 :error-count 4)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -491,12 +483,10 @@ fn oracle_prop_workflow_conditional_branching() {
     (fmakunbound 'neovm--test-add-end)
     (fmakunbound 'neovm--test-run-workflow)
     (makunbound 'neovm--test-workflow)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:state (:amount 180 :in-stock t :status \"shipped\" :validated t :discount 20) :trace (start validate check-amount apply-discount check-stock ship end-success) :steps 7) (:state (:amount 135 :in-stock nil :status \"backordered\" :validated t :discount 15) :trace (start validate check-amount apply-discount check-stock backorder end-backorder) :steps 7) (:state (:amount 50 :in-stock t :status \"shipped\" :validated t) :trace (start validate check-amount check-stock ship end-success) :steps 6) (:state (:amount 30 :in-stock nil :status \"backordered\" :validated t) :trace (start validate check-amount check-stock backorder end-backorder) :steps 6))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:state (:amount 180 :in-stock t :status \"shipped\" :validated t :discount 20) :trace (start validate check-amount apply-discount check-stock ship end-success) :steps 7) (:state (:amount 135 :in-stock nil :status \"backordered\" :validated t :discount 15) :trace (start validate check-amount apply-discount check-stock backorder end-backorder) :steps 7) (:state (:amount 50 :in-stock t :status \"shipped\" :validated t) :trace (start validate check-amount check-stock ship end-success) :steps 6) (:state (:amount 30 :in-stock nil :status \"backordered\" :validated t) :trace (start validate check-amount check-stock backorder end-backorder) :steps 6))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -585,10 +575,8 @@ fn oracle_prop_workflow_audit_trail() {
     (fmakunbound 'neovm--test-audit-wrap)
     (fmakunbound 'neovm--test-run-audited-pipeline)
     (makunbound 'neovm--test-audit-log)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"name=alice smith\" \"email=alice@example.com\" \"city=new york\") 4 (\"normalize\" \"validate\" \"filter\" \"format\") t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"name=alice smith\" \"email=alice@example.com\" \"city=new york\") 4 (\"normalize\" \"validate\" \"filter\" \"format\") t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

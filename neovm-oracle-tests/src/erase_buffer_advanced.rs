@@ -60,12 +60,10 @@ fn oracle_prop_erase_buffer_advanced_markers_collapse() {
         (set-marker m-end nil)
         (set-marker m-ins nil)
         (list pre-positions post-positions after-insert)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 10 20 37 15 t) (1 1 1 1 1 t t t t t t) (1 1 1 1 17 \"New content here\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 10 20 37 15 t) (1 1 1 1 1 t t t t t t) (1 1 1 1 17 \"New content here\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -116,12 +114,10 @@ fn oracle_prop_erase_buffer_advanced_narrowing_interaction() {
                         post-pmin post-pmax post-point)
                   (list 'after-widen widened-size widened-text
                         widened-pmin widened-pmax))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((full 53 \"HEADER-START\nline one\nline two\nline three\nFOOTER-END\n\") (narrowed 53 \"line one\nline two\nline three\n\" 14 43) (after-erase 0 \"\" 1 1 1) (after-widen 0 \"\" 1 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((full 53 \"HEADER-START\nline one\nline two\nline three\nFOOTER-END\n\") (narrowed 53 \"line one\nline two\nline three\n\" 14 43) (after-erase 0 \"\" 1 1 1) (after-widen 0 \"\" 1 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -159,12 +155,10 @@ fn oracle_prop_erase_buffer_advanced_text_properties() {
                   prop-at-24 prop-at-24b)
             (list 'post post-text
                   post-prop-1 post-prop-5 post-prop-10)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((pre #(\"bold text italic text custom prop\" 0 9 (face bold) 10 21 (face italic) 22 33 (my-prop 42 another-prop \"hello\")) 33 bold italic 42 \"hello\") (post \"plain text after erase\" nil nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((pre #(\"bold text italic text custom prop\" 0 9 (face bold) 10 21 (face italic) 22 33 (my-prop 42 another-prop \"hello\")) 33 bold italic 42 \"hello\") (post \"plain text after erase\" nil nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -211,12 +205,10 @@ fn oracle_prop_erase_buffer_advanced_insert_cycles() {
                               (string= (buffer-string) ""))
                         results))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 25 26 1 26 t \"ShortShortShortShortShort\") (1 96 97 1 97 t \"Medium length string for testingMedium length string for testingMedium length string for testing\") (2 100 101 1 101 t \"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\") (3 0 1 1 1 t \"\") (4 36 37 1 37 t \"Final content with\nnewlines\nand\ttabs\") (final 0 1 t t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 25 26 1 26 t \"ShortShortShortShortShort\") (1 96 97 1 97 t \"Medium length string for testingMedium length string for testingMedium length string for testing\") (2 100 101 1 101 t \"XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\") (3 0 1 1 1 t \"\") (4 36 37 1 37 t \"Final content with\nnewlines\nand\ttabs\") (final 0 1 t t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -251,10 +243,9 @@ fn oracle_prop_erase_buffer_advanced_with_undo() {
               ;; Content should match
               (string= before-erase after-undo-text)
               (= before-size after-undo-size))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -292,12 +283,10 @@ fn oracle_prop_erase_buffer_advanced_save_excursion_complex() {
           outer-result
           (list 'outer-restore (point) (buffer-string)
                 (<= (point) (point-max))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (25 (inner \"replacement text\" 16 17) (after-inner-restore 1 \"replacement text\" t t) (outer-restore 1 \"replacement text\" t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (25 (inner \"replacement text\" 16 17) (after-inner-restore 1 \"replacement text\" t t) (outer-restore 1 \"replacement text\" t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -351,12 +340,10 @@ fn oracle_prop_erase_buffer_advanced_size_consistency() {
                                 (buffer-size) (buffer-string))
                           results)))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ascii 17 18 17 t t) (ascii-erased 0 1 t t) (multibyte 5 6 5 t) (multibyte-erased 0 1 t) (after-partial-delete 7 \"ABCGHIJ\" 0 \"\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ascii 17 18 17 t t) (ascii-erased 0 1 t t) (multibyte 5 6 5 t) (multibyte-erased 0 1 t) (after-partial-delete 7 \"ABCGHIJ\" 0 \"\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -402,10 +389,8 @@ fn oracle_prop_erase_buffer_advanced_marker_reuse_after_erase() {
           (set-marker m2 nil)
           (set-marker m3 nil)
           (list pre mid post))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((5 20 30 #<killed buffer> t) (1 1 1 t) (10 25 35 32 120 116 \"brand new replacement text for testing markers\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((5 20 30 #<killed buffer> t) (1 1 1 t) (10 25 35 32 120 116 \"brand new replacement text for testing markers\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

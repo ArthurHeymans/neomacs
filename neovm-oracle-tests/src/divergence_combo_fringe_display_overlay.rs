@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_fringe_display_prop_with_margin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""AAAA-BBBB-CCCC-DDDDOK (t t margin-marked t (margin left-margin) t (margin right-margin) t warning t highlight t 4 t 4 t \"AAAA-BBBB-CCCC-DDDD\" nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")
@@ -44,9 +47,7 @@ fn divergence_fringe_display_prop_with_margin() {
             (= right-margin-width 4)
             (buffer-string)
             (= (buffer-size) 17))))) "#,
-        expect_test::expect![[
-            r#""AAAA-BBBB-CCCC-DDDDOK (t t margin-marked t (margin left-margin) t (margin right-margin) t warning t highlight t 4 t 4 t \"AAAA-BBBB-CCCC-DDDD\" nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -54,6 +55,7 @@ fn divergence_fringe_display_prop_with_margin() {
 fn divergence_fringe_bitmap_face_per_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (8 8 0 0 t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf1 (generate-new-buffer " test-fbfpb1-xxx"))
@@ -93,7 +95,7 @@ fn divergence_fringe_bitmap_face_per_buffer() {
             (consp b2-ind)
             (eq (nth 1 b2-ind) 'right-triangle)
             (eq (nth 2 b2-ind) 'left-triangle))))) "#,
-        expect_test::expect![[r#""OK (8 8 0 0 t t t t t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -101,6 +103,9 @@ fn divergence_fringe_bitmap_face_per_buffer() {
 fn divergence_fringe_overlay_chain_multiple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""AAA-BBB-CCC-DDD-EEE-FFF-GGG-HHHOK (((left-fringe right-arrow) (right-fringe left-arrow) (left-fringe up-arrow success) (right-fringe down-arrow error)) nil nil nil nil t \"AAA-BBB-CCC-DDD-EEE-FFF-GGG-HHH\" t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAA-BBB-CCC-DDD-EEE-FFF-GGG-HHH")
@@ -133,9 +138,7 @@ fn divergence_fringe_overlay_chain_multiple() {
             (= (length ovs) 4)
             (buffer-string)
             (= (buffer-size) 31))))) "#,
-        expect_test::expect![[
-            r#""AAA-BBB-CCC-DDD-EEE-FFF-GGG-HHHOK (((left-fringe right-arrow) (right-fringe left-arrow) (left-fringe up-arrow success) (right-fringe down-arrow error)) nil nil nil nil t \"AAA-BBB-CCC-DDD-EEE-FFF-GGG-HHH\" t)""#
-        ]],
+        expect,
     );
 }
 
@@ -143,6 +146,9 @@ fn divergence_fringe_overlay_chain_multiple() {
 fn divergence_fringe_with_narrow_and_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""AA-BB-CC-DD-EE-FF-GGOK (#(\"BB-CC-DD-EE\" 0 1 (block b) 3 4 (block c)) 4 6 t #(\"AA-BB-CC-DD-EE-FF-GG\" 0 1 (block a) 3 4 (block b) 6 7 (block c)) t a t b t active t (left-fringe filled-square) t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AA-BB-CC-DD-EE-FF-GG")
@@ -173,9 +179,7 @@ fn divergence_fringe_with_narrow_and_undo() {
             (equal (get-text-property 0 'display
                      (overlay-get ov 'before-string))
                    '(left-fringe filled-square)))))) "#,
-        expect_test::expect![[
-            r#""AA-BB-CC-DD-EE-FF-GGOK (#(\"BB-CC-DD-EE\" 0 1 (block b) 3 4 (block c)) 4 6 t #(\"AA-BB-CC-DD-EE-FF-GG\" 0 1 (block a) 3 4 (block b) 6 7 (block c)) t a t b t active t (left-fringe filled-square) t)""#
-        ]],
+        expect,
     );
 }
 
@@ -183,6 +187,9 @@ fn divergence_fringe_with_narrow_and_undo() {
 fn divergence_display_space_spec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""BEFORE-AFTEROK (t t t t (space :width 5) t (space :width 3) t spacer t \"BEFORE-AFTER\" t nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "BEFORE-AFTER")
@@ -209,9 +216,7 @@ fn divergence_display_space_spec() {
             (buffer-string)
             (string= (buffer-string) "BEFORE-AFTER")
             (= (buffer-size) 13))))) "#,
-        expect_test::expect![[
-            r#""BEFORE-AFTEROK (t t t t (space :width 5) t (space :width 3) t spacer t \"BEFORE-AFTER\" t nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -219,6 +224,7 @@ fn divergence_display_space_spec() {
 fn divergence_fringe_with_text_property_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""XXXXXXXXXXXXXXXXOK (t t t t 16 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "XXXXXXXXXXXXXXXX")
@@ -235,7 +241,7 @@ fn divergence_fringe_with_text_property_display() {
           (null d-none)
           (buffer-size)
           (= (buffer-size) 16)))) "#,
-        expect_test::expect![[r#""XXXXXXXXXXXXXXXXOK (t t t t 16 t)""#]],
+        expect,
     );
 }
 
@@ -243,6 +249,7 @@ fn divergence_fringe_with_text_property_display() {
 fn divergence_window_margins_with_fringes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((10 . 5) t t t (0 0 nil nil) t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((w (selected-window)))
@@ -260,7 +267,7 @@ fn divergence_window_margins_with_fringes() {
               (= (length fringes) 4)
               (>= (nth 0 fringes) 0)
               (>= (nth 1 fringes) 0)))))) "#,
-        expect_test::expect![[r#""OK ((10 . 5) t t t (0 0 nil nil) t t t)""#]],
+        expect,
     );
 }
 
@@ -268,6 +275,9 @@ fn divergence_window_margins_with_fringes() {
 fn divergence_truncate_lines_with_fringe_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXOK (t t t truncate t (right-fringe right-arrow) t (right-fringe left-arrow) t t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq truncate-lines t)
@@ -293,9 +303,7 @@ fn divergence_truncate_lines_with_fringe_overlay() {
                  '(right-fringe left-arrow))
           (= (overlay-start ov) 1)
           (= (overlay-end ov) 201)))) "#,
-        expect_test::expect![[
-            r#""XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXOK (t t t truncate t (right-fringe right-arrow) t (right-fringe left-arrow) t t t)""#
-        ]],
+        expect,
     );
 }
 
@@ -303,6 +311,9 @@ fn divergence_truncate_lines_with_fringe_overlay() {
 fn divergence_word_wrap_fringe_indicators() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""This is a very long line that should wrap when displayed and show fringe indicators at the wrap points in visual line modeOK (t t nil t t t t t t t t nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq word-wrap t)
@@ -324,9 +335,7 @@ fn divergence_word_wrap_fringe_indicators() {
           (eq (car (nth 2 cont)) 'right-curly-arrow)
           (> (buffer-size) 100)
           (= (buffer-size) 131)))) "#,
-        expect_test::expect![[
-            r#""This is a very long line that should wrap when displayed and show fringe indicators at the wrap points in visual line modeOK (t t nil t t t t t t t t nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -334,6 +343,9 @@ fn divergence_word_wrap_fringe_indicators() {
 fn divergence_visual_line_fringe_config() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (nil t t nil nil t ((funcall #'#[0 \"\\300\\207\" [(nil nil)] 1])))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'fringe)
@@ -351,8 +363,6 @@ fn divergence_visual_line_fringe_config() {
             (eq (cadr visual-line-fringe-indicators) 'right-curly-arrow)
             (boundp 'visual-line-fringe-indicators)
             (custom-variable-p 'visual-line-fringe-indicators))))) "#,
-        expect_test::expect![[
-            r#""OK (nil t t nil nil t ((funcall #'#[0 \"\\300\\207\" [(nil nil)] 1])))""#
-        ]],
+        expect,
     );
 }

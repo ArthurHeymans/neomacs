@@ -11,6 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_h0_seq_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((2 3 4) (2 3 4) (2 4) 10 2 3 3 [1 2 3])""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (seq-map #'1+ '(1 2 3))
@@ -23,13 +24,14 @@ fn div_h0_seq_basics() {
       (seq-into '(1 2 3) 'vector))
 "##,
         &["emacs-lisp/seq.el"],
-        expect_test::expect![[r#""OK ((2 3 4) (2 3 4) (2 4) 10 2 3 3 [1 2 3])""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_h0_seq_search_order_minmax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function seq-containsp)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (seq-position '(1 2 3 2) 2)
@@ -41,13 +43,14 @@ fn div_h0_seq_search_order_minmax() {
       (seq-uniq '(1 2 1 3 2)))
 "##,
         &["emacs-lisp/seq.el"],
-        expect_test::expect![[r#""ERR (void-function seq-containsp)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_h0_seq_group_partition_concat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function seq-split-at)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (seq-group-by (lambda (x) (= (% x 2) 0)) '(1 2 3 4))
@@ -57,13 +60,14 @@ fn div_h0_seq_group_partition_concat() {
       (seq-concatenate 'list '(1 2) '(3 4)))
 "##,
         &["emacs-lisp/seq.el"],
-        expect_test::expect![[r#""ERR (void-function seq-split-at)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_h0_map_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function symbol<)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (sort (map-keys '((a . 1) (b . 2))) #'symbol<)
@@ -74,13 +78,14 @@ fn div_h0_map_basics() {
       (map-contains-key '((a . 1)) 'z))
 "##,
         &["emacs-lisp/map.el"],
-        expect_test::expect![[r#""ERR (void-function symbol<)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_h0_map_merge_and_do() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (((a . 1) (b . 2)) ((a . 1) (b . 2)))""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (map-merge 'alist '((a . 1)) '((b . 2)))
@@ -89,13 +94,14 @@ fn div_h0_map_merge_and_do() {
         (sort out (lambda (x y) (string< (symbol-name (car x)) (symbol-name (car y)))))))
 "##,
         &["emacs-lisp/map.el"],
-        expect_test::expect![[r#""OK (((a . 1) (b . 2)) ((a . 1) (b . 2)))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_h0_hash_table_via_seq_map() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function symbol<)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (let ((h (make-hash-table :test 'equal)))
@@ -109,6 +115,6 @@ fn div_h0_hash_table_via_seq_map() {
         (map-elt h 'z 'missing)))
 "##,
         &["emacs-lisp/map.el"],
-        expect_test::expect![[r#""ERR (void-function symbol<)""#]],
+        expect,
     );
 }

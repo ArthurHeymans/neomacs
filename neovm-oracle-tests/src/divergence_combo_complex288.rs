@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx288_string_comparison_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil nil t nil t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-lessp "abc" "abd")
@@ -19,13 +20,14 @@ fn div_cx288_string_comparison_matrix() {
       (string= "abc" "abc")
       (string-equal "ABC" "abc"))
 "##,
-        expect_test::expect![[r#""OK (t nil nil t nil t t nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx288_char_comparison_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function char-lessp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (char-equal ?a ?a)
@@ -37,13 +39,14 @@ fn div_cx288_char_comparison_matrix() {
       (char< ?A ?B)
       (char-equal ?à ?À))
 "##,
-        expect_test::expect![[r#""ERR (void-function char-lessp)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx288_compare_buffer_substrings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 -1 0 -1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -53,13 +56,16 @@ fn div_cx288_compare_buffer_substrings() {
         (compare-buffer-substrings nil 1 6 nil 13 18)
         (compare-buffer-substrings nil 1 5 nil 7 11)))
 "##,
-        expect_test::expect![[r#""OK (0 -1 0 -1)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx288_replace_regexp_in_string_with_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"abc # def #\" \"HELLO WORLD\" \"beta alpha\" \"a_b_c\" \"*lph*b*t\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (replace-regexp-in-string "[0-9]+" "#" "abc 123 def 456")
@@ -68,15 +74,14 @@ fn div_cx288_replace_regexp_in_string_with_function() {
       (replace-regexp-in-string " +" "_" "a  b   c")
       (replace-regexp-in-string "[aeiou]" "*" "alphabet" t))
 "##,
-        expect_test::expect![[
-            r#""OK (\"abc # def #\" \"HELLO WORLD\" \"beta alpha\" \"a_b_c\" \"*lph*b*t\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx288_match_data_save_set_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 0 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (saved)
@@ -91,13 +96,14 @@ fn div_cx288_match_data_save_set_restore() {
           (match-string 2)
           (match-string 3))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 0 5)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx288_looking_back_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -108,13 +114,14 @@ fn div_cx288_looking_back_predicate() {
         (looking-back "World" 1)
         (looking-at "World")))
 "##,
-        expect_test::expect![[r#""OK (t t nil nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx288_skip_syntax_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (4 15 16 19 \"hello_world\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -129,13 +136,14 @@ fn div_cx288_skip_syntax_variants() {
         (skip-syntax-forward "w")
         (list p1 p2 p3 (point) (buffer-substring p1 p2))))))
 "##,
-        expect_test::expect![[r#""OK (4 15 16 19 \"hello_world\")""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx288_char_before_following_preceding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (67 68 67 68)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -146,13 +154,14 @@ fn div_cx288_char_before_following_preceding() {
         (preceding-char)
         (char-after)))
 "##,
-        expect_test::expect![[r#""OK (67 68 67 68)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx288_bolp_eolp_bobp_eobp_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -164,13 +173,14 @@ fn div_cx288_bolp_eolp_bobp_eobp_predicates() {
   (goto-char (point-max))
   (list (eobp) (eolp)))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx288_string_ops_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s1 "alpha beta gamma")
@@ -198,6 +208,6 @@ fn div_cx288_string_ops_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     )
 }

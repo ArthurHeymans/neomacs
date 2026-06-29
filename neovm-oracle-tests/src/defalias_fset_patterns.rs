@@ -45,10 +45,8 @@ fn oracle_prop_defalias_fset_docstring_stored() {
     (fmakunbound 'neovm--dfp-doc1)
     (fmakunbound 'neovm--dfp-doc2)
     (fmakunbound 'neovm--dfp-doc3)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (30 \"HELLO\" 49 t t 20 t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (30 \"HELLO\" 49 t t 20 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -88,10 +86,8 @@ fn oracle_prop_defalias_vs_fset_return_values() {
       (fmakunbound 'neovm--dfp-vs2)
       (fmakunbound 'neovm--dfp-vs3)
       (fmakunbound 'neovm--dfp-vs4))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t a b (1 (2 3)) (a-prime b-prime))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t a b (1 (2 3)) (a-prime b-prime))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -156,12 +152,10 @@ fn oracle_prop_fset_non_function_cycle_and_defalias_hook_edges() {
       (setplist sym nil))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((setting-constant (nil)) nil nil (setting-constant (nil)) 42 t 42 nil (invalid-function (neomacs--dfp-fcell-a)) neomacs--dfp-fcell-b (cyclic-function-indirection (neomacs--dfp-fcell-b)) neomacs--dfp-fcell-target (neomacs--dfp-fcell-target (closure (t) nil 'real) nil) nil nil \"doc\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((setting-constant (nil)) nil nil (setting-constant (nil)) 42 t 42 nil (invalid-function (neomacs--dfp-fcell-a)) neomacs--dfp-fcell-b (cyclic-function-indirection (neomacs--dfp-fcell-b)) neomacs--dfp-fcell-target (neomacs--dfp-fcell-target (closure (t) nil 'real) nil) nil nil \"doc\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -207,10 +201,8 @@ fn oracle_prop_defalias_fset_symbol_function_types() {
     (fmakunbound 'neovm--dfp-sf2)
     (fmakunbound 'neovm--dfp-sf3)
     (fmakunbound 'neovm--dfp-sf4)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t 42 (* 5 3))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t t 42 (* 5 3))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -256,10 +248,8 @@ fn oracle_prop_defalias_fset_fboundp_lifecycle() {
     (fmakunbound 'neovm--dfp-lc1)
     (setq trace (cons (fboundp 'neovm--dfp-lc1) trace))
     (nreverse trace)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil t v1 nil caught-void t v2 v3 nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil t v1 nil caught-void t v2 v3 nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -326,12 +316,10 @@ fn oracle_prop_defalias_fset_function_wrapper() {
     (fmakunbound 'neovm--dfp-add)
     (fmakunbound 'neovm--dfp-mul)
     (makunbound 'neovm--dfp-wrap-log)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (7 30 30 56 4 ((call add (3 4) => 7) (call add (10 20) => 30) (call mul (5 6) => 30) (call mul (7 8) => 56)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (7 30 30 56 4 ((call add (3 4) => 7) (call add (10 20) => 30) (call mul (5 6) => 30) (call mul (7 8) => 56)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -418,12 +406,10 @@ fn oracle_prop_defalias_fset_dynamic_dispatch() {
     (fmakunbound 'neovm--dfp-dd-dispatch)
     (makunbound 'neovm--dfp-dd-table)
     (makunbound 'neovm--dfp-dd-fallback)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (30 63 42 \"Hello, World!\" \"FALLBACK[div]: (10 3)\" \"FALLBACK[sub]: (50 25)\" (difference 25) 4 (sub greet mul add))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (30 63 42 \"Hello, World!\" \"FALLBACK[div]: (10 3)\" \"FALLBACK[sub]: (50 25)\" (difference 25) 4 (sub greet mul add))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -536,12 +522,10 @@ fn oracle_prop_defalias_fset_method_resolution_order() {
     (fmakunbound 'neovm--dfp-mro-lookup)
     (fmakunbound 'neovm--dfp-mro-call)
     (makunbound 'neovm--dfp-mro-classes)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:resolved-in rectangle :result \"S1 is a rectangle\") (:resolved-in square :result 25) (:resolved-in shape :result \"default-gray\") (:resolved-in rectangle :result 12) (:error \"no method area on shape\") (:resolved-in shape :result \"default-gray\") (:resolved-in shape :result \"base is a shape\") (:resolved-in square :result \"S2 is a perfect square!\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:resolved-in rectangle :result \"S1 is a rectangle\") (:resolved-in square :result 25) (:resolved-in shape :result \"default-gray\") (:resolved-in rectangle :result 12) (:error \"no method area on shape\") (:resolved-in shape :result \"default-gray\") (:resolved-in shape :result \"base is a shape\") (:resolved-in square :result \"S2 is a perfect square!\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -579,8 +563,6 @@ fn oracle_prop_defalias_fset_nil_and_rebind() {
         (setq trace (cons (fboundp 'neovm--dfp-nil1) trace))
         (nreverse trace))
     (fmakunbound 'neovm--dfp-nil1)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (alive t nil nil caught-void resurrected nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (alive t nil nil caught-void resurrected nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

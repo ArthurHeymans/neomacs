@@ -36,10 +36,8 @@ fn oracle_set_file_selinux_context_no_selinux_handler_edges() {
     (fmakunbound 'neomacs--oracle-selinux-handler)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((set-file-selinux-context (\"/tmp/neomacs-oracle-selinux-handler-file\" (user role type range))) nil (wrong-number-of-arguments (set-file-selinux-context 0)) (wrong-type-argument (stringp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((set-file-selinux-context (\"/tmp/neomacs-oracle-selinux-handler-file\" (user role type range))) nil (wrong-number-of-arguments (set-file-selinux-context 0)) (wrong-type-argument (stringp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

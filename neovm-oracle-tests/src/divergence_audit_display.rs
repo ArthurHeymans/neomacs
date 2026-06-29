@@ -12,6 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_adisp_current_column_display_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 3""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -19,13 +20,14 @@ fn div_adisp_current_column_display_property() {
   (put-text-property 1 2 'display "abc")
   (current-column))
 "##,
-        expect_test::expect![[r#""OK 3""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_adisp_move_to_column_display_glyph() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 8""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -34,13 +36,14 @@ fn div_adisp_move_to_column_display_glyph() {
   (move-to-column 5)
   (current-column))
 "##,
-        expect_test::expect![[r#""OK 8""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_adisp_current_column_display_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 4""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -50,13 +53,14 @@ fn div_adisp_current_column_display_table() {
     (setq buffer-display-table dt))
   (current-column))
 "##,
-        expect_test::expect![[r#""OK 4""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_adisp_current_column_composition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 1""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -64,13 +68,14 @@ fn div_adisp_current_column_composition() {
   (compose-region 1 3 "")
   (current-column))
 "##,
-        expect_test::expect![[r#""OK 1""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_adisp_move_to_column_display_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 3""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -81,13 +86,14 @@ fn div_adisp_move_to_column_display_table() {
   (move-to-column 3)
   (current-column))
 "##,
-        expect_test::expect![[r#""OK 3""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_adisp_indent_to_after_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 8""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -96,13 +102,14 @@ fn div_adisp_indent_to_after_display() {
   (indent-to 8)
   (current-column))
 "##,
-        expect_test::expect![[r#""OK 8""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_adisp_current_column_display_integer_height() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 3""#]];
     // (height N) display spec changes line height, not width — column unaffected.
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -111,13 +118,14 @@ fn div_adisp_current_column_display_integer_height() {
   (put-text-property 2 3 'display '(height 2.0))
   (current-column))
 "##,
-        expect_test::expect![[r#""OK 3""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_adisp_current_column_display_slice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 9""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -125,26 +133,28 @@ fn div_adisp_current_column_display_slice() {
   (put-text-property 2 4 'display (make-string 5 90))
   (current-column))
 "##,
-        expect_test::expect![[r#""OK 9""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_adisp_string_width_display_control() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 1""#]];
     // Control: string-width measures actual chars (display affects rendering only).
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s (propertize "x" 'display "abcde")))
   (string-width s))
 "##,
-        expect_test::expect![[r#""OK 1""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_adisp_current_column_multiple_display_glyphs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 6""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -152,13 +162,14 @@ fn div_adisp_current_column_multiple_display_glyphs() {
   (put-text-property 2 3 'display "1234")
   (current-column))
 "##,
-        expect_test::expect![[r#""OK 6""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_adisp_current_column_invisible_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 3""#]];
     // Invisible text contributes 0 columns.
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -167,13 +178,14 @@ fn div_adisp_current_column_invisible_text() {
   (put-text-property 2 5 'invisible t)
   (current-column))
 "##,
-        expect_test::expect![[r#""OK 3""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_adisp_move_to_column_with_tabs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 8""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -181,6 +193,6 @@ fn div_adisp_move_to_column_with_tabs() {
   (move-to-column 8)
   (current-column))
 "##,
-        expect_test::expect![[r#""OK 8""#]],
+        expect,
     );
 }

@@ -21,10 +21,8 @@ fn oracle_prop_seq_elt() {
                         (seq-elt [10 20 30 40] 3)
                         (seq-elt "hello" 0)
                         (seq-elt "hello" 4))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (a c 20 40 104 111)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (a c 20 40 104 111)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -39,7 +37,8 @@ fn oracle_prop_seq_length() {
                         (seq-length '(a b c))
                         (seq-length [1 2 3 4])
                         (seq-length "hello"))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (0 3 4 5)""#]]);
+    let expect = expect_test::expect![[r#""OK (0 3 4 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -53,10 +52,8 @@ fn oracle_prop_seq_map_list() {
     let form = r#"(list (seq-map #'1+ '(1 2 3 4 5))
                         (seq-map #'upcase '("a" "b" "c"))
                         (seq-map #'numberp '(1 "two" 3 nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((2 3 4 5 6) (\"A\" \"B\" \"C\") (t nil t nil))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((2 3 4 5 6) (\"A\" \"B\" \"C\") (t nil t nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -65,10 +62,8 @@ fn oracle_prop_seq_map_vector() {
 
     let form = r#"(list (seq-map #'1+ [10 20 30])
                         (seq-map (lambda (x) (* x x)) [1 2 3 4 5]))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((11 21 31) (1 4 9 16 25))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((11 21 31) (1 4 9 16 25))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -82,10 +77,8 @@ fn oracle_prop_seq_filter() {
     let form = r#"(list (seq-filter #'numberp '(1 "a" 2 nil 3 t))
                         (seq-filter (lambda (x) (> x 3)) '(1 2 3 4 5 6))
                         (seq-filter #'stringp '(1 "hello" 2 "world")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3) (4 5 6) (\"hello\" \"world\"))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 2 3) (4 5 6) (\"hello\" \"world\"))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -94,10 +87,8 @@ fn oracle_prop_seq_remove() {
 
     let form = r#"(list (seq-remove #'numberp '(1 "a" 2 nil 3 t))
                         (seq-remove (lambda (x) (> x 3)) '(1 2 3 4 5 6)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((\"a\" nil t) (1 2 3))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((\"a\" nil t) (1 2 3))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,10 +105,8 @@ fn oracle_prop_seq_reduce() {
                         (seq-reduce (lambda (acc x)
                                       (cons x acc))
                                     '(a b c d) nil))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (15 120 9 (d c b a))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (15 120 9 (d c b a))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -133,10 +122,8 @@ fn oracle_prop_seq_find() {
                         (seq-find #'null '(1 2 nil 3))
                         (seq-find #'stringp '(1 2 3))
                         (seq-find #'stringp '(1 2 3) 'not-found))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (42 15 nil nil not-found)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (42 15 nil nil not-found)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -153,10 +140,8 @@ fn oracle_prop_seq_some_every() {
                         (seq-every-p #'numberp '(1 2 3))
                         (seq-every-p #'numberp '(1 "a" 3))
                         (seq-every-p #'stringp '("a" "b" "c")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil t t nil t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil t t nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -171,10 +156,8 @@ fn oracle_prop_seq_uniq() {
                         (seq-uniq '(a a b b c c))
                         (seq-uniq nil)
                         (seq-uniq '(solo)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3 4 5) (a b c) nil (solo))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 2 3 4 5) (a b c) nil (solo))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -188,7 +171,8 @@ fn oracle_prop_seq_count() {
     let form = r#"(list (seq-count #'numberp '(1 "a" 2 nil 3))
                         (seq-count (lambda (x) (> x 3)) '(1 2 3 4 5 6))
                         (seq-count #'null '(nil nil 1 nil 2)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (3 3 3)""#]]);
+    let expect = expect_test::expect![[r#""OK (3 3 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -223,10 +207,8 @@ fn oracle_prop_seq_analysis_pipeline() {
                             (length scores))
                          (seq-every-p (lambda (s) (> s 85)) scores)
                          (seq-some (lambda (s) (> s 90)) scores)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (2 (95 88) 183 91.5 t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 (95 88) 183 91.5 t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -256,8 +238,6 @@ fn oracle_prop_seq_set_operations() {
                                 (sort inter #'<)
                                 (sort diff #'<)
                                 (seq-count (lambda (x) (memq x b)) a))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3 4 5 6 7) (3 4 5) (1 2) 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 2 3 4 5 6 7) (3 4 5) (1 2) 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

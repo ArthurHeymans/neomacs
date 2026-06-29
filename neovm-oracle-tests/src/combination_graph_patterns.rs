@@ -55,10 +55,8 @@ fn oracle_prop_graph_pattern_weighted_adjacency() {
                       (sort c-neighbors (lambda (a b) (< (cdr a) (cdr b)))))
                 (list total heaviest c-neighbors))))
         (fmakunbound 'neovm--test-add-weighted-edge)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (40 (b d 10) ((d . 3) (e . 8)))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (40 (b d 10) ((d . 3) (e . 8)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -115,10 +113,8 @@ fn oracle_prop_graph_pattern_bfs_levels() {
                 (puthash v (cons u (gethash v g nil)) g)))
             (funcall 'neovm--test-bfs-levels g 'a))
         (fmakunbound 'neovm--test-bfs-levels)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((0 a) (1 b c) (2 d e f g) (3 h))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((0 a) (1 b c) (2 d e f g) (3 h))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -183,12 +179,10 @@ fn oracle_prop_graph_pattern_dfs_cycle_report() {
                     (list 'cyclic-finish (cadr r2)))))
         (fmakunbound 'neovm--test-dfs-find-back-edges)
         (fmakunbound 'neovm--test-dfs-visit-be)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((dag-back-edges nil) (dag-finish (a c e b d f)) (cyclic-back-edges ((c . a) (e . d))) (cyclic-finish (a b d e f c)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((dag-back-edges nil) (dag-finish (a c e b d f)) (cyclic-back-edges ((c . a) (e . d))) (cyclic-finish (a b d e f c)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -254,12 +248,10 @@ fn oracle_prop_graph_pattern_shortest_path_reconstruct() {
                         (length path-1-5))))))
         (fmakunbound 'neovm--test-bfs-shortest)
         (fmakunbound 'neovm--test-reconstruct-path)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 . 0) (2 . 1) (3 . 1) (4 . 2) (5 . 2) (6 . 3)) (1 3 5 6) 4 (1 3 5) 3)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 . 0) (2 . 1) (3 . 1) (4 . 2) (5 . 2) (6 . 3)) (1 3 5 6) 4 (1 3 5) 3)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -327,12 +319,10 @@ fn oracle_prop_graph_pattern_connected_components_stats() {
                                 iso)))
                 (list (length comps) sizes largest isolated comps))))
         (fmakunbound 'neovm--test-find-components)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (5 (5 2 3 1 1) (1 2 3 4 5) (11 12) ((1 2 3 4 5) (6 7) (8 9 10) (11) (12)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (5 (5 2 3 1 1) (1 2 3 4 5) (11 12) ((1 2 3 4 5) (6 7) (8 9 10) (11) (12)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -425,12 +415,10 @@ fn oracle_prop_graph_pattern_bipartite_check() {
                           results)))
             (nreverse results))
         (fmakunbound 'neovm--test-is-bipartite)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((path-graph (t (1 3) (2 4))) (k23 (t (1 2) (3 4 5))) (triangle nil) (pentagon nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((path-graph (t (1 3) (2 4))) (k23 (t (1 2) (3 4 5))) (triangle nil) (pentagon nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -498,8 +486,6 @@ fn oracle_prop_graph_pattern_topological_sort() {
                       (setq all-ok nil))))
                 (list valid order all-ok))))
         (fmakunbound 'neovm--test-topo-sort)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t (math101 math201 cs101 cs201 cs202 cs301) t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t (math101 math201 cs101 cs201 cs202 cs301) t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

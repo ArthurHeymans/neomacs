@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx272_outline_minor_mode_with_custom_regexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-variable)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -24,13 +25,14 @@ fn div_cx272_outline_minor_mode_with_custom_regexp() {
               (outline-on-heading-p))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-variable)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx272_imenu_index_emacs_lisp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -43,13 +45,14 @@ fn div_cx272_imenu_index_emacs_lisp() {
               (assq 'Variables index))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx272_semantic_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -58,13 +61,14 @@ fn div_cx272_semantic_availability() {
           (boundp 'semantic-new-buffer-setup-functions))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil t nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx272_which_function_mode_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -75,13 +79,14 @@ fn div_cx272_which_function_mode_query() {
             (boundp 'which-func-format)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx272_which_function_in_elisp_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"neo-cx272-fn2\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -94,13 +99,14 @@ fn div_cx272_which_function_in_elisp_buffer() {
         (which-function)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK \"neo-cx272-fn2\"""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx272_hi_lock_interactive_highlighting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -113,13 +119,14 @@ fn div_cx272_hi_lock_interactive_highlighting() {
             (boundp 'hi-lock-file-patterns)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx272_page_break_lines_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -127,13 +134,16 @@ fn div_cx272_page_break_lines_mode() {
           (fboundp 'page-break-lines-mode))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx272_outline_hide_show_body() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (t \"* Heading 1\nbody line one\nbody line two\n* Heading 2\nbody three\n\" \"* Heading 1\nbody line one\nbody line two\n* Heading 2\nbody three\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -149,15 +159,14 @@ fn div_cx272_outline_hide_show_body() {
                 after-hide after-show))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (t \"* Heading 1\nbody line one\nbody line two\n* Heading 2\nbody three\n\" \"* Heading 1\nbody line one\nbody line two\n* Heading 2\nbody three\n\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx272_imenu_rescan_after_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -171,13 +180,14 @@ fn div_cx272_imenu_rescan_after_insert() {
                 (consp idx2)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx272_outline_imenu_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -211,6 +221,6 @@ fn div_cx272_outline_imenu_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     )
 }

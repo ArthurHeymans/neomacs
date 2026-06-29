@@ -42,12 +42,10 @@ fn oracle_prop_signal_adv_custom_error_symbol() {
              (error-message-string err)))))
       (put 'neovm-test-custom-err 'error-conditions nil)
       (put 'neovm-test-custom-err 'error-message nil))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((caught neovm-test-custom-err \"detail-1\" 42) (generic-catch neovm-test-custom-err \"via-generic\") \"A custom test error: \\\"payload\\\"\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((caught neovm-test-custom-err \"detail-1\" 42) (generic-catch neovm-test-custom-err \"via-generic\") \"A custom test error: \\\"payload\\\"\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -86,12 +84,10 @@ fn oracle_prop_signal_adv_complex_data_payloads() {
          (let ((v (cadr err)))
            (list (aref v 0) (aref v 1) (aref v 2)
                  (caddr err))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((3 1 2 3 (a b)) (\"val1\" 42 (nested data)) (10 20 30 \"extra\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((3 1 2 3 (a b)) (\"val1\" 42 (nested data)) (10 20 30 \"extra\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -135,12 +131,10 @@ fn oracle_prop_signal_adv_error_hierarchy() {
       (put 'neovm-test-io-err 'error-message nil)
       (put 'neovm-test-fnf-err 'error-conditions nil)
       (put 'neovm-test-fnf-err 'error-message nil))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((fnf \"/tmp/missing.txt\") (io-parent neovm-test-fnf-err \"/etc/secret\") (error-gp neovm-test-fnf-err) (outer-io \"generic-io\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((fnf \"/tmp/missing.txt\") (io-parent neovm-test-fnf-err \"/etc/secret\") (error-gp neovm-test-fnf-err) (outer-io \"generic-io\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,12 +171,10 @@ fn oracle_prop_signal_adv_builtin_hierarchy_catch() {
         (arith-error 'wrong-match)
         (wrong-type-argument 'correct-match)
         (error 'fallback)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((caught-as-error arith-error) (caught-wta-as-error wrong-type-argument) (caught-void-as-error void-variable) specific-arith correct-match)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((caught-as-error arith-error) (caught-wta-as-error wrong-type-argument) (caught-void-as-error void-variable) specific-arith correct-match)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -217,12 +209,10 @@ fn oracle_prop_signal_adv_handler_bind_normal_return_continues_search() {
       '(error))
    (error (list (car err) (cdr err)))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:caught (error \"boom\") :log ((:second (error \"boom\")) (:first (error \"boom\")))) (:thrown (error \"nonlocal\")) (error (\"Trailing CONDITIONS without HANDLER in ‘handler-bind‘\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:caught (error \"boom\") :log ((:second (error \"boom\")) (:first (error \"boom\")))) (:thrown (error \"nonlocal\")) (error (\"Trailing CONDITIONS without HANDLER in ‘handler-bind‘\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -257,12 +247,10 @@ fn oracle_prop_signal_adv_error_function() {
             (error
              (error "outer wraps: %s" (cadr inner))))
         (error (cadr outer))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((error \"something went wrong\") \"Expected string but got 42\" (error t \"auto-wrapped: test\") \"outer wraps: inner error 1\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((error \"something went wrong\") \"Expected string but got 42\" (error t \"auto-wrapped: test\") \"outer wraps: inner error 1\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -300,10 +288,8 @@ fn oracle_prop_signal_adv_user_error_vs_error() {
       (condition-case err
           (user-error "Invalid input: %S (expected %s)" '(a b) "number")
         (user-error (cadr err))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable inner)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable inner)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -371,12 +357,10 @@ fn oracle_prop_signal_adv_classification_recovery() {
       (put 'neovm-test-retryable 'error-conditions nil)
       (put 'neovm-test-defaultable 'error-conditions nil)
       (put 'neovm-test-fatal 'error-conditions nil))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ok 42) (exhausted 3) 3 (default 99 \"missing\") (fatal \"critical\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ok 42) (exhausted 3) 3 (default 99 \"missing\") (fatal \"critical\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -424,10 +408,8 @@ fn oracle_prop_signal_adv_error_wrapping_chaining() {
           (caddr final-err)
           ;; Error symbol is still 'error
           (car final-err)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"[http-client] [auth-service] [token-validator] [crypto-lib] invalid key length: 7\" (\"http-client\" \"auth-service\" \"token-validator\" \"crypto-lib\") error)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"[http-client] [auth-service] [token-validator] [crypto-lib] invalid key length: 7\" (\"http-client\" \"auth-service\" \"token-validator\" \"crypto-lib\") error)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

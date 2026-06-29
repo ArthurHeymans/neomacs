@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_defcustom_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (42 ((funcall #'(closure (t) nil 42))) ((funcall #'(closure (t) nil 42))) integer 42)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (defcustom test-custom-var-xxx 42
@@ -18,9 +21,7 @@ fn divergence_defcustom_real() {
         (get 'test-custom-var-xxx 'standard-value)
         (get 'test-custom-var-xxx 'custom-type)
         (default-value 'test-custom-var-xxx))) ",
-        expect_test::expect![[
-            r#""OK (42 ((funcall #'(closure (t) nil 42))) ((funcall #'(closure (t) nil 42))) integer 42)""#
-        ]],
+        expect,
     );
 }
 
@@ -28,6 +29,7 @@ fn divergence_defcustom_real() {
 fn divergence_custom_set_and_save() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function customize-get-value)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (defcustom test-cs-var-xxx 'default
@@ -37,7 +39,7 @@ fn divergence_custom_set_and_save() {
   (list test-cs-var-xxx
         (customize-get-value 'test-cs-var-xxx)
         (eq test-cs-var-xxx 'modified))) ",
-        expect_test::expect![[r#""ERR (void-function customize-get-value)""#]],
+        expect,
     );
 }
 
@@ -45,6 +47,7 @@ fn divergence_custom_set_and_save() {
 fn divergence_add_remove_hook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (2 2)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (setq test-hook-xxx nil)
@@ -53,7 +56,7 @@ fn divergence_add_remove_hook() {
   (let ((len (length test-hook-xxx)))
     (remove-hook 'test-hook-xxx (lambda () (push 'a test-hook-xxx-run)))
     (list len (length test-hook-xxx)))) ",
-        expect_test::expect![[r#""OK (2 2)""#]],
+        expect,
     );
 }
 
@@ -61,6 +64,7 @@ fn divergence_add_remove_hook() {
 fn divergence_hook_depth_ordering() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 4) 5)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (setq test-depth-hook-xxx nil)
@@ -69,7 +73,7 @@ fn divergence_hook_depth_ordering() {
   (add-hook 'test-depth-hook-xxx (lambda () 'b) nil nil 0)
   (list (length test-depth-hook-xxx)
         (>= (length test-depth-hook-xxx) 3))) ",
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 4) 5)""#]],
+        expect,
     );
 }
 
@@ -77,6 +81,7 @@ fn divergence_hook_depth_ordering() {
 fn divergence_run_hooks_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (2 1)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (defvar test-rh-log-xxx nil)
@@ -85,7 +90,7 @@ fn divergence_run_hooks_real() {
   (add-hook 'test-rh-hook-xxx (lambda () (push 2 test-rh-log-xxx)))
   (run-hooks 'test-rh-hook-xxx)
   (nreverse test-rh-log-xxx)) ",
-        expect_test::expect![[r#""OK (2 1)""#]],
+        expect,
     );
 }
 
@@ -93,13 +98,14 @@ fn divergence_run_hooks_real() {
 fn divergence_provide_require_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t test-feature-a-xxx)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (provide 'test-feature-a-xxx)
   (list (featurep 'test-feature-a-xxx)
         (if (memq 'test-feature-a-xxx features) t nil)
         (require 'test-feature-a-xxx))) ",
-        expect_test::expect![[r#""OK (t t test-feature-a-xxx)""#]],
+        expect,
     );
 }
 
@@ -107,6 +113,7 @@ fn divergence_provide_require_cycle() {
 fn divergence_autoload_detection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil nil t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (autoloadp 'car)
@@ -114,7 +121,7 @@ fn divergence_autoload_detection() {
   (functionp 'car)
   (functionp 'undefined-fn-xxx)
   (functionp (lambda (x) x))) ",
-        expect_test::expect![[r#""OK (nil nil t nil t)""#]],
+        expect,
     );
 }
 
@@ -122,6 +129,7 @@ fn divergence_autoload_detection() {
 fn deficiency_obarray_intern_soft() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((sym (intern-soft \"car\" obarray)))
   (list (symbolp sym)
@@ -129,7 +137,7 @@ fn deficiency_obarray_intern_soft() {
         (null (intern-soft \"nonexistent-sym-xxx\" obarray))
         (eq (intern \"test-sym-xxx\" obarray)
             (intern-soft \"test-sym-xxx\" obarray)))) ",
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -137,6 +145,7 @@ fn deficiency_obarray_intern_soft() {
 fn divergence_defvar_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (10 \"Doc string.\" t 10)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (defvar test-dv-xxx 10 \"Doc string.\")
@@ -144,7 +153,7 @@ fn divergence_defvar_real() {
         (documentation-property 'test-dv-xxx 'variable-documentation)
         (boundp 'test-dv-xxx)
         (default-value 'test-dv-xxx))) ",
-        expect_test::expect![[r#""OK (10 \"Doc string.\" t 10)""#]],
+        expect,
     );
 }
 
@@ -152,6 +161,7 @@ fn divergence_defvar_real() {
 fn divergence_buffer_local_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t 2)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (setq test-bl-hook-xxx nil)
@@ -159,6 +169,6 @@ fn divergence_buffer_local_hooks() {
   (list (listp test-bl-hook-xxx)
         (local-variable-p 'test-bl-hook-xxx)
         (length test-bl-hook-xxx))) ",
-        expect_test::expect![[r#""OK (t t 2)""#]],
+        expect,
     );
 }

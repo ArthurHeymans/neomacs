@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx132_calc_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -17,13 +18,14 @@ fn div_cx132_calc_availability() {
             (boundp 'calc-language)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx132_calc_eval_basic_arithmetic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"3\" \"12\" \"3.33333333333\" \"1024\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -35,13 +37,14 @@ fn div_cx132_calc_eval_basic_arithmetic() {
             (calc-eval "2^10")))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"3\" \"12\" \"3.33333333333\" \"1024\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx132_calendar_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -52,13 +55,14 @@ fn div_cx132_calendar_availability() {
             (boundp 'calendar-week-start-day)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx132_calendar_gregorian_to_absolute() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (738886 739251 738945 (7 29 2021))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -70,13 +74,14 @@ fn div_cx132_calendar_gregorian_to_absolute() {
             (calendar-gregorian-from-absolute 738000)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (738886 739251 738945 (7 29 2021))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx132_holidays_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -87,13 +92,14 @@ fn div_cx132_holidays_availability() {
             (boundp 'holiday-local-holidays)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx132_diary_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -104,13 +110,14 @@ fn div_cx132_diary_availability() {
             (boundp 'diary-entry-marker)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx132_timeclock_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -122,13 +129,14 @@ fn div_cx132_timeclock_availability() {
             (boundp 'timeclock-file)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx132_calendar_day_of_year_calc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -141,13 +149,14 @@ fn div_cx132_calendar_day_of_year_calc() {
             (calendar-month-name 1)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx132_calendar_leap_year_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -159,13 +168,14 @@ fn div_cx132_calendar_leap_year_predicate() {
             (calendar-leap-year-p 1900)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t nil t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx132_calendar_last_day_of_month() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (29 28 30 31)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -177,13 +187,14 @@ fn div_cx132_calendar_last_day_of_month() {
             (calendar-last-day-of-month 12 2024)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (29 28 30 31)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx132_calc_eval_radix_conversions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"255\" \"10\" \"64\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -195,13 +206,14 @@ fn div_cx132_calc_eval_radix_conversions() {
               (let ((calc-number-radix 8)) (calc-eval "64")))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"255\" \"10\" \"64\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx132_calc_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -228,6 +240,6 @@ fn div_cx132_calc_with_marker_overlay_undo_narrow_mega() {
                     (text-properties-at 1)))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     );
 }

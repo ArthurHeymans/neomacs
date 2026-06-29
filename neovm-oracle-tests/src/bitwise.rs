@@ -15,53 +15,40 @@ use super::common::{ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity, eval_
 fn oracle_prop_logand_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    crate::common::assert_oracle_parity_expect(
-        "(logand #xff #x0f)",
-        expect_test::expect![r#""OK 15""#],
-    );
-    crate::common::assert_oracle_parity_expect(
-        "(logand #b1010 #b1100)",
-        expect_test::expect![r#""OK 8""#],
-    );
-    crate::common::assert_oracle_parity_expect("(logand 255 0)", expect_test::expect![r#""OK 0""#]);
-    crate::common::assert_oracle_parity_expect(
-        "(logand -1 42)",
-        expect_test::expect![r#""OK 42""#],
-    );
+    let expect = expect_test::expect![r#""OK 15""#];
+    crate::common::assert_oracle_parity_expect("(logand #xff #x0f)", expect);
+    let expect = expect_test::expect![r#""OK 8""#];
+    crate::common::assert_oracle_parity_expect("(logand #b1010 #b1100)", expect);
+    let expect = expect_test::expect![r#""OK 0""#];
+    crate::common::assert_oracle_parity_expect("(logand 255 0)", expect);
+    let expect = expect_test::expect![r#""OK 42""#];
+    crate::common::assert_oracle_parity_expect("(logand -1 42)", expect);
 }
 
 #[test]
 fn oracle_prop_logand_multiple_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    crate::common::assert_oracle_parity_expect(
-        "(logand #xff #x0f #x03)",
-        expect_test::expect![r#""OK 3""#],
-    );
-    crate::common::assert_oracle_parity_expect(
-        "(logand 255 127 63 31)",
-        expect_test::expect![r#""OK 31""#],
-    );
-    crate::common::assert_oracle_parity_expect("(logand)", expect_test::expect![r#""OK -1""#]);
-    crate::common::assert_oracle_parity_expect("(logand 42)", expect_test::expect![r#""OK 42""#]);
+    let expect = expect_test::expect![r#""OK 3""#];
+    crate::common::assert_oracle_parity_expect("(logand #xff #x0f #x03)", expect);
+    let expect = expect_test::expect![r#""OK 31""#];
+    crate::common::assert_oracle_parity_expect("(logand 255 127 63 31)", expect);
+    let expect = expect_test::expect![r#""OK -1""#];
+    crate::common::assert_oracle_parity_expect("(logand)", expect);
+    let expect = expect_test::expect![r#""OK 42""#];
+    crate::common::assert_oracle_parity_expect("(logand 42)", expect);
 }
 
 #[test]
 fn oracle_prop_logand_negative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    crate::common::assert_oracle_parity_expect(
-        "(logand -1 -1)",
-        expect_test::expect![r#""OK -1""#],
-    );
-    crate::common::assert_oracle_parity_expect(
-        "(logand -256 255)",
-        expect_test::expect![r#""OK 0""#],
-    );
-    crate::common::assert_oracle_parity_expect(
-        "(logand -128 127)",
-        expect_test::expect![r#""OK 0""#],
-    );
+    let expect = expect_test::expect![r#""OK -1""#];
+    crate::common::assert_oracle_parity_expect("(logand -1 -1)", expect);
+    let expect = expect_test::expect![r#""OK 0""#];
+    crate::common::assert_oracle_parity_expect("(logand -256 255)", expect);
+    let expect = expect_test::expect![r#""OK 0""#];
+    crate::common::assert_oracle_parity_expect("(logand -128 127)", expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -72,38 +59,34 @@ fn oracle_prop_logand_negative() {
 fn oracle_prop_logior_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    crate::common::assert_oracle_parity_expect(
-        "(logior #x0f #xf0)",
-        expect_test::expect![r#""OK 255""#],
-    );
-    crate::common::assert_oracle_parity_expect(
-        "(logior #b1010 #b0101)",
-        expect_test::expect![r#""OK 15""#],
-    );
-    crate::common::assert_oracle_parity_expect("(logior 0 0)", expect_test::expect![r#""OK 0""#]);
+    let expect = expect_test::expect![r#""OK 255""#];
+    crate::common::assert_oracle_parity_expect("(logior #x0f #xf0)", expect);
+    let expect = expect_test::expect![r#""OK 15""#];
+    crate::common::assert_oracle_parity_expect("(logior #b1010 #b0101)", expect);
+    let expect = expect_test::expect![r#""OK 0""#];
+    crate::common::assert_oracle_parity_expect("(logior 0 0)", expect);
 }
 
 #[test]
 fn oracle_prop_logior_multiple_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    crate::common::assert_oracle_parity_expect(
-        "(logior 1 2 4 8 16)",
-        expect_test::expect![r#""OK 31""#],
-    );
-    crate::common::assert_oracle_parity_expect("(logior)", expect_test::expect![r#""OK 0""#]);
-    crate::common::assert_oracle_parity_expect("(logior 42)", expect_test::expect![r#""OK 42""#]);
+    let expect = expect_test::expect![r#""OK 31""#];
+    crate::common::assert_oracle_parity_expect("(logior 1 2 4 8 16)", expect);
+    let expect = expect_test::expect![r#""OK 0""#];
+    crate::common::assert_oracle_parity_expect("(logior)", expect);
+    let expect = expect_test::expect![r#""OK 42""#];
+    crate::common::assert_oracle_parity_expect("(logior 42)", expect);
 }
 
 #[test]
 fn oracle_prop_logior_negative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    crate::common::assert_oracle_parity_expect("(logior -1 0)", expect_test::expect![r#""OK -1""#]);
-    crate::common::assert_oracle_parity_expect(
-        "(logior -128 64)",
-        expect_test::expect![r#""OK -64""#],
-    );
+    let expect = expect_test::expect![r#""OK -1""#];
+    crate::common::assert_oracle_parity_expect("(logior -1 0)", expect);
+    let expect = expect_test::expect![r#""OK -64""#];
+    crate::common::assert_oracle_parity_expect("(logior -128 64)", expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,25 +97,26 @@ fn oracle_prop_logior_negative() {
 fn oracle_prop_logxor_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    crate::common::assert_oracle_parity_expect(
-        "(logxor #xff #x0f)",
-        expect_test::expect![r#""OK 240""#],
-    );
-    crate::common::assert_oracle_parity_expect(
-        "(logxor #b1010 #b1100)",
-        expect_test::expect![r#""OK 6""#],
-    );
-    crate::common::assert_oracle_parity_expect("(logxor 42 42)", expect_test::expect![r#""OK 0""#]);
-    crate::common::assert_oracle_parity_expect("(logxor 0 0)", expect_test::expect![r#""OK 0""#]);
+    let expect = expect_test::expect![r#""OK 240""#];
+    crate::common::assert_oracle_parity_expect("(logxor #xff #x0f)", expect);
+    let expect = expect_test::expect![r#""OK 6""#];
+    crate::common::assert_oracle_parity_expect("(logxor #b1010 #b1100)", expect);
+    let expect = expect_test::expect![r#""OK 0""#];
+    crate::common::assert_oracle_parity_expect("(logxor 42 42)", expect);
+    let expect = expect_test::expect![r#""OK 0""#];
+    crate::common::assert_oracle_parity_expect("(logxor 0 0)", expect);
 }
 
 #[test]
 fn oracle_prop_logxor_multiple_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    crate::common::assert_oracle_parity_expect("(logxor 1 2 4)", expect_test::expect![r#""OK 7""#]);
-    crate::common::assert_oracle_parity_expect("(logxor)", expect_test::expect![r#""OK 0""#]);
-    crate::common::assert_oracle_parity_expect("(logxor 42)", expect_test::expect![r#""OK 42""#]);
+    let expect = expect_test::expect![r#""OK 7""#];
+    crate::common::assert_oracle_parity_expect("(logxor 1 2 4)", expect);
+    let expect = expect_test::expect![r#""OK 0""#];
+    crate::common::assert_oracle_parity_expect("(logxor)", expect);
+    let expect = expect_test::expect![r#""OK 42""#];
+    crate::common::assert_oracle_parity_expect("(logxor 42)", expect);
 }
 
 #[test]
@@ -142,8 +126,8 @@ fn oracle_prop_logxor_self_inverse() {
     // XOR with itself is always 0
     let form = "(let ((x 12345))
                   (logxor (logxor x 99999) 99999))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 12345""#]]);
+    let expect = expect_test::expect![[r#""OK 12345""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("12345", &o, &n);
 }
 
@@ -155,23 +139,22 @@ fn oracle_prop_logxor_self_inverse() {
 fn oracle_prop_lognot_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    crate::common::assert_oracle_parity_expect("(lognot 0)", expect_test::expect![r#""OK -1""#]);
-    crate::common::assert_oracle_parity_expect("(lognot -1)", expect_test::expect![r#""OK 0""#]);
-    crate::common::assert_oracle_parity_expect("(lognot 1)", expect_test::expect![r#""OK -2""#]);
-    crate::common::assert_oracle_parity_expect(
-        "(lognot 255)",
-        expect_test::expect![r#""OK -256""#],
-    );
+    let expect = expect_test::expect![r#""OK -1""#];
+    crate::common::assert_oracle_parity_expect("(lognot 0)", expect);
+    let expect = expect_test::expect![r#""OK 0""#];
+    crate::common::assert_oracle_parity_expect("(lognot -1)", expect);
+    let expect = expect_test::expect![r#""OK -2""#];
+    crate::common::assert_oracle_parity_expect("(lognot 1)", expect);
+    let expect = expect_test::expect![r#""OK -256""#];
+    crate::common::assert_oracle_parity_expect("(lognot 255)", expect);
 }
 
 #[test]
 fn oracle_prop_lognot_double_negation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        "(lognot (lognot 42))",
-        expect_test::expect![[r#""OK 42""#]],
-    );
+    let expect = expect_test::expect![[r#""OK 42""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect("(lognot (lognot 42))", expect);
     assert_ok_eq("42", &o, &n);
 }
 
@@ -187,10 +170,8 @@ fn oracle_prop_logcount_accepts_bignum_like_gnu() {
         (logcount mask)
         (logcount (- big))
         (logcount (- -1 mask))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (1 100 100 100)""#],
-    );
+    let expect = expect_test::expect![r#""OK (1 100 100 100)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -201,38 +182,45 @@ fn oracle_prop_logcount_accepts_bignum_like_gnu() {
 fn oracle_prop_ash_left_shift() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    crate::common::assert_oracle_parity_expect("(ash 1 0)", expect_test::expect![r#""OK 1""#]);
-    crate::common::assert_oracle_parity_expect("(ash 1 1)", expect_test::expect![r#""OK 2""#]);
-    crate::common::assert_oracle_parity_expect("(ash 1 8)", expect_test::expect![r#""OK 256""#]);
-    crate::common::assert_oracle_parity_expect("(ash 1 16)", expect_test::expect![r#""OK 65536""#]);
-    crate::common::assert_oracle_parity_expect("(ash 5 3)", expect_test::expect![r#""OK 40""#]);
+    let expect = expect_test::expect![r#""OK 1""#];
+    crate::common::assert_oracle_parity_expect("(ash 1 0)", expect);
+    let expect = expect_test::expect![r#""OK 2""#];
+    crate::common::assert_oracle_parity_expect("(ash 1 1)", expect);
+    let expect = expect_test::expect![r#""OK 256""#];
+    crate::common::assert_oracle_parity_expect("(ash 1 8)", expect);
+    let expect = expect_test::expect![r#""OK 65536""#];
+    crate::common::assert_oracle_parity_expect("(ash 1 16)", expect);
+    let expect = expect_test::expect![r#""OK 40""#];
+    crate::common::assert_oracle_parity_expect("(ash 5 3)", expect);
 }
 
 #[test]
 fn oracle_prop_ash_right_shift() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    crate::common::assert_oracle_parity_expect("(ash 256 -1)", expect_test::expect![r#""OK 128""#]);
-    crate::common::assert_oracle_parity_expect("(ash 256 -4)", expect_test::expect![r#""OK 16""#]);
-    crate::common::assert_oracle_parity_expect("(ash 256 -8)", expect_test::expect![r#""OK 1""#]);
-    crate::common::assert_oracle_parity_expect("(ash 255 -4)", expect_test::expect![r#""OK 15""#]);
-    crate::common::assert_oracle_parity_expect("(ash 1 -1)", expect_test::expect![r#""OK 0""#]);
+    let expect = expect_test::expect![r#""OK 128""#];
+    crate::common::assert_oracle_parity_expect("(ash 256 -1)", expect);
+    let expect = expect_test::expect![r#""OK 16""#];
+    crate::common::assert_oracle_parity_expect("(ash 256 -4)", expect);
+    let expect = expect_test::expect![r#""OK 1""#];
+    crate::common::assert_oracle_parity_expect("(ash 256 -8)", expect);
+    let expect = expect_test::expect![r#""OK 15""#];
+    crate::common::assert_oracle_parity_expect("(ash 255 -4)", expect);
+    let expect = expect_test::expect![r#""OK 0""#];
+    crate::common::assert_oracle_parity_expect("(ash 1 -1)", expect);
 }
 
 #[test]
 fn oracle_prop_ash_negative_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![r#""OK -2""#];
     // Arithmetic shift preserves sign
-    crate::common::assert_oracle_parity_expect("(ash -1 1)", expect_test::expect![r#""OK -2""#]);
-    crate::common::assert_oracle_parity_expect(
-        "(ash -256 -4)",
-        expect_test::expect![r#""OK -16""#],
-    );
-    crate::common::assert_oracle_parity_expect(
-        "(ash -128 -1)",
-        expect_test::expect![r#""OK -64""#],
-    );
+    crate::common::assert_oracle_parity_expect("(ash -1 1)", expect);
+    let expect = expect_test::expect![r#""OK -16""#];
+    crate::common::assert_oracle_parity_expect("(ash -256 -4)", expect);
+    let expect = expect_test::expect![r#""OK -64""#];
+    crate::common::assert_oracle_parity_expect("(ash -128 -1)", expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -264,10 +252,8 @@ fn oracle_prop_bitwise_flag_manipulation() {
                         (list has-read has-write has-exec
                               after-clear-write has-exec-now
                               flags)))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (t t nil nil t 5)""#],
-    );
+    let expect = expect_test::expect![r#""OK (t t nil nil t 5)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -280,7 +266,8 @@ fn oracle_prop_bitwise_mask_extraction() {
                         (mid (logand (ash packed -4) #xf))
                         (low (logand packed #xf)))
                     (list high mid low)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (5 3 7)""#]);
+    let expect = expect_test::expect![r#""OK (5 3 7)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -300,7 +287,8 @@ fn oracle_prop_bitwise_population_count() {
                         (funcall popcount 7)
                         (funcall popcount 255)
                         (funcall popcount 256)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (0 1 3 8 1)""#]);
+    let expect = expect_test::expect![r#""OK (0 1 3 8 1)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------

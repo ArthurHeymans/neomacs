@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_prop_boundary_textprop_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass pb-snap ()
@@ -68,7 +69,7 @@ fn combo_eieio_prop_boundary_textprop_navigation() {
               (overlay-start ov) (overlay-end ov)
               my-pb-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -76,6 +77,7 @@ fn combo_eieio_prop_boundary_textprop_navigation() {
 fn combo_eieio_prop_boundary_char_prop_with_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass cpb-snap ()
@@ -147,7 +149,7 @@ fn combo_eieio_prop_boundary_char_prop_with_overlay() {
               (overlay-start ov2) (overlay-end ov2)
               my-cpb-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -155,6 +157,7 @@ fn combo_eieio_prop_boundary_char_prop_with_overlay() {
 fn combo_eieio_prop_boundary_narrow_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass pb-narrow-snap ()
@@ -216,7 +219,7 @@ fn combo_eieio_prop_boundary_narrow_navigation() {
               (overlay-start ov) (overlay-end ov)
               my-pbn-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -224,6 +227,7 @@ fn combo_eieio_prop_boundary_narrow_navigation() {
 fn combo_eieio_prop_boundary_overlay_face_priority_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass pb-face-snap ()
@@ -287,7 +291,7 @@ fn combo_eieio_prop_boundary_overlay_face_priority_change() {
               (overlay-start ov2) (overlay-end ov2)
               my-pbf-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -295,6 +299,7 @@ fn combo_eieio_prop_boundary_overlay_face_priority_change() {
 fn combo_eieio_prop_boundary_undo_restores_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable n1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass pb-undo-snap ()
@@ -362,6 +367,6 @@ fn combo_eieio_prop_boundary_undo_restores_boundaries() {
               (overlay-start ov) (overlay-end ov)
               my-pbu-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-variable n1)""#]],
+        expect,
     );
 }

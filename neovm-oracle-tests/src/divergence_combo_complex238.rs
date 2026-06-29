@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx238_mega_1_full_chaos_coding_charset_eieio_clloop_advice_process_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -73,13 +74,14 @@ fn div_cx238_mega_1_full_chaos_coding_charset_eieio_clloop_advice_process_undo()
                       (list state (buffer-live-p buf))))))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx238_mega_2_pcase_rx_syntax_search_replace_format_time_advice_register_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
@@ -123,13 +125,14 @@ fn div_cx238_mega_2_pcase_rx_syntax_search_replace_format_time_advice_register_w
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx238_mega_3_process_buflocal_undo_textprop_overlay_coding_env_timer_weak_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
@@ -170,13 +173,14 @@ fn div_cx238_mega_3_process_buflocal_undo_textprop_overlay_coding_env_timer_weak
         (kill-buffer buf))
       (list snapshot (buffer-live-p buf)))))
 "##,
-        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx238_mega_4_keymap_eval_macro_closure_advice_clloop_hash_obarray_secure_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
@@ -230,13 +234,14 @@ fn div_cx238_mega_4_keymap_eval_macro_closure_advice_clloop_hash_obarray_secure_
                       (overlay-start ov) (overlay-end ov)
                       (text-properties-at 1)))))))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx238_mega_5_all_subsystem_final_ultimate_chaos_record_hash_coding_advice_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable weak-ht)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
@@ -294,6 +299,6 @@ fn div_cx238_mega_5_all_subsystem_final_ultimate_chaos_record_hash_coding_advice
                     (hash-table-count ht)
                     (aref rec 2)))))))))
 "##,
-        expect_test::expect![[r#""ERR (void-variable weak-ht)""#]],
+        expect,
     );
 }

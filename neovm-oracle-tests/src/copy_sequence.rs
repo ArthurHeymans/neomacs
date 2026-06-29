@@ -8,10 +8,8 @@ use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 fn oracle_prop_copy_sequence_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        "(copy-sequence '(1 2 3))",
-        expect_test::expect![[r#""OK (1 2 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 2 3)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect("(copy-sequence '(1 2 3))", expect);
     assert_ok_eq("(1 2 3)", &o, &n);
 }
 
@@ -21,8 +19,8 @@ fn oracle_prop_copy_sequence_not_eq() {
 
     let form = "(let ((lst '(1 2 3)))
                   (eq lst (copy-sequence lst)))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -32,8 +30,8 @@ fn oracle_prop_copy_sequence_equal() {
 
     let form = "(let ((lst '(1 2 3)))
                   (equal lst (copy-sequence lst)))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK t""#]]);
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("t", &o, &n);
 }
 
@@ -41,10 +39,8 @@ fn oracle_prop_copy_sequence_equal() {
 fn oracle_prop_copy_sequence_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(copy-sequence "hello")"#,
-        expect_test::expect![[r#""OK \"hello\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"hello\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(copy-sequence "hello")"#, expect);
     assert_ok_eq(r#""hello""#, &o, &n);
 }
 
@@ -52,10 +48,8 @@ fn oracle_prop_copy_sequence_string() {
 fn oracle_prop_copy_sequence_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        "(copy-sequence [1 2 3])",
-        expect_test::expect![[r#""OK [1 2 3]""#]],
-    );
+    let expect = expect_test::expect![[r#""OK [1 2 3]""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect("(copy-sequence [1 2 3])", expect);
     assert_ok_eq("[1 2 3]", &o, &n);
 }
 
@@ -63,10 +57,8 @@ fn oracle_prop_copy_sequence_vector() {
 fn oracle_prop_copy_sequence_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        "(copy-sequence nil)",
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect("(copy-sequence nil)", expect);
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -74,10 +66,8 @@ fn oracle_prop_copy_sequence_nil() {
 fn oracle_prop_copy_sequence_empty_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(copy-sequence "")"#,
-        expect_test::expect![[r#""OK \"\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(copy-sequence "")"#, expect);
     assert_ok_eq(r#""""#, &o, &n);
 }
 
@@ -90,8 +80,6 @@ fn oracle_prop_copy_sequence_mutation_independence() {
                        (copy (copy-sequence orig)))
                   (setcar copy 99)
                   (list orig copy))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3) (99 2 3))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 2 3) (99 2 3))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -11,6 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn strong_x_doc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (3 . 8) 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -18,7 +19,7 @@ fn strong_x_doc() {
   (let* ((tree (org-element-parse-buffer))
          (types (org-element-map tree (lambda (el) (org-element-type el)))))
     types))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (3 . 8) 2)""#]],
+        expect,
     );
 }
 
@@ -29,6 +30,9 @@ fn strong_x_doc() {
 #[test]
 fn strong_x_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (((\"CATEGORY\" . \"???\") (\"B\" . \"2\") (\"A\" . \"1\")) ((\"CATEGORY\" . \"???\") (\"C\" . \"3\") (\"A\" . \"10\")))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -39,9 +43,7 @@ fn strong_x_prop() {
     (org-entry-delete nil "B")
     (org-entry-put nil "A" "10")
     (list p1 (org-entry-properties nil 'standard))))"##,
-        expect_test::expect![[
-            r#""OK (((\"CATEGORY\" . \"???\") (\"B\" . \"2\") (\"A\" . \"1\")) ((\"CATEGORY\" . \"???\") (\"C\" . \"3\") (\"A\" . \"10\")))""#
-        ]],
+        expect,
     );
 }
 
@@ -52,6 +54,7 @@ fn strong_x_prop() {
 #[test]
 fn strong_x_tbl() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-table-transpose)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -63,7 +66,7 @@ fn strong_x_tbl() {
     (let ((d2 (org-table-to-lisp)))
       (org-table-transpose)
       (list d1 d2 (org-table-to-lisp)))))"##,
-        expect_test::expect![[r#""ERR (void-function org-table-transpose)""#]],
+        expect,
     );
 }
 
@@ -74,6 +77,7 @@ fn strong_x_tbl() {
 #[test]
 fn strong_x_cb() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"* T [0%]\" \"* T [66%]\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -88,7 +92,7 @@ fn strong_x_cb() {
     (org-update-statistics-cookies t)
     (goto-char (point-min))
     (list h0 (buffer-substring-no-properties (line-beginning-position) (line-end-position)))))"##,
-        expect_test::expect![[r#""OK (\"* T [0%]\" \"* T [66%]\")""#]],
+        expect,
     );
 }
 
@@ -99,6 +103,7 @@ fn strong_x_cb() {
 #[test]
 fn strong_x_sp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"T1\" \"T2\" \"T3\" \"T4\") nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -114,7 +119,7 @@ fn strong_x_sp() {
               (push hd h) (push hd v))))
       (forward-line))
     (list (nreverse v) (nreverse h))))"##,
-        expect_test::expect![[r#""OK ((\"T1\" \"T2\" \"T3\" \"T4\") nil)""#]],
+        expect,
     );
 }
 
@@ -125,6 +130,9 @@ fn strong_x_sp() {
 #[test]
 fn strong_x_hl() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (nil 65 (\"t\") (timestamp (:standard-properties [30 nil nil nil 42 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2026-01-15>\" :year-start 2026 :month-start 1 :day-start 15 :hour-start nil :minute-start nil :year-end 2026 :month-end 1 :day-end 15 :hour-end nil :minute-end nil)) nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -138,9 +146,7 @@ fn strong_x_hl() {
           (org-element-property :tags h)
           (org-element-property :scheduled p)
           (org-element-property :deadline p))))"##,
-        expect_test::expect![[
-            r#""OK (nil 65 (\"t\") (timestamp (:standard-properties [30 nil nil nil 42 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2026-01-15>\" :year-start 2026 :month-start 1 :day-start 15 :hour-start nil :minute-start nil :year-end 2026 :month-end 1 :day-end 15 :hour-end nil :minute-end nil)) nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -151,6 +157,9 @@ fn strong_x_hl() {
 #[test]
 fn strong_x_exp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((#(\"T\" 0 1 (:parent (#(\"T\" 0 1 (:parent #4)))))) nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -158,9 +167,7 @@ fn strong_x_exp() {
   (let* ((tree (org-element-parse-buffer))
          (info (org-export-get-environment nil)))
     (list (plist-get info :title) (plist-get info :with-toc))))"##,
-        expect_test::expect![[
-            r#""OK ((#(\"T\" 0 1 (:parent (#(\"T\" 0 1 (:parent #4)))))) nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -171,6 +178,9 @@ fn strong_x_exp() {
 #[test]
 fn strong_x_ec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:todo nil :pri 65 :tags (\"t\")) (:todo \"PLANNING\" :pri nil :tags (\"n\") :title \"C\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -190,9 +200,7 @@ fn strong_x_ec() {
                      :tags (org-element-property :tags el2)
                      :title (org-element-property :raw-value el2))))
       (list p1 p2))))"##,
-        expect_test::expect![[
-            r#""OK ((:todo nil :pri 65 :tags (\"t\")) (:todo \"PLANNING\" :pri nil :tags (\"n\") :title \"C\"))""#
-        ]],
+        expect,
     );
 }
 
@@ -203,6 +211,7 @@ fn strong_x_ec() {
 #[test]
 fn strong_x_mb() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"A\" \"A1\") (\"B\" \"B1\" \"B2\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((r '()))
   (with-temp-buffer
@@ -218,7 +227,7 @@ fn strong_x_mb() {
             (lambda (h) (org-element-property :raw-value h)))
           r))
   (nreverse r))"##,
-        expect_test::expect![[r#""OK ((\"A\" \"A1\") (\"B\" \"B1\" \"B2\"))""#]],
+        expect,
     );
 }
 
@@ -229,6 +238,7 @@ fn strong_x_mb() {
 #[test]
 fn strong_x_pl() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((cumulate nil) (nil cumulate))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -239,7 +249,7 @@ fn strong_x_pl() {
             (d (org-element-property :deadline p)))
         (list (when s (org-element-property :repeater-type s))
               (when d (org-element-property :repeater-type d)))))))"##,
-        expect_test::expect![[r#""OK ((cumulate nil) (nil cumulate))""#]],
+        expect,
     );
 }
 
@@ -250,6 +260,7 @@ fn strong_x_pl() {
 #[test]
 fn strong_x_bl() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"emacs-lisp\" \"-n\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -257,7 +268,7 @@ fn strong_x_bl() {
   (org-element-map (org-element-parse-buffer) 'src-block
     (lambda (b) (list (org-element-property :language b)
                       (org-element-property :switches b)))))"##,
-        expect_test::expect![[r#""OK ((\"emacs-lisp\" \"-n\"))""#]],
+        expect,
     );
 }
 
@@ -268,6 +279,7 @@ fn strong_x_bl() {
 #[test]
 fn strong_x_ts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((active-range 2026 15) (active-range 2026 16))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -276,7 +288,7 @@ fn strong_x_ts() {
     (lambda (t) (list (org-element-property :type t)
                       (org-element-property :year-start t)
                       (org-element-property :day-start t)))))"##,
-        expect_test::expect![[r#""OK ((active-range 2026 15) (active-range 2026 16))""#]],
+        expect,
     );
 }
 
@@ -287,6 +299,8 @@ fn strong_x_ts() {
 #[test]
 fn strong_x_lnk() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((\"https\" \"//x\") (\"file\" \"f\") (\"id\" \"i\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -294,7 +308,7 @@ fn strong_x_lnk() {
   (org-element-map (org-element-parse-buffer) 'link
     (lambda (l) (list (org-element-property :type l)
                       (org-element-property :path l)))))"##,
-        expect_test::expect![[r#""OK ((\"https\" \"//x\") (\"file\" \"f\") (\"id\" \"i\"))""#]],
+        expect,
     );
 }
 
@@ -305,6 +319,7 @@ fn strong_x_lnk() {
 #[test]
 fn strong_x_fn() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"1\") (\"1\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -315,7 +330,7 @@ fn strong_x_fn() {
          (fd (org-element-map tree 'footnote-definition
                (lambda (d) (org-element-property :label d)))))
     (list fn fd)))"##,
-        expect_test::expect![[r#""OK ((\"1\") (\"1\"))""#]],
+        expect,
     );
 }
 
@@ -326,6 +341,7 @@ fn strong_x_fn() {
 #[test]
 fn strong_x_ol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"P\" \"T1\" \"S1\") 4 \"SS1\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -335,7 +351,7 @@ fn strong_x_ol() {
   (list (org-get-outline-path)
         (org-current-level)
         (org-get-heading t t t t)))"##,
-        expect_test::expect![[r#""OK ((\"P\" \"T1\" \"S1\") 4 \"SS1\")""#]],
+        expect,
     );
 }
 
@@ -346,6 +362,7 @@ fn strong_x_ol() {
 #[test]
 fn strong_x_vi() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (0 . 0) 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -359,7 +376,7 @@ fn strong_x_vi() {
     (org-set-startup-visibility 'all)
     (push (get-char-property (search-forward "H2") 'invisible) s)
     (nreverse s)))"##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (0 . 0) 1)""#]],
+        expect,
     );
 }
 
@@ -370,6 +387,8 @@ fn strong_x_vi() {
 #[test]
 fn strong_x_sd() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((\"T1\" \"T2\" \"T3\" \"T4\") (\"T1\" \"T2\" \"T3\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -385,7 +404,7 @@ fn strong_x_sd() {
               (push hd h) (push hd v))))
       (forward-line))
     (list (nreverse v) (nreverse h))))"##,
-        expect_test::expect![[r#""OK ((\"T1\" \"T2\" \"T3\" \"T4\") (\"T1\" \"T2\" \"T3\"))""#]],
+        expect,
     );
 }
 
@@ -396,6 +415,7 @@ fn strong_x_sd() {
 #[test]
 fn strong_x_mc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (error \"Undefined Org macro: g; aborting\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -403,7 +423,7 @@ fn strong_x_mc() {
   (let ((raw (buffer-string)))
     (org-macro-replace-all org-macro-templates)
     (list raw (buffer-string))))"##,
-        expect_test::expect![[r#""ERR (error \"Undefined Org macro: g; aborting\")""#]],
+        expect,
     );
 }
 
@@ -414,6 +434,9 @@ fn strong_x_mc() {
 #[test]
 fn strong_x_db() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r##""OK #(\"#+BEGIN: clocktable :maxlevel 2\n#+CAPTION: Clock summary at [FIXED-TIME]\n| Headline     | Time   |\n|--------------+--------|\n| *Total time* | *0:00* |\n#+END:\" 73 74 (face org-table) 74 75 (face org-table rear-nonsticky t display (space :relative-width 1)) 75 83 (face org-table) 83 87 (face org-table) 87 88 (face org-table display (space :relative-width 1.001)) 88 89 (face org-table) 89 90 (face org-table rear-nonsticky t display (space :relative-width 1)) 90 94 (face org-table) 94 96 (face org-table) 96 97 (face org-table display (space :relative-width 1.001)) 97 98 (face org-table) 98 99 (face org-table-row) 99 100 (face org-table) 100 124 (face org-table) 124 125 (face org-table-row) 125 126 (face org-table) 126 127 (face org-table rear-nonsticky t display (space :relative-width 1)) 127 139 (org-emphasis t font-lock-multiline t face (bold org-table)) 139 140 (face org-table display (space :relative-width 1.001)) 140 141 (face org-table) 141 142 (face org-table rear-nonsticky t display (space :relative-width 1)) 142 148 (org-emphasis t font-lock-multiline t face (bold org-table)) 148 149 (face org-table display (space :relative-width 1.001)) 149 150 (face org-table) 150 151 (face org-table-row))""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -421,9 +444,7 @@ fn strong_x_db() {
   (goto-char (point-min))
   (org-dblock-update)
   (buffer-string))"##,
-        expect_test::expect![[
-            r##""OK #(\"#+BEGIN: clocktable :maxlevel 2\n#+CAPTION: Clock summary at [FIXED-TIME]\n| Headline     | Time   |\n|--------------+--------|\n| *Total time* | *0:00* |\n#+END:\" 73 74 (face org-table) 74 75 (face org-table rear-nonsticky t display (space :relative-width 1)) 75 83 (face org-table) 83 87 (face org-table) 87 88 (face org-table display (space :relative-width 1.001)) 88 89 (face org-table) 89 90 (face org-table rear-nonsticky t display (space :relative-width 1)) 90 94 (face org-table) 94 96 (face org-table) 96 97 (face org-table display (space :relative-width 1.001)) 97 98 (face org-table) 98 99 (face org-table-row) 99 100 (face org-table) 100 124 (face org-table) 124 125 (face org-table-row) 125 126 (face org-table) 126 127 (face org-table rear-nonsticky t display (space :relative-width 1)) 127 139 (org-emphasis t font-lock-multiline t face (bold org-table)) 139 140 (face org-table display (space :relative-width 1.001)) 140 141 (face org-table) 141 142 (face org-table rear-nonsticky t display (space :relative-width 1)) 142 148 (org-emphasis t font-lock-multiline t face (bold org-table)) 148 149 (face org-table display (space :relative-width 1.001)) 149 150 (face org-table) 150 151 (face org-table-row))""##
-        ]],
+        expect,
     );
 }
 
@@ -434,13 +455,14 @@ fn strong_x_db() {
 #[test]
 fn strong_x_st() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-try-structure-completion)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "<s")
   (org-try-structure-completion)
   (buffer-string))"##,
-        expect_test::expect![[r#""ERR (void-function org-try-structure-completion)""#]],
+        expect,
     );
 }
 
@@ -451,6 +473,7 @@ fn strong_x_st() {
 #[test]
 fn strong_x_cf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"C\") (\"F\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -461,7 +484,7 @@ fn strong_x_cf() {
          (f (org-element-map tree 'fixed-width
               (lambda (f) (org-element-property :value f)))))
     (list c f)))"##,
-        expect_test::expect![[r#""OK ((\"C\") (\"F\"))""#]],
+        expect,
     );
 }
 
@@ -472,12 +495,13 @@ fn strong_x_cf() {
 #[test]
 fn strong_x_pc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 0""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "\\agr")
   (length (all-completions "\\ag" (pcomplete-entries))))"##,
-        expect_test::expect![[r#""OK 0""#]],
+        expect,
     );
 }
 
@@ -488,13 +512,14 @@ fn strong_x_pc() {
 #[test]
 fn strong_x_cv() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-columns-get-format)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "#+COLUMNS: %25ITEM %TODO %PRIORITY\n* TODO [#A] T")
   (goto-char (point-min))
   (org-columns-get-format))"##,
-        expect_test::expect![[r#""ERR (void-function org-columns-get-format)""#]],
+        expect,
     );
 }
 
@@ -505,6 +530,9 @@ fn strong_x_cv() {
 #[test]
 fn strong_x_er() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"\\\\alpha \\\\beta\n<<<t>>>\nSee t\" \"\\\\alpha \\\\beta\n<<<t>>>\nSee t\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -512,9 +540,7 @@ fn strong_x_er() {
   (let ((b (buffer-string)))
     (org-toggle-pretty-entities)
     (list b (buffer-string))))"##,
-        expect_test::expect![[
-            r#""OK (\"\\\\alpha \\\\beta\n<<<t>>>\nSee t\" \"\\\\alpha \\\\beta\n<<<t>>>\nSee t\")""#
-        ]],
+        expect,
     );
 }
 
@@ -525,6 +551,7 @@ fn strong_x_er() {
 #[test]
 fn strong_x_in() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -535,7 +562,7 @@ fn strong_x_in() {
       (when (= (org-element-property :level h) 15)
         (list (org-element-property :raw-value h)
               (org-element-property :todo-keyword h))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -546,6 +573,9 @@ fn strong_x_in() {
 #[test]
 fn strong_x_kw() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"TITLE\" \"T\") (\"AUTHOR\" \"A\") (\"OPTIONS\" \"toc:nil\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -553,9 +583,7 @@ fn strong_x_kw() {
   (org-element-map (org-element-parse-buffer) 'keyword
     (lambda (k) (list (org-element-property :key k)
                       (org-element-property :value k)))))"##,
-        expect_test::expect![[
-            r#""OK ((\"TITLE\" \"T\") (\"AUTHOR\" \"A\") (\"OPTIONS\" \"toc:nil\"))""#
-        ]],
+        expect,
     );
 }
 
@@ -566,6 +594,7 @@ fn strong_x_kw() {
 #[test]
 fn strong_x_ag() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -575,7 +604,7 @@ fn strong_x_ag() {
       (list (org-get-heading t t t t)
             (org-get-todo-state)))
     nil 'file))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -586,12 +615,13 @@ fn strong_x_ag() {
 #[test]
 fn strong_x_rf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"P1\" \"P2\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* P1\n** T1\n* P2\n** T2")
   (mapcar 'car (org-refile-get-targets nil)))"##,
-        expect_test::expect![[r#""OK (\"P1\" \"P2\")""#]],
+        expect,
     );
 }
 
@@ -602,6 +632,7 @@ fn strong_x_rf() {
 #[test]
 fn strong_x_sts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"* T [66%]\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -609,7 +640,7 @@ fn strong_x_sts() {
   (goto-char (point-min))
   (org-update-statistics-cookies t)
   (buffer-substring-no-properties (line-beginning-position) (line-end-position)))"##,
-        expect_test::expect![[r#""OK \"* T [66%]\"""#]],
+        expect,
     );
 }
 
@@ -620,6 +651,7 @@ fn strong_x_sts() {
 #[test]
 fn strong_x_pi() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"2\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -628,7 +660,7 @@ fn strong_x_pi() {
   (search-forward "L3")
   (list (org-entry-get nil "V" 'inherit)
         (org-entry-get nil "V" nil)))"##,
-        expect_test::expect![[r#""OK (\"2\" nil)""#]],
+        expect,
     );
 }
 
@@ -639,6 +671,9 @@ fn strong_x_pi() {
 #[test]
 fn strong_x_hi() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((1 \"L1\" 2) (2 \"L2a\" 2) (3 \"L3a\" 0) (3 \"L3b\" 0) (2 \"L2b\" 0) (1 \"L1b\" 0))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -648,8 +683,6 @@ fn strong_x_hi() {
       (list (org-element-property :level h)
             (org-element-property :raw-value h)
             (length (org-element-contents h))))))"##,
-        expect_test::expect![[
-            r#""OK ((1 \"L1\" 2) (2 \"L2a\" 2) (3 \"L3a\" 0) (3 \"L3b\" 0) (2 \"L2b\" 0) (1 \"L1b\" 0))""#
-        ]],
+        expect,
     );
 }

@@ -20,10 +20,8 @@ fn oracle_prop_subrp() {
                         (subrp (lambda (x) x))
                         (subrp 42)
                         (subrp nil))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -38,10 +36,8 @@ fn oracle_prop_subr_arity() {
                         (subr-arity (symbol-function 'cons))
                         (subr-arity (symbol-function '+))
                         (subr-arity (symbol-function 'list)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 . 1) (2 . 2) (0 . many) (0 . many))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 . 1) (2 . 2) (0 . many) (0 . many))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -59,7 +55,8 @@ fn oracle_prop_commandp_basic() {
                     (commandp (lambda () (interactive) 42))
                     ;; Symbols
                     (commandp '+))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (nil t nil)""#]]);
+    let expect = expect_test::expect![[r#""OK (nil t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -79,10 +76,8 @@ fn oracle_prop_functionp_comprehensive() {
                         (functionp 42)
                         (functionp "hello")
                         (functionp '(1 2 3)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t nil nil nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t nil nil nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -116,12 +111,10 @@ fn oracle_prop_byte_code_function_p_and_make_byte_code() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t t 42 nil nil nil nil (wrong-number-of-arguments (make-byte-code 0)) #[nil \"not-byte-code\" [] 0])""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t t 42 nil nil nil nil (wrong-number-of-arguments (make-byte-code 0)) #[nil \"not-byte-code\" [] 0])""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -147,12 +140,10 @@ fn oracle_prop_subr_introspect_framework() {
                                             (when arity (cdr arity)))
                                       results)))))
                     (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((+ t 0 many) (car t 1 1) (cons t 2 2) (list t 0 many) (length t 1 1) (append t 0 many) (mapcar t 2 2) (format t 1 many) (concat t 0 many))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((+ t 0 many) (car t 1 1) (cons t 2 2) (list t 0 many) (length t 1 1) (append t 0 many) (mapcar t 2 2) (format t 1 many) (concat t 0 many))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -190,8 +181,6 @@ fn oracle_prop_subr_arity_dispatch() {
                      ;; concat works with 0 args
                      (funcall call-with-defaults
                               'concat nil nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((hello) 0 \"\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((hello) 0 \"\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

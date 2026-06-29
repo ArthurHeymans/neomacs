@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_textprop_next_change_with_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass annotation ()
@@ -57,7 +58,7 @@ fn combo_eieio_textprop_next_change_with_objects() {
                 (buffer-string)
                 annots))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -65,6 +66,7 @@ fn combo_eieio_textprop_next_change_with_objects() {
 fn combo_eieio_textprop_single_change_overlay_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass styled-chunk ()
@@ -134,7 +136,7 @@ fn combo_eieio_textprop_single_change_overlay_merge() {
                 (buffer-string)
                 styles))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -142,6 +144,7 @@ fn combo_eieio_textprop_single_change_overlay_merge() {
 fn combo_eieio_textprop_remove_add_overlay_clash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass token ()
@@ -210,7 +213,7 @@ fn combo_eieio_textprop_remove_add_overlay_clash() {
                 (buffer-string)
                 tokens))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -218,6 +221,7 @@ fn combo_eieio_textprop_remove_add_overlay_clash() {
 fn combo_eieio_textprop_object_identity_eq_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ref ()
@@ -273,7 +277,7 @@ fn combo_eieio_textprop_object_identity_eq_check() {
                 (buffer-string)
                 refs))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -281,6 +285,7 @@ fn combo_eieio_textprop_object_identity_eq_check() {
 fn combo_eieio_textprop_add_transitive_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable chain-weight)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass link ()
@@ -340,6 +345,6 @@ fn combo_eieio_textprop_add_transitive_overlay() {
                 (buffer-string)
                 links))))
     (kill-buffer buf))"#,
-        expect_test::expect![[r#""ERR (void-variable chain-weight)""#]],
+        expect,
     );
 }

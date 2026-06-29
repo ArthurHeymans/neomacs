@@ -91,12 +91,10 @@ fn oracle_prop_physics_2d_vector_operations() {
     (fmakunbound 'neovm--phys-vmag-sq)
     (fmakunbound 'neovm--phys-vneg)
     (fmakunbound 'neovm--phys-kinematic-step)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((4 . 6) (7 . 13) (15 . 20) 11 25 (-5 . 3) ((10 . 0) (10 . -1)) ((0 . 1000) (0 . 1000) (0 . 990) (0 . 970) (0 . 940) (0 . 900)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((4 . 6) (7 . 13) (15 . 20) 11 25 (-5 . 3) ((10 . 0) (10 . -1)) ((0 . 1000) (0 . 1000) (0 . 990) (0 . 970) (0 . 940) (0 . 900)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -154,12 +152,10 @@ fn oracle_prop_physics_verlet_integration() {
                     (nth 5 traj) (nth 3 traj) dt))))
     (fmakunbound 'neovm--verlet-step)
     (fmakunbound 'neovm--verlet-velocity)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((5 . 100) (10 . 90) (15 . 70) (20 . 40) (25 . 0) (30 . -50) (35 . -110) (40 . -180) (45 . -260)) (5 25 45) (100 0 -260) (5 . -45))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((5 . 100) (10 . 90) (15 . 70) (20 . 40) (25 . 0) (30 . -50) (35 . -110) (40 . -180) (45 . -260)) (5 25 45) (100 0 -260) (5 . -45))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -249,10 +245,8 @@ fn oracle_prop_physics_collision_detection() {
     (fmakunbound 'neovm--phys-point-in-rect)
     (fmakunbound 'neovm--phys-circle-rect-collide)
     (fmakunbound 'neovm--phys-sweep-collide)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t nil t t nil t nil t nil t 9)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t nil t t nil t nil t nil t 9)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -374,12 +368,10 @@ fn oracle_prop_physics_nbody_gravity() {
     (fmakunbound 'neovm--nbody-total-accel)
     (fmakunbound 'neovm--nbody-step)
     (fmakunbound 'neovm--nbody-kinetic-energy)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((((0 0) (100 0) (-100 0)) ((0 0) (91 3) (-91 -3)) ((0 0) (72 6) (-72 -6)) ((0 0) (40 8) (-40 -8)) ((0 0) (-16 6) (16 -6)) ((0 0) (-18 -16) (18 16))) (0 0) 488 3)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((((0 0) (100 0) (-100 0)) ((0 0) (91 3) (-91 -3)) ((0 0) (72 6) (-72 -6)) ((0 0) (40 8) (-40 -8)) ((0 0) (-16 6) (16 -6)) ((0 0) (-18 -16) (18 16))) (0 0) 488 3)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -453,12 +445,10 @@ fn oracle_prop_physics_spring_mass() {
     (fmakunbound 'neovm--spring-step)
     (fmakunbound 'neovm--spring-simulate)
     (fmakunbound 'neovm--spring-energy)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1000 855 502 27 0) (946 208 t) (5000 118855) (500 488 464 428 381 325 261 190 115 37 -42 -120 -195 -265 -329 -384))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1000 855 502 27 0) (946 208 t) (5000 118855) (500 488 464 428 381 325 261 190 115 37 -42 -120 -195 -265 -329 -384))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -558,10 +548,8 @@ fn oracle_prop_physics_projectile_with_drag() {
     (fmakunbound 'neovm--proj-simulate)
     (fmakunbound 'neovm--proj-range)
     (fmakunbound 'neovm--proj-max-height)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((20 1900 450) (18 1164 331) t (0 1900) 7)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((20 1900 450) (18 1164 331) t (0 1900) 7)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -647,10 +635,8 @@ fn oracle_prop_physics_collision_response() {
     (fmakunbound 'neovm--coll-inelastic)
     (fmakunbound 'neovm--coll-partial)
     (fmakunbound 'neovm--coll-momentum)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((-30 . 50) (9 . 19) (-98 . 1) (-100 . 100) 0 5 (100 100 t) (25 . 75) (t t) (t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((-30 . 50) (9 . 19) (-98 . 1) (-100 . 100) 0 5 (100 100 t) (25 . 75) (t t) (t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

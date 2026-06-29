@@ -104,12 +104,10 @@ fn oracle_prop_constraint_logic_adv_domain_store() {
     (fmakunbound 'neovm--cla-store-value)
     (fmakunbound 'neovm--cla-store-copy)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4 5) (1 2 3 4 5) (1 2 3 4 5) t (2 4) t (4 5) t nil nil (nil (1 2 3) t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5) (1 2 3 4 5) (1 2 3 4 5) t (2 4) t (4 5) t nil nil (nil (1 2 3) t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -182,10 +180,8 @@ fn oracle_prop_constraint_logic_adv_arc_consistency_propagation() {
     (fmakunbound 'neovm--cla-ac3-revise)
     (fmakunbound 'neovm--cla-ac3)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t (1 2 3 4 5) (2 3 4 5) (2 3 4 5 6))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t (1 2 3 4 5) (2 3 4 5) (2 3 4 5 6))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -293,10 +289,8 @@ fn oracle_prop_constraint_logic_adv_backtrack_with_propagation() {
     (fmakunbound 'neovm--cla-bt-search)
     (fmakunbound 'neovm--cla-bt-inner)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t ((a . 1) (b . 2) (c . 3)) (t t t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t ((a . 1) (b . 2) (c . 3)) (t t t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -396,7 +390,8 @@ fn oracle_prop_constraint_logic_adv_all_different_global() {
     (fmakunbound 'neovm--cla-alldiff-solve)
     (fmakunbound 'neovm--cla-alldiff-bt)))
 "#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -486,12 +481,10 @@ fn oracle_prop_constraint_logic_adv_linear_inequalities() {
     (fmakunbound 'neovm--cla-lin-bt)
     (fmakunbound 'neovm--cla-lin-env-get)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (11 (((c . 1) (b . 3) (a . 1)) ((c . 0) (b . 4) (a . 1)) ((c . 3) (b . 1) (a . 2))) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (11 (((c . 1) (b . 3) (a . 1)) ((c . 0) (b . 4) (a . 1)) ((c . 3) (b . 1) (a . 2))) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -581,12 +574,10 @@ fn oracle_prop_constraint_logic_adv_reification() {
     (fmakunbound 'neovm--cla-reify-solve)
     (fmakunbound 'neovm--cla-reify-bt)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (7 ((((y . 4) (x . 2)) nil t t) (((y . 2) (x . 3)) t nil t) (((y . 3) (x . 3)) nil t t) (((y . 4) (x . 3)) nil t t) (((y . 2) (x . 4)) t t t) (((y . 3) (x . 4)) t t t) (((y . 4) (x . 4)) nil t t)) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (7 ((((y . 4) (x . 2)) nil t t) (((y . 2) (x . 3)) t nil t) (((y . 3) (x . 3)) nil t t) (((y . 4) (x . 3)) nil t t) (((y . 2) (x . 4)) t t t) (((y . 3) (x . 4)) t t t) (((y . 4) (x . 4)) nil t t)) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -715,8 +706,6 @@ fn oracle_prop_constraint_logic_adv_branch_and_bound() {
     (fmakunbound 'neovm--cla-bb-solve)
     (fmakunbound 'neovm--cla-bb-inner)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (((c . 1) (b . 2) (a . 0)) 17 (10 t) t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (((c . 1) (b . 2) (a . 0)) 17 (10 t) t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_n3_checkdoc_clean_defun() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
@@ -20,13 +21,15 @@ fn div_n3_checkdoc_clean_defun() {
         (checkdoc-rogue-spaces 1 20)))
 "##,
         &["emacs-lisp/checkdoc.el"],
-        expect_test::expect![[r#""OK (t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_n3_custom_introspection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (wrong-type-argument symbolp \"probe-cust-var\")""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (progn
@@ -39,13 +42,16 @@ fn div_n3_custom_introspection() {
         (custom-unlispify-tag-name "probe-cust-var")))
 "##,
         &["cus-edit.el"],
-        expect_test::expect![[r#""ERR (wrong-type-argument symbolp \"probe-cust-var\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_n3_eldoc_argstring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/eldoc.el\")""#
+    ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (progn
@@ -55,15 +61,16 @@ fn div_n3_eldoc_argstring() {
         (help-function-arglist 'car)))
 "##,
         &["eldoc.el"],
-        expect_test::expect![[
-            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/eldoc.el\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_n3_find_func_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/find-func.el\")""#
+    ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (let ((buf (find-function-search-for-symbol 'car nil nil)))
@@ -71,15 +78,16 @@ fn div_n3_find_func_search() {
         (consp buf)))
 "##,
         &["find-func.el"],
-        expect_test::expect![[
-            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/find-func.el\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_n3_help_split_string_and_key() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (nil #(\"C-c C-d\" 0 7 (font-lock-face help-key-binding face help-key-binding)) t)""#
+    ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (help-split-fundoc "DOC BODY.\n(fn ARG1 ARG2)" nil)
@@ -87,8 +95,6 @@ fn div_n3_help_split_string_and_key() {
       (subrp (symbol-function 'car)))
 "##,
         &["help-fns.el"],
-        expect_test::expect![[
-            r#""OK (nil #(\"C-c C-d\" 0 7 (font-lock-face help-key-binding face help-key-binding)) t)""#
-        ]],
+        expect,
     );
 }

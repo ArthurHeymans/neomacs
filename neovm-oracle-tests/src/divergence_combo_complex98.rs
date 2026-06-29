@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx98_image_type_availability_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -19,13 +20,14 @@ fn div_cx98_image_type_availability_matrix() {
           (image-type-available-p 'tiff))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx98_image_metadata_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t image png \"non-existent.png\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -36,13 +38,14 @@ fn div_cx98_image_metadata_creation() {
             (plist-get (cdr img) :file)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t image png \"non-existent.png\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx98_image_size_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -53,13 +56,16 @@ fn div_cx98_image_size_query() {
             (image-size img)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored error)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx98_fringe_bitmap_availability_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((left-arrow 3) (right-arrow 4) (up-arrow 5) (down-arrow 6) (filled-square 20) (hollow-square 21) (left-triangle 10) (right-triangle 11) (question-mark 1) (exclamation-mark 2))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -70,15 +76,14 @@ fn div_cx98_fringe_bitmap_availability_matrix() {
               question-mark exclamation-mark))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK ((left-arrow 3) (right-arrow 4) (up-arrow 5) (down-arrow 6) (filled-square 20) (hollow-square 21) (left-triangle 10) (right-triangle 11) (question-mark 1) (exclamation-mark 2))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx98_fringe_bitmaps_at_pos() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -92,13 +97,14 @@ fn div_cx98_fringe_bitmaps_at_pos() {
   (list (get-text-property 5 'display)
         (get-text-property 7 'display)))
 "##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx98_svg_creation_simple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t image svg)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -112,13 +118,14 @@ fn div_cx98_svg_creation_simple() {
                   (plist-get (cdr xml) :type)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t image svg)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx98_image_scale_factor_and_multipliers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -127,13 +134,14 @@ fn div_cx98_image_scale_factor_and_multipliers() {
             (plist-get (cdr img) :scale)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t 2)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx98_image_format_available_p_per_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -144,13 +152,16 @@ fn div_cx98_image_format_available_p_per_format() {
           (fboundp 'image-animate))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx98_put_text_property_with_image_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((image :type png :file \"non-existent.png\" :scale default) nil nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -161,15 +172,14 @@ fn div_cx98_put_text_property_with_image_display() {
         (get-text-property 1 'display)
         (get-text-property 12 'display)))
 "##,
-        expect_test::expect![[
-            r#""OK ((image :type png :file \"non-existent.png\" :scale default) nil nil)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx98_image_animated_p_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t :err)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -178,13 +188,14 @@ fn div_cx98_image_animated_p_predicate() {
             (condition-case err (image-animated-p img) (error :err))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t :err)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx98_image_with_marker_overlay_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -212,6 +223,6 @@ fn div_cx98_image_with_marker_overlay_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     );
 }

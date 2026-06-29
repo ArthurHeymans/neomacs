@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_buffer_substring_prop_transfer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass content-block ()
@@ -71,7 +72,7 @@ fn combo_eieio_buffer_substring_prop_transfer() {
                 (buffer-string)
                 blocks))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -79,6 +80,7 @@ fn combo_eieio_buffer_substring_prop_transfer() {
 fn combo_eieio_substring_narrow_propagate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass snippet ()
@@ -142,7 +144,7 @@ fn combo_eieio_substring_narrow_propagate() {
                 (buffer-string)
                 snippets))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 6)""#]],
+        expect,
     );
 }
 
@@ -150,6 +152,7 @@ fn combo_eieio_substring_narrow_propagate() {
 fn combo_eieio_substring_object_as_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tagged-span ()
@@ -207,7 +210,7 @@ fn combo_eieio_substring_object_as_property() {
                 (buffer-string)
                 spans))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -215,6 +218,7 @@ fn combo_eieio_substring_object_as_property() {
 fn combo_eieio_substring_multibuf_transfer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass transfer-log ()
@@ -273,7 +277,7 @@ fn combo_eieio_substring_multibuf_transfer() {
                 tlogs))))
     (kill-buffer buf1)
     (kill-buffer buf2)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -281,6 +285,7 @@ fn combo_eieio_substring_multibuf_transfer() {
 fn combo_eieio_substring_undo_prop_restoration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable m)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass prop-snapshot ()
@@ -329,6 +334,6 @@ fn combo_eieio_substring_undo_prop_restoration() {
       (list (marker-position m) (overlay-start ov) (overlay-end ov) (buffer-string)
             snapshots))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-variable m)""#]],
+        expect,
     );
 }

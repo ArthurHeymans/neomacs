@@ -81,12 +81,10 @@ fn oracle_prop_bitset_fundamental_operations() {
     (fmakunbound 'neovm--bs-test)
     (fmakunbound 'neovm--bs-from-list)
     (fmakunbound 'neovm--bs-to-list)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((0 t nil) (1 nil t) (2 t nil) (3 nil t) (4 t nil) (5 nil t) (6 t nil) (7 nil t) (8 t nil) (9 nil t)) (0 2 4 6 8) (1 3 5 7 9) (5 10) (10) (2 4 6 8) (0 1 2 4 6 8))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((0 t nil) (1 nil t) (2 t nil) (3 nil t) (4 t nil) (5 nil t) (6 t nil) (7 nil t) (8 t nil) (9 nil t)) (0 2 4 6 8) (1 3 5 7 9) (5 10) (10) (2 4 6 8) (0 1 2 4 6 8))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -166,12 +164,10 @@ fn oracle_prop_bitset_set_operations() {
     (fmakunbound 'neovm--bs-intersection)
     (fmakunbound 'neovm--bs-difference)
     (fmakunbound 'neovm--bs-symmetric-diff)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 5 7 8 11 13) (2 3 5 13) (1 8) (7 11) (1 7 8 11) t t (0 1 2 3 4 5 7 8 9 11 13 16) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 5 7 8 11 13) (2 3 5 13) (1 8) (7 11) (1 7 8 11) t t (0 1 2 3 4 5 7 8 9 11 13 16) nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -219,12 +215,10 @@ fn oracle_prop_bitset_popcount() {
           (list (nreverse results) pc-a pc-b pc-and pc-or inclusion-exclusion)))
     (fmakunbound 'neovm--bs-popcount)
     (fmakunbound 'neovm--bs-popcount-kernighan)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((0 0 t) (1 1 t) (2 1 t) (3 2 t) (7 3 t) (8 1 t) (15 4 t) (16 1 t) (31 5 t) (32 1 t) (63 6 t) (64 1 t) (127 7 t) (128 1 t) (255 8 t) (256 1 t) (1023 10 t) (4095 12 t) (65535 16 t)) 4 4 2 6 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((0 0 t) (1 1 t) (2 1 t) (3 2 t) (7 3 t) (8 1 t) (15 4 t) (16 1 t) (31 5 t) (32 1 t) (63 6 t) (64 1 t) (127 7 t) (128 1 t) (255 8 t) (256 1 t) (1023 10 t) (4095 12 t) (65535 16 t)) 4 4 2 6 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -294,10 +288,8 @@ fn oracle_prop_bitset_subset_testing() {
     (fmakunbound 'neovm--bs-proper-subset-p)
     (fmakunbound 'neovm--bs-equal-p)
     (fmakunbound 'neovm--bs-disjoint-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil t t t t nil nil t nil t nil t (t t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil t t t t nil nil t nil t nil t (t t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -370,12 +362,10 @@ fn oracle_prop_bitset_power_set() {
     (fmakunbound 'neovm--bs-to-list)
     (fmakunbound 'neovm--bs-power-set)
     (fmakunbound 'neovm--bs-popcount)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t ((0 . 1) (1 . 4) (2 . 6) (3 . 4) (4 . 1)) nil (0) (0 1 2 3) 1)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t ((0 . 1) (1 . 4) (2 . 6) (3 . 4) (4 . 1)) nil (0) (0 1 2 3) 1)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -478,10 +468,8 @@ fn oracle_prop_bitset_manipulation_puzzles() {
     (fmakunbound 'neovm--bs-reverse-bits)
     (fmakunbound 'neovm--bs-to-gray)
     (fmakunbound 'neovm--bs-from-gray)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((lowest 0 0) (lowest 1 1) (lowest 2 2) (lowest 6 2) (lowest 12 4) (lowest 40 8) (lowest 128 128) (clear-low 1 0) (clear-low 6 4) (clear-low 12 8) (clear-low 15 14) (clear-low 128 0)) ((0) (1 . t) (2 . t) (3) (4 . t) (7) (8 . t) (15) (16 . t) (31) (32 . t) (64 . t) (100) (128 . t) (256 . t)) ((0 . 1) (1 . 1) (2 . 2) (3 . 4) (5 . 8) (7 . 8) (8 . 8) (9 . 16) (15 . 16) (16 . 16) (17 . 32) (100 . 128)) ((0 0) (1 128) (128 1) (170 85) (255 255) (85 170)) t (0 1 3 2 6 7 5 4))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((lowest 0 0) (lowest 1 1) (lowest 2 2) (lowest 6 2) (lowest 12 4) (lowest 40 8) (lowest 128 128) (clear-low 1 0) (clear-low 6 4) (clear-low 12 8) (clear-low 15 14) (clear-low 128 0)) ((0) (1 . t) (2 . t) (3) (4 . t) (7) (8 . t) (15) (16 . t) (31) (32 . t) (64 . t) (100) (128 . t) (256 . t)) ((0 . 1) (1 . 1) (2 . 2) (3 . 4) (5 . 8) (7 . 8) (8 . 8) (9 . 16) (15 . 16) (16 . 16) (17 . 32) (100 . 128)) ((0 0) (1 128) (128 1) (170 85) (255 255) (85 170)) t (0 1 3 2 6 7 5 4))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

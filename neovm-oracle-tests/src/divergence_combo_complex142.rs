@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx142_button_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -17,13 +18,14 @@ fn div_cx142_button_availability() {
             (fboundp 'button-activate)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx142_make_button_in_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -38,13 +40,14 @@ fn div_cx142_make_button_in_buffer() {
               (length (overlays-in 1 20)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx142_insert_button_creates_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -57,13 +60,14 @@ fn div_cx142_insert_button_creates_overlay() {
             (buttonp (button-at 1))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx142_browse_url_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -74,13 +78,14 @@ fn div_cx142_browse_url_availability() {
             (boundp 'browse-url-browser-function)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx142_goto_address_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -92,13 +97,14 @@ fn div_cx142_goto_address_mode() {
             (boundp 'goto-address-mail-face)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx142_ffap_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -109,13 +115,14 @@ fn div_cx142_ffap_availability() {
             (boundp 'ffap-url-regexp)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx142_thing_at_point_url_at_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"https://example.com/path\" (5 . 29) t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -126,13 +133,14 @@ fn div_cx142_thing_at_point_url_at_point() {
           (bounds-of-thing-at-point 'url)
           (stringp url))))
 "##,
-        expect_test::expect![[r#""OK (\"https://example.com/path\" (5 . 29) t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx142_thing_at_point_email() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"user@example.com\" t 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -143,13 +151,14 @@ fn div_cx142_thing_at_point_email() {
           (stringp email)
           (when email (string-match "@" email)))))
 "##,
-        expect_test::expect![[r#""OK (\"user@example.com\" t 4)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx142_thing_at_point_filename() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"/home/user/file.txt\" t (6 . 25))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -160,13 +169,14 @@ fn div_cx142_thing_at_point_filename() {
           (stringp fname)
           (bounds-of-thing-at-point 'filename))))
 "##,
-        expect_test::expect![[r#""OK (\"/home/user/file.txt\" t (6 . 25))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx142_button_next_previous() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -184,13 +194,14 @@ fn div_cx142_button_next_previous() {
                 (when b2 (button-start b2))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx142_link_overlay_face_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (link highlight \"Click to open\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -205,13 +216,14 @@ fn div_cx142_link_overlay_face_default() {
               (get-char-property 8 'help-echo))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (link highlight \"Click to open\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx142_button_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -240,6 +252,6 @@ fn div_cx142_button_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }

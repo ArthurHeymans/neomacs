@@ -26,12 +26,10 @@ fn oracle_prop_string_replace_basic_and_multiple() {
   (string-replace "a" "AAA" "abracadabra")
   ;; Replacement shorter than original
   (string-replace "abc" "x" "abcdefabcghi"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"hello Emacs\" \"f00 b00 m00\" \"hello world\" \"AAAbrAAAcAAAdAAAbrAAA\" \"xdefxghi\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"hello Emacs\" \"f00 b00 m00\" \"hello world\" \"AAAbrAAAcAAAdAAAbrAAA\" \"xdefxghi\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -55,10 +53,8 @@ fn oracle_prop_string_replace_empty_strings() {
   (string-replace "" "x" "")
   ;; Entire string is the match
   (string-replace "hello" "" "hello"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (wrong-length-argument 0)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-length-argument 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -80,12 +76,10 @@ fn oracle_prop_string_replace_case_and_special_chars() {
   (string-replace "\\" "/" "path\\to\\file")
   ;; Overlapping pattern: string-replace is non-greedy, left-to-right
   (string-replace "aa" "b" "aaaa"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"hello world\" \"line1 line2 line3\" \"one\ntwo\nthree\" \"path/to/file\" \"bb\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"hello world\" \"line1 line2 line3\" \"one\ntwo\nthree\" \"path/to/file\" \"bb\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -113,10 +107,8 @@ fn oracle_prop_string_search_all_params() {
   (string-search "he" "hello" 0)
   ;; Search at end of string
   (string-search "d" "world" 4))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (6 2 4 nil nil 3 0 4)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (6 2 4 nil nil 3 0 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -142,10 +134,8 @@ fn oracle_prop_string_search_edge_cases() {
   (string-search "Hello" "hello world")
   ;; START-POS equals length of string
   (string-search "" "abc" 3))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil 0 nil 0 0 nil 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil 0 nil 0 0 nil 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -171,12 +161,10 @@ fn oracle_prop_number_sequence_all_params() {
   (number-sequence 10 0 -2)
   ;; Large step that overshoots: still includes FROM
   (number-sequence 1 3 10))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4 5) (0 2 4 6 8 10) (1 4 7 10) (5) (10 9 8 7 6 5 4 3 2 1) (10 8 6 4 2 0) (1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5) (0 2 4 6 8 10) (1 4 7 10) (5) (10 9 8 7 6 5 4 3 2 1) (10 8 6 4 2 0) (1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -200,12 +188,10 @@ fn oracle_prop_number_sequence_float_and_edge_cases() {
   (number-sequence 7 7 0)
   ;; Descending with float step
   (number-sequence 1.0 0.0 -0.5))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0.0 0.25 0.5 0.75 1.0) (-5 -4 -3 -2 -1) (-3 -2 -1 0 1 2 3) (42) (7) (1.0 0.5 0.0))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0.0 0.25 0.5 0.75 1.0) (-5 -4 -3 -2 -1) (-3 -2 -1 0 1 2 3) (42) (7) (1.0 0.5 0.0))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -238,10 +224,8 @@ fn oracle_prop_string_search_substring_parsing() {
     (let ((input "name=Alice\nage=30\ncity=Boston\nactive=true"))
       (let ((lines (funcall split-lines input)))
         (mapcar parse-kv lines)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"name\" . \"Alice\") (\"age\" . \"30\") (\"city\" . \"Boston\") (\"active\" . \"true\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"name\" . \"Alice\") (\"age\" . \"30\") (\"city\" . \"Boston\") (\"active\" . \"true\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

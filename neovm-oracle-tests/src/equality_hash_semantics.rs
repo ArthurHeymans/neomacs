@@ -29,10 +29,8 @@ fn oracle_equal_ignores_string_properties_but_including_properties_checks_them()
     (propertize "abc" 'tag 'source 'face 'bold))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t nil nil t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t nil nil t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -63,10 +61,8 @@ fn oracle_equal_numeric_and_bool_vector_edges() {
    (equal a b)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil t t t nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil t t t nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -89,10 +85,8 @@ fn oracle_equal_handles_circular_lists_and_vectors() {
    (equal v1 (let ((v (vector 'y nil))) (aset v 1 v) v))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -124,10 +118,8 @@ fn oracle_equal_including_properties_recurses_through_cycles() {
    (equal-including-properties left-vector different-vector)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t nil t t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t nil t t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -151,10 +143,8 @@ fn oracle_sxhash_equal_invariants_for_properties_and_structures() {
    (= (sxhash-equal 0.0) (sxhash-equal -0.0))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t nil t nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t nil t nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -183,10 +173,8 @@ fn oracle_hash_table_equal_including_properties_test_respects_string_properties(
      (hash-table-count table))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (neomacs-oracle-eip-test bold missing 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (neomacs-oracle-eip-test bold missing 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -212,8 +200,7 @@ fn oracle_hash_table_tests_follow_eq_eql_equal_keys() {
    (hash-table-test equalh)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (missing eql-float eql-float equal-string eq eql equal)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (missing eql-float eql-float equal-string eq eql equal)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -18,12 +18,10 @@ fn oracle_wrapper_hook_macroexpansion_shape() {
     (list x y)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (let (runrestofhook) (setq runrestofhook (lambda (funs global args) (if (consp funs) (if (eq t (car funs)) (funcall runrestofhook (append global (cdr funs)) nil args) (apply (car funs) (apply-partially (lambda (funs global &rest args) (funcall runrestofhook funs global args)) (cdr funs) global) args)) (apply (lambda (x y) (list x y)) args)))) (funcall runrestofhook neovm--wwh-hook (if (local-variable-p 'neovm--wwh-hook) (default-value 'neovm--wwh-hook)) (list x y)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (let (runrestofhook) (setq runrestofhook (lambda (funs global args) (if (consp funs) (if (eq t (car funs)) (funcall runrestofhook (append global (cdr funs)) nil args) (apply (car funs) (apply-partially (lambda (funs global &rest args) (funcall runrestofhook funs global args)) (cdr funs) global) args)) (apply (lambda (x y) (list x y)) args)))) (funcall runrestofhook neovm--wwh-hook (if (local-variable-p 'neovm--wwh-hook) (default-value 'neovm--wwh-hook)) (list x y)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -66,10 +64,8 @@ fn oracle_wrapper_hook_order_reentry_and_replacement() {
         (nreverse log))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable hook)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable hook)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -105,8 +101,6 @@ fn oracle_wrapper_hook_local_t_splices_global_hook() {
       (makunbound 'neovm--wwh-hook))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable x)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable x)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

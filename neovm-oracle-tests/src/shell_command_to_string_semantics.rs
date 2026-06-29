@@ -19,12 +19,10 @@ fn oracle_prop_shell_command_to_string_basic_output_and_status() {
    (error err)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"alpha\nbeta\n\" \"kept\" (wrong-type-argument stringp 42))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"alpha\nbeta\n\" \"kept\" (wrong-type-argument stringp 42))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -37,7 +35,8 @@ fn oracle_prop_shell_command_to_string_respects_shell_variables() {
   (shell-command-to-string "abc"))
 "#;
 
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK \"neo:abc\"""#]]);
+    let expect = expect_test::expect![[r#""OK \"neo:abc\"""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -51,8 +50,7 @@ fn oracle_prop_shell_command_to_string_uses_current_default_directory() {
    (shell-command-to-string "pwd")))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"/tmp/nix-shell.XcUf3d/\" \"/tmp/nix-shell.XcUf3d\n\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (\"/tmp/nix-shell.XcUf3d/\" \"/tmp/nix-shell.XcUf3d\n\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

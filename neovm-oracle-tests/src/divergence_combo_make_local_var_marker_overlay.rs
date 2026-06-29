@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_make_local_var_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "mlv")))
@@ -38,7 +39,7 @@ fn combo_make_local_var_marker_overlay_undo() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -46,6 +47,7 @@ fn combo_make_local_var_marker_overlay_undo() {
 fn combo_make_local_var_narrow_clone_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "mlc")))
@@ -82,7 +84,7 @@ fn combo_make_local_var_narrow_clone_overlay() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -90,6 +92,7 @@ fn combo_make_local_var_narrow_clone_overlay() {
 fn combo_make_local_var_multi_buffer_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "mm1"))
@@ -134,7 +137,7 @@ fn combo_make_local_var_multi_buffer_overlay() {
           (list v mp s))))
     (kill-buffer b1)
     (kill-buffer b2)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -142,6 +145,7 @@ fn combo_make_local_var_multi_buffer_overlay() {
 fn combo_make_local_var_setq_default_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "mls")))
@@ -174,7 +178,7 @@ fn combo_make_local_var_setq_default_marker() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -182,6 +186,7 @@ fn combo_make_local_var_setq_default_marker() {
 fn combo_make_local_var_overlay_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "mlo")))
@@ -215,6 +220,6 @@ fn combo_make_local_var_overlay_narrow_undo() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

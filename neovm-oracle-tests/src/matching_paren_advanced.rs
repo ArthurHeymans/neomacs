@@ -38,10 +38,8 @@ fn oracle_prop_matching_paren_all_standard_brackets() {
    (= ?\( (matching-paren (matching-paren ?\()))
    (= ?\[ (matching-paren (matching-paren ?\[)))
    (= ?{ (matching-paren (matching-paren ?{)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (41 40 93 91 125 123 t t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (41 40 93 91 125 123 t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -85,12 +83,10 @@ fn oracle_prop_matching_paren_nil_for_non_brackets() {
    (null (matching-paren ?a))
    (null (matching-paren ?.))
    (null (matching-paren ?\"))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -130,10 +126,8 @@ fn oracle_prop_matching_paren_custom_brackets_via_modify_syntax() {
      ;; Verify types
      (characterp (matching-paren ?<))
      (null (matching-paren ?@)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (62 60 125 41 40 93 91 nil t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (62 60 125 41 40 93 91 nil t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -188,12 +182,10 @@ fn oracle_prop_matching_paren_combined_with_char_syntax() {
          (= (char-syntax ?>) ?\))
          ;; Full result list for deterministic comparison
          verification)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t t t t t t t ((40 41 40 t t) (41 40 41 t t) (91 93 40 t t) (93 91 41 t t) (123 125 40 t t) (125 123 41 t t) (60 62 40 t t) (62 60 41 t t) (97 nil 119 nil t) (122 nil 119 nil t) (48 nil 119 nil t) (32 nil 32 nil t) (46 nil 46 nil t) (44 nil 46 nil t) (43 nil 95 nil t) (45 nil 95 nil t) (34 nil 34 nil t)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t t t t t t t ((40 41 40 t t) (41 40 41 t t) (91 93 40 t t) (93 91 41 t t) (123 125 40 t t) (125 123 41 t t) (60 62 40 t t) (62 60 41 t t) (97 nil 119 nil t) (122 nil 119 nil t) (48 nil 119 nil t) (32 nil 32 nil t) (46 nil 46 nil t) (44 nil 46 nil t) (43 nil 95 nil t) (45 nil 95 nil t) (34 nil 34 nil t)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -245,10 +237,9 @@ fn oracle_prop_matching_paren_buffer_local_syntax_tables() {
      ;; Standard parens work in both
      (characterp (nth 2 result-with))
      (characterp (nth 2 result-without)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((62 60 41 40 41) (nil nil 41 46 46) t t t t t t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((62 60 41 40 41) (nil nil 41 46 46) t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -290,10 +281,8 @@ fn oracle_prop_matching_paren_unicode_brackets() {
      (= (matching-paren 12301) 12300)
      (= (matching-paren 65288) 65289)
      (= (matching-paren 65289) 65288))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (49 49 49 49 54 54 nil nil nil nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (49 49 49 49 54 54 nil nil nil nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -357,8 +346,6 @@ fn oracle_prop_matching_paren_bracket_matcher() {
        (funcall 'neovm--test-brackets-balanced-p "<{>}")
        (funcall 'neovm--test-brackets-balanced-p "}{"))
     (fmakunbound 'neovm--test-brackets-balanced-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t t nil nil nil nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t nil nil nil nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

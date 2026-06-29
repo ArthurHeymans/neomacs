@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_buflocal_narrow_eval_closure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-blne-xxx 0)
@@ -30,7 +31,7 @@ fn divergence_buflocal_narrow_eval_closure() {
               (= v4 100)
               (= v5 42)
               (= v6 42))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -38,6 +39,7 @@ fn divergence_buflocal_narrow_eval_closure() {
 fn divergence_let_shadow_buflocal_eval_sequence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (10 t (20 t 30 t) t 10 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-lsb-xxx 0)
@@ -54,7 +56,7 @@ fn divergence_let_shadow_buflocal_eval_sequence() {
         (= (eval 'test-lsb-xxx) 10)
         test-lsb-xxx
         (= test-lsb-xxx 10))) "#,
-        expect_test::expect![[r#""OK (10 t (20 t 30 t) t 10 t)""#]],
+        expect,
     );
 }
 
@@ -62,6 +64,7 @@ fn divergence_let_shadow_buflocal_eval_sequence() {
 fn divergence_buflocal_kill_buffer_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (10 99 t t 10 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-bkr-xxx 0)
@@ -78,7 +81,7 @@ fn divergence_buflocal_kill_buffer_restore() {
             (= v1 10) (= v2 99)
             test-bkr-xxx
             (= test-bkr-xxx 10))))) "#,
-        expect_test::expect![[r#""OK (10 99 t t 10 t)""#]],
+        expect,
     );
 }
 
@@ -86,6 +89,7 @@ fn divergence_buflocal_kill_buffer_restore() {
 fn divergence_closure_over_buflocal_with_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-cbm-xxx 0)
@@ -107,7 +111,7 @@ fn divergence_closure_over_buflocal_with_marker() {
               (= test-cbm-xxx 5)
               (marker-position m)
               (> (marker-position m) 5))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -115,6 +119,7 @@ fn divergence_closure_over_buflocal_with_marker() {
 fn divergence_default_value_vs_buflocal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-dvb-xxx 42)
@@ -132,7 +137,7 @@ fn divergence_default_value_vs_buflocal() {
               (= (car result) 100)
               (numberp default)
               (= (nth 2 result) 200))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -140,6 +145,7 @@ fn divergence_default_value_vs_buflocal() {
 fn divergence_narrowed_eval_with_closures_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-nen-xxx 'outer)
@@ -158,7 +164,7 @@ fn divergence_narrowed_eval_with_closures_nested() {
               (eq v1 'outer)
               (eq (car result2) 'inner)
               (eq v2 'outer))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -166,6 +172,7 @@ fn divergence_narrowed_eval_with_closures_nested() {
 fn divergence_buflocal_with_set_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-sd-xxx 0)
@@ -183,7 +190,7 @@ fn divergence_buflocal_with_set_default() {
             (= v1 10)
             (= v2 20)
             (= dv 999)))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -191,6 +198,7 @@ fn divergence_buflocal_with_set_default() {
 fn divergence_closure_capture_with_eval_redefinition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-cer-xxx 1)
@@ -205,7 +213,7 @@ fn divergence_closure_capture_with_eval_redefinition() {
           (= test-cer-xxx 999)
           (eval 'test-cer-xxx)
           (= (eval 'test-cer-xxx) 999))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -213,6 +221,7 @@ fn divergence_closure_capture_with_eval_redefinition() {
 fn divergence_buflocal_with_undo_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""HEXXLLOERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-bui-xxx 0)
@@ -235,7 +244,7 @@ fn divergence_buflocal_with_undo_insert() {
             (buffer-string)
             (overlay-get ov 'val)
             (= (overlay-get ov 'val) 42))))) "#,
-        expect_test::expect![[r#""HEXXLLOERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -243,6 +252,7 @@ fn divergence_buflocal_with_undo_insert() {
 fn divergence_multiple_buflocal_vars_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-mbi-a-xxx 0)
@@ -270,6 +280,6 @@ fn divergence_multiple_buflocal_vars_interaction() {
             (= test-mbi-a-xxx 1)
             (= test-mbi-b-xxx 2)
             (= test-mbi-c-xxx 3)))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

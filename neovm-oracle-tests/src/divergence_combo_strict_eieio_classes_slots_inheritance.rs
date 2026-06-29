@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_g2_eieio_basic_slots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (10 \"y\" 1 \"x\" 10 t t 99)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -26,13 +27,14 @@ fn div_g2_eieio_basic_slots() {
           (slot-boundp o 'a)
           (progn (oset o a 99) (oref o a)))))
 "##,
-        expect_test::expect![[r#""OK (10 \"y\" 1 \"x\" 10 t t 99)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_g2_eieio_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 6 t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -46,13 +48,14 @@ fn div_g2_eieio_inheritance() {
           (child-of-class-p 'probe-eieio-child 'probe-eieio-base)
           (eq (eieio-object-class o) 'probe-eieio-child))))
 "##,
-        expect_test::expect![[r#""OK (5 6 t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_g2_eieio_initforms() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 (1 2 3) 3 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -66,13 +69,14 @@ fn div_g2_eieio_initforms() {
           (length (oref o b))
           (slot-boundp o 'c))))
 "##,
-        expect_test::expect![[r#""OK (3 (1 2 3) 3 t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_g2_eieio_predicates_and_class() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -84,13 +88,14 @@ fn div_g2_eieio_predicates_and_class() {
           (class-p 'probe-eieio-3)
           (cl-typep o 'probe-eieio-3))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_g2_eieio_class_slot_allocation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 5 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -103,6 +108,6 @@ fn div_g2_eieio_class_slot_allocation() {
           (oref o2 shared)
           (oref-default o1 shared))))
 "##,
-        expect_test::expect![[r#""OK (5 5 5)""#]],
+        expect,
     );
 }

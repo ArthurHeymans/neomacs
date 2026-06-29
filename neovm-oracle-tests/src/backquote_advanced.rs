@@ -20,10 +20,8 @@ fn oracle_prop_backquote_nested_two_levels() {
     let form = r#"(let ((x 1) (y 2))
                     (let ((template `(list ,x `(+ ,,y 3))))
                       (list template (eval (eval template)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""ERR (invalid-function 1)""#],
-    );
+    let expect = expect_test::expect![r#""ERR (invalid-function 1)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -36,27 +34,33 @@ fn oracle_prop_backquote_splice_positions() {
 
     // Splice at beginning
     let form = "(let ((xs '(1 2 3))) `(,@xs 4 5))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (1 2 3 4 5)""#]);
+    let expect = expect_test::expect![r#""OK (1 2 3 4 5)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Splice at end
     let form = "(let ((xs '(4 5 6))) `(1 2 3 ,@xs))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (1 2 3 4 5 6)""#]);
+    let expect = expect_test::expect![r#""OK (1 2 3 4 5 6)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Splice in middle
     let form = "(let ((xs '(b c d))) `(a ,@xs e))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (a b c d e)""#]);
+    let expect = expect_test::expect![r#""OK (a b c d e)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Splice as sole contents
     let form = "(let ((xs '(x y z))) `(,@xs))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (x y z)""#]);
+    let expect = expect_test::expect![r#""OK (x y z)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Multiple splices adjacent
     let form = "(let ((a '(1 2)) (b '()) (c '(3))) `(,@a ,@b ,@c))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (1 2 3)""#]);
+    let expect = expect_test::expect![r#""OK (1 2 3)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Splice of nil (empty) in various positions
     let form = "(let ((e nil)) `(a ,@e b ,@e c))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (a b c)""#]);
+    let expect = expect_test::expect![r#""OK (a b c)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -77,7 +81,8 @@ fn oracle_prop_backquote_construct_defun() {
                         (list (funcall fname 10 20)
                               (funcall fname -3 7))
                       (fmakunbound fname)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (30 4)""#]);
+    let expect = expect_test::expect![r#""OK (30 4)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +110,8 @@ fn oracle_prop_backquote_macro_expansion_pipeline() {
                            (neovm--test-bq-pipe 3 inc double)       ;; (3+1)*2 = 8
                            (neovm--test-bq-pipe 2 double double square))) ;; ((2*2)*2)^2 = 64
                       (fmakunbound 'neovm--test-bq-pipe)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (7 8 64)""#]);
+    let expect = expect_test::expect![r#""OK (7 8 64)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -122,30 +128,24 @@ fn oracle_prop_backquote_computed_splice_mapcar() {
                     `(let ,(mapcar (lambda (v val) (list v val))
                                    vars vals)
                        (+ a b c)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""ERR (wrong-number-of-arguments mapcar 3)""#],
-    );
+    let expect = expect_test::expect![r#""ERR (wrong-number-of-arguments mapcar 3)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // mapcar producing forms to splice into progn
     let form = r#"(let ((names '(x y z))
                         (values '(10 20 30)))
                     `(progn ,@(mapcar (lambda (n v) `(setq ,n ,v))
                                       names values)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""ERR (wrong-number-of-arguments mapcar 3)""#],
-    );
+    let expect = expect_test::expect![r#""ERR (wrong-number-of-arguments mapcar 3)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Eval the generated let form to verify correctness end-to-end
     let form = r#"(let ((vars '(a b c))
                         (vals '(10 20 30)))
                     (eval `(let ,(mapcar #'list vars vals)
                              (list a b c))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""ERR (wrong-number-of-arguments mapcar 3)""#],
-    );
+    let expect = expect_test::expect![r#""ERR (wrong-number-of-arguments mapcar 3)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -159,26 +159,20 @@ fn oracle_prop_backquote_nested_inner_quote() {
     // Inner backquote stays quoted; outer comma substitutes
     let form = r#"(let ((x 'hello))
                     `(a ,x `(b ,x)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (a hello `(b ,x))""#],
-    );
+    let expect = expect_test::expect![r#""OK (a hello `(b ,x))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // With a function call producing the inner value
     let form = r#"(let ((x 5))
                     `(outer ,x ,(+ x 1) `(inner ,,x)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (outer 5 6 `(inner ,5))""#],
-    );
+    let expect = expect_test::expect![r#""OK (outer 5 6 `(inner ,5))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Triple nesting pattern
     let form = r#"(let ((a 1))
                     `(level1 ,a `(level2 ,a ,,a `(level3 ,a ,,a))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (level1 1 `(level2 ,a ,1 `(level3 ,a ,,a)))""#],
-    );
+    let expect = expect_test::expect![r#""OK (level1 1 `(level2 ,a ,1 `(level3 ,a ,,a)))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -198,10 +192,8 @@ fn oracle_prop_backquote_generate_let_from_alist() {
                                          bindings)
                               ,@body-forms)))
                       (list let-form (eval let-form))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((let ((x 10) (y 20) (z 30)) (+ x y z)) 60)""#],
-    );
+    let expect = expect_test::expect![r#""OK ((let ((x 10) (y 20) (z 30)) (+ x y z)) 60)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -239,10 +231,8 @@ fn oracle_prop_backquote_code_rewriter() {
                           '(neovm--test-bq-cond-let ((x 10) (y 20))
                             (list x y))))
                       (fmakunbound 'neovm--test-bq-cond-let)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (6 (let ((x 10) (y 20)) (unless x (error \"binding %s is nil\" 'x)) (unless y (error \"binding %s is nil\" 'y)) (list x y)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (6 (let ((x 10) (y 20)) (unless x (error \"binding %s is nil\" 'x)) (unless y (error \"binding %s is nil\" 'y)) (list x y)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

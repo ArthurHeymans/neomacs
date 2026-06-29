@@ -69,10 +69,8 @@ fn oracle_file_mode_symbolic_conversion_helpers() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((2496 1080 519 4095) (error (\"z: Bad ‘who’ character\")) (292 146 73 3072 512 0 73 2847 9709 37741) (error (\"q: Bad right character\")) (365 447 416 416) (\"----------\" \"-rw-r--r--\" \"-rwxr-xr-x\" \"-rws------\" \"-rwxr-s---\" \"-rwxr-xr-t\" \"drwxr-xr-x\" \"lrwxrwxrwx\" \"srwxrwxrwx\") (\"drwxr-xr-x\" \"lrwxr-xr-x\") (wrong-type-argument (integerp \"bad\")) (420 420 493 2523 457 2047) (error (\"Parse error in modes near ‘q’\")) (wrong-type-argument (stringp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((2496 1080 519 4095) (error (\"z: Bad ‘who’ character\")) (292 146 73 3072 512 0 73 2847 9709 37741) (error (\"q: Bad right character\")) (365 447 416 416) (\"----------\" \"-rw-r--r--\" \"-rwxr-xr-x\" \"-rws------\" \"-rwxr-s---\" \"-rwxr-xr-t\" \"drwxr-xr-x\" \"lrwxrwxrwx\" \"srwxrwxrwx\") (\"drwxr-xr-x\" \"lrwxr-xr-x\") (wrong-type-argument (integerp \"bad\")) (420 420 493 2523 457 2047) (error (\"Parse error in modes near ‘q’\")) (wrong-type-argument (stringp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

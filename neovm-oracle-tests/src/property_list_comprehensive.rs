@@ -47,12 +47,10 @@ fn oracle_prop_plist_get_all_key_types() {
       ;; Empty plist
       (plist-get nil :a)
       (plist-get '() 'x))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (1 2 3 nil 10 20 30 nil \"one\" \"two\" \"three\" nil nil nil \"alpha\" \"beta\" nil \"yes\" 42 nil nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (1 2 3 nil 10 20 30 nil \"one\" \"two\" \"three\" nil nil nil \"alpha\" \"beta\" nil \"yes\" 42 nil nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -101,12 +99,10 @@ fn oracle_prop_plist_put_comprehensive() {
                           (plist-put nil :z 99)
                           ;; plist-put returns the plist
                           (plist-get (plist-put '(:w 1) :w 2) :w)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:a 1 :b 2 :c 3) (:a 100 :b 200 :c 300) \"now-a-string\" nil (now a list) 4 (:b nil :c (now a list) :d 4) 5 2 (:z 99) 2)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:a 1 :b 2 :c 3) (:a 100 :b 200 :c 300) \"now-a-string\" nil (now a list) 4 (:b nil :c (now a list) :d 4) 5 2 (:z 99) 2)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -141,12 +137,10 @@ fn oracle_prop_plist_member_comprehensive() {
                      ;; Length of tail
                      (length (plist-member pl :a))
                      (length (plist-member pl :d))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:a 1 :b 2 :c 3 :d 4) (:b 2 :c 3 :d 4) (:c 3 :d 4) (:d 4) nil 3 (:c 3 :d 4) ((:present nil :after 42) nil exists absent) nil 8 2)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:a 1 :b 2 :c 3 :d 4) (:b 2 :c 3 :d 4) (:c 3 :d 4) (:d 4) nil 3 (:c 3 :d 4) ((:present nil :after 42) nil exists absent) nil 8 2)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -181,12 +175,10 @@ fn oracle_prop_plist_custom_predicate() {
       ;; Using eql predicate (default-like, but explicit)
       (plist-get '(1 "one" 2 "two") 1 #'eql)
       (plist-get '(1 "one" 2 "two") 2 #'eql))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Alice\" 30 \"NYC\" nil \"pair-12\" \"pair-34\" nil 20 (\"prod.example.com\" 8080 4) (\"b\" 2 \"c\" 3) \"one\" \"two\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Alice\" 30 \"NYC\" nil \"pair-12\" \"pair-34\" nil 20 (\"prod.example.com\" 8080 4) (\"b\" 2 \"c\" 3) \"one\" \"two\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -243,12 +235,10 @@ fn oracle_prop_symbol_plist_operations() {
 
             (nreverse results))
         (setplist 'neovm--pltest-sym nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil (red 42 (a b c) \"test-sym\") nil 999 blue 42 (nil new-val) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil (red 42 (a b c) \"test-sym\") nil 999 blue 42 (nil new-val) nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -296,10 +286,8 @@ fn oracle_prop_multiple_symbol_plists() {
         (setplist 'neovm--pltest-a nil)
         (setplist 'neovm--pltest-b nil)
         (setplist 'neovm--pltest-c nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (100 200 300 nil nil (1 2 3) (100 nil 300))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (100 200 300 nil nil (1 2 3) (100 nil 300))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -341,10 +329,8 @@ fn oracle_prop_large_plist_operations() {
          (dotimes (i 10)
            (setq sum (+ sum (plist-get pl (intern (format ":k%d" i))))))
          sum)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (200 0 49 99 nil t t nil 9999 100 45)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (200 0 49 99 nil t t nil 9999 100 45)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -387,12 +373,10 @@ fn oracle_prop_nested_plist_deep_access() {
                      (plist-get (plist-get config :server) :nonexistent)
                      ;; Missing top-level key
                      (plist-get config :missing)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:host \"localhost\" :port 3000 :ssl (:enabled t :cert \"/etc/ssl/cert.pem\" :key \"/etc/ssl/key.pem\")) (:level :info :outputs (:file \"/var/log/app.log\" :console t)) \"localhost\" 3000 \"db.local\" 5432 t \"/etc/ssl/cert.pem\" 5 20 30 \"/var/log/app.log\" t nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:host \"localhost\" :port 3000 :ssl (:enabled t :cert \"/etc/ssl/cert.pem\" :key \"/etc/ssl/key.pem\")) (:level :info :outputs (:file \"/var/log/app.log\" :console t)) \"localhost\" 3000 \"db.local\" 5432 t \"/etc/ssl/cert.pem\" 5 20 30 \"/var/log/app.log\" t nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -456,12 +440,10 @@ fn oracle_prop_plist_iteration_while_loop() {
                          (setq count (1+ count))
                          (setq rest (cddr rest)))
                        count)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:name :age :city :score :rank :active) (\"Bob\" 25 \"NYC\" 92 3 t) ((:name . \"Bob\") (:age . 25) (:city . \"NYC\") (:score . 92) (:rank . 3) (:active . t)) 6 (:age :score :rank) 120 ((:name . \"Bob\") (:city . \"NYC\")) 0)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:name :age :city :score :rank :active) (\"Bob\" 25 \"NYC\" 92 3 t) ((:name . \"Bob\") (:age . 25) (:city . \"NYC\") (:score . 92) (:rank . 3) (:active . t)) 6 (:age :score :rank) 120 ((:name . \"Bob\") (:city . \"NYC\")) 0)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -502,12 +484,10 @@ fn oracle_prop_plist_alist_conversion() {
                        ;; Conversion preserves order
                        (funcall plist-to-alist '(:first 1 :second 2 :third 3))
                        (funcall alist-to-plist '((:first . 1) (:second . 2) (:third . 3))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((:x . 1) (:y . 2) (:z . 3)) (:a 10 :b 20 :c 30) t t nil nil ((:first . 1) (:second . 2) (:third . 3)) (:first 1 :second 2 :third 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((:x . 1) (:y . 2) (:z . 3)) (:a 10 :b 20 :c 30) t t nil nil ((:first . 1) (:second . 2) (:third . 3)) (:first 1 :second 2 :third 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -571,12 +551,10 @@ fn oracle_prop_plist_merge_patterns() {
                        (funcall plist-remove '(:x 1 :y 2 :z 3) :y)
                        (funcall plist-remove '(:x 1 :y 2 :z 3) :z)
                        (funcall plist-remove '(:x 1 :y 2 :z 3) :w))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:a 1 :b 20 :c 30 :d 4 :e 50 :f 60) (:a 1 :b 2 :c 3 :d 4) (:b 20 :c 30 :e 50 :f 60) (:a 1 :b 22 :c 33 :d 4 :e 50 :f 60) (:a 1 :b 2 :c 3 :d 4 :e 50 :f 60) (:a 1 :b (2 20) :c (3 30) :d 4 :e 50 :f 60) (:y 2 :z 3) (:x 1 :z 3) (:x 1 :y 2) (:x 1 :y 2 :z 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:a 1 :b 20 :c 30 :d 4 :e 50 :f 60) (:a 1 :b 2 :c 3 :d 4) (:b 20 :c 30 :e 50 :f 60) (:a 1 :b 22 :c 33 :d 4 :e 50 :f 60) (:a 1 :b 2 :c 3 :d 4 :e 50 :f 60) (:a 1 :b (2 20) :c (3 30) :d 4 :e 50 :f 60) (:y 2 :z 3) (:x 1 :z 3) (:x 1 :y 2) (:x 1 :y 2 :z 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -616,12 +594,10 @@ fn oracle_prop_plist_config_store() {
                        (funcall plist-get-or config :width 80)
                        ;; Full config
                        config)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (120 :dark 14 24 t 4 120 (:width 120 :height 24 :color t :font-size 14 :theme :dark))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (120 :dark 14 24 t 4 120 (:width 120 :height 24 :color t :font-size 14 :theme :dark))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -649,10 +625,9 @@ fn oracle_prop_cl_getf_with_default() {
        (cl-getf nil :any 'empty-default)
        ;; cl-getf without explicit default (defaults to nil)
        (cl-getf '(:a 1) :missing)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 2 3 default-val 42 \"fallback\" nil empty-default nil)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (1 2 3 default-val 42 \"fallback\" nil empty-default nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -694,10 +669,8 @@ fn oracle_prop_plist_equality_check() {
                      (funcall plist-equal-p
                               '(:data (1 2 3) :nested (:x 1))
                               '(:nested (:x 1) :data (1 2 3)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t nil nil nil t nil t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t nil nil nil t nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -743,10 +716,8 @@ fn oracle_prop_plist_event_registry() {
                      (funcall handler-count :click)
                      (funcall handler-count :hover)
                      (funcall handler-count :scroll)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable registry)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable registry)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -807,10 +778,8 @@ fn oracle_prop_plist_select_reject_transform() {
                        ;; Map values: stringify
                        (funcall plist-map-values '(:a 1 :b 2)
                                 (lambda (v) (format "%d" v))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:a 1 :c 3 :e 5) (:b 2 :d 4) nil nil (:b 2 :d 4) (:a 1 :c 3 :e 5) (:a 1 :b 2 :c 3 :d 4 :e 5) (:x 20 :y 40 :z 60) (:a \"1\" :b \"2\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:a 1 :c 3 :e 5) (:b 2 :d 4) nil nil (:b 2 :d 4) (:a 1 :c 3 :e 5) (:a 1 :b 2 :c 3 :d 4 :e 5) (:x 20 :y 40 :z 60) (:a \"1\" :b \"2\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

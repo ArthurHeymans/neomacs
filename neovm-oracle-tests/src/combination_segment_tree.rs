@@ -76,10 +76,8 @@ fn oracle_prop_segment_tree_build_and_range_sum() {
           (funcall 'neovm--st-query-sum st 6 7))) ;; 28
     (fmakunbound 'neovm--st-build)
     (fmakunbound 'neovm--st-query-sum)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (64 1 7 15 16 48 32 48 4 28)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (64 1 7 15 16 48 32 48 4 28)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -169,10 +167,8 @@ fn oracle_prop_segment_tree_point_update() {
     (fmakunbound 'neovm--st2-build)
     (fmakunbound 'neovm--st2-update)
     (fmakunbound 'neovm--st2-query)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (150 220 100 130 210 0 161 41 103)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (150 220 100 130 210 0 161 41 103)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -263,10 +259,8 @@ fn oracle_prop_segment_tree_range_minimum() {
     (fmakunbound 'neovm--stmin-build)
     (fmakunbound 'neovm--stmin-query)
     (fmakunbound 'neovm--stmin-update)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 5 1 1 3 2 3 1 2 2 3 0 0)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 5 1 1 3 2 3 1 2 2 3 0 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -388,10 +382,8 @@ fn oracle_prop_segment_tree_lazy_propagation() {
     (fmakunbound 'neovm--stlazy-push)
     (fmakunbound 'neovm--stlazy-range-add)
     (fmakunbound 'neovm--stlazy-query-sum)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (36 76 58 3 15 116 33 110 6 13)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (36 76 58 3 15 116 33 110 6 13)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -477,10 +469,8 @@ fn oracle_prop_segment_tree_merge() {
     (fmakunbound 'neovm--stm-build)
     (fmakunbound 'neovm--stm-query)
     (fmakunbound 'neovm--stm-merge)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (15 150 165 11 33 66 99 99 (30 2 24))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (15 150 165 11 33 66 99 99 (30 2 24))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -566,10 +556,8 @@ fn oracle_prop_segment_tree_range_max_query() {
     (fmakunbound 'neovm--stmax-build)
     (fmakunbound 'neovm--stmax-query)
     (fmakunbound 'neovm--stmax-update)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (9 5 9 9 3 5 6 5 100 100 6)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (9 5 9 9 3 5 6 5 100 100 6)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -659,8 +647,6 @@ fn oracle_prop_segment_tree_frequency_counting() {
     (fmakunbound 'neovm--stf-create)
     (fmakunbound 'neovm--stf-add)
     (fmakunbound 'neovm--stf-count-range)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (15 4 9 4 2 7 0 0 (5 1 1 18))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (15 4 9 4 2 7 0 0 (5 1 1 18))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

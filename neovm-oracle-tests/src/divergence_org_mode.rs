@@ -16,6 +16,7 @@ fn org(form: &str) {
 fn div_org_element_parse_root_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     org("");
+    let expect = expect_test::expect![[r#""OK (org-data 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -27,7 +28,7 @@ fn div_org_element_parse_root_type() {
       (list (org-element-type tree)
             (length (org-element-contents tree))))))
 "##,
-        expect_test::expect![[r#""OK (org-data 1)""#]],
+        expect,
     );
 }
 
@@ -35,6 +36,7 @@ fn div_org_element_parse_root_type() {
 fn div_org_headline_raw_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     org("");
+    let expect = expect_test::expect![[r#""OK \"Buy milk\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -45,7 +47,7 @@ fn div_org_headline_raw_value() {
     (let ((hl (org-element-at-point)))
       (org-element-property :raw-value hl))))
 "##,
-        expect_test::expect![[r#""OK \"Buy milk\"""#]],
+        expect,
     );
 }
 
@@ -53,6 +55,7 @@ fn div_org_headline_raw_value() {
 fn div_org_headline_todo_keyword_level() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     org("");
+    let expect = expect_test::expect![[r#""OK (\"DONE\" done 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -65,7 +68,7 @@ fn div_org_headline_todo_keyword_level() {
             (org-element-property :todo-type hl)
             (org-element-property :level hl)))))
 "##,
-        expect_test::expect![[r#""OK (\"DONE\" done 2)""#]],
+        expect,
     );
 }
 
@@ -73,6 +76,7 @@ fn div_org_headline_todo_keyword_level() {
 fn div_org_headline_tags_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     org("");
+    let expect = expect_test::expect![[r#""OK (65 (\"tag1\" \"tag2\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -84,7 +88,7 @@ fn div_org_headline_tags_priority() {
       (list (org-element-property :priority hl)
             (org-element-property :tags hl)))))
 "##,
-        expect_test::expect![[r#""OK (65 (\"tag1\" \"tag2\"))""#]],
+        expect,
     );
 }
 
@@ -92,6 +96,8 @@ fn div_org_headline_tags_priority() {
 fn div_org_link_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     org("");
+    let expect =
+        expect_test::expect![[r#""OK (\"https\" \"//example.com\" \"https://example.com\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -105,7 +111,7 @@ fn div_org_link_parse() {
             (org-element-property :path link)
             (org-element-property :raw-link link)))))
 "##,
-        expect_test::expect![[r#""OK (\"https\" \"//example.com\" \"https://example.com\")""#]],
+        expect,
     );
 }
 
@@ -113,6 +119,7 @@ fn div_org_link_parse() {
 fn div_org_src_block_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     org("");
+    let expect = expect_test::expect![[r#""OK (\"emacs-lisp\" \"(+ 1 2)\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -125,7 +132,7 @@ fn div_org_src_block_parse() {
         (lambda (b) (list (org-element-property :language b)
                           (org-element-property :value b))) nil t))))
 "##,
-        expect_test::expect![[r#""OK (\"emacs-lisp\" \"(+ 1 2)\n\")""#]],
+        expect,
     );
 }
 
@@ -133,6 +140,7 @@ fn div_org_src_block_parse() {
 fn div_org_table_align() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     org("");
+    let expect = expect_test::expect![[r#""OK \"| a | b |\n| 1 | 2 |\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -143,7 +151,7 @@ fn div_org_table_align() {
     (org-table-align)
     (buffer-substring-no-properties (point-min) (point-max))))
 "##,
-        expect_test::expect![[r#""OK \"| a | b |\n| 1 | 2 |\n\"""#]],
+        expect,
     );
 }
 
@@ -151,6 +159,7 @@ fn div_org_table_align() {
 fn div_org_fontify_bold() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     org("");
+    let expect = expect_test::expect![[r#""OK (bold)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -161,7 +170,7 @@ fn div_org_fontify_bold() {
     (font-lock-fontify-buffer)
     (get-text-property 1 'face)))
 "##,
-        expect_test::expect![[r#""OK (bold)""#]],
+        expect,
     );
 }
 
@@ -169,6 +178,7 @@ fn div_org_fontify_bold() {
 fn div_org_property_drawer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     org("");
+    let expect = expect_test::expect![[r#""OK ((\"KEY\" \"value\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -180,7 +190,7 @@ fn div_org_property_drawer() {
       (lambda (p) (list (org-element-property :key p)
                         (org-element-property :value p))) nil)))
 "##,
-        expect_test::expect![[r#""OK ((\"KEY\" \"value\"))""#]],
+        expect,
     );
 }
 
@@ -188,6 +198,7 @@ fn div_org_property_drawer() {
 fn div_org_itemize_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     org("");
+    let expect = expect_test::expect![[r#""OK (\"- \" \"- \" \"- \")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -199,7 +210,7 @@ fn div_org_itemize_list() {
       (org-element-map tree 'item
         (lambda (i) (org-element-property :bullet i)) nil))))
 "##,
-        expect_test::expect![[r#""OK (\"- \" \"- \" \"- \")""#]],
+        expect,
     );
 }
 
@@ -207,6 +218,7 @@ fn div_org_itemize_list() {
 fn div_org_map_entries_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     org("");
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp buffer)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -216,7 +228,7 @@ fn div_org_map_entries_count() {
     (org-mode)
     (let (n) (org-map-entries (lambda () (setq n (1+ n))) nil 'buffer) n)))
 "##,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp buffer)""#]],
+        expect,
     );
 }
 
@@ -224,6 +236,7 @@ fn div_org_map_entries_count() {
 fn div_org_timestamp_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     org("");
+    let expect = expect_test::expect![[r#""OK (2024 1 15)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -237,7 +250,7 @@ fn div_org_timestamp_parse() {
             (org-element-property :month-start ts)
             (org-element-property :day-start ts)))))
 "##,
-        expect_test::expect![[r#""OK (2024 1 15)""#]],
+        expect,
     );
 }
 
@@ -245,13 +258,14 @@ fn div_org_timestamp_parse() {
 fn div_org_todo_keywords_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     org("");
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
   (require 'org)
   org-todo-keywords-1)
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -259,6 +273,7 @@ fn div_org_todo_keywords_default() {
 fn div_org_section_text() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     org("");
+    let expect = expect_test::expect![[r#""OK 5""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -270,6 +285,6 @@ fn div_org_section_text() {
            (sec (org-element-map tree 'section #'identity nil t)))
       (org-element-property :begin sec))))
 "##,
-        expect_test::expect![[r#""OK 5""#]],
+        expect,
     );
 }

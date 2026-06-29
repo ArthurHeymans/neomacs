@@ -5,6 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_sort_entries_property_schedule_custom_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -53,7 +54,7 @@ fn org_sort_entries_property_schedule_custom_combo() {
                           (org-element-property :todo-keyword h)
                           (org-element-property :priority h)
                           (org-element-property :raw-value h))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -61,6 +62,7 @@ fn org_sort_entries_property_schedule_custom_combo() {
 fn org_sort_list_checkbox_time_custom_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -98,7 +100,7 @@ fn org_sort_list_checkbox_time_custom_combo() {
                 (buffer-substring-no-properties (point-min) (point-max))
                 (nreverse events)
                 (org-list-to-lisp))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -106,6 +108,9 @@ fn org_sort_list_checkbox_time_custom_combo() {
 fn org_table_sort_region_time_numeric_function_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-number-of-arguments (closure (t) nil (let ((fields (org-split-string (org-table-get-field) \"[ \t]*|[ \t]*\"))) (downcase (car fields)))) 1)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -139,9 +144,7 @@ fn org_table_sort_region_time_numeric_function_combo() {
               by-score-desc
               (buffer-substring-no-properties (point-min) (point-max))
               (org-table-to-lisp))))))"##,
-        expect_test::expect![[
-            r#""ERR (wrong-number-of-arguments (closure (t) nil (let ((fields (org-split-string (org-table-get-field) \"[ \t]*|[ \t]*\"))) (downcase (car fields)))) 1)""#
-        ]],
+        expect,
     );
 }
 
@@ -149,6 +152,7 @@ fn org_table_sort_region_time_numeric_function_combo() {
 fn org_sort_dispatch_table_list_entries_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -214,7 +218,7 @@ fn org_sort_dispatch_table_list_entries_combo() {
                           (org-element-property :todo-keyword h)
                           (org-element-property :raw-value h)
                           (org-element-property :begin h))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -222,6 +226,7 @@ fn org_sort_dispatch_table_list_entries_combo() {
 fn org_sort_entries_priority_clock_region_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable events)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -321,7 +326,7 @@ fn org_sort_entries_priority_clock_region_combo() {
                                  (list (org-element-property :todo-keyword h)
                                        (org-element-property :priority h)
                                        (org-element-property :raw-value h))))))))))))))))"##,
-        expect_test::expect![[r#""ERR (void-variable events)""#]],
+        expect,
     );
 }
 
@@ -329,6 +334,7 @@ fn org_sort_entries_priority_clock_region_combo() {
 fn org_sort_entries_time_tag_property_alpha_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (user-error \"Nothing to sort\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -381,7 +387,7 @@ fn org_sort_entries_time_tag_property_alpha_combo() {
                     by-prop-headlines
                     by-alpha
                     by-alpha-headlines)))))))))"##,
-        expect_test::expect![[r#""ERR (user-error \"Nothing to sort\")""#]],
+        expect,
     );
 }
 
@@ -389,6 +395,7 @@ fn org_sort_entries_time_tag_property_alpha_combo() {
 fn org_sort_entries_edit_resort_by_alpha_time_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (user-error \"Nothing to sort\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -436,6 +443,6 @@ fn org_sort_entries_edit_resort_by_alpha_time_deep() {
                     alpha-buf
                     time-buf
                     resort-buf)))))))))"##,
-        expect_test::expect![[r#""ERR (user-error \"Nothing to sort\")""#]],
+        expect,
     );
 }

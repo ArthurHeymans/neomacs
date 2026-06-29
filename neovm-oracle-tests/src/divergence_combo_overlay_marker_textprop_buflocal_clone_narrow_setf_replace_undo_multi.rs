@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_overlay_marker_textprop_buflocal_clone_narrow_setf_replace_undo_multi() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "omb"))
@@ -81,7 +82,7 @@ fn combo_overlay_marker_textprop_buflocal_clone_narrow_setf_replace_undo_multi()
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
+        expect,
     );
 }
 
@@ -89,6 +90,7 @@ fn combo_overlay_marker_textprop_buflocal_clone_narrow_setf_replace_undo_multi()
 fn combo_overlay_marker_textprop_buflocal_clone_narrow_replace_setf_undo_multi() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "onb"))
@@ -164,7 +166,7 @@ fn combo_overlay_marker_textprop_buflocal_clone_narrow_replace_setf_undo_multi()
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
+        expect,
     );
 }
 
@@ -172,6 +174,7 @@ fn combo_overlay_marker_textprop_buflocal_clone_narrow_replace_setf_undo_multi()
 fn combo_overlay_marker_textprop_buflocal_clone_narrow_multi_overlay_undo_multi() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "pmb"))
@@ -255,7 +258,7 @@ fn combo_overlay_marker_textprop_buflocal_clone_narrow_multi_overlay_undo_multi(
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
+        expect,
     );
 }
 
@@ -263,6 +266,7 @@ fn combo_overlay_marker_textprop_buflocal_clone_narrow_multi_overlay_undo_multi(
 fn combo_overlay_marker_textprop_buflocal_clone_narrow_textprop_replace_undo_multi() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "rtb"))
@@ -338,7 +342,7 @@ fn combo_overlay_marker_textprop_buflocal_clone_narrow_textprop_replace_undo_mul
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
+        expect,
     );
 }
 
@@ -346,6 +350,7 @@ fn combo_overlay_marker_textprop_buflocal_clone_narrow_textprop_replace_undo_mul
 fn combo_overlay_marker_textprop_buflocal_clone_narrow_setf_replace_undo_multi_2() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "zmb"))
@@ -419,6 +424,6 @@ fn combo_overlay_marker_textprop_buflocal_clone_narrow_setf_replace_undo_multi_2
     (kill-buffer c2)
     (kill-buffer b1)
     (kill-buffer b2)))"#,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
+        expect,
     );
 }

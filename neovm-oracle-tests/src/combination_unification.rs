@@ -76,10 +76,8 @@ fn oracle_prop_unification_substitution_apply() {
     (fmakunbound 'neovm--unify-var-p)
     (fmakunbound 'neovm--unify-apply-subst)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 30 39)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 30 39)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -137,10 +135,8 @@ fn oracle_prop_unification_occurs_check() {
     (fmakunbound 'neovm--unify-var-p)
     (fmakunbound 'neovm--unify-occurs-p)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil t t nil nil nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil t t nil nil nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -260,12 +256,10 @@ fn oracle_prop_unification_basic_unify() {
     (fmakunbound 'neovm--unify-var)
     (fmakunbound 'neovm--unify)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil fail fail fail fail fail fail fail fail nil nil fail)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil fail fail fail fail fail fail fail fail nil nil fail)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -390,12 +384,10 @@ fn oracle_prop_unification_compound_recursive() {
     (fmakunbound 'neovm--unify-var)
     (fmakunbound 'neovm--unify)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((deep nil 120 121 122) (three-level nil (f (g (h 120)) 121)) (shared-var nil 120 121 nil) (conflict t) (multi-var 97 98 99))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((deep nil 120 121 122) (three-level nil (f (g (h 120)) 121)) (shared-var nil 120 121 nil) (conflict t) (multi-var 97 98 99))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -529,10 +521,8 @@ fn oracle_prop_unification_equation_solving() {
     (fmakunbound 'neovm--unify)
     (fmakunbound 'neovm--unify-solve)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 102 31)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 102 31)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -651,8 +641,6 @@ fn oracle_prop_unification_query_answering() {
     (fmakunbound 'neovm--unify)
     (fmakunbound 'neovm--unify-query)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 75 70)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 75 70)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

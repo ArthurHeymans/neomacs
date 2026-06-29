@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_o1_hash_table_copy_independence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function hash-table-copy)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((h (make-hash-table :test 'equal)))
@@ -24,13 +25,15 @@ fn div_o1_hash_table_copy_independence() {
           (gethash 'a h2)
           (gethash 'c h))))
 "##,
-        expect_test::expect![[r#""ERR (void-function hash-table-copy)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_o1_map_char_table_iteration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (2 (((123 . 4194303) range-val) ((123 . 4194303) val)))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'syntax-table nil))
@@ -53,13 +56,14 @@ fn div_o1_map_char_table_iteration() {
                               ((integerp ry) nil)
                               (t (< (car rx) (car ry)))))))))
 "##,
-        expect_test::expect![[r#""OK (2 (((123 . 4194303) range-val) ((123 . 4194303) val)))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_o1_with_demoted_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil 3 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-demoted-errors "Demoted: %S" (error "boom"))
@@ -68,13 +72,14 @@ fn div_o1_with_demoted_errors() {
           (with-demoted-errors "Demoted: %S" (signal 'arith-error '("x")))
         (error (cdr err))))
 "##,
-        expect_test::expect![[r#""OK (nil 3 nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_o1_define_inline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (7 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -84,6 +89,6 @@ fn div_o1_define_inline() {
         (fboundp 'probe-inline-fn)
         (functionp (symbol-function 'probe-inline-fn))))
 "##,
-        expect_test::expect![[r#""OK (7 t t)""#]],
+        expect,
     );
 }

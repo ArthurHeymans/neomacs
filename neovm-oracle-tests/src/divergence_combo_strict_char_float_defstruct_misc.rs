@@ -11,6 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_e2_char_width_special_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 8 0 1 2 0 2 2 10 2 6 2 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (char-width ?a)
@@ -27,13 +28,16 @@ fn div_e2_char_width_special_chars() {
       (string-width "🙂")
       (string-width "a🙂b"))
 "##,
-        expect_test::expect![[r#""OK (1 8 0 1 2 0 2 2 10 2 6 2 4)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_e2_float_string_printing_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"1.0\" \"-0.0\" \"0.0\" \"0.1\" \"1.5\" \"3.14159\" \"1e+20\" \"1e+16\" \"1e+15\" \"1e-05\" \"0.0001\" \"1.5e+300\" \"123456789.0\" \"100.0\" \"100.0\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%s" 1.0)
@@ -52,15 +56,16 @@ fn div_e2_float_string_printing_edge() {
       (number-to-string 100.0)
       (format "%s" 100.0))
 "##,
-        expect_test::expect![[
-            r#""OK (\"1.0\" \"-0.0\" \"0.0\" \"0.1\" \"1.5\" \"3.14159\" \"1e+20\" \"1e+16\" \"1e+15\" \"1e-05\" \"0.0001\" \"1.5e+300\" \"123456789.0\" \"100.0\" \"100.0\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_e2_fixnum_bignum_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (0 2305843009213693952 nil t 0 -2305843009213693953 t \"2305843009213693951\" \"2305843009213693952\" 4611686018427387902)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list most-positive-fixnum
@@ -74,15 +79,16 @@ fn div_e2_fixnum_bignum_boundary() {
       (format "%s" (1+ most-positive-fixnum))
       (* 2 most-positive-fixnum))
 "##,
-        expect_test::expect![[
-            r#""OK (0 2305843009213693952 nil t 0 -2305843009213693953 t \"2305843009213693951\" \"2305843009213693952\" 4611686018427387902)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_e2_cl_defstruct_print_and_slots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r##""OK (probe-struct2 1 2 nil \"#s(probe-struct2 1 2 nil)\" t 4)""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -97,15 +103,14 @@ fn div_e2_cl_defstruct_print_and_slots() {
           (probe-struct2-p s)
           (length s))))
 "##,
-        expect_test::expect![[
-            r##""OK (probe-struct2 1 2 nil \"#s(probe-struct2 1 2 nil)\" t 4)""##
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_e2_overlay_priority_and_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((1 10 5) 3 (c b a) (1 10 5) 2 8)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -126,13 +131,14 @@ fn div_e2_overlay_priority_and_boundaries() {
           (overlay-start o1)
           (overlay-end o1))))
 "##,
-        expect_test::expect![[r#""OK ((1 10 5) 3 (c b a) (1 10 5) 2 8)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_e2_abbrev_expand() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (foo \"bar\" \"foo\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((table (make-abbrev-table)))
@@ -145,13 +151,16 @@ fn div_e2_abbrev_expand() {
           (buffer-string)
           last-abbrev-text)))
 "##,
-        expect_test::expect![[r#""OK (foo \"bar\" \"foo\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_e2_char_table_range_and_parent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (zero lower lower nil syntax-table #^[nil nil syntax-table nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] lower)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'syntax-table nil)))
@@ -166,15 +175,14 @@ fn div_e2_char_table_range_and_parent() {
                (char-table-parent ct))
         (char-table-range ct ?b)))
 "##,
-        expect_test::expect![[
-            r#""OK (zero lower lower nil syntax-table #^[nil nil syntax-table nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] lower)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_e2_keymap_introspection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function map-keymap-prompt)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap))
@@ -192,13 +200,14 @@ fn div_e2_keymap_introspection() {
         (keymapp map)
         (accessible-keymaps nil map)))
 "##,
-        expect_test::expect![[r#""ERR (void-function map-keymap-prompt)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_e2_window_edges_geometry() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((0 1 80 24) (0 1 80 23) 80 22 80 23 0 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-edges*")))
@@ -217,13 +226,14 @@ fn div_e2_window_edges_geometry() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
-        expect_test::expect![[r#""OK ((0 1 80 24) (0 1 80 23) 80 22 80 23 0 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_e2_frame_char_metrics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 1 1 1 nil 1 nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (frame-char-width)
@@ -235,13 +245,14 @@ fn div_e2_frame_char_metrics() {
       (frame-parameter nil 'tool-bar-lines)
       (frame-parameter nil 'scroll-bar-width))
 "##,
-        expect_test::expect![[r#""OK (1 1 1 1 nil 1 nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_e2_frame_parameter_numeric_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 nil nil nil nil)""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK (0 nil nil nil nil)
     // Neomacs:   OK (nil nil nil nil nil)
@@ -255,6 +266,6 @@ fn div_e2_frame_parameter_numeric_defaults() {
       (frame-parameter nil 'right-divider-width)
       (frame-parameter nil 'bottom-divider-width))
 "##,
-        expect_test::expect![[r#""OK (0 nil nil nil nil)""#]],
+        expect,
     );
 }

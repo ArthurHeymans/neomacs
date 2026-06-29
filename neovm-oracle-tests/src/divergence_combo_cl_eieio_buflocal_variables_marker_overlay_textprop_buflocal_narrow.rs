@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_buflocal_set_make_variable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass buflocal-snap ()
@@ -66,7 +67,7 @@ fn combo_eieio_buflocal_set_make_variable() {
                 (overlay-start ov) (overlay-end ov)
                 fill-column tab-width))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -74,6 +75,7 @@ fn combo_eieio_buflocal_set_make_variable() {
 fn combo_eieio_buflocal_default_value_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass default-snap ()
@@ -133,7 +135,7 @@ fn combo_eieio_buflocal_default_value_edit() {
                 (overlay-start ov) (overlay-end ov)
                 fill-column (default-value 'fill-column)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -141,6 +143,7 @@ fn combo_eieio_buflocal_default_value_edit() {
 fn combo_eieio_buflocal_with_narrowing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass narrow-buflocal-snap ()
@@ -200,7 +203,7 @@ fn combo_eieio_buflocal_with_narrowing() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -208,6 +211,7 @@ fn combo_eieio_buflocal_with_narrowing() {
 fn combo_eieio_buflocal_eieio_slots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass buf-config ()
@@ -257,7 +261,7 @@ fn combo_eieio_buflocal_eieio_slots() {
                 (bc-thresh my-cfg)
                 (bc-enabled my-cfg)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -265,6 +269,7 @@ fn combo_eieio_buflocal_eieio_slots() {
 fn combo_eieio_buflocal_undo_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass buflocal-undo-snap ()
@@ -321,6 +326,6 @@ fn combo_eieio_buflocal_undo_restore() {
               (overlay-start ov) (overlay-end ov)
               fill-column case-fold-search)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

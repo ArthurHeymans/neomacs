@@ -21,10 +21,8 @@ fn oracle_prop_recursion_factorial() {
                             (funcall 'neovm--test-fact 5)
                             (funcall 'neovm--test-fact 10))
                     (fmakunbound 'neovm--test-fact)))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (1 1 120 3628800)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 1 120 3628800)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(1 1 120 3628800)", &o, &n);
 }
 
@@ -43,10 +41,8 @@ fn oracle_prop_recursion_fibonacci() {
                   (unwind-protect
                       (mapcar 'neovm--test-fib '(0 1 2 3 4 5 6 7 8 9 10))
                     (fmakunbound 'neovm--test-fib)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 1 1 2 3 5 8 13 21 34 55)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 1 1 2 3 5 8 13 21 34 55)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -64,10 +60,8 @@ fn oracle_prop_recursion_list_length() {
                             (funcall 'neovm--test-my-length '(a))
                             (funcall 'neovm--test-my-length '(a b c d e)))
                     (fmakunbound 'neovm--test-my-length)))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (0 1 5)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 1 5)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(0 1 5)", &o, &n);
 }
 
@@ -87,10 +81,8 @@ fn oracle_prop_recursion_flatten() {
                   (unwind-protect
                       (funcall 'neovm--test-flatten '(1 (2 (3 4) 5) (6 7)))
                     (fmakunbound 'neovm--test-flatten)))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (1 2 3 4 5 6 7)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 2 3 4 5 6 7)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(1 2 3 4 5 6 7)", &o, &n);
 }
 
@@ -109,8 +101,8 @@ fn oracle_prop_recursion_tail_recursive_sum() {
                   (unwind-protect
                       (funcall 'neovm--test-sum-acc '(1 2 3 4 5 6 7 8 9 10) 0)
                     (fmakunbound 'neovm--test-sum-acc)))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 55""#]]);
+    let expect = expect_test::expect![[r#""OK 55""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("55", &o, &n);
 }
 
@@ -136,10 +128,8 @@ fn oracle_prop_recursion_mutual() {
                             (funcall 'neovm--test-my-odd 6))
                     (fmakunbound 'neovm--test-my-even)
                     (fmakunbound 'neovm--test-my-odd)))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil t t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil t t nil)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(t nil t t nil)", &o, &n);
 }
 
@@ -159,7 +149,8 @@ fn oracle_prop_recursion_tree_depth() {
                             (funcall 'neovm--test-tree-depth '(a (b (c))))
                             (funcall 'neovm--test-tree-depth '((a b) (c d))))
                     (fmakunbound 'neovm--test-tree-depth)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (0 1 5 4)""#]]);
+    let expect = expect_test::expect![[r#""OK (0 1 5 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -182,10 +173,8 @@ fn oracle_prop_recursion_ackermann() {
                             (funcall 'neovm--test-ack 2 2)
                             (funcall 'neovm--test-ack 3 3))
                     (fmakunbound 'neovm--test-ack)))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (1 3 7 61)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 3 7 61)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(1 3 7 61)", &o, &n);
 }
 
@@ -204,10 +193,8 @@ fn oracle_prop_recursion_map_tree() {
                   (unwind-protect
                       (funcall 'neovm--test-map-tree '1+ '(1 (2 3) ((4) 5)))
                     (fmakunbound 'neovm--test-map-tree)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -229,7 +216,8 @@ fn oracle_prop_recursion_with_catch_throw() {
                         (catch 'found (funcall 'neovm--test-find-deep '(1 (2 (3 4) 5) 6) 4))
                         (catch 'found (funcall 'neovm--test-find-deep '(1 (2 (3 4) 5) 6) 99)))
                     (fmakunbound 'neovm--test-find-deep)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t nil)""#]]);
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 proptest! {

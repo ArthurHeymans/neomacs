@@ -23,10 +23,8 @@ fn oracle_prop_cl_adv_dotimes_result_accumulates_vector() {
                     (dotimes (i 8 v)
                       (setq fact (if (= i 0) 1 (* fact i)))
                       (aset v i fact)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK [1 1 2 6 24 120 720 5040]""#],
-    );
+    let expect = expect_test::expect![r#""OK [1 1 2 6 24 120 720 5040]""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -45,10 +43,8 @@ fn oracle_prop_cl_adv_dolist_result_partition() {
                       (if (= (% x 2) 0)
                           (setq evens (cons x evens))
                         (setq odds (cons x odds)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((2 4 6 8 10) 1 3 5 7 9)""#],
-    );
+    let expect = expect_test::expect![r#""OK ((2 4 6 8 10) 1 3 5 7 9)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -76,10 +72,8 @@ fn oracle_prop_cl_adv_nested_iteration_matrix_multiply() {
                           (aset (aref result i) j sum))))
                     (list (append (aref result 0) nil)
                           (append (aref result 1) nil)))"#;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK ((58 64) (139 154))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((58 64) (139 154))""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("((58 64) (139 154))", &o, &n);
 }
 
@@ -94,12 +88,10 @@ fn oracle_prop_cl_adv_nested_dolist_cartesian_filter() {
                         (when (> (+ a b) 7)
                           (setq result (cons (cons a b) result)))))
                     (nreverse result))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((1 . 8) (3 . 6) (3 . 8) (5 . 4) (5 . 6) (5 . 8) (7 . 2) (7 . 4) (7 . 6) (7 . 8))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((1 . 8) (3 . 6) (3 . 8) (5 . 4) (5 . 6) (5 . 8) (7 . 2) (7 . 4) (7 . 6) (7 . 8))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -118,10 +110,8 @@ fn oracle_prop_cl_adv_loop_collect_when_with_index() {
                         (setq result (cons (list idx x) result)))
                       (setq idx (1+ idx)))
                     (nreverse result))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((1 banana) (2 cherry) (4 elderberry))""#],
-    );
+    let expect = expect_test::expect![r#""OK ((1 banana) (2 cherry) (4 elderberry))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,10 +139,8 @@ fn oracle_prop_cl_adv_reduce_nested_alist_merge() {
                     (sort merged (lambda (x y)
                                    (string< (symbol-name (car x))
                                             (symbol-name (car y))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((a . 100) (b . 20) (c . 3) (d . 4))""#],
-    );
+    let expect = expect_test::expect![r#""OK ((a . 100) (b . 20) (c . 3) (d . 4))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -171,10 +159,8 @@ fn oracle_prop_cl_adv_mapcan_flatten_and_transform() {
                         (setq result (nconc result
                                            (list n (* n 10) (* n 100))))))
                     result)"#;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (3 30 300 5 50 500 4 40 400)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 30 300 5 50 500 4 40 400)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(3 30 300 5 50 500 4 40 400)", &o, &n);
 }
 
@@ -207,9 +193,7 @@ fn oracle_prop_cl_adv_remove_if_not_chained_filters() {
                             (when (< x 20)
                               (setq step3 (cons x step3))))
                           (nreverse step3)))))"#;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (2 4 6 18 10 14 16)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 4 6 18 10 14 16)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(2 4 6 18 10 14 16)", &o, &n);
 }

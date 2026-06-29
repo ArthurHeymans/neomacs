@@ -23,10 +23,8 @@ fn oracle_prop_dolist_result_form_complex() {
                       (setq count (1+ count))
                       (when (> (length (symbol-name item)) 4)
                         (setq acc (cons (cons item (length (symbol-name item))) acc)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable item)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable item)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -46,7 +44,8 @@ fn oracle_prop_dolist_nested_cartesian_filtered() {
                                      (= (+ (* x x) (* y y)) (* z z)))
                             (setq result (cons (list x y z) result))))))
                     (nreverse result))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK ((3 4 5))""#]]);
+    let expect = expect_test::expect![[r#""OK ((3 4 5))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -65,12 +64,10 @@ fn oracle_prop_dotimes_result_accumulating_factorial_table() {
                           (setq fact 1)
                         (setq fact (* fact i)))
                       (setq table (cons (cons i fact) table))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 . 1) (1 . 1) (2 . 2) (3 . 6) (4 . 24) (5 . 120) (6 . 720) (7 . 5040) (8 . 40320) (9 . 362880))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 . 1) (1 . 1) (2 . 2) (3 . 6) (4 . 24) (5 . 120) (6 . 720) (7 . 5040) (8 . 40320) (9 . 362880))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -90,10 +87,8 @@ fn oracle_prop_dotimes_fibonacci() {
                       (let ((next (+ a b)))
                         (setq a b
                               b next))))"#;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (0 1 1 2 3 5 8 13 21 34 55 89 144 233 377)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 1 1 2 3 5 8 13 21 34 55 89 144 233 377)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(0 1 1 2 3 5 8 13 21 34 55 89 144 233 377)", &o, &n);
 }
 
@@ -124,12 +119,10 @@ fn oracle_prop_dolist_dotimes_matrix_transpose() {
                             (setq new-row (cons (nth j row) new-row)))
                           (setq transposed (cons (nreverse new-row) transposed))))
                       (list matrix (nreverse transposed))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 2 3 4) (5 6 7 8) (9 10 11 12)) ((1 5 9) (2 6 10) (3 7 11) (4 8 12)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 2 3 4) (5 6 7 8) (9 10 11 12)) ((1 5 9) (2 6 10) (3 7 11) (4 8 12)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -164,12 +157,10 @@ fn oracle_prop_dolist_dynamic_list_side_effects() {
                                  (setq pairs (cons (cons k v) pairs)))
                                freq)
                       (sort pairs (lambda (a b) (string< (car a) (car b))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"cat\" . 2) (\"mat\" . 1) (\"on\" . 1) (\"sat\" . 1) (\"the\" . 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"cat\" . 2) (\"mat\" . 1) (\"on\" . 1) (\"sat\" . 1) (\"the\" . 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -196,10 +187,8 @@ fn oracle_prop_dolist_early_return_catch_throw() {
                                                     'in group-name
                                                     'with-score score)))))))
                       'nobody-found))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (winner dave in group-b with-score 95)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (winner dave in group-b with-score 95)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -225,12 +214,10 @@ fn oracle_prop_dotimes_pascals_triangle() {
                         (setq triangle (cons new-row triangle))
                         (setq prev-row new-row)))
                     (nreverse triangle))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1) (1 1) (1 2 1) (1 3 3 1) (1 4 6 4 1) (1 5 10 10 5 1) (1 6 15 20 15 6 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1) (1 1) (1 2 1) (1 3 3 1) (1 4 6 4 1) (1 5 10 10 5 1) (1 6 15 20 15 6 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -264,10 +251,8 @@ fn oracle_prop_dolist_unwind_protect_cleanup() {
                                      (cons (format "error on %d" item)
                                            neovm--test-process-log))))))
                       (makunbound 'neovm--test-process-log)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((10 5 (error \"Division by zero for item 0\") 3 2) (\"processing 10\" \"processing 20\" \"processing 0\" \"error on 0\" \"processing 30\" \"processing 40\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((10 5 (error \"Division by zero for item 0\") 3 2) (\"processing 10\" \"processing 20\" \"processing 0\" \"error on 0\" \"processing 30\" \"processing 40\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

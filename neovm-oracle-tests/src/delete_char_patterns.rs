@@ -57,12 +57,10 @@ fn oracle_prop_delete_char_positive_n_various() {
           (delete-char 1)
           (list (buffer-string) (point))) results)
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"bcdef\" 1) (\"def\" 1) (\"\" 1) (\"abef\" 3) (\"\" (104 101 108 108 111)) (\"abcde\" 6))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"bcdef\" 1) (\"def\" 1) (\"\" 1) (\"abef\" 3) (\"\" (104 101 108 108 111)) (\"abcde\" 6))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -108,12 +106,10 @@ fn oracle_prop_delete_char_negative_n_various() {
               (delete-char -1))
             (list (buffer-string) removed))) results)
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"abcde\" 6) (\"abc\" 4) (\"\" 1) (\"adef\" 2) (\"\" (119 111 114 108 100)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"abcde\" 6) (\"abc\" 4) (\"\" 1) (\"adef\" 2) (\"\" (119 111 114 108 100)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -154,12 +150,10 @@ fn oracle_prop_delete_char_zero_noop() {
           (delete-char 0 t)
           (list (buffer-string) (point) (buffer-size))) results)
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"hello\" 1 5) (\"hello\" 6 5) (\"hello\" 3 5) (\"\" 1 0) (\"hello\" 3 5))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"hello\" 1 5) (\"hello\" 6 5) (\"hello\" 3 5) (\"\" 1 0) (\"hello\" 3 5))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -216,12 +210,10 @@ fn oracle_prop_delete_char_killflag_combinations() {
           (delete-char 1 42)
           (list (buffer-string) (point))) results)
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"def\" 1) (\"def\" 1) (\"abcd\" 5) (\"abcd\" 5) (\"abcdef\" 3) (\"bcdef\" 1) (\"bcdef\" 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"def\" 1) (\"def\" 1) (\"abcd\" 5) (\"abcd\" 5) (\"abcdef\" 3) (\"bcdef\" 1) (\"bcdef\" 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -240,10 +232,8 @@ fn oracle_prop_delete_char_boundary_errors() {
       (delete-char -1)
       'no-error)
   (error (list 'got-error (car err))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form1,
-        expect_test::expect![[r#""OK (got-error beginning-of-buffer)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (got-error beginning-of-buffer)""#]];
+    crate::common::assert_oracle_parity_expect(form1, expect);
 
     // Trying to delete past end should signal an error
     let form2 = r#"(condition-case err
@@ -253,10 +243,8 @@ fn oracle_prop_delete_char_boundary_errors() {
       (delete-char 1)
       'no-error)
   (error (list 'got-error (car err))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form2,
-        expect_test::expect![[r#""OK (got-error end-of-buffer)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (got-error end-of-buffer)""#]];
+    crate::common::assert_oracle_parity_expect(form2, expect);
 
     // Trying to delete more chars than available (forward)
     let form3 = r#"(condition-case err
@@ -266,10 +254,8 @@ fn oracle_prop_delete_char_boundary_errors() {
       (delete-char 10)
       'no-error)
   (error (list 'got-error (car err))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form3,
-        expect_test::expect![[r#""OK (got-error end-of-buffer)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (got-error end-of-buffer)""#]];
+    crate::common::assert_oracle_parity_expect(form3, expect);
 
     // Trying to delete more chars than available (backward)
     let form4 = r#"(condition-case err
@@ -279,10 +265,8 @@ fn oracle_prop_delete_char_boundary_errors() {
       (delete-char -10)
       'no-error)
   (error (list 'got-error (car err))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form4,
-        expect_test::expect![[r#""OK (got-error beginning-of-buffer)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (got-error beginning-of-buffer)""#]];
+    crate::common::assert_oracle_parity_expect(form4, expect);
 
     // Delete in empty buffer (should error for any N != 0)
     let form5 = r#"(condition-case err
@@ -290,10 +274,8 @@ fn oracle_prop_delete_char_boundary_errors() {
       (delete-char 1)
       'no-error)
   (error (list 'got-error (car err))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form5,
-        expect_test::expect![[r#""OK (got-error end-of-buffer)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (got-error end-of-buffer)""#]];
+    crate::common::assert_oracle_parity_expect(form5, expect);
 
     // Delete exact remaining chars (should succeed, not error)
     let form6 = r#"(with-temp-buffer
@@ -301,7 +283,8 @@ fn oracle_prop_delete_char_boundary_errors() {
   (goto-char 2)
   (delete-char 2)
   (list (buffer-string) (point)))"#;
-    crate::common::assert_oracle_parity_expect(form6, expect_test::expect![[r#""OK (\"a\" 2)""#]]);
+    let expect = expect_test::expect![[r#""OK (\"a\" 2)""#]];
+    crate::common::assert_oracle_parity_expect(form6, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -360,12 +343,10 @@ fn oracle_prop_delete_char_with_narrowing() {
             (widen)
             (list narrowed-str narrowed-size (buffer-string)))) results)
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"56\" \"01256789\") (\"34\" \"01234789\") (got-error end-of-buffer) (got-error beginning-of-buffer) (\"\" 5 \"ABHIJ\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"56\" \"01256789\") (\"34\" \"01234789\") (got-error end-of-buffer) (got-error beginning-of-buffer) (\"\" 5 \"ABHIJ\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -392,10 +373,8 @@ fn oracle_prop_delete_char_processing_pipeline() {
           (setq deleted (1+ deleted))
           (delete-char 1))))
     (list (buffer-string) kept deleted (point) (buffer-size))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"hll wrld ttcs\" 13 10 14 13)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"hll wrld ttcs\" 13 10 14 13)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -427,10 +406,8 @@ fn oracle_prop_delete_char_loop_with_position_tracking() {
           (nreverse deleted-chars)
           (length (nreverse positions))
           (buffer-size))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"acegi\" (98 100 102 104 106) 10 5)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"acegi\" (98 100 102 104 106) 10 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -468,10 +445,9 @@ fn oracle_prop_delete_char_multibyte() {
           (insert "ELL")
           (list (buffer-string) (point))) results)
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((\"bc\" 1) (\"cafe\" 5 4) (\"a-bd-e\" 4) (\"hELLo\" 5))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((\"bc\" 1) (\"cafe\" 5 4) (\"a-bd-e\" 4) (\"hELLo\" 5))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -505,8 +481,6 @@ fn oracle_prop_delete_char_interleaved_with_insert() {
       (goto-char (point-max))
       (insert "]")
       (list step1 step2 (buffer-string) (buffer-size) (point)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"AbCdE\" \"bCd\" \"[bCd]\" 5 6)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"AbCdE\" \"bCd\" \"[bCd]\" 5 6)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

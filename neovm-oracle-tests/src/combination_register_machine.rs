@@ -135,7 +135,8 @@ fn oracle_prop_register_machine_basic() {
     (fmakunbound 'neovm--rm-set-pc)
     (fmakunbound 'neovm--rm-step)
     (fmakunbound 'neovm--rm-run)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (30 20 3)""#]]);
+    let expect = expect_test::expect![[r#""OK (30 20 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -202,10 +203,8 @@ fn oracle_prop_register_machine_arithmetic_program() {
     (fmakunbound 'neovm--rm-set-pc)
     (fmakunbound 'neovm--rm-step)
     (fmakunbound 'neovm--rm-run)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (48 7 5 2 7)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (48 7 5 2 7)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -312,10 +311,8 @@ fn oracle_prop_register_machine_conditional_jump() {
     (fmakunbound 'neovm--rm-set-pc)
     (fmakunbound 'neovm--rm-step)
     (fmakunbound 'neovm--rm-run)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (42 42 0 7 4)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (42 42 0 7 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -427,10 +424,8 @@ fn oracle_prop_register_machine_gcd() {
     (fmakunbound 'neovm--rm-set-pc)
     (fmakunbound 'neovm--rm-step)
     (fmakunbound 'neovm--rm-run)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (6 25 1 5 12 t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (6 25 1 5 12 t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -521,10 +516,8 @@ fn oracle_prop_register_machine_factorial() {
     (fmakunbound 'neovm--rm-set-pc)
     (fmakunbound 'neovm--rm-step)
     (fmakunbound 'neovm--rm-run)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 1 120 40320 3628800 t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 1 120 40320 3628800 t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -599,12 +592,10 @@ fn oracle_prop_register_machine_fibonacci() {
     (fmakunbound 'neovm--rm-set-pc)
     (fmakunbound 'neovm--rm-step)
     (fmakunbound 'neovm--rm-run)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 0) (1 1) (2 1) (3 2) (4 3) (5 5) (6 8) (7 13) (8 21) (10 55) (15 610))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 0) (1 1) (2 1) (3 2) (4 3) (5 5) (6 8) (7 13) (8 21) (10 55) (15 610))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -676,10 +667,8 @@ fn oracle_prop_register_machine_power() {
     (fmakunbound 'neovm--rm-set-pc)
     (fmakunbound 'neovm--rm-step)
     (fmakunbound 'neovm--rm-run)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((2 0 1) (2 1 2) (2 10 1024) (3 4 81) (5 3 125) (10 3 1000) (7 2 49))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((2 0 1) (2 1 2) (2 10 1024) (3 4 81) (5 3 125) (10 3 1000) (7 2 49))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

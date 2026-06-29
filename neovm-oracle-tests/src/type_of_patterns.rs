@@ -41,12 +41,10 @@ fn oracle_prop_type_of_numeric_types_exhaustive() {
   (type-of (+ 1.0 2))
   ;; Division producing float
   (type-of (/ 1.0 3.0)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (integer integer integer integer integer integer integer float float float float float float float float float integer float float)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (integer integer integer integer integer integer integer float float float float float float float float float integer float float)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -77,12 +75,10 @@ fn oracle_prop_type_of_compound_types_exhaustive() {
   (type-of (vector 'a 'b 'c))
   (type-of (make-vector 3 0))
   (type-of (vconcat [1] [2])))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (string string string string string string cons cons cons cons cons vector vector vector vector vector)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (string string string string string string cons cons cons cons cons vector vector vector vector vector)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,12 +110,10 @@ fn oracle_prop_type_of_symbol_nil_t() {
   (eq (type-of nil) 'symbol)
   (eq (type-of t) 'symbol)
   (eq (type-of :foo) 'symbol))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (symbol symbol symbol symbol symbol symbol symbol symbol symbol symbol symbol t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (symbol symbol symbol symbol symbol symbol symbol symbol symbol symbol symbol t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,12 +143,10 @@ fn oracle_prop_type_of_specialized_containers() {
                      (type-of (make-char-table 'foo))
                      (type-of (make-hash-table)))))
     types))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (bool-vector bool-vector bool-vector char-table char-table hash-table hash-table hash-table hash-table hash-table (bool-vector char-table hash-table))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (bool-vector bool-vector bool-vector char-table char-table hash-table hash-table hash-table hash-table hash-table (bool-vector char-table hash-table))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,10 +176,8 @@ fn oracle_prop_type_of_marker_and_buffer() {
            (let ((m4 (copy-marker (point-max))))
              (type-of m4)))))
     results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (marker buffer marker marker marker)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (marker buffer marker marker marker)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -217,12 +207,10 @@ fn oracle_prop_type_of_subr_and_functions() {
               (let ((sf (symbol-function fn)))
                 (list fn (subrp sf))))
             fns)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (subr subr subr subr t t interpreted-function ((+ t) (- t) (* t) (car t) (cdr t) (cons t) (list t) (append t) (length t)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (subr subr subr subr t t interpreted-function ((+ t) (- t) (* t) (car t) (cdr t) (cons t) (list t) (append t) (length t)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -281,12 +269,10 @@ fn oracle_prop_type_of_dispatch_system() {
                                      (symbol-name (car b)))))))))
     (fmakunbound 'neovm--type-describe)
     (fmakunbound 'neovm--type-safe-equal)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"int:42\" \"float:3.14\" \"str:hello\" \"list:len=3\" \"vec:len=3\" \"sym:foo\" \"hash:count=0\" \"bvec:len=4\") t nil t t nil ((float (3.0 4.0)) (integer (1 2)) (string (\"a\" \"b\")) (symbol (x y))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"int:42\" \"float:3.14\" \"str:hello\" \"list:len=3\" \"vec:len=3\" \"sym:foo\" \"hash:count=0\" \"bvec:len=4\") t nil t t nil ((float (3.0 4.0)) (integer (1 2)) (string (\"a\" \"b\")) (symbol (x y))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -356,12 +342,10 @@ fn oracle_prop_type_of_serializer() {
          (mapcar (lambda (v) (type-of v)) decoded)))
     (fmakunbound 'neovm--serialize)
     (fmakunbound 'neovm--deserialize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((INT 42) (FLOAT 3.14) (STR \"hello\") (SYM \"world\") (LIST ((INT 1) (INT 2) (INT 3))) (VEC ((INT 4) (INT 5) (INT 6))) (LIST ((SYM \"nested\") (LIST ((SYM \"list\") (STR \"with\") (INT 7)))))) (42 3.14 \"hello\" world (1 2 3) [4 5 6] (nested (list \"with\" 7))) t (integer float string symbol cons vector cons))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((INT 42) (FLOAT 3.14) (STR \"hello\") (SYM \"world\") (LIST ((INT 1) (INT 2) (INT 3))) (VEC ((INT 4) (INT 5) (INT 6))) (LIST ((SYM \"nested\") (LIST ((SYM \"list\") (STR \"with\") (INT 7)))))) (42 3.14 \"hello\" world (1 2 3) [4 5 6] (nested (list \"with\" 7))) t (integer float string symbol cons vector cons))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -397,10 +381,8 @@ fn oracle_prop_type_of_heterogeneous_collection() {
                             (push item acc)))
                         (nreverse acc))))
   (list types counts strings numbers))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((integer float string symbol cons vector hash-table bool-vector symbol symbol symbol cons) ((bool-vector 1) (cons 2) (float 1) (hash-table 1) (integer 1) (string 1) (symbol 4) (vector 1)) (\"three\") (1 2.0))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((integer float string symbol cons vector hash-table bool-vector symbol symbol symbol cons) ((bool-vector 1) (cons 2) (float 1) (hash-table 1) (integer 1) (string 1) (symbol 4) (vector 1)) (\"three\") (1 2.0))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

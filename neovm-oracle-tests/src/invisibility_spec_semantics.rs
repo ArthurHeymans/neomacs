@@ -33,12 +33,10 @@ fn oracle_prop_gnu_invisibility_spec_helpers_preserve_exact_state() {
   (nreverse results))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t (alpha t) (alpha t) (t) (t) (t) (t)) (nil (alpha) (alpha) nil nil (t) (t)) ((t) (alpha t) (alpha t) (t) (t) (t) (t)) ((alpha beta alpha) (alpha alpha beta) (alpha alpha beta) (beta) (beta) (beta) (beta)) (((outline . t) t) (alpha (outline . t) t) (alpha (outline . t) t) ((outline . t) t) ((outline . t) t) ((outline . t) t) ((outline . t) t)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t (alpha t) (alpha t) (t) (t) (t) (t)) (nil (alpha) (alpha) nil nil (t) (t)) ((t) (alpha t) (alpha t) (t) (t) (t) (t)) ((alpha beta alpha) (alpha alpha beta) (alpha alpha beta) (beta) (beta) (beta) (beta)) (((outline . t) t) (alpha (outline . t) t) (alpha (outline . t) t) ((outline . t) t) ((outline . t) t) ((outline . t) t) ((outline . t) t)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -55,10 +53,8 @@ fn oracle_prop_gnu_remove_from_invisibility_spec_converts_non_lists_to_t_list() 
   (nreverse results))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t (t) (t)) (nil (t) (t)) (hidden (t) (t)) (42 (t) (t)) (\"hidden\" (t) (t)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t (t) (t)) (nil (t) (t)) (hidden (t) (t)) (42 (t) (t)) (\"hidden\" (t) (t)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

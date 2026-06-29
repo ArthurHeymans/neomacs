@@ -61,10 +61,8 @@ fn oracle_file_in_directory_symlink_missing_and_self_edges() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 44)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 44)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -125,10 +123,8 @@ fn oracle_file_in_directory_relative_prefix_and_escape_edges() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 44)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 44)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -168,10 +164,8 @@ fn oracle_file_in_directory_empty_root_and_normalized_file_edges() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 31 44)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 31 44)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -218,10 +212,8 @@ fn oracle_file_in_directory_type_null_and_missing_dir_order_edges() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 44)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 44)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -257,10 +249,8 @@ fn oracle_file_in_directory_file_name_handler_dispatch_edges() {
     (makunbound 'neomacs--oracle-file-in-dir-calls)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((file-handler file-in-directory-p (\"/oracle-file:child\" \"/plain-dir\")) ((file file-in-directory-p (\"/oracle-file:child\" \"/plain-dir\"))) nil (dir-handler file-in-directory-p (\"/plain-file\" \"/oracle-dir:root\")) ((dir file-in-directory-p (\"/plain-file\" \"/oracle-dir:root\"))) nil (file-handler file-in-directory-p (\"/oracle-file:child\" \"/oracle-dir:root\")) ((file file-in-directory-p (\"/oracle-file:child\" \"/oracle-dir:root\"))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((file-handler file-in-directory-p (\"/oracle-file:child\" \"/plain-dir\")) ((file file-in-directory-p (\"/oracle-file:child\" \"/plain-dir\"))) nil (dir-handler file-in-directory-p (\"/plain-file\" \"/oracle-dir:root\")) ((dir file-in-directory-p (\"/plain-file\" \"/oracle-dir:root\"))) nil (file-handler file-in-directory-p (\"/oracle-file:child\" \"/oracle-dir:root\")) ((file file-in-directory-p (\"/oracle-file:child\" \"/oracle-dir:root\"))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

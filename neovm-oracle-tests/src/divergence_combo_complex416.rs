@@ -9,6 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx416_display_pixel_dimensions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (80 25 nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (display-pixel-width)
@@ -16,7 +17,7 @@ fn div_cx416_display_pixel_dimensions() {
       (display-mm-width)
       (display-mm-height))
 "##,
-        expect_test::expect![[r#""OK (80 25 nil nil)""#]],
+        expect,
     );
 }
 
@@ -24,6 +25,7 @@ fn div_cx416_display_pixel_dimensions() {
 #[test]
 fn div_cx416_display_screens() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 not-useful not-useful static-gray)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (display-screens)
@@ -31,7 +33,7 @@ fn div_cx416_display_screens() {
       (display-save-under)
       (display-visual-class))
 "##,
-        expect_test::expect![[r#""OK (1 not-useful not-useful static-gray)""#]],
+        expect,
     );
 }
 
@@ -39,13 +41,15 @@ fn div_cx416_display_screens() {
 #[test]
 fn div_cx416_x_display_color() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (error \"X windows are not in use or not initialized\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (x-display-color-p)
       (x-display-grayscale-p)
       (display-color-p))
 "##,
-        expect_test::expect![[r#""ERR (error \"X windows are not in use or not initialized\")""#]],
+        expect,
     );
 }
 
@@ -53,13 +57,14 @@ fn div_cx416_x_display_color() {
 #[test]
 fn div_cx416_display_monitor_attrs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 1""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (length (display-monitor-attributes-list))
   (error (car e)))
 "##,
-        expect_test::expect![[r#""OK 1""#]],
+        expect,
     );
 }
 
@@ -67,12 +72,13 @@ fn div_cx416_display_monitor_attrs() {
 #[test]
 fn div_cx416_x_server_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (error error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (x-server-vendor) (error (car e)))
       (condition-case e (x-server-version) (error (car e))))
 "##,
-        expect_test::expect![[r#""OK (error error)""#]],
+        expect,
     );
 }
 
@@ -80,6 +86,7 @@ fn div_cx416_x_server_info() {
 #[test]
 fn div_cx416_x_list_fonts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (error error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e
@@ -89,7 +96,7 @@ fn div_cx416_x_list_fonts() {
           (x-list-fonts "*")
         (error (car e))))
 "##,
-        expect_test::expect![[r#""OK (error error)""#]],
+        expect,
     );
 }
 
@@ -97,6 +104,7 @@ fn div_cx416_x_list_fonts() {
 #[test]
 fn div_cx416_image_type_available() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (image-type-available-p 'png)
@@ -104,7 +112,7 @@ fn div_cx416_image_type_available() {
       (image-type-available-p 'gif)
       (image-type-available-p 'svg))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -112,6 +120,7 @@ fn div_cx416_image_type_available() {
 #[test]
 fn div_cx416_image_size_mask() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (wrong-type-argument error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e
@@ -122,7 +131,7 @@ fn div_cx416_image_size_mask() {
           (image-mask-p (list 'image :type 'png :data ""))
         (error (car e))))
 "##,
-        expect_test::expect![[r#""OK (wrong-type-argument error)""#]],
+        expect,
     );
 }
 
@@ -130,12 +139,13 @@ fn div_cx416_image_size_mask() {
 #[test]
 fn div_cx416_gui_selection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil \"test\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (gui-get-selection 'PRIMARY) (error (car e)))
       (condition-case e (gui-set-selection 'PRIMARY "test") (error (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil \"test\")""#]],
+        expect,
     );
 }
 
@@ -143,13 +153,14 @@ fn div_cx416_gui_selection() {
 #[test]
 fn div_cx416_selection_coding_system() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function next-selection-coding-system)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (next-selection-coding-system)
       (set-selection-coding-system 'utf-8)
       (condition-case e (x-selection-exists-p 'PRIMARY) (error (car e))))
 "##,
-        expect_test::expect![[r#""ERR (void-function next-selection-coding-system)""#]],
+        expect,
     );
 }
 
@@ -157,14 +168,15 @@ fn div_cx416_selection_coding_system() {
 #[test]
 fn div_cx416_x_parse_geometry() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (((height . 24) (width . 80)) ((height . 600) (width . 800) (top . 20) (left . 10)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (x-parse-geometry "80x24")
       (x-parse-geometry "800x600+10+20"))
 "##,
-        expect_test::expect![[
-            r#""OK (((height . 24) (width . 80)) ((height . 600) (width . 800) (top . 20) (left . 10)))""#
-        ]],
+        expect,
     );
 }
 
@@ -172,12 +184,13 @@ fn div_cx416_x_parse_geometry() {
 #[test]
 fn div_cx416_x_get_resource() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (error error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (x-get-resource "emacs*Background" "Background") (error (car e)))
       (condition-case e (x-get-resource "nonexistent" "Nonexistent") (error (car e))))
 "##,
-        expect_test::expect![[r#""OK (error error)""#]],
+        expect,
     );
 }
 
@@ -185,12 +198,13 @@ fn div_cx416_x_get_resource() {
 #[test]
 fn div_cx416_tool_menu_bar_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (tool-bar-mode -1) (error (car e)))
       (condition-case e (menu-bar-mode -1) (error (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
@@ -198,6 +212,7 @@ fn div_cx416_tool_menu_bar_mode() {
 #[test]
 fn div_cx416_frame_parameter_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (mono dark nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (selected-frame)))
@@ -206,7 +221,7 @@ fn div_cx416_frame_parameter_deep() {
         (frame-parameter f 'cursor-type)
         (frame-parameter f 'title)))
 "##,
-        expect_test::expect![[r#""OK (mono dark nil nil)""#]],
+        expect,
     );
 }
 
@@ -214,6 +229,7 @@ fn div_cx416_frame_parameter_deep() {
 #[test]
 fn div_cx416_frame_list_live() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (selected-frame)))
@@ -221,7 +237,7 @@ fn div_cx416_frame_list_live() {
         (frame-live-p f)
         (windowp (frame-selected-window f))))
 "##,
-        expect_test::expect![[r#""OK (1 t t)""#]],
+        expect,
     );
 }
 
@@ -229,6 +245,7 @@ fn div_cx416_frame_list_live() {
 #[test]
 fn div_cx416_terminal_name_live() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"initial_terminal\" t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((term (frame-terminal (selected-frame))))
@@ -236,7 +253,7 @@ fn div_cx416_terminal_name_live() {
         (terminal-live-p term)
         (terminal-live-p (get-buffer-create "*test*"))))
 "##,
-        expect_test::expect![[r#""OK (\"initial_terminal\" t nil)""#]],
+        expect,
     );
 }
 
@@ -244,12 +261,13 @@ fn div_cx416_terminal_name_live() {
 #[test]
 fn div_cx416_device_class() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((term (frame-terminal (selected-frame))))
   (device-class term))
 "##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 1)""#]],
+        expect,
     );
 }
 
@@ -257,6 +275,9 @@ fn div_cx416_device_class() {
 #[test]
 fn div_cx416_color_rgb_to_hex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r##""OK (\"#ffff00000000\" \"#0000ffff0000\" \"#00000000ffff\" (1.0 0.0 0.0) (1.0 1.0 1.0))""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (color-rgb-to-hex 1.0 0 0)
@@ -265,9 +286,7 @@ fn div_cx416_color_rgb_to_hex() {
       (color-name-to-rgb "red")
       (color-name-to-rgb "alice blue"))
 "##,
-        expect_test::expect![[
-            r##""OK (\"#ffff00000000\" \"#0000ffff0000\" \"#00000000ffff\" (1.0 0.0 0.0) (1.0 1.0 1.0))""##
-        ]],
+        expect,
     );
 }
 
@@ -275,15 +294,16 @@ fn div_cx416_color_rgb_to_hex() {
 #[test]
 fn div_cx416_color_space_conversion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((0.4124564 0.21266729 0.0193339) (0.7991526701664677 0.7180676680115904 0.7044985157025838))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'color)
   (list (condition-case e (color-srgb-to-xyz 1.0 0 0) (error (car e)))
         (condition-case e (color-xyz-to-srgb 0.5 0.5 0.5) (error (car e)))))
 "##,
-        expect_test::expect![[
-            r#""OK ((0.4124564 0.21266729 0.0193339) (0.7991526701664677 0.7180676680115904 0.7044985157025838))""#
-        ]],
+        expect,
     );
 }
 
@@ -291,11 +311,12 @@ fn div_cx416_color_space_conversion() {
 #[test]
 fn div_cx416_tty_display_color() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (tty-display-color-p)
       (tty-display-color-cells))
 "##,
-        expect_test::expect![[r#""OK (nil 0)""#]],
+        expect,
     );
 }

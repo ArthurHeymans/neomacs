@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx95_oclosure_basic_slots_and_accessors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -21,13 +22,14 @@ fn div_cx95_oclosure_basic_slots_and_accessors() {
               (oclosure-type c))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx95_closure_p_lambda_p_and_function_p_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lex (let ((lexical-binding t)) (lambda () :lex)))
@@ -40,13 +42,14 @@ fn div_cx95_closure_p_lambda_p_and_function_p_matrix() {
         (byte-code-function-p (symbol-function 'car))
         (closurep (symbol-function 'neo-cx95-named))))
 "##,
-        expect_test::expect![[r#""OK (t t t t nil t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx95_generator_basic_iteration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -66,13 +69,14 @@ fn div_cx95_generator_basic_iteration() {
               (funcall iter))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx95_closure_capture_in_loop_does_not_share() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 1 2 3 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
@@ -81,13 +85,14 @@ fn div_cx95_closure_capture_in_loop_does_not_share() {
       (push (lambda () i) closures))
     (mapcar #'funcall (nreverse closures))))
 "##,
-        expect_test::expect![[r#""OK (0 1 2 3 4)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx95_closure_mutation_visible_across_callers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 1 2 3 3 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
@@ -101,13 +106,14 @@ fn div_cx95_closure_mutation_visible_across_callers() {
             (funcall get)
             count))))
 "##,
-        expect_test::expect![[r#""OK (0 1 2 3 3 3)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx95_make_interpreted_closure_vs_bytecompiled() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable x)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
@@ -119,13 +125,14 @@ fn div_cx95_make_interpreted_closure_vs_bytecompiled() {
             (closurep interpreted)
             (closurep via-eval)))))
 "##,
-        expect_test::expect![[r#""ERR (void-variable x)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx95_closure_environment_introspection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -137,13 +144,14 @@ fn div_cx95_closure_environment_introspection() {
               (closure--function-environment f))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx95_apply_closure_via_funcall_with_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (6 0 60 106)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
@@ -153,13 +161,14 @@ fn div_cx95_apply_closure_via_funcall_with_args() {
           (apply f '(10 20 30))
           (apply f 100 '(1 2 3)))))
 "##,
-        expect_test::expect![[r#""OK (6 0 60 106)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx95_recursive_closure_with_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 1 5 55 6765)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
@@ -172,13 +181,14 @@ fn div_cx95_recursive_closure_with_state() {
           (funcall fib 10 0 1)
           (funcall fib 20 0 1))))
 "##,
-        expect_test::expect![[r#""OK (0 1 5 55 6765)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx95_defun_inline_closures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 105 10 110)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
@@ -191,13 +201,14 @@ fn div_cx95_defun_inline_closures() {
           (funcall add10 0)
           (funcall add10 100))))
 "##,
-        expect_test::expect![[r#""OK (5 105 10 110)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx95_closure_with_opt_and_rest_combined() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable base)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
@@ -208,13 +219,14 @@ fn div_cx95_closure_with_opt_and_rest_combined() {
           (funcall f 1 2)
           (funcall f 1 2 3 4 5))))
 "##,
-        expect_test::expect![[r#""ERR (void-variable base)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx95_closures_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
@@ -245,6 +257,6 @@ fn div_cx95_closures_with_marker_overlay_undo_narrow_mega() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }

@@ -94,12 +94,10 @@ fn oracle_prop_sched_adv_round_robin() {
                         (setq total (+ total turnaround))))
                     total)))))
     (fmakunbound 'neovm--test-round-robin)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((P1 0 3) (P2 3 6) (P3 6 9) (P4 9 12) (P1 12 15) (P2 15 16) (P3 16 19) (P1 19 22) (P1 22 23)) ((P1 23) (P2 16) (P3 19) (P4 12)) 9 64)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((P1 0 3) (P2 3 6) (P3 6 9) (P4 9 12) (P1 12 15) (P2 15 16) (P3 16 19) (P1 19 22) (P1 22 23)) ((P1 23) (P2 16) (P3 19) (P4 12)) 9 64)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -194,12 +192,10 @@ fn oracle_prop_sched_adv_priority_with_aging() {
                       (setq total-wait (+ total-wait wait))))
                   total-wait))))
     (fmakunbound 'neovm--test-priority-aging)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((P1 0 6) (P2 6 9) (P4 9 11) (P3 11 19) (P5 19 23)) ((P1 6) (P2 9) (P4 11) (P3 19) (P5 23)) 39)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((P1 0 6) (P2 6 9) (P4 9 11) (P3 11 19) (P5 19 23)) ((P1 6) (P2 9) (P4 11) (P3 19) (P5 23)) 39)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -269,12 +265,10 @@ fn oracle_prop_sched_adv_shortest_job_first() {
                 ;; Average waiting time * length (sum)
                 (apply #'+ (mapcar #'cadr (nth 2 result))))))
     (fmakunbound 'neovm--test-sjf)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((P1 0 6) (P5 6 7) (P2 7 9) (P4 9 12) (P3 12 20)) ((P1 6) (P2 8) (P3 18) (P4 9) (P5 3)) ((P1 0) (P2 6) (P3 10) (P4 6) (P5 2)) 44 24)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((P1 0 6) (P5 6 7) (P2 7 9) (P4 9 12) (P3 12 20)) ((P1 6) (P2 8) (P3 18) (P4 9) (P5 3)) ((P1 0) (P2 6) (P3 10) (P4 6) (P5 2)) 44 24)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -360,12 +354,10 @@ fn oracle_prop_sched_adv_srtf() {
                 (apply #'+ (mapcar #'cadr (nth 2 result))))))
     (fmakunbound 'neovm--test-srtf)
     (fmakunbound 'nth-1-plus-2)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((P1 0 2) (P2 2 4) (P3 4 5) (P2 5 7) (P4 7 11) (P1 11 16)) ((P1 16) (P2 5) (P3 1) (P4 6)) ((P1 9) (P2 1) (P3 0) (P4 2)) 28 12)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((P1 0 2) (P2 2 4) (P3 4 5) (P2 5 7) (P4 7 11) (P1 11 16)) ((P1 16) (P2 5) (P3 1) (P4 6)) ((P1 9) (P2 1) (P3 0) (P4 2)) 28 12)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -456,12 +448,10 @@ fn oracle_prop_sched_adv_multi_level_feedback_queue() {
                 (nth 1 result)
                 (length (nth 0 result)))))
     (fmakunbound 'neovm--test-mlfq)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((P1 0 2 0) (P2 2 4 0) (P3 4 6 0) (P4 6 8 0) (P1 8 12 1) (P2 12 15 1) (P3 15 16 1) (P4 16 20 1) (P1 20 26 2) (P4 26 28 2)) ((P1 26) (P2 15) (P3 16) (P4 28)) 10)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((P1 0 2 0) (P2 2 4 0) (P3 4 6 0) (P4 6 8 0) (P1 8 12 1) (P2 12 15 1) (P3 15 16 1) (P4 16 20 1) (P1 20 26 2) (P4 26 28 2)) ((P1 26) (P2 15) (P3 16) (P4 28)) 10)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -541,12 +531,10 @@ fn oracle_prop_sched_adv_edf_preemptive() {
                 ;; Number of context switches
                 (1- (length (nth 0 result))))))
     (fmakunbound 'neovm--test-edf-preemptive)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((P1 0 1) (P2 1 3) (P1 3 4) (P4 4 5) (P1 5 6) (P3 6 10) (P5 10 13)) ((P1 6) (P2 3) (P3 10) (P4 5) (P5 13)) (P5) 6)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((P1 0 1) (P2 1 3) (P1 3 4) (P4 4 5) (P1 5 6) (P3 6 10) (P5 10 13)) ((P1 6) (P2 3) (P3 10) (P4 5) (P5 13)) (P5) 6)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -633,10 +621,8 @@ fn oracle_prop_sched_adv_gantt_and_metrics() {
     (fmakunbound 'neovm--test-fcfs)
     (fmakunbound 'neovm--test-metrics)
     (fmakunbound 'neovm--test-format-gantt)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"P1[0-5] P2[5-8] P3[8-16] P4[16-18] P5[18-22]\" ((P1 5 0) (P2 7 4) (P3 14 6) (P4 15 13) (P5 18 14)) (total-turnaround 59 total-waiting 37 total-burst 22 makespan 22 throughput-x100 22) (t t t t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"P1[0-5] P2[5-8] P3[8-16] P4[16-18] P5[18-22]\" ((P1 5 0) (P2 7 4) (P3 14 6) (P4 15 13) (P5 18 14)) (total-turnaround 59 total-waiting 37 total-burst 22 makespan 22 throughput-x100 22) (t t t t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

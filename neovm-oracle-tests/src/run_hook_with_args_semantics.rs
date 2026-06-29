@@ -23,7 +23,8 @@ fn oracle_run_hook_with_args_function_value_and_final_value() {
    (nreverse log)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (nil nil)""#]]);
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -53,10 +54,8 @@ fn oracle_run_hook_until_success_and_failure_stop_semantics() {
            (run-hook-with-args-until-failure 'empty-hook)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil t nil (nil t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil t nil (nil t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -97,10 +96,8 @@ fn oracle_run_hook_with_args_local_t_ordering_for_stop_variants() {
       (makunbound 'neovm--rhwa-failure))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (global-success ((local-s-before 1) (global-s 1)) nil ((local-f-before 2) (global-f 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (global-success ((local-s-before 1) (global-s 1)) nil ((local-f-before 2) (global-f 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

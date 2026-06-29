@@ -11,16 +11,14 @@ use super::common::{
 fn oracle_prop_substring_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(substring "hello world" 0 5)"#,
-        expect_test::expect![[r#""OK \"hello\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"hello\"""#]];
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(r#"(substring "hello world" 0 5)"#, expect);
     assert_ok_eq(r#""hello""#, &o, &n);
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(substring "hello world" 6)"#,
-        expect_test::expect![[r#""OK \"world\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"world\"""#]];
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(r#"(substring "hello world" 6)"#, expect);
     assert_ok_eq(r#""world""#, &o, &n);
 }
 
@@ -28,10 +26,8 @@ fn oracle_prop_substring_basic() {
 fn oracle_prop_substring_full() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(substring "hello" 0)"#,
-        expect_test::expect![[r#""OK \"hello\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"hello\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(substring "hello" 0)"#, expect);
     assert_ok_eq(r#""hello""#, &o, &n);
 }
 
@@ -39,10 +35,8 @@ fn oracle_prop_substring_full() {
 fn oracle_prop_substring_empty_result() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(substring "hello" 3 3)"#,
-        expect_test::expect![[r#""OK \"\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(substring "hello" 3 3)"#, expect);
     assert_ok_eq(r#""""#, &o, &n);
 }
 
@@ -50,17 +44,15 @@ fn oracle_prop_substring_empty_result() {
 fn oracle_prop_substring_negative_index() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK \"world\"""#]];
     // Negative indices count from end
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(substring "hello world" -5)"#,
-        expect_test::expect![[r#""OK \"world\"""#]],
-    );
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(r#"(substring "hello world" -5)"#, expect);
     assert_ok_eq(r#""world""#, &o, &n);
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(substring "hello" -3 -1)"#,
-        expect_test::expect![[r#""OK \"ll\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"ll\"""#]];
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(r#"(substring "hello" -3 -1)"#, expect);
     assert_ok_eq(r#""ll""#, &o, &n);
 }
 
@@ -68,10 +60,8 @@ fn oracle_prop_substring_negative_index() {
 fn oracle_prop_substring_single_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(substring "hello" 1 2)"#,
-        expect_test::expect![[r#""OK \"e\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"e\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(substring "hello" 1 2)"#, expect);
     assert_ok_eq(r#""e""#, &o, &n);
 }
 
@@ -90,10 +80,8 @@ fn oracle_prop_substring_with_concat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r####"(concat (substring "hello" 0 2) (substring "world" 3))"####;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK \"held\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"held\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq(r#""held""#, &o, &n);
 }
 
@@ -101,10 +89,8 @@ fn oracle_prop_substring_with_concat() {
 fn oracle_prop_substring_on_empty_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(substring "" 0)"#,
-        expect_test::expect![[r#""OK \"\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(substring "" 0)"#, expect);
     assert_ok_eq(r#""""#, &o, &n);
 }
 
@@ -136,10 +122,8 @@ fn oracle_substring_rejects_non_vector_arraylikes_like_gnu() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ([1 2] (wrong-type-argument (arrayp #s(neovm--substring-record 1 2))) (wrong-type-argument (arrayp #[257 \"\\300\\207\" [42] 1])) (wrong-type-argument (arrayp #&3\"\u{7}\")) (wrong-type-argument (arrayp #^[65 nil generic 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65])) (wrong-type-argument (stringp [1 2 3])))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ([1 2] (wrong-type-argument (arrayp #s(neovm--substring-record 1 2))) (wrong-type-argument (arrayp #[257 \"\\300\\207\" [42] 1])) (wrong-type-argument (arrayp #&3\"\u{7}\")) (wrong-type-argument (arrayp #^[65 nil generic 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65])) (wrong-type-argument (stringp [1 2 3])))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

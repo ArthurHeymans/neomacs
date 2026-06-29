@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_marker_set_nil_evaporate_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass marker-state ()
@@ -64,7 +65,7 @@ fn combo_eieio_marker_set_nil_evaporate_overlay() {
                 (overlay-live-p ov)
                 (marker-live-p m2)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]],
+        expect,
     );
 }
 
@@ -72,6 +73,7 @@ fn combo_eieio_marker_set_nil_evaporate_overlay() {
 fn combo_eieio_evaporate_overlay_with_textprops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass evaporate-log ()
@@ -129,7 +131,7 @@ fn combo_eieio_evaporate_overlay_with_textprops() {
                 (overlay-live-p ov1)
                 (overlay-live-p ov2)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]],
+        expect,
     );
 }
 
@@ -137,6 +139,7 @@ fn combo_eieio_evaporate_overlay_with_textprops() {
 fn combo_eieio_marker_relocation_after_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass marker-track ()
@@ -202,7 +205,7 @@ fn combo_eieio_marker_relocation_after_edit() {
                 (overlay-start ov)
                 (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -210,6 +213,7 @@ fn combo_eieio_marker_relocation_after_edit() {
 fn combo_eieio_marker_copy_relocate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass marker-pair ()
@@ -271,7 +275,7 @@ fn combo_eieio_marker_copy_relocate() {
                 (marker-position m-src)
                 (marker-position m-dst)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -279,6 +283,7 @@ fn combo_eieio_marker_copy_relocate() {
 fn combo_eieio_marker_in_deleted_overlay_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function marker-live-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass region-state ()
@@ -339,6 +344,6 @@ fn combo_eieio_marker_in_deleted_overlay_region() {
                 (marker-live-p m1)
                 (overlay-live-p ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function marker-live-p)""#]],
+        expect,
     );
 }

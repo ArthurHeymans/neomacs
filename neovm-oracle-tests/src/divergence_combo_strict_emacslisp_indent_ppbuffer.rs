@@ -10,6 +10,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_o9_emacs_lisp_indent_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"(defun foo ()\n  (let ((x 1))\n    (+ x 2)))\n\" \"(let ((x 1)\n      (y 2))\n  (+ x y))\n\" \"(progn\n  (foo)\n  (bar)\n  (baz))\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer
@@ -28,15 +31,16 @@ fn div_o9_emacs_lisp_indent_region() {
         (indent-region (point-min) (point-max))
         (buffer-string)))
 "##,
-        expect_test::expect![[
-            r#""OK (\"(defun foo ()\n  (let ((x 1))\n    (+ x 2)))\n\" \"(let ((x 1)\n      (y 2))\n  (+ x y))\n\" \"(progn\n  (foo)\n  (bar)\n  (baz))\n\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_o9_emacs_lisp_indent_control_flow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"(if x\n    (then)\n  (else))\n\" \"(cond\n ((= x 1)\n  'one)\n ((= x 2)\n  'two))\n\" \"(while x\n  (foo)\n  (bar))\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer
@@ -55,15 +59,16 @@ fn div_o9_emacs_lisp_indent_control_flow() {
         (indent-region (point-min) (point-max))
         (buffer-string)))
 "##,
-        expect_test::expect![[
-            r#""OK (\"(if x\n    (then)\n  (else))\n\" \"(cond\n ((= x 1)\n  'one)\n ((= x 2)\n  'two))\n\" \"(while x\n  (foo)\n  (bar))\n\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_o9_pp_buffer_pretty_print() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK \"((a . 1) (b . (2 3)) (c . 4) (d . ((nested . val))))\n\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -71,15 +76,16 @@ fn div_o9_pp_buffer_pretty_print() {
   (pp-buffer)
   (buffer-string))
 "##,
-        expect_test::expect![[
-            r#""OK \"((a . 1) (b . (2 3)) (c . 4) (d . ((nested . val))))\n\"""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_o9_emacs_lisp_indent_keyword_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK \"(make-process :name \\\"foo\\\"\n\t      :command '(\\\"echo\\\" \\\"hi\\\")\n\t      :buffer buf)\n\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -88,8 +94,6 @@ fn div_o9_emacs_lisp_indent_keyword_args() {
   (indent-region (point-min) (point-max))
   (buffer-string))
 "##,
-        expect_test::expect![[
-            r#""OK \"(make-process :name \\\"foo\\\"\n\t      :command '(\\\"echo\\\" \\\"hi\\\")\n\t      :buffer buf)\n\"""#
-        ]],
+        expect,
     );
 }

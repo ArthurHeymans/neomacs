@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_print_object_custom_buffer_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (defclass named-entity ()
@@ -57,7 +58,7 @@ fn combo_eieio_print_object_custom_buffer_ops() {
                 (buffer-string)
                 entity)))
       (kill-buffer buf))))"##,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -65,6 +66,7 @@ fn combo_eieio_print_object_custom_buffer_ops() {
 fn combo_eieio_clone_independent_mutations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass score-record ()
@@ -122,7 +124,7 @@ fn combo_eieio_clone_independent_mutations() {
                 (buffer-string)
                 original cloned)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -130,6 +132,7 @@ fn combo_eieio_clone_independent_mutations() {
 fn combo_eieio_class_precedence_introspection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function eieio-class-precedence-list)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass base () ((x :initarg :x :accessor base-x :initform 0)))
@@ -177,7 +180,7 @@ fn combo_eieio_class_precedence_introspection() {
                 (buffer-string)
                 obj)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function eieio-class-precedence-list)""#]],
+        expect,
     );
 }
 
@@ -185,6 +188,7 @@ fn combo_eieio_class_precedence_introspection() {
 fn combo_eieio_object_types_and_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function class-ancestor-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass shape ()
@@ -239,7 +243,7 @@ fn combo_eieio_object_types_and_predicates() {
                 (buffer-string)
                 shapes)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function class-ancestor-p)""#]],
+        expect,
     );
 }
 
@@ -247,6 +251,7 @@ fn combo_eieio_object_types_and_predicates() {
 fn combo_eieio_print_read_roundtrip_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (defclass serializable ()
@@ -295,6 +300,6 @@ fn combo_eieio_print_read_roundtrip_buffer() {
                 (buffer-string)
                 ser-obj)))
       (kill-buffer buf))))"##,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }

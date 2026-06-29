@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_apply_partially_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "app")))
@@ -37,7 +38,7 @@ fn combo_apply_partially_marker_overlay_undo() {
                   (marker-position m)
                   (buffer-string))))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -45,6 +46,7 @@ fn combo_apply_partially_marker_overlay_undo() {
 fn combo_apply_partially_narrow_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "apn")))
@@ -76,7 +78,7 @@ fn combo_apply_partially_narrow_marker() {
                   (marker-position m)
                   (buffer-string))))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -84,6 +86,7 @@ fn combo_apply_partially_narrow_marker() {
 fn combo_apply_partially_clone_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "apc")))
@@ -115,7 +118,7 @@ fn combo_apply_partially_clone_overlay() {
                     (buffer-string))))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -123,6 +126,7 @@ fn combo_apply_partially_clone_overlay() {
 fn combo_apply_partially_multi_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun my-buf-ins (pos str)
@@ -166,7 +170,7 @@ fn combo_apply_partially_multi_buffer() {
         (list r1 r2))
       (kill-buffer b1)
       (kill-buffer b2))))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -174,6 +178,7 @@ fn combo_apply_partially_multi_buffer() {
 fn combo_apply_partially_overlay_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "apo")))
@@ -205,6 +210,6 @@ fn combo_apply_partially_overlay_narrow_undo() {
                   (marker-position m)
                   (buffer-string))))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

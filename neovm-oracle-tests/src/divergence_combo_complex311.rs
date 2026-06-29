@@ -9,6 +9,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx311_format_all_specifiers_full_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Format string ends in middle of format specifier\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%d" 42)
@@ -32,15 +35,14 @@ fn div_cx311_format_all_specifiers_full_matrix() {
       (format "%%")
       (format "%3$" 1 2 3))
 "##,
-        expect_test::expect![[
-            r#""ERR (error \"Format string ends in middle of format specifier\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx311_number_to_string_all_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable 1/3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (number-to-string 42)
@@ -52,13 +54,14 @@ fn div_cx311_number_to_string_all_types() {
       (number-to-string 0)
       (number-to-string -0.0))
 "##,
-        expect_test::expect![[r#""ERR (void-variable 1/3)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx311_string_to_number_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (42 3.14 1 0 0 0 0 42 0 -314.0 42)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-to-number "42")
@@ -73,13 +76,14 @@ fn div_cx311_string_to_number_edge_cases() {
       (string-to-number "-3.14e2")
       (string-to-number "  42  "))
 "##,
-        expect_test::expect![[r#""OK (42 3.14 1 0 0 0 0 42 0 -314.0 42)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx311_expt_log_sqrt_full_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable exp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (expt 2 10)
@@ -97,13 +101,14 @@ fn div_cx311_expt_log_sqrt_full_matrix() {
       (sqrt 2)
       (expt 8 1/3))
 "##,
-        expect_test::expect![[r#""ERR (void-variable exp)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx311_floor_ceiling_round_truncate_all_combos() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 -3 3 -2 2 2 3 4 -4 2 -2 2.0 3.0 2.0 2.0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (floor 2.7)
@@ -122,13 +127,14 @@ fn div_cx311_floor_ceiling_round_truncate_all_combos() {
       (fround 2.5)
       (ftruncate 2.7))
 "##,
-        expect_test::expect![[r#""OK (2 -3 3 -2 2 2 3 4 -4 2 -2 2.0 3.0 2.0 2.0)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx311_mod_remainder_negative_divisor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 -1 1 -1 1 2 -2 -1 1.5 1.5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (% 7 3)
@@ -142,13 +148,16 @@ fn div_cx311_mod_remainder_negative_divisor() {
       (mod 7.5 3)
       (mod -7.5 3))
 "##,
-        expect_test::expect![[r#""OK (1 -1 1 -1 1 2 -2 -1 1.5 1.5)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx311_ash_lsh_logand_logior_logxor_bignum() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (1 1024 4294967296 18446744073709551616 340282366920938463463374607431768211456 128 -1 1298074214633706907132624082305024 1237940039285380274899124224 15 255 240 -1 8 0)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((big (expt 2 100)))
@@ -168,15 +177,15 @@ fn div_cx311_ash_lsh_logand_logior_logxor_bignum() {
         (logcount 255)
         (logcount -1)))
 "##,
-        expect_test::expect![[
-            r#""OK (1 1024 4294967296 18446744073709551616 340282366920938463463374607431768211456 128 -1 1298074214633706907132624082305024 1237940039285380274899124224 15 255 240 -1 8 0)""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx311_format_positional_args_mixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (error \"Not enough arguments for format string\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%2$s %1$s" "world" "hello")
@@ -184,13 +193,14 @@ fn div_cx311_format_positional_args_mixed() {
       (format "%s = %2$d (or %d)" "x" 99)
       (format "%3$-10s|" "a" "b" "c"))
 "##,
-        expect_test::expect![[r#""ERR (error \"Not enough arguments for format string\")""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx311_nan_inf_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((inf (/ 1.0 0.0))
@@ -205,13 +215,14 @@ fn div_cx311_nan_inf_predicates() {
         (= nan nan)
         (< nan 0)))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t nil nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx311_number_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable 355/113)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((big (expt 2 128))
@@ -242,6 +253,6 @@ fn div_cx311_number_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""ERR (void-variable 355/113)""#]],
+        expect,
     )
 }

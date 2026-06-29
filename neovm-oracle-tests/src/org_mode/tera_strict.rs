@@ -10,6 +10,9 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn tera_all_org_element_create_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (paragraph 3 (#(\"body\" 0 4 (:parent (section nil #(\"body\" 0 4 (:parent #4)))))) (1 section) \"foo\" 1 t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -32,9 +35,7 @@ fn tera_all_org_element_create_combinations() {
    (let ((children '("a" "b" (org-element-create 'foo))))
      (equal (cddr (apply #'org-element-create 'bar nil children))
             children))))"##,
-        expect_test::expect![[
-            r#""OK (paragraph 3 (#(\"body\" 0 4 (:parent (section nil #(\"body\" 0 4 (:parent #4)))))) (1 section) \"foo\" 1 t)""#
-        ]],
+        expect,
     );
 }
 
@@ -45,6 +46,7 @@ fn tera_all_org_element_create_combinations() {
 #[test]
 fn tera_all_org_element_copy_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (bold 2 nil nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -61,7 +63,7 @@ fn tera_all_org_element_copy_combinations() {
    (equal '("text") (org-element-copy '("text")))
    ;; Not eq.
    (eq '("text") (org-element-copy '("text")))))"##,
-        expect_test::expect![[r#""OK (bold 2 nil nil t nil)""#]],
+        expect,
     );
 }
 
@@ -72,6 +74,9 @@ fn tera_all_org_element_copy_combinations() {
 #[test]
 fn tera_all_org_element_set_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (bar nil #(\"test\" 0 4 (:parent (#(\"test\" 0 4 (:parent #3))))))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -94,9 +99,7 @@ fn tera_all_org_element_set_combinations() {
          (str "old"))
      (org-element-set str "new")
      (car (org-element-contents parent)))))"##,
-        expect_test::expect![[
-            r#""OK (bar nil #(\"test\" 0 4 (:parent (#(\"test\" 0 4 (:parent #3))))))""#
-        ]],
+        expect,
     );
 }
 
@@ -107,6 +110,7 @@ fn tera_all_org_element_set_combinations() {
 #[test]
 fn tera_all_org_element_adopt_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((paragraph paragraph) section section)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -120,7 +124,7 @@ fn tera_all_org_element_adopt_combinations() {
      ;; Parent set on children.
      (org-element-type (org-element-property :parent child1))
      (org-element-type (org-element-property :parent child2)))))"##,
-        expect_test::expect![[r#""OK ((paragraph paragraph) section section)""#]],
+        expect,
     );
 }
 
@@ -131,6 +135,7 @@ fn tera_all_org_element_adopt_combinations() {
 #[test]
 fn tera_all_org_element_extract_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((paragraph) nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -144,7 +149,7 @@ fn tera_all_org_element_extract_combinations() {
      (mapcar #'org-element-type (org-element-contents parent))
      ;; Extracted child has no parent.
      (org-element-property :parent child1))))"##,
-        expect_test::expect![[r#""OK ((paragraph) nil)""#]],
+        expect,
     );
 }
 
@@ -155,6 +160,7 @@ fn tera_all_org_element_extract_combinations() {
 #[test]
 fn tera_all_org_element_insert_before_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (paragraph paragraph paragraph)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -165,7 +171,7 @@ fn tera_all_org_element_insert_before_combinations() {
     (org-element-adopt parent child1 child2)
     (org-element-insert-before new-child child2)
     (mapcar #'org-element-type (org-element-contents parent))))"##,
-        expect_test::expect![[r#""OK (paragraph paragraph paragraph)""#]],
+        expect,
     );
 }
 
@@ -176,6 +182,7 @@ fn tera_all_org_element_insert_before_combinations() {
 #[test]
 fn tera_all_org_element_swap_a_b_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument integer-or-marker-p nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -186,7 +193,7 @@ fn tera_all_org_element_swap_a_b_combinations() {
     (org-element-adopt parent child1 child2 child3)
     (org-element-swap-A-B child1 child3)
     (mapcar #'org-element-type (org-element-contents parent))))"##,
-        expect_test::expect![[r#""ERR (wrong-type-argument integer-or-marker-p nil)""#]],
+        expect,
     );
 }
 
@@ -197,6 +204,7 @@ fn tera_all_org_element_swap_a_b_combinations() {
 #[test]
 fn tera_all_org_element_uniq_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-uniq)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -211,7 +219,7 @@ fn tera_all_org_element_uniq_combinations() {
      (length (org-element-uniq list))
      ;; Order preserved.
      (mapcar #'org-element-type (org-element-uniq list)))))"##,
-        expect_test::expect![[r#""ERR (void-function org-element-uniq)""#]],
+        expect,
     );
 }
 
@@ -222,6 +230,9 @@ fn tera_all_org_element_uniq_combinations() {
 #[test]
 fn tera_all_org_element_lineage_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((paragraph center-block section headline headline org-data) (bold paragraph center-block section headline headline org-data) (nil :standard-properties section) (nil :standard-properties paragraph) (nil :standard-properties plain-text))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -244,9 +255,7 @@ fn tera_all_org_element_lineage_combinations() {
          (mapcar #'org-element-type (org-element-lineage bold 'center-block))
          ;; Filtered: with self.
          (mapcar #'org-element-type (org-element-lineage bold '(bold paragraph) t)))))))"##,
-        expect_test::expect![[
-            r#""OK ((paragraph center-block section headline headline org-data) (bold paragraph center-block section headline headline org-data) (nil :standard-properties section) (nil :standard-properties paragraph) (nil :standard-properties plain-text))""#
-        ]],
+        expect,
     );
 }
 
@@ -257,6 +266,9 @@ fn tera_all_org_element_lineage_combinations() {
 #[test]
 fn tera_all_org_element_lineage_map_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((paragraph center-block section headline headline org-data) (bold paragraph center-block section headline headline org-data) (\"H2\" \"H1\") bold)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -279,9 +291,7 @@ fn tera_all_org_element_lineage_map_combinations() {
          ;; FIRST-MATCH.
          (org-element-lineage-map
           bold #'org-element-type nil t t))))))"##,
-        expect_test::expect![[
-            r#""OK ((paragraph center-block section headline headline org-data) (bold paragraph center-block section headline headline org-data) (\"H2\" \"H1\") bold)""#
-        ]],
+        expect,
     );
 }
 
@@ -292,6 +302,7 @@ fn tera_all_org_element_lineage_map_combinations() {
 #[test]
 fn tera_all_org_element_property_inherited_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 3 (1 2 3) (\"p\") (\"c\") (\"gc\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -311,7 +322,7 @@ fn tera_all_org_element_property_inherited_combinations() {
      (org-element-property-inherited :own-c grandchild 'with-self 'accumulate)
      ;; Only grandchild has :own-gc.
      (org-element-property-inherited :own-gc grandchild 'with-self 'accumulate))))"##,
-        expect_test::expect![[r#""OK (2 3 (1 2 3) (\"p\") (\"c\") (\"gc\"))""#]],
+        expect,
     );
 }
 
@@ -322,6 +333,9 @@ fn tera_all_org_element_property_inherited_combinations() {
 #[test]
 fn tera_all_org_element_normalize_contents_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((paragraph nil \"Two spaces\n Three spaces\") (paragraph nil #(\"  Two spaces\nNo space\" 0 2 (org-ind 2))) (paragraph nil \"Two spaces\n\n\nTwo spaces\") (paragraph nil \"No space\nTwo spaces\n Three spaces\") (paragraph nil \"1 space\" (line-break) \" 2 spaces\") (verse-block nil \"line 1\n\nline 2\") (paragraph nil \" Two spaces \" (bold nil \" and\nOne space\")))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -347,9 +361,7 @@ fn tera_all_org_element_normalize_contents_combinations() {
    ;; Recursive objects.
    (org-element-normalize-contents
     '(paragraph nil "  Two spaces " (bold nil " and\n One space")))))"##,
-        expect_test::expect![[
-            r#""OK ((paragraph nil \"Two spaces\n Three spaces\") (paragraph nil #(\"  Two spaces\nNo space\" 0 2 (org-ind 2))) (paragraph nil \"Two spaces\n\n\nTwo spaces\") (paragraph nil \"No space\nTwo spaces\n Three spaces\") (paragraph nil \"1 space\" (line-break) \" 2 spaces\") (verse-block nil \"line 1\n\nline 2\") (paragraph nil \" Two spaces \" (bold nil \" and\nOne space\")))""#
-        ]],
+        expect,
     );
 }
 
@@ -360,6 +372,7 @@ fn tera_all_org_element_normalize_contents_combinations() {
 #[test]
 fn tera_all_org_element_secondary_p_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:title :foo nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -384,7 +397,7 @@ fn tera_all_org_element_secondary_p_combinations() {
        (org-element-map (org-element-parse-buffer) 'bold
          (lambda (object) (org-element-type (org-element-secondary-p object)))
          nil t)))))"##,
-        expect_test::expect![[r#""OK (:title :foo nil)""#]],
+        expect,
     );
 }
 
@@ -395,6 +408,7 @@ fn tera_all_org_element_secondary_p_combinations() {
 #[test]
 fn tera_all_org_element_map_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -420,7 +434,7 @@ fn tera_all_org_element_map_combinations() {
          (length (org-element-map tree 'bold #'identity nil nil 'paragraph))
          ;; Map with affiliated.
          (length (org-element-map tree 'bold #'identity nil nil nil nil t))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -431,6 +445,9 @@ fn tera_all_org_element_map_combinations() {
 #[test]
 fn tera_all_org_element_ast_map_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((plain-text plain-text bold) (plain-text plain-text) (bold bold) (bold) (dummy bold))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -468,9 +485,7 @@ fn tera_all_org_element_ast_map_combinations() {
      (org-element-create 'bold))
     t #'org-element-type
     nil nil nil nil nil 'no-undefer)))"##,
-        expect_test::expect![[
-            r#""OK ((plain-text plain-text bold) (plain-text plain-text) (bold bold) (bold) (dummy bold))""#
-        ]],
+        expect,
     );
 }
 
@@ -481,6 +496,7 @@ fn tera_all_org_element_ast_map_combinations() {
 #[test]
 fn tera_all_org_element_properties_mapc_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -503,7 +519,7 @@ fn tera_all_org_element_properties_mapc_combinations() {
           (when (and (eq prop :foo) (eq 1 val))
             (throw :found t)))
         el 'undefer)))))"##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
@@ -514,6 +530,7 @@ fn tera_all_org_element_properties_mapc_combinations() {
 #[test]
 fn tera_all_org_element_properties_map_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((1 2 3) (1 2 nil) (1 2 4))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -531,7 +548,7 @@ fn tera_all_org_element_properties_map_combinations() {
             (1+ (org-element-property-raw :baz node))
           val))
       el))))"##,
-        expect_test::expect![[r#""OK ((1 2 3) (1 2 nil) (1 2 4))""#]],
+        expect,
     );
 }
 
@@ -542,6 +559,7 @@ fn tera_all_org_element_properties_map_combinations() {
 #[test]
 fn tera_all_org_element_deferred_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-deferred-force-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -564,7 +582,7 @@ fn tera_all_org_element_deferred_combinations() {
    (let ((el (org-element-create 'dummy '(:foo ,(org-element-deferred-create-list
                                                   (list 1 2 (org-element-deferred-create nil (lambda (_) 3))))))))
      (org-element-property :foo el))))"##,
-        expect_test::expect![[r#""ERR (void-function org-element-deferred-force-p)""#]],
+        expect,
     );
 }
 
@@ -575,6 +593,7 @@ fn tera_all_org_element_deferred_combinations() {
 #[test]
 fn tera_all_org_element_property_raw_setter_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (42 baz 3.14)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -586,7 +605,7 @@ fn tera_all_org_element_property_raw_setter_combinations() {
     (list (org-element-property-raw :foo el)
           (org-element-property-raw :bar el)
           (org-element-property-raw :num el))))"##,
-        expect_test::expect![[r#""OK (42 baz 3.14)""#]],
+        expect,
     );
 }
 
@@ -597,6 +616,7 @@ fn tera_all_org_element_property_raw_setter_combinations() {
 #[test]
 fn tera_all_org_element_at_point_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (paragraph paragraph paragraph headline drawer)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -622,7 +642,7 @@ fn tera_all_org_element_at_point_combinations() {
      (with-temp-buffer (org-mode) (insert ":DRAWER:\ncontents\n:END:")
        (goto-char (point-min)) (forward-line 2)
        (org-element-type (org-element-at-point))))))"##,
-        expect_test::expect![[r#""OK (paragraph paragraph paragraph headline drawer)""#]],
+        expect,
     );
 }
 
@@ -633,6 +653,7 @@ fn tera_all_org_element_at_point_combinations() {
 #[test]
 fn tera_all_org_element_context_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (search-failed \"Para\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -656,7 +677,7 @@ fn tera_all_org_element_context_combinations() {
        ;; On plain text.
        (search-forward "Para")
        (org-element-type (org-element-context))))))"##,
-        expect_test::expect![[r#""ERR (search-failed \"Para\")""#]],
+        expect,
     );
 }
 
@@ -667,6 +688,9 @@ fn tera_all_org_element_context_combinations() {
 #[test]
 fn tera_all_org_element_interpret_data_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"Simple paragraph.\n\" \"* H1\nBody 1\n** H2\nBody 2\n\" \"| a | b |\n| c | d |\n\" \"- Item 1\n- Item 2\n  - Sub\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -692,8 +716,6 @@ fn tera_all_org_element_interpret_data_combinations() {
        (goto-char (point-min))
        (substring-no-properties
         (org-element-interpret-data (org-element-parse-buffer)))))))"##,
-        expect_test::expect![[
-            r#""OK (\"Simple paragraph.\n\" \"* H1\nBody 1\n** H2\nBody 2\n\" \"| a | b |\n| c | d |\n\" \"- Item 1\n- Item 2\n  - Sub\n\")""#
-        ]],
+        expect,
     );
 }

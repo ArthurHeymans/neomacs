@@ -36,12 +36,10 @@ fn oracle_prop_sort_stability_tagged_elements() {
      group2
      group3)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 1 1 2 2 2 3 3 3) (\"a1\" \"a2\" \"a3\") (\"b1\" \"b2\" \"b3\") (\"c1\" \"c2\" \"c3\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 1 1 2 2 2 3 3 3) (\"a1\" \"a2\" \"a3\") (\"b1\" \"b2\" \"b3\") (\"c1\" \"c2\" \"c3\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -83,12 +81,10 @@ fn oracle_prop_sort_multi_field_records() {
      ;; Extract (seniority . name) tuples
      (mapcar #'cdr sorted))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"eng\" \"eng\" \"eng\" \"hr\" \"hr\" \"hr\" \"sales\" \"sales\") ((5 . \"bob\") (3 . \"alice\") (3 . \"carol\") (4 . \"eve\") (2 . \"dave\") (2 . \"hank\") (1 . \"frank\") (1 . \"grace\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"eng\" \"eng\" \"eng\" \"hr\" \"hr\" \"hr\" \"sales\" \"sales\") ((5 . \"bob\") (3 . \"alice\") (3 . \"carol\") (4 . \"eve\") (2 . \"dave\") (2 . \"hank\") (1 . \"frank\") (1 . \"grace\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -121,12 +117,10 @@ fn oracle_prop_sort_priority_mapping() {
                           (length (seq-filter (lambda (x) (eq x (car p))) sorted))))
                   priority))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((critical critical high medium medium low low none) t ((critical . 2) (high . 1) (medium . 2) (low . 2) (none . 1)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((critical critical high medium medium low low none) t ((critical . 2) (high . 1) (medium . 2) (low . 2) (none . 1)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -190,10 +184,8 @@ fn oracle_prop_sort_topological_ordering() {
              ok))))
     (fmakunbound 'neovm--sort-topo-depends-p)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((a b c d e) t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((a b c d e) t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -244,12 +236,10 @@ fn oracle_prop_sort_bucket_sort_simulation() {
            (setq m (1+ m)))
          (nreverse sizes))))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((3 4 8 11 15 17 26 29 31 42 44 50 55 63 68 72 76 87 93 99) t 10 ((0 . 3) (1 . 3) (2 . 2) (3 . 1) (4 . 2) (5 . 2) (6 . 2) (7 . 2) (8 . 1) (9 . 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((3 4 8 11 15 17 26 29 31 42 44 50 55 63 68 72 76 87 93 99) t 10 ((0 . 3) (1 . 3) (2 . 2) (3 . 1) (4 . 2) (5 . 2) (6 . 2) (7 . 2) (8 . 1) (9 . 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -281,10 +271,8 @@ fn oracle_prop_sort_comparison_counting() {
      ;; At least n-1 comparisons needed
      (>= count (1- n)))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3 4 5 6 7 8 9 10) 22 t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 2 3 4 5 6 7 8 9 10) 22 t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -325,12 +313,10 @@ fn oracle_prop_sort_chained_stable_sorts() {
           (equal score85 (sort (copy-sequence score85) #'string-lessp))
           (equal score92 (sort (copy-sequence score92) #'string-lessp))))))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"dave\" . 78) (\"grace\" . 78) (\"alice\" . 85) (\"carol\" . 85) (\"frank\" . 85) (\"bob\" . 92) (\"eve\" . 92) (\"hank\" . 92)) ((\"dave\" \"grace\") (\"alice\" \"carol\" \"frank\") (\"bob\" \"eve\" \"hank\") t t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"dave\" . 78) (\"grace\" . 78) (\"alice\" . 85) (\"carol\" . 85) (\"frank\" . 85) (\"bob\" . 92) (\"eve\" . 92) (\"hank\" . 92)) ((\"dave\" \"grace\") (\"alice\" \"carol\" \"frank\") (\"bob\" \"eve\" \"hank\") t t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -374,12 +360,10 @@ fn oracle_prop_sort_schwartzian_transform() {
        ;; Show decorations for verification
        (mapcar (lambda (d) (list (car d) (cadr d) (caddr d))) sorted-dec)))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"fig\" \"cherry\" \"date\" \"apple\" \"grape\" \"banana\" \"elderberry\") ((1 3 \"fig\") (1 6 \"cherry\") (2 4 \"date\") (2 5 \"apple\") (2 5 \"grape\") (3 6 \"banana\") (3 10 \"elderberry\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"fig\" \"cherry\" \"date\" \"apple\" \"grape\" \"banana\" \"elderberry\") ((1 3 \"fig\") (1 6 \"cherry\") (2 4 \"date\") (2 5 \"apple\") (2 5 \"grape\") (3 6 \"banana\") (3 10 \"elderberry\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -435,10 +419,8 @@ fn oracle_prop_sort_flatten_and_rebuild() {
     (fmakunbound 'neovm--sort-flatten)
     (fmakunbound 'neovm--sort-rebuild)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((5 3 1 8 2 9 4 7 6) (1 2 3 4 5 6 7 8 9) ((1 (2 3)) (4 (5 (6 7))) (8 9)) t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((5 3 1 8 2 9 4 7 6) (1 2 3 4 5 6 7 8 9) ((1 (2 3)) (4 (5 (6 7))) (8 9)) t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

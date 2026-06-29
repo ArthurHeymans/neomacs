@@ -29,12 +29,10 @@ fn oracle_prop_lambda_adv_optional_rest_defaults() {
                       (funcall f 1 2)
                       (funcall f 1 2 3)
                       (funcall f 1 2 3 4 5 6)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 default-b default-c 0 nil) (1 2 default-c 0 nil) (1 2 3 0 nil) (1 2 3 3 (4 5 6)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 default-b default-c 0 nil) (1 2 default-c 0 nil) (1 2 3 0 nil) (1 2 3 3 (4 5 6)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -58,10 +56,8 @@ fn oracle_prop_lambda_adv_iife_with_complex_body() {
                        ;; Sort by char code for deterministic output
                        (sort freq (lambda (a b) (< (car a) (car b))))))
                    "abracadabra")"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((97 . 5) (98 . 2) (99 . 1) (100 . 1) (114 . 2))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((97 . 5) (98 . 2) (99 . 1) (100 . 1) (114 . 2))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -82,10 +78,8 @@ fn oracle_prop_lambda_adv_mapcar_closure_over_loop_var() {
                     (setq makers (nreverse makers))
                     ;; Call each maker with 100
                     (mapcar (lambda (f) (funcall f 100)) makers))"####;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (100 101 102 103 104)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (100 101 102 103 104)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(100 101 102 103 104)", &o, &n);
 }
 
@@ -108,10 +102,8 @@ fn oracle_prop_lambda_adv_y_combinator_factorial() {
                       (funcall fact fact 1)
                       (funcall fact fact 5)
                       (funcall fact fact 10)))"####;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (1 1 120 3628800)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 1 120 3628800)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(1 1 120 3628800)", &o, &n);
 }
 
@@ -143,10 +135,8 @@ fn oracle_prop_lambda_adv_higher_order_pipeline_factory() {
                       (list (funcall pipeline 5)
                             (funcall pipeline 0)
                             (funcall pipeline 1))))"####;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (169 9 25)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (169 9 25)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(169 9 25)", &o, &n);
 }
 
@@ -236,10 +226,8 @@ fn oracle_prop_lambda_adv_finite_state_machine() {
                           (funcall C (lambda (a) (lambda (b) (- a b))))
                           3)
                         10)))"####;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (42 1 7 12 7)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (42 1 7 12 7)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     // Oracle (GNU Emacs) returns (t t t nil nil nil nil) under lexical binding —
     // the FSM lambdas capture state variables lexically and produce correct results.
     assert_eq!(n, o, "neovm and oracle should match");

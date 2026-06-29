@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx75_window_configuration_save_and_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 2 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((config (current-window-configuration))
@@ -19,13 +20,14 @@ fn div_cx75_window_configuration_save_and_restore() {
       (list n-with-split n-restored
             (eq orig-buffer (window-buffer (selected-window)))))))
 "##,
-        expect_test::expect![[r#""OK (3 2 nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx75_with_current_buffer_preserves_origin_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t \"in other\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((origin (current-buffer))
@@ -38,13 +40,14 @@ fn div_cx75_with_current_buffer_preserves_origin_buffer() {
                  (with-current-buffer other (buffer-string)))
       (kill-buffer other))))
 "##,
-        expect_test::expect![[r#""OK (t t \"in other\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx75_with_temp_buffer_isolation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil \"isolated\" t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((origin (current-buffer)))
@@ -56,13 +59,14 @@ fn div_cx75_with_temp_buffer_isolation() {
             (buffer-live-p temp-buffer)
             (eq origin (current-buffer))))))
 "##,
-        expect_test::expect![[r#""OK (nil \"isolated\" t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx75_save_window_excursion_restores_split() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 2""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((n-before (length (window-list))))
@@ -73,13 +77,16 @@ fn div_cx75_save_window_excursion_restores_split() {
   (let ((n-after (length (window-list))))
     n-after))
 "##,
-        expect_test::expect![[r#""OK 2""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx75_get_buffer_window_and_buffer_windows() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (#<window 1 on *scratch*> (#<window 1 on *scratch*>) (#<window 1 on *scratch*> #<window 4 on *scratch*>) t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx75-gw*")))
@@ -92,15 +99,14 @@ fn div_cx75_get_buffer_window_and_buffer_windows() {
                  (eq (window-buffer (selected-window)) buf))
       (kill-buffer buf))))
 "##,
-        expect_test::expect![[
-            r#""OK (#<window 1 on *scratch*> (#<window 1 on *scratch*>) (#<window 1 on *scratch*> #<window 4 on *scratch*>) t t)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx75_window_dedicated_p_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
@@ -112,13 +118,14 @@ fn div_cx75_window_dedicated_p_set() {
         (set-window-dedicated-p win (if (numberp ded-before) 99 t))
         (list ded-before ded-true ded-false (window-dedicated-p win))))))
 "##,
-        expect_test::expect![[r#""OK (nil t nil t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx75_minibuffer_setup_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -129,13 +136,14 @@ fn div_cx75_minibuffer_setup_basic() {
               (window-buffer (minibuffer-window))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx75_set_window_buffer_dont_change_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (error \"Window is dedicated to ‘*scratch*’\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx75-a*"))
@@ -154,13 +162,14 @@ fn div_cx75_set_window_buffer_dont_change_point() {
     (kill-buffer buf-b)
     p-in-b))
 "##,
-        expect_test::expect![[r#""ERR (error \"Window is dedicated to ‘*scratch*’\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx75_window_start_end_and_set_window_start() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (error \"Window is dedicated to ‘*scratch*’\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx75-ws*")))
@@ -176,13 +185,14 @@ fn div_cx75_window_start_end_and_set_window_start() {
       (prog1 (list start-1 end-1 start-2)
         (kill-buffer buf)))))
 "##,
-        expect_test::expect![[r#""ERR (error \"Window is dedicated to ‘*scratch*’\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx75_buffer_display_count_and_kill_buffer_queries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil #<killed buffer> t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx75-dc*")))
@@ -192,13 +202,16 @@ fn div_cx75_buffer_display_count_and_kill_buffer_queries() {
         (eq (get-buffer " *neo-cx75-dc*") buf)
         (progn (kill-buffer buf) (get-buffer " *neo-cx75-dc*"))))
 "##,
-        expect_test::expect![[r#""OK (t nil #<killed buffer> t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx75_buffer_list_order_and_bury_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"*scratch*\" \" *Minibuf-0*\" \"*Messages*\" \" *load*\" \"*Warnings*\" \" *neo-cx75-a*\" \" *neo-cx75-b*\" \" *neo-cx75-ws*\" \" *neovm-oracle-stdout*\" \" *neovm-oracle-form*\" \" *neo-cx75-ba*\" \" *neo-cx75-bb*\") (\"*scratch*\" \" *Minibuf-0*\" \"*Messages*\" \" *load*\" \"*Warnings*\" \" *neo-cx75-a*\" \" *neo-cx75-b*\" \" *neo-cx75-ws*\" \" *neovm-oracle-stdout*\" \" *neovm-oracle-form*\" \" *neo-cx75-bb*\" \" *neo-cx75-ba*\") (\" *neo-cx75-ba*\" \" *neo-cx75-bb*\") (\" *neo-cx75-ba*\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx75-ba*"))
@@ -212,15 +225,14 @@ fn div_cx75_buffer_list_order_and_bury_buffer() {
             (member " *neo-cx75-ba*" list-before)
             (member " *neo-cx75-ba*" list-after)))))
 "##,
-        expect_test::expect![[
-            r#""OK ((\"*scratch*\" \" *Minibuf-0*\" \"*Messages*\" \" *load*\" \"*Warnings*\" \" *neo-cx75-a*\" \" *neo-cx75-b*\" \" *neo-cx75-ws*\" \" *neovm-oracle-stdout*\" \" *neovm-oracle-form*\" \" *neo-cx75-ba*\" \" *neo-cx75-bb*\") (\"*scratch*\" \" *Minibuf-0*\" \"*Messages*\" \" *load*\" \"*Warnings*\" \" *neo-cx75-a*\" \" *neo-cx75-b*\" \" *neo-cx75-ws*\" \" *neovm-oracle-stdout*\" \" *neovm-oracle-form*\" \" *neo-cx75-bb*\" \" *neo-cx75-ba*\") (\" *neo-cx75-ba*\" \" *neo-cx75-bb*\") (\" *neo-cx75-ba*\"))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx75_window_config_save_excursion_marker_overlay_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (error \"Window is dedicated to ‘*scratch*’\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx75-mega*")))
@@ -251,6 +263,6 @@ fn div_cx75_window_config_save_excursion_marker_overlay_narrow_mega() {
                 (point-min) (point-max)))))
     (kill-buffer buf)))
 "##,
-        expect_test::expect![[r#""ERR (error \"Window is dedicated to ‘*scratch*’\")""#]],
+        expect,
     );
 }

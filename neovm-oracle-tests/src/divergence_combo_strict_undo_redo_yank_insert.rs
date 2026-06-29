@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_p5_undo_redo_and_undo_only() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"abcdef\" \"abc\" \"abcdef\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -24,13 +25,14 @@ fn div_p5_undo_redo_and_undo_only() {
       (undo-redo)
       (list full after-undo (buffer-string)))))
 "##,
-        expect_test::expect![[r#""OK (\"abcdef\" \"abc\" \"abcdef\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_p5_undo_amalgamate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function undo-amalgamate)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -43,13 +45,14 @@ fn div_p5_undo_amalgamate() {
     (undo)
     (list full (buffer-string))))
 "##,
-        expect_test::expect![[r#""ERR (void-function undo-amalgamate)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_p5_insert_for_yank_handler() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments propertize 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer
@@ -63,13 +66,16 @@ fn div_p5_insert_for_yank_handler() {
           (insert-for-yank str)
           (buffer-string))))
 "##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments propertize 4)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_p5_undo_buffer_undo_list_inspection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-type-argument symbolp ((6 . 12) nil (1 . 6) (t . 0)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -81,8 +87,6 @@ fn div_p5_undo_buffer_undo_list_inspection() {
         (null (get buffer-undo-list 'pending-undo-list))
         (consp (car-safe buffer-undo-list))))
 "##,
-        expect_test::expect![[
-            r#""ERR (wrong-type-argument symbolp ((6 . 12) nil (1 . 6) (t . 0)))""#
-        ]],
+        expect,
     );
 }

@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx117_process_filter_chunked_data_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 18 \"line1\nline2\nline3\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((collected nil)
@@ -24,13 +25,14 @@ fn div_cx117_process_filter_chunked_data_capture() {
           (length all-data)
           (string-trim all-data))))
 "##,
-        expect_test::expect![[r#""OK (1 18 \"line1\nline2\nline3\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx117_process_filter_with_coding_chunk_split() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((collected nil)
@@ -46,13 +48,14 @@ fn div_cx117_process_filter_with_coding_chunk_split() {
     (kill-buffer buf)
     (list content (length content))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx117_process_sentinel_runs_on_exit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"exited abnormally with code 7\n\") 7 exit)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((events nil))
@@ -65,13 +68,16 @@ fn div_cx117_process_sentinel_runs_on_exit() {
           (process-exit-status p)
           (process-status p))))
 "##,
-        expect_test::expect![[r#""OK ((\"exited abnormally with code 7\n\") 7 exit)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx117_process_send_string_to_stdin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK \"alpha beta gamma\n\nProcess neo-cx117-stdin finished\n\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx117-stdin*"))
@@ -87,9 +93,7 @@ fn div_cx117_process_send_string_to_stdin() {
     (kill-buffer buf)
     content))
 "##,
-        expect_test::expect![[
-            r#""OK \"alpha beta gamma\n\nProcess neo-cx117-stdin finished\n\"""#
-        ]],
+        expect,
     );
 }
 
@@ -116,6 +120,7 @@ fn div_cx117_process_connection_type_pipe_vs_pty() {
 #[test]
 fn div_cx117_make_process_with_environment_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"Process neo-cx117-env finished\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -131,13 +136,14 @@ fn div_cx117_make_process_with_environment_override() {
         content))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK \"Process neo-cx117-env finished\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx117_process_filter_no_buffer_no_filter_appends_nowhere() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"no buffer here\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((collected nil))
@@ -149,13 +155,15 @@ fn div_cx117_process_filter_no_buffer_no_filter_appends_nowhere() {
     (sit-for 0.05)
     (apply #'concat (nreverse collected))))
 "##,
-        expect_test::expect![[r#""OK \"no buffer here\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx117_process_stderr_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK \"to stderr\n\nProcess neo-cx117-err stderr finished\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -170,13 +178,16 @@ fn div_cx117_process_stderr_capture() {
         stderr-content))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK \"to stderr\n\nProcess neo-cx117-err stderr finished\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx117_process_query_before_exit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((run open listen connect stop) (#<process neo-cx117-q>) (#<process neo-cx117-q>) \"neo-cx117-q\" (\"sh\" \"-c\" \"echo start; sleep 0.1; echo end\") t 0)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx117-q*"))
@@ -191,15 +202,14 @@ fn div_cx117_process_query_before_exit() {
         (accept-process-output p 1)
         (process-exit-status p)))
 "##,
-        expect_test::expect![[
-            r#""OK ((run open listen connect stop) (#<process neo-cx117-q>) (#<process neo-cx117-q>) \"neo-cx117-q\" (\"sh\" \"-c\" \"echo start; sleep 0.1; echo end\") t 0)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx117_make_process_file_name_temp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -218,13 +228,14 @@ fn div_cx117_make_process_file_name_temp() {
         (list created content)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx117_process_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx117-mega*")))
@@ -252,6 +263,6 @@ fn div_cx117_process_with_marker_overlay_undo_narrow_mega() {
         (kill-buffer buf)
         (list state (buffer-string))))))
 "##,
-        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
+        expect,
     );
 }

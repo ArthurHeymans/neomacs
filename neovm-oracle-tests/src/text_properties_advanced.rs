@@ -31,12 +31,10 @@ fn oracle_prop_propertize_multi_property_extraction() {
                      (get-text-property 5 'help-echo s)
                      ;; Verify full plist
                      (length (text-properties-at 0 s))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (bold \"tooltip\" highlight some-map my-cat bold \"tooltip\" 10)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (bold \"tooltip\" highlight some-map my-cat bold \"tooltip\" 10)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -64,10 +62,9 @@ fn oracle_prop_text_property_position_boundaries() {
                      (get-text-property 11 'face s)   ;; nil
                      ;; Length verification
                      (length s)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (bold bold italic italic underline underline nil nil 12)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (bold bold italic italic underline underline nil nil 12)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -97,12 +94,10 @@ fn oracle_prop_put_text_property_overlapping_ranges() {
                      (get-text-property 5 'help-echo s)  ;; "tip"
                      (get-text-property 7 'help-echo s)  ;; "tip"
                      (get-text-property 8 'help-echo s)));; nil"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (bold bold italic italic bold bold nil \"tip\" \"tip\" nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (bold bold italic italic bold bold nil \"tip\" \"tip\" nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -129,10 +124,8 @@ fn oracle_prop_remove_text_properties_selective() {
                                    (get-text-property 0 'help-echo s)
                                    (get-text-property 0 'mouse-face s))))
                         (list after-first after-second))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((nil \"tip\" highlight) (nil nil highlight))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((nil \"tip\" highlight) (nil nil highlight))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -154,10 +147,8 @@ fn oracle_prop_text_properties_at_full_plist() {
                        (length plist)
                        ;; Empty position in unpropertized part
                        (text-properties-at 0 "plain"))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 2 3 6 nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 2 3 6 nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -191,10 +182,8 @@ fn oracle_prop_next_property_change_with_limit() {
                          (when pos
                            (setq boundaries (cons pos boundaries))))
                        (nreverse boundaries))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 6 9 nil 2 3 3 (3 6 9))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 6 9 nil 2 3 3 (3 6 9))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -237,12 +226,10 @@ fn oracle_prop_rich_text_overlapping_properties() {
                        (list (plist-get p 'face)
                              (plist-get p 'help-echo)
                              (plist-get p 'mouse-face)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil (bold nil nil) (bold \"animal\" nil) (nil \"animal\" highlight) (nil nil highlight))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil (bold nil nil) (bold \"animal\" nil) (nil \"animal\" highlight) (nil nil highlight))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -276,10 +263,8 @@ fn oracle_prop_syntax_highlight_simulation() {
                         (let ((next (next-property-change pos code)))
                           (setq pos next)))
                       (nreverse result)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 . font-lock-keyword-face) (7 . font-lock-function-name-face) (11 . font-lock-variable-name-face) (17 . font-lock-builtin-face))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 . font-lock-keyword-face) (7 . font-lock-function-name-face) (11 . font-lock-variable-name-face) (17 . font-lock-builtin-face))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

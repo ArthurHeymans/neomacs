@@ -94,12 +94,10 @@ fn oracle_prop_nn_matrix_primitives() {
     (fmakunbound 'neovm--nn-mat-mul)
     (fmakunbound 'neovm--nn-mat-add)
     (fmakunbound 'neovm--nn-mat-scale)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1.0 3.0) (2.0 4.0)) ((1.0) (2.0) (3.0)) ((19.0 22.0) (43.0 50.0)) t ((6.0 8.0) (10.0 12.0)) ((2.0 4.0) (6.0 8.0)) 32.0)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1.0 3.0) (2.0 4.0)) ((1.0) (2.0) (3.0)) ((19.0 22.0) (43.0 50.0)) t ((6.0 8.0) (10.0 12.0)) ((2.0 4.0) (6.0 8.0)) 32.0)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -163,12 +161,10 @@ fn oracle_prop_nn_activation_functions() {
     (fmakunbound 'neovm--nn-sigmoid-deriv)
     (fmakunbound 'neovm--nn-relu-deriv)
     (fmakunbound 'neovm--nn-mat-apply)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (0.5 t t 0.25 3.5 0.0 0.0 (1.0 0.0 0.0) ((0.5 0.9999546021312976) (4.5397868702434395e-05 0.5)) ((0.0 2.0) (3.0 0.0)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (0.5 t t 0.25 3.5 0.0 0.0 (1.0 0.0 0.0) ((0.5 0.9999546021312976) (4.5397868702434395e-05 0.5)) ((0.0 2.0) (3.0 0.0)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -222,10 +218,8 @@ fn oracle_prop_nn_mse_loss() {
        (>= (funcall 'neovm--nn-mse '((-3.0 7.0)) '((2.0 -1.0))) 0.0))
     (fmakunbound 'neovm--nn-mse)
     (fmakunbound 'neovm--nn-mat-sub)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0.0 1.0 4.0 ((2.0 1.0) (0.0 3.0)) 0.25 t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0.0 1.0 4.0 ((2.0 1.0) (0.0 3.0)) 0.25 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -338,12 +332,10 @@ fn oracle_prop_nn_numerical_gradient() {
     (fmakunbound 'neovm--nn-loss-fn)
     (fmakunbound 'neovm--nn-mat-set)
     (fmakunbound 'neovm--nn-numerical-grad)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (2 2 t ((0.6341355910108007 0.6899744811276125)) t ((1.0 99.0) (3.0 4.0)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (2 2 t ((0.6341355910108007 0.6899744811276125)) t ((1.0 99.0) (3.0 4.0)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -408,10 +400,8 @@ fn oracle_prop_nn_gradient_descent_step() {
            (> d-big d-small))))
     (fmakunbound 'neovm--nn-update-weights)
     (fmakunbound 'neovm--nn-matrices-different)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (2 2 0.499 0.302 t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 2 0.499 0.302 t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -499,12 +489,10 @@ fn oracle_prop_nn_multi_layer_forward() {
     (fmakunbound 'neovm--nn-vec-mat-mul)
     (fmakunbound 'neovm--nn-vec-add)
     (fmakunbound 'neovm--nn-multi-forward)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0.30000000000000004 0.45 0.6) (0.31000000000000005 0.47000000000000003 0.63) 1 t t (0.31000000000000005 0.47000000000000003 0.63) (0.7777322100392836))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0.30000000000000004 0.45 0.6) (0.31000000000000005 0.47000000000000003 0.63) 1 t t (0.31000000000000005 0.47000000000000003 0.63) (0.7777322100392836))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -616,10 +604,8 @@ fn oracle_prop_nn_batch_processing() {
     (fmakunbound 'neovm--nn-batch-loss)
     (fmakunbound 'neovm--nn-classify)
     (fmakunbound 'neovm--nn-accuracy)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0.6456563062257954 0.35434369377420455) (1 0) t 0.23509753650811427 t t 0.014996287798405518)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0.6456563062257954 0.35434369377420455) (1 0) t 0.23509753650811427 t t 0.014996287798405518)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

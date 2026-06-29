@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx218_projectile_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -17,13 +18,14 @@ fn div_cx218_projectile_availability() {
           (boundp 'projectile-project-root))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx218_lsp_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -32,13 +34,14 @@ fn div_cx218_lsp_mode_availability() {
           (boundp 'lsp-headerline-breadcrumb-enable))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx218_eglot_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -50,13 +53,14 @@ fn div_cx218_eglot_availability() {
             (boundp 'eglot-autoshutdown)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx218_company_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -67,13 +71,14 @@ fn div_cx218_company_availability() {
           (boundp 'company-idle-delay))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx218_corfu_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -83,13 +88,14 @@ fn div_cx218_corfu_availability() {
           (boundp 'corfu-count))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx218_cape_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -99,13 +105,14 @@ fn div_cx218_cape_availability() {
           (boundp 'cape-dict-file))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx218_dap_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -114,13 +121,14 @@ fn div_cx218_dap_mode_availability() {
           (fboundp 'dap-debug))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx218_treemacs_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -129,13 +137,14 @@ fn div_cx218_treemacs_availability() {
           (boundp 'treemacs-width))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx218_flycheck_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -145,13 +154,14 @@ fn div_cx218_flycheck_availability() {
           (boundp 'flycheck-check-syntax-automatically))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx218_devtools_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -181,6 +191,6 @@ fn div_cx218_devtools_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     );
 }

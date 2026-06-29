@@ -15,6 +15,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_clone_buffer_overlay_marker_textprop_buflocal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-clone")))
@@ -60,7 +61,7 @@ fn combo_clone_buffer_overlay_marker_textprop_buflocal() {
                   (kill-buffer clone)
                   (kill-buffer buf)
                   (list after restored))))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -68,6 +69,7 @@ fn combo_clone_buffer_overlay_marker_textprop_buflocal() {
 fn combo_rename_buffer_overlay_marker_textprop_buflocal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-rename")))
@@ -106,7 +108,7 @@ fn combo_rename_buffer_overlay_marker_textprop_buflocal() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -114,6 +116,7 @@ fn combo_rename_buffer_overlay_marker_textprop_buflocal() {
 fn combo_indirect_buffer_shared_overlay_marker_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((base (generate-new-buffer " combo-indbase")))
@@ -169,7 +172,7 @@ fn combo_indirect_buffer_shared_overlay_marker_textprop() {
                     (kill-buffer ind)
                     (kill-buffer base)
                     (list after restored))))))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -177,6 +180,7 @@ fn combo_indirect_buffer_shared_overlay_marker_textprop() {
 fn combo_kill_buffer_local_overlay_marker_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq kill-test-global 'original)
@@ -204,7 +208,7 @@ fn combo_kill_buffer_local_overlay_marker_textprop() {
                               (get-text-property 11 'zone))))
           (kill-buffer buf)
           (list pre-kill kill-test-global))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -212,6 +216,7 @@ fn combo_kill_buffer_local_overlay_marker_textprop() {
 fn combo_buffer_lifecycle_chain_overlay_marker_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-lc")))
@@ -266,6 +271,6 @@ fn combo_buffer_lifecycle_chain_overlay_marker_textprop() {
                     (list after-edit after-undo))))
             (when (buffer-live-p clone)
               (kill-buffer clone)))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }

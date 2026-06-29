@@ -60,12 +60,10 @@ fn oracle_prop_dp_fibonacci_memoized_and_tabulated() {
                 (funcall 'neovm--test-fib-tab 20)))) ;; 6765
     (fmakunbound 'neovm--test-fib-memo)
     (fmakunbound 'neovm--test-fib-tab)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((0 0 0 t) (1 1 1 t) (2 1 1 t) (5 5 5 t) (10 55 55 t) (15 610 610 t) (20 6765 6765 t) (25 75025 75025 t) (30 832040 832040 t)) t 31 55 6765)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((0 0 0 t) (1 1 1 t) (2 1 1 t) (5 5 5 t) (10 55 55 t) (15 610 610 t) (20 6765 6765 t) (25 75025 75025 t) (30 832040 832040 t)) t 31 55 6765)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -125,12 +123,10 @@ fn oracle_prop_dp_edit_distance() {
                     (list s1 s2 (car (funcall 'neovm--test-edit-distance s1 s2)))))
                 test-cases))
     (fmakunbound 'neovm--test-edit-distance)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"kitten\" \"sitting\" 3) (\"\" \"abc\" 3) (\"abc\" \"\" 3) (\"abc\" \"abc\" 0) (\"saturday\" \"sunday\" 3) (\"intention\" \"execution\" 5) (\"abcdef\" \"azced\" 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"kitten\" \"sitting\" 3) (\"\" \"abc\" 3) (\"abc\" \"\" 3) (\"abc\" \"abc\" 0) (\"saturday\" \"sunday\" 3) (\"intention\" \"execution\" 5) (\"abcdef\" \"azced\" 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -191,12 +187,10 @@ fn oracle_prop_dp_lcs_with_backtrack() {
                       (list s1 s2 (car result) (cadr result)))))
                 test-cases))
     (fmakunbound 'neovm--test-lcs)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"ABCBDAB\" \"BDCAB\" 4 \"BDAB\") (\"AGGTAB\" \"GXTXAYB\" 4 \"GTAB\") (\"\" \"anything\" 0 \"\") (\"abc\" \"def\" 0 \"\") (\"abcde\" \"ace\" 3 \"ace\") (\"ABCDGH\" \"AEDFHR\" 3 \"ADH\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"ABCBDAB\" \"BDCAB\" 4 \"BDAB\") (\"AGGTAB\" \"GXTXAYB\" 4 \"GTAB\") (\"\" \"anything\" 0 \"\") (\"abc\" \"def\" 0 \"\") (\"abcde\" \"ace\" 3 \"ace\") (\"ABCDGH\" \"AEDFHR\" 3 \"ADH\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -275,12 +269,10 @@ fn oracle_prop_dp_knapsack_01() {
                 [10]
                 [42]))
     (fmakunbound 'neovm--test-knapsack)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((220 (1 2) 220 t) (41 (2 3 4) 41 t) (0 nil 0 t) (42 (0) 42 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((220 (1 2) 220 t) (41 (2 3 4) 41 t) (0 nil 0 t) (42 (0) 42 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -340,12 +332,10 @@ fn oracle_prop_dp_coin_change() {
        ;; Single denomination
        (funcall 'neovm--test-coin-change '(3) 9))
     (fmakunbound 'neovm--test-coin-change)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((6 (1 1 1 10 25 25) t) (1 (25) t) nil (2 (7 7) t) (0 nil t) (3 (3 3 3) t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((6 (1 1 1 10 25 25) t) (1 (25) t) nil (2 (7 7) t) (0 nil t) (3 (3 3 3) t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -400,12 +390,10 @@ fn oracle_prop_dp_kadanes_max_subarray() {
        ;; Mixed with large valley
        (funcall 'neovm--test-kadane [5 4 -1 7 8 -100 3 4 5 6]))
     (fmakunbound 'neovm--test-kadane)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((6 3 6 (4 -1 2 1) t) (15 0 4 (1 2 3 4 5) t) (-2 3 3 (-2) t) (42 0 0 (42) t) (23 0 4 (5 4 -1 7 8) t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((6 3 6 (4 -1 2 1) t) (15 0 4 (1 2 3 4 5) t) (-2 3 3 (-2) t) (42 0 0 (42) t) (23 0 4 (5 4 -1 7 8) t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -474,10 +462,8 @@ fn oracle_prop_dp_matrix_chain_multiplication() {
        (funcall 'neovm--test-mcm [10 20 30]))
     (fmakunbound 'neovm--test-mcm)
     (fmakunbound 'neovm--test-mcm-paren)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((5000 \"((M1 x M2) x (M3 x M4))\") (14000 \"(M1 x (M2 x M3))\") (6000 \"(M1 x M2)\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((5000 \"((M1 x M2) x (M3 x M4))\") (14000 \"(M1 x (M2 x M3))\") (6000 \"(M1 x M2)\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

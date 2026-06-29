@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_eval_defclass_defmethod() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (eval '(defclass eval-class ()
@@ -59,7 +60,7 @@ fn combo_eieio_eval_defclass_defmethod() {
                 (buffer-string)
                 my-obj)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -67,6 +68,7 @@ fn combo_eieio_eval_defclass_defmethod() {
 fn combo_eieio_defmacro_generates_class() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defmacro define-counter (name &optional default)
@@ -128,7 +130,7 @@ fn combo_eieio_defmacro_generates_class() {
                   (buffer-string)
                   hits-obj misses-obj)))
         (kill-buffer buf))))))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -136,6 +138,7 @@ fn combo_eieio_defmacro_generates_class() {
 fn combo_eieio_eval_string_with_instances() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable obj)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass runtime-checked ()
@@ -181,7 +184,7 @@ fn combo_eieio_eval_string_with_instances() {
                 (buffer-string)
                 my-obj)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-variable obj)""#]],
+        expect,
     );
 }
 
@@ -189,6 +192,7 @@ fn combo_eieio_eval_string_with_instances() {
 fn combo_eieio_macrolet_with_generics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defgeneric)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass measurable ()
@@ -239,7 +243,7 @@ fn combo_eieio_macrolet_with_generics() {
                 (buffer-string)
                 meas)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function defgeneric)""#]],
+        expect,
     );
 }
 
@@ -247,6 +251,7 @@ fn combo_eieio_macrolet_with_generics() {
 fn combo_eieio_symbol_macrolet_slot_access() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 27 35)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass config-store ()
@@ -301,6 +306,6 @@ fn combo_eieio_symbol_macrolet_slot_access() {
                 (buffer-string)
                 my-cfg)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 27 35)""#]],
+        expect,
     );
 }

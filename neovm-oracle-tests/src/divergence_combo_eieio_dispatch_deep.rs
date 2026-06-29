@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_cl_defgeneric_multiple_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (60 t 90 t 150 t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-disp-base () ((val :initarg :val :accessor test-disp-val)))
@@ -32,7 +33,7 @@ fn divergence_cl_defgeneric_multiple_dispatch() {
           (cl-typep oa 'test-disp-base)
           (cl-typep oab 'test-disp-a)
           (cl-typep oab 'test-disp-b)))) "#,
-        expect_test::expect![[r#""OK (60 t 90 t 150 t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -40,6 +41,7 @@ fn divergence_cl_defgeneric_multiple_dispatch() {
 fn divergence_eieio_slot_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-undo-slot ()
@@ -71,7 +73,7 @@ fn divergence_eieio_slot_with_undo() {
               (object-of-class-p (get-text-property 1 'owner) 'test-undo-slot)
               (get-text-property 5 'owner)
               (object-of-class-p (get-text-property 5 'owner) 'test-undo-slot)))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -79,6 +81,7 @@ fn divergence_eieio_slot_with_undo() {
 fn divergence_cl_struct_nested_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-nst (:constructor test-nst-make))
@@ -111,7 +114,7 @@ fn divergence_cl_struct_nested_undo() {
               (test-nst-label (get-text-property 15 'struct))
               (string= (test-nst-label (get-text-property 15 'struct)) "gamma")
               (equal (test-nst-tokens (get-text-property 1 'struct)) '("a" "b" "c"))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -119,6 +122,9 @@ fn divergence_cl_struct_nested_undo() {
 fn divergence_hash_table_eql_eq_identity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (found-sym t found-num t nil nil found-sym t nil t t t nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ht-eql (make-hash-table :test 'eql))
@@ -143,9 +149,7 @@ fn divergence_hash_table_eql_eq_identity() {
           (eq sym1 sym2)
           (equal str1 str2)
           (eq str1 str2)))) "#,
-        expect_test::expect![[
-            r#""OK (found-sym t found-num t nil nil found-sym t nil t t t nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -153,6 +157,7 @@ fn divergence_hash_table_eql_eq_identity() {
 fn divergence_closure_over_buffer_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq-local 'my-test-val 10)
@@ -168,7 +173,7 @@ fn divergence_closure_over_buffer_local() {
     (funcall trace-fn)
     (list my-test-val (= my-test-val 52)
           my-test-trace (equal my-test-trace '(52 45 15)))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -176,6 +181,7 @@ fn divergence_closure_over_buffer_local() {
 fn divergence_advice_filter_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (30 t 10 t (\"after:15\" \"before:15\") 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-advice-target (x) (* x 2))
@@ -197,7 +203,7 @@ fn divergence_advice_filter_chain() {
         (list result (= result 30)
               result2 (= result2 10)
               log (length log)))))) "#,
-        expect_test::expect![[r#""OK (30 t 10 t (\"after:15\" \"before:15\") 2)""#]],
+        expect,
     );
 }
 
@@ -205,6 +211,7 @@ fn divergence_advice_filter_chain() {
 fn divergence_cl_flet_labels_interplay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-cl-top-level-fn (x) (+ x 100))
@@ -217,7 +224,7 @@ fn divergence_cl_flet_labels_interplay() {
                   result2 (= result2 205)
                   result3 (= result3 305)
                   (test-cl-top-level-fn 10) (= (test-cl-top-level-fn 10) 110))))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -225,6 +232,8 @@ fn divergence_cl_flet_labels_interplay() {
 fn divergence_nested_condition_case_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""AAAA-XXXBBBB-CCCC-DDDDERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")
@@ -256,7 +265,7 @@ fn divergence_nested_condition_case_with_undo() {
             (get-text-property 11 'zone) (eq (get-text-property 11 'zone) 'c)
             (get-text-property 16 'zone) (eq (get-text-property 16 'zone) 'd)
             (overlay-get ov 'scope) (eq (overlay-get ov 'scope) 'all))))) "#,
-        expect_test::expect![[r#""AAAA-XXXBBBB-CCCC-DDDDERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -264,6 +273,7 @@ fn divergence_nested_condition_case_with_undo() {
 fn divergence_propertized_string_concat_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""GOODBYE WORLDERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((s1 (propertize "HELLO" 'face 'bold))
@@ -289,7 +299,7 @@ fn divergence_propertized_string_concat_undo() {
               (get-text-property 6 'separator) (eq (get-text-property 6 'separator) t)
               (get-text-property 7 'face) (eq (get-text-property 7 'face) 'italic)
               (overlay-get ov 'combined) (eq (overlay-get ov 'combined) t)))))) "#,
-        expect_test::expect![[r#""GOODBYE WORLDERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -297,6 +307,8 @@ fn divergence_propertized_string_concat_undo() {
 fn divergence_multibyte_propertized_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""café résumé naïve déjeunerERR (args-out-of-range 23 30)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "café résumé naïve déjeuner")
@@ -327,6 +339,6 @@ fn divergence_multibyte_propertized_undo() {
             (get-text-property 5 'accent) (eq (get-text-property 5 'accent) 'e-acute)
             (get-text-property 7 'word) (eq (get-text-property 7 'word) 'w2)
             (overlay-get ov 'lang) (eq (overlay-get ov 'lang) 'french))))) "#,
-        expect_test::expect![[r#""café résumé naïve déjeunerERR (args-out-of-range 23 30)""#]],
+        expect,
     );
 }

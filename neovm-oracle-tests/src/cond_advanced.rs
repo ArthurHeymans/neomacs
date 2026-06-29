@@ -26,12 +26,10 @@ fn oracle_prop_cond_multi_clause() {
                             (t 'huge)))))
                     (mapcar classify
                             '(-5 0 3 42 500 9999 "hello" nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (negative zero small medium large huge not-a-number not-a-number)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (negative zero small medium large huge not-a-number not-a-number)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -58,10 +56,8 @@ fn oracle_prop_cond_multi_body() {
                       (setq log (cons 'large log))
                       'large))
                     (list (nreverse log)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((medium 15 30))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((medium 15 30))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -97,12 +93,10 @@ fn oracle_prop_cond_pattern_dispatch() {
                                   '(+ 1 2 3)
                                   '(lambda (a b) body)
                                   '(foo bar baz))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"empty\" \"atom:42\" \"atom:hello\" \"quoted:x\" \"add(3 args)\" \"lambda(2 params)\" \"list(3)\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"empty\" \"atom:42\" \"atom:hello\" \"quoted:x\" \"add(3 args)\" \"lambda(2 params)\" \"list(3)\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -120,10 +114,8 @@ fn oracle_prop_cond_clause_returns_test() {
                     (cond ('hello))      ;; returns hello
                     (cond (nil) (nil) ('found-it)))  ;; third
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (42 99 hello found-it)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (42 99 hello found-it)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -164,12 +156,10 @@ fn oracle_prop_cond_nested_dispatch() {
                      (funcall format-value 'string "hello")
                      (funcall format-value 'string "a very long string indeed")
                      (funcall format-value 'float 3.14)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"-5\" \"0\" \"+42\" \"true\" \"false\" \"\\\"\\\"\" \"\\\"hello\\\"\" \"\\\"a very lon...\\\"\" \"unsupported\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"-5\" \"0\" \"+42\" \"true\" \"false\" \"\\\"\\\"\" \"\\\"hello\\\"\" \"\\\"a very lon...\\\"\" \"unsupported\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -221,8 +211,6 @@ fn oracle_prop_cond_type_system() {
                        (funcall type-check '(if flag 1 2) env)
                        (funcall type-check '(if flag "a" "b") env)
                        (funcall type-check '(if x 1 2) env))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable type-check)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable type-check)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

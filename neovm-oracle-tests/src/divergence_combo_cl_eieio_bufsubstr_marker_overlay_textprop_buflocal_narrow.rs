@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_bufsubstr_with_overlay_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass bss-snap ()
@@ -73,7 +74,7 @@ fn combo_eieio_bufsubstr_with_overlay_props() {
               (overlay-start ov) (overlay-end ov)
               my-bs-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -81,6 +82,7 @@ fn combo_eieio_bufsubstr_with_overlay_props() {
 fn combo_eieio_bufsubstr_insert_into_other_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass cross-buf-snap ()
@@ -142,7 +144,7 @@ fn combo_eieio_bufsubstr_insert_into_other_buffer() {
               (overlay-start ov) (overlay-end ov))))
     (kill-buffer src)
     (kill-buffer dst)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -150,6 +152,7 @@ fn combo_eieio_bufsubstr_insert_into_other_buffer() {
 fn combo_eieio_bufsubstr_filter_buffer_substring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<buffer bs3> 1 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass filter-snap ()
@@ -223,7 +226,7 @@ fn combo_eieio_bufsubstr_filter_buffer_substring() {
               (overlay-start ov2) (overlay-end ov2)
               buffer-invisibility-spec)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range #<buffer bs3> 1 25)""#]],
+        expect,
     );
 }
 
@@ -231,6 +234,7 @@ fn combo_eieio_bufsubstr_filter_buffer_substring() {
 fn combo_eieio_bufsubstr_prop_transfer_cross_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass prop-transfer-snap ()
@@ -315,7 +319,7 @@ fn combo_eieio_bufsubstr_prop_transfer_cross_buffer() {
               (overlay-start ov) (overlay-end ov))))
     (kill-buffer src)
     (kill-buffer dst)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -323,6 +327,7 @@ fn combo_eieio_bufsubstr_prop_transfer_cross_buffer() {
 fn combo_eieio_bufsubstr_undo_after_insert_substring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass undo-substr-snap ()
@@ -392,6 +397,6 @@ fn combo_eieio_bufsubstr_undo_after_insert_substring() {
               (length snaps) (marker-position m)
               (overlay-start ov) (overlay-end ov))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 3)""#]],
+        expect,
     );
 }

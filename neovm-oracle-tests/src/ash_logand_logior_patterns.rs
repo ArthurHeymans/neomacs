@@ -32,10 +32,8 @@ fn oracle_prop_ash_power_of_two_generation() {
           (ash 1 10)
           (ash 1 20)
           (ash 1 30))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (t 1 1024 1048576 1073741824)""#],
-    );
+    let expect = expect_test::expect![r#""OK (t 1 1024 1048576 1073741824)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -62,10 +60,8 @@ fn oracle_prop_ash_right_shift_sign_extension() {
   ;; Negative left-then-right
   (let ((x -100))
     (ash (ash x 4) -4)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (127 15 1 -1 -16 -1 -32 0 -1 255 -100)""#],
-    );
+    let expect = expect_test::expect![r#""OK (127 15 1 -1 -16 -1 -32 0 -1 255 -100)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -87,12 +83,10 @@ fn oracle_prop_ash_multiply_divide_equivalence() {
                                 left3 right3)
                           results))))
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((0 t t 0 0) (1 t t 8 0) (7 t t 56 0) (42 t t 336 5) (100 t t 800 12) (255 t t 2040 31) (1000 t t 8000 125) (65535 t t 524280 8191))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((0 t t 0 0) (1 t t 8 0) (7 t t 56 0) (42 t t 336 5) (100 t t 800 12) (255 t t 2040 31) (1000 t t 8000 125) (65535 t t 524280 8191))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -158,12 +152,10 @@ fn oracle_prop_bitfield_pack_unpack_rgb() {
     (fmakunbound 'neovm--test-pack-rgb)
     (fmakunbound 'neovm--test-unpack-rgb)
     (fmakunbound 'neovm--test-blend-rgb)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((255 0 0) (0 255 0) (0 0 255) (255 255 255) (255 127 80) t t t (127 0 127) (63 63 63))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((255 0 0) (0 255 0) (0 0 255) (255 255 255) (255 127 80) t t t (127 0 127) (63 63 63))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -232,12 +224,10 @@ fn oracle_prop_bitfield_ip_address_manipulation() {
     (fmakunbound 'neovm--test-network-addr)
     (fmakunbound 'neovm--test-broadcast-addr)
     (fmakunbound 'neovm--test-same-subnet)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((192 168 1 100) (192 168 1 200) (255 255 255 0) (192 168 1 0) t nil t 254)""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((192 168 1 100) (192 168 1 200) (255 255 255 0) (192 168 1 0) t nil t 254)""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -340,12 +330,10 @@ fn oracle_prop_bitmask_permission_system() {
     (makunbound 'neovm--test-perm-other-r)
     (makunbound 'neovm--test-perm-other-w)
     (makunbound 'neovm--test-perm-other-x)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"rwxr-xr-x\" \"rw-r--r--\" t nil \"rwxr-xr-x\" \"r-xr-xr-x\" \"rwxrwxr-x\" 493 420)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"rwxr-xr-x\" \"rw-r--r--\" t nil \"rwxr-xr-x\" \"r-xr-xr-x\" \"rwxrwxr-x\" 493 420)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -458,10 +446,8 @@ fn oracle_prop_bitwise_algorithms_combined() {
     (fmakunbound 'neovm--test-xor-checksum)
     (fmakunbound 'neovm--test-clz8)
     (fmakunbound 'neovm--test-highest-bit)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (141 255 0 1 t t t 8 0 0 0 3 7 8 0 7 10 -1)""#],
-    );
+    let expect = expect_test::expect![r#""OK (141 255 0 1 t t t 8 0 0 0 3 7 8 0 7 10 -1)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -534,10 +520,8 @@ fn oracle_prop_bitwise_boolean_algebra() {
     ;; Idempotent: A | A == A, A & A == A
     (= (logior a a) a)
     (= (logand a a) a)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form_fixed,
-        expect_test::expect![r#""OK (t t t t t t t t t t t)""#],
-    );
+    let expect = expect_test::expect![r#""OK (t t t t t t t t t t t)""#];
+    crate::common::assert_oracle_parity_expect(form_fixed, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -599,10 +583,8 @@ fn oracle_prop_bitfield_date_packing() {
     (fmakunbound 'neovm--test-pack-datetime)
     (fmakunbound 'neovm--test-unpack-datetime)
     (fmakunbound 'neovm--test-datetime-cmp)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((2026 3 2 14 30) (2026 3 2 15 0) (2025 12 31 23 59) (2026 1 1 0 0) -1 1 0 -1 (0 1 1 0 0) (4095 12 31 23 59))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((2026 3 2 14 30) (2026 3 2 15 0) (2025 12 31 23 59) (2026 1 1 0 0) -1 1 0 -1 (0 1 1 0 0) (4095 12 31 23 59))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

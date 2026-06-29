@@ -8,6 +8,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx61_line_prefix_wrap_prefix_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"L1> \" \"  \" \"L2> \" nil 8 #(\"line one\nline two\nline three\n\" 0 7 (wrap-prefix \"  \" line-prefix \"L1> \") 9 16 (line-prefix \"L2> \")))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -22,15 +25,14 @@ fn div_cx61_line_prefix_wrap_prefix_display() {
         (next-single-property-change 1 'line-prefix)
         (buffer-string)))
 "##,
-        expect_test::expect![[
-            r#""OK (\"L1> \" \"  \" \"L2> \" nil 8 #(\"line one\nline two\nline three\n\" 0 7 (wrap-prefix \"  \" line-prefix \"L1> \") 9 16 (line-prefix \"L2> \")))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx61_intangible_text_and_constrain_to_field() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (6 nil nil t 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -43,13 +45,14 @@ fn div_cx61_intangible_text_and_constrain_to_field() {
           (get-text-property (point) 'intangible)
           (skip-syntax-forward "w"))))
 "##,
-        expect_test::expect![[r#""OK (6 nil nil t 0)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx61_cursor_intangible_overlay_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -64,13 +67,16 @@ fn div_cx61_cursor_intangible_overlay_property() {
               (length (overlays-in 1 30)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t nil 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx61_display_property_inline_image_placeholder() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (nil (image :type xpm :file \"pic.xpm\") nil \"IMG\" 8 21)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -84,15 +90,14 @@ fn div_cx61_display_property_inline_image_placeholder() {
         (next-single-property-change 1 'display)
         (previous-single-property-change 25 'display)))
 "##,
-        expect_test::expect![[
-            r#""OK (nil (image :type xpm :file \"pic.xpm\") nil \"IMG\" 8 21)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx61_window_text_height_and_pixel_dimensions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (80 11 80 10 80 10 1 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
@@ -105,13 +110,14 @@ fn div_cx61_window_text_height_and_pixel_dimensions() {
         (window-mode-line-height win)
         (window-header-line-height win)))
 "##,
-        expect_test::expect![[r#""OK (80 11 80 10 80 10 1 0)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx61_window_edges_and_pixel_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
@@ -124,13 +130,16 @@ fn div_cx61_window_edges_and_pixel_edges() {
         (window-fringes win)
         (window-margins win)))
 "##,
-        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx61_set_window_margins_fringes_scroll() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((nil) (0 0 nil nil) (12 . 4) (0 0 nil nil) 5 (nil) (0 0 nil nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
@@ -149,15 +158,14 @@ fn div_cx61_set_window_margins_fringes_scroll() {
             (window-margins win)
             (window-fringes win)))))
 "##,
-        expect_test::expect![[
-            r#""OK ((nil) (0 0 nil nil) (12 . 4) (0 0 nil nil) 5 (nil) (0 0 nil nil))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx61_line_spacing_and_line_height_text_height() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (4 nil nil 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -172,13 +180,14 @@ fn div_cx61_line_spacing_and_line_height_text_height() {
             (line-pixel-height)
             (default-line-height)))))
 "##,
-        expect_test::expect![[r#""OK (4 nil nil 1 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx61_posn_at_point_and_pixel_col_row() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil (0 . 0) nil nil nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -194,13 +203,14 @@ fn div_cx61_posn_at_point_and_pixel_col_row() {
           (posn-object posn)
           (posn-image posn))))
 "##,
-        expect_test::expect![[r#""OK (nil (0 . 0) nil nil nil nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx61_window_scroll_functions_and_redisplay_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (fired)
@@ -217,13 +227,14 @@ fn div_cx61_window_scroll_functions_and_redisplay_hooks() {
     (remove-hook 'window-scroll-functions hook t)
     (nreverse fired)))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx61_temp_buffer_resize_and_window_combination() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 1 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -240,13 +251,14 @@ fn div_cx61_temp_buffer_resize_and_window_combination() {
                 (eq (current-buffer) (window-buffer (selected-window)))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (3 1 nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx61_window_point_marker_and_special_window_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (20 1 20)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx61-wp*")))
@@ -264,13 +276,14 @@ fn div_cx61_window_point_marker_and_special_window_point() {
         (set-window-buffer (selected-window) (other-buffer))
         (kill-buffer buf)))))
 "##,
-        expect_test::expect![[r#""OK (20 1 20)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx61_window_display_table_buffer_display_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ([88] [124 10] t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -286,13 +299,16 @@ fn div_cx61_window_display_table_buffer_display_table() {
                 (eq got wdt)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK ([88] [124 10] t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx61_selective_display_and_invisible_text_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"visible\thidden\nvisib\" \"visible\thidden\nvisib\" \"visible\thidden\nvisible2\thidden2\n\" 0)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -303,15 +319,14 @@ fn div_cx61_selective_display_and_invisible_text_property() {
       (setq selective-display nil)
       (list ss1 ss2 (buffer-string) (current-column)))))
 "##,
-        expect_test::expect![[
-            r#""OK (\"visible\thidden\nvisib\" \"visible\thidden\nvisib\" \"visible\thidden\nvisible2\thidden2\n\" 0)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx61_overlay_invisibility_spec_buffer_local_combination_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -332,6 +347,6 @@ fn div_cx61_overlay_invisibility_spec_buffer_local_combination_mega() {
               (get-char-property 3 'invisible)
               (get-char-property 11 'invisible)))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

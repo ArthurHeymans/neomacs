@@ -10,16 +10,13 @@ use super::common::{ORACLE_PROP_CASES, assert_ok_eq, eval_oracle_and_neovm};
 fn oracle_prop_if_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle_t, neovm_t) = crate::common::eval_oracle_and_neovm_expect(
-        "(if t 1 2)",
-        expect_test::expect![[r#""OK 1""#]],
-    );
+    let expect = expect_test::expect![[r#""OK 1""#]];
+    let (oracle_t, neovm_t) = crate::common::eval_oracle_and_neovm_expect("(if t 1 2)", expect);
     assert_ok_eq("1", &oracle_t, &neovm_t);
 
-    let (oracle_nil, neovm_nil) = crate::common::eval_oracle_and_neovm_expect(
-        "(if nil 1 2)",
-        expect_test::expect![[r#""OK 2""#]],
-    );
+    let expect = expect_test::expect![[r#""OK 2""#]];
+    let (oracle_nil, neovm_nil) =
+        crate::common::eval_oracle_and_neovm_expect("(if nil 1 2)", expect);
     assert_ok_eq("2", &oracle_nil, &neovm_nil);
 }
 

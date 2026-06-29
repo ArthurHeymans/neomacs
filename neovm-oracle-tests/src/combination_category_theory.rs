@@ -66,10 +66,8 @@ fn oracle_prop_category_theory_morphisms() {
     ;; Not commutative in general
     (not (= (funcall (funcall compose negate square) 3)
             (funcall (funcall compose square negate) 3)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (8 7 36 t t (1 2 3 4 5) (t t t 36 36) -9 9 t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (8 7 36 t t (1 2 3 4 5) (t t t 36 36) -9 9 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -131,12 +129,10 @@ fn oracle_prop_category_theory_functor() {
     ;; Composition of functors: list of maybes
     (let ((data '((just . 1) nil (just . 3) (just . 4) nil)))
       (mapcar (lambda (m) (funcall maybe-fmap double m)) data))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((2 4 6 8 10) (11 21 31) (\"1\" \"2\" \"3\") t t (just . 10) nil (just . 1) t t t ((just . 2) nil (just . 6) (just . 8) nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((2 4 6 8 10) (11 21 31) (\"1\" \"2\" \"3\") t t (just . 10) nil (just . 1) t t t ((just . 2) nil (just . 6) (just . 8) nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -214,10 +210,9 @@ fn oracle_prop_category_theory_natural_transformation() {
         (funcall roundtrip '(1 2 3))    ;; (1)
         (funcall roundtrip nil)          ;; nil
         (funcall roundtrip '(99))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((just . 10) nil (42) nil t t t t t ((1) nil (99)))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((just . 10) nil (42) nil t t t t t ((1) nil (99)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -315,12 +310,10 @@ fn oracle_prop_category_theory_maybe_monad() {
         ;; Access pattern for 'bob' who has nil data
         (funcall mbind (cons 'just (cdr (assq 'bob (cdr (assq 'users data)))))
           (lambda (val) (cons 'just val)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((just . 5) nil nil (just . 10) nil t t t t t t t ((just age . 30) (just)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((just . 5) nil nil (just . 10) nil t t t t t t t ((just age . 30) (just)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -407,12 +400,10 @@ fn oracle_prop_category_theory_list_monad() {
                 (if (= (+ (* a a) (* b b)) (* c c))
                     (list (list a b c))
                   nil)))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 -1 1 2 -2 4 3 -3 9) ((1 a) (1 b) (2 a) (2 b) (3 a) (3 b)) (3 6 9) (1 2 2 3 3 3) t t t t t ((3 4 5) (6 8 10)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 -1 1 2 -2 4 3 -3 9) ((1 a) (1 b) (2 a) (2 b) (3 a) (3 b)) (3 6 9) (1 2 2 3 3 3) t t t t t ((3 4 5) (6 8 10)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -494,12 +485,10 @@ fn oracle_prop_category_theory_monad_laws_verification() {
                (funcall list-f val))
         (equal (funcall maybe-bind (funcall maybe-return val) maybe-f)
                (funcall maybe-f val))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((law1 . t) (law2 . t) (law3 . t)) ((law1 . t) (law2 . t) (law3 . t)) (nil nil nil) (nil nil nil) (t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((law1 . t) (law2 . t) (law3 . t)) ((law1 . t) (law2 . t) (law3 . t)) (nil nil nil) (nil nil nil) (t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -576,10 +565,8 @@ fn oracle_prop_category_theory_kleisli() {
         (equal (funcall left "100") (funcall right "100"))
         (equal (funcall left "-5") (funcall right "-5"))
         (equal (funcall left "abc") (funcall right "abc"))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((just . 42) nil nil ((just . 50) nil nil nil) ((just . \"result=50\") (just . \"result=21\") (just . \"result=10\")) t t (t t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((just . 42) nil nil ((just . 50) nil nil nil) ((just . \"result=50\") (just . \"result=21\") (just . \"result=10\")) t t (t t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

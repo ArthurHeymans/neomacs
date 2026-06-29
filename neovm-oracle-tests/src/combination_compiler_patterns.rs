@@ -85,12 +85,10 @@ fn oracle_prop_compiler_lexer() {
        (funcall 'neovm--test-lex "let result = foo(1, 2) + bar(3);")
        (funcall 'neovm--test-lex "a == b != c <= d"))
     (fmakunbound 'neovm--test-lex)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((KW-LET) (IDENT \"x\") (OP \"=\") (INT 10) (SEMI)) ((KW-FN) (IDENT \"add\") (LPAREN) (IDENT \"a\") (COMMA) (IDENT \"b\") (RPAREN) (LBRACE) (KW-RETURN) (IDENT \"a\") (OP \"+\") (IDENT \"b\") (SEMI) (RBRACE)) ((KW-IF) (IDENT \"x\") (OP \">=\") (INT 10) (LBRACE) (IDENT \"y\") (OP \"=\") (IDENT \"x\") (OP \"*\") (INT 2) (SEMI) (RBRACE)) ((KW-LET) (IDENT \"result\") (OP \"=\") (IDENT \"foo\") (LPAREN) (INT 1) (COMMA) (INT 2) (RPAREN) (OP \"+\") (IDENT \"bar\") (LPAREN) (INT 3) (RPAREN) (SEMI)) ((IDENT \"a\") (OP \"==\") (IDENT \"b\") (OP \"!=\") (IDENT \"c\") (OP \"<=\") (IDENT \"d\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((KW-LET) (IDENT \"x\") (OP \"=\") (INT 10) (SEMI)) ((KW-FN) (IDENT \"add\") (LPAREN) (IDENT \"a\") (COMMA) (IDENT \"b\") (RPAREN) (LBRACE) (KW-RETURN) (IDENT \"a\") (OP \"+\") (IDENT \"b\") (SEMI) (RBRACE)) ((KW-IF) (IDENT \"x\") (OP \">=\") (INT 10) (LBRACE) (IDENT \"y\") (OP \"=\") (IDENT \"x\") (OP \"*\") (INT 2) (SEMI) (RBRACE)) ((KW-LET) (IDENT \"result\") (OP \"=\") (IDENT \"foo\") (LPAREN) (INT 1) (COMMA) (INT 2) (RPAREN) (OP \"+\") (IDENT \"bar\") (LPAREN) (INT 3) (RPAREN) (SEMI)) ((IDENT \"a\") (OP \"==\") (IDENT \"b\") (OP \"!=\") (IDENT \"c\") (OP \"<=\") (IDENT \"d\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -194,12 +192,10 @@ fn oracle_prop_compiler_ast_builder() {
     (fmakunbound 'neovm--test-ast-expr)
     (fmakunbound 'neovm--test-ast-parse)
     (makunbound 'neovm--test-ast-toks)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((binop \"+\" (lit 3) (lit 4)) (binop \"+\" (binop \"*\" (lit 2) (lit 3)) (lit 1)) (binop \"*\" (binop \"+\" (lit 1) (lit 2)) (lit 3)) (binop \"+\" (neg (lit 5)) (ref \"x\")) (binop \"+\" (binop \"*\" (ref \"a\") (ref \"b\")) (binop \"*\" (ref \"c\") (ref \"d\"))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((binop \"+\" (lit 3) (lit 4)) (binop \"+\" (binop \"*\" (lit 2) (lit 3)) (lit 1)) (binop \"*\" (binop \"+\" (lit 1) (lit 2)) (lit 3)) (binop \"+\" (neg (lit 5)) (ref \"x\")) (binop \"+\" (binop \"*\" (ref \"a\") (ref \"b\")) (binop \"*\" (ref \"c\") (ref \"d\"))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -288,12 +284,10 @@ fn oracle_prop_compiler_constant_folding() {
                 '(binop "*" (binop "+" (ref "x") (lit 0))
                         (binop "*" (lit 1) (ref "y")))))
     (fmakunbound 'neovm--test-cf-fold)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((lit 7) (ref \"x\") (lit 0) (lit 15) (ref \"x\") (lit 5) (lit -3) (binop \"*\" (ref \"x\") (ref \"y\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((lit 7) (ref \"x\") (lit 0) (lit 15) (ref \"x\") (lit 5) (lit -3) (binop \"*\" (ref \"x\") (ref \"y\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -405,10 +399,8 @@ fn oracle_prop_compiler_scope_analysis() {
                 '("a")))
     (fmakunbound 'neovm--test-sa-refs)
     (fmakunbound 'neovm--test-sa-analyze)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable body)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable body)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -500,12 +492,10 @@ fn oracle_prop_compiler_codegen_stack_machine() {
                 test-cases))
     (fmakunbound 'neovm--test-cg-emit)
     (fmakunbound 'neovm--test-cg-run)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((code ((push 3) (push 4) (add)) result 7) (code ((load \"x\") (push 2) (mul) (load \"y\") (add)) result 13) (code ((load \"a\") (load \"b\") (add) (negate)) result -17) (code ((push 2) (push 3) (add) (push 8) (push 2) (sub) (mul)) result 30) (code ((load \"a\") (load \"b\") (mul) (load \"c\") (load \"d\") (mul) (add)) result 42))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((code ((push 3) (push 4) (add)) result 7) (code ((load \"x\") (push 2) (mul) (load \"y\") (add)) result 13) (code ((load \"a\") (load \"b\") (add) (negate)) result -17) (code ((push 2) (push 3) (add) (push 8) (push 2) (sub) (mul)) result 30) (code ((load \"a\") (load \"b\") (mul) (load \"c\") (load \"d\") (mul) (add)) result 42))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -721,10 +711,8 @@ fn oracle_prop_compiler_end_to_end() {
     (fmakunbound 'neovm--test-e2e-vm-run)
     (fmakunbound 'neovm--test-e2e-compile-run)
     (makunbound 'neovm--test-e2e-toks)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((tokens 5 ast-folded t code-len 1 result 11) (tokens 5 ast-folded nil code-len 5 result 13) (tokens 11 ast-folded t code-len 1 result 60) (tokens 4 ast-folded t code-len 1 result 10) (tokens 9 ast-folded nil code-len 9 result 25) (tokens 1 ast-folded nil code-len 1 result 42))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((tokens 5 ast-folded t code-len 1 result 11) (tokens 5 ast-folded nil code-len 5 result 13) (tokens 11 ast-folded t code-len 1 result 60) (tokens 4 ast-folded t code-len 1 result 10) (tokens 9 ast-folded nil code-len 9 result 25) (tokens 1 ast-folded nil code-len 1 result 42))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

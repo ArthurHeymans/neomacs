@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx349_eieio_multiple_inheritance_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (11 22 :a neo-cx349-c)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -23,13 +24,14 @@ fn div_cx349_eieio_multiple_inheritance_dispatch() {
               (neo-cx349-who inst) (class-of inst))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (11 22 :a neo-cx349-c)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx349_eieio_method_combination_min_and_or() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -52,13 +54,14 @@ fn div_cx349_eieio_method_combination_min_and_or() {
               (neo-cx349-orc inst))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored error)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx349_eieio_slot_boundp_makunbound_with_slots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t 0 unbound 99 99 eieio--unbound nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -79,13 +82,14 @@ fn div_cx349_eieio_slot_boundp_makunbound_with_slots() {
               (slot-boundp inst 'y))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t 0 unbound 99 99 eieio--unbound nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx349_eieio_print_object_and_change_class() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -107,13 +111,14 @@ fn div_cx349_eieio_print_object_and_change_class() {
                 (princ-to-string po)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx349_eieio_class_allocated_and_object_of_class_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -133,13 +138,16 @@ fn div_cx349_eieio_class_allocated_and_object_of_class_p() {
               (same-class-p a 'neo-cx349-cls))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx349_eieio_initialize_instance_custom_and_class_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:init-ran (#s(eieio--class neo-cx349-mid nil (#s(eieio--class neo-cx349-root nil (#s(eieio--class eieio-default-superclass \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" (#s(built-in-class record \"Abstract type of objects with slots.\" (#s(built-in-class atom \"Abstract supertype of anything but cons cells.\" (#s(built-in-class t \"Abstract supertype of everything.\" nil nil nil nil)) nil nil nil)) nil nil nil)) [] #s(hash-table test eq) (neo-cx349-root neo-cx349-init neo-cx349-cls neo-cx349-po neo-cx349-v2 neo-cx349-v1 neo-cx349-sb neo-cx349-mc neo-cx349-b neo-cx349-a neo-cx34-cls) nil [] [] #s(#6) (:custom-groups nil :documentation \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" :abstract t))) [] #s(hash-table test eq) (neo-cx349-mid) nil [] [] #s(#4) (:custom-groups nil))) [] #s(hash-table test eq) (neo-cx349-leaf) nil [] [] #s(#2) (:custom-groups nil))) (#s(eieio--class neo-cx349-root nil (#s(eieio--class eieio-default-superclass \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" (#s(built-in-class record \"Abstract type of objects with slots.\" (#s(built-in-class atom \"Abstract supertype of anything but cons cells.\" (#s(built-in-class t \"Abstract supertype of everything.\" nil nil nil nil)) nil nil nil)) nil nil nil)) [] #s(hash-table test eq) (neo-cx349-root neo-cx349-init neo-cx349-cls neo-cx349-po neo-cx349-v2 neo-cx349-v1 neo-cx349-sb neo-cx349-mc neo-cx349-b neo-cx349-a neo-cx34-cls) nil [] [] #s(#4) (:custom-groups nil :documentation \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" :abstract t))) [] #s(hash-table test eq) (neo-cx349-mid) nil [] [] #s(#2) (:custom-groups nil))) (neo-cx349-mid) #s(eieio--class neo-cx349-leaf nil (#s(eieio--class neo-cx349-mid nil (#s(eieio--class neo-cx349-root nil (#s(eieio--class eieio-default-superclass \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" (#s(built-in-class record \"Abstract type of objects with slots.\" (#s(built-in-class atom \"Abstract supertype of anything but cons cells.\" (#s(built-in-class t \"Abstract supertype of everything.\" nil nil nil nil)) nil nil nil)) nil nil nil)) [] #s(hash-table test eq) (neo-cx349-root neo-cx349-init neo-cx349-cls neo-cx349-po neo-cx349-v2 neo-cx349-v1 neo-cx349-sb neo-cx349-mc neo-cx349-b neo-cx349-a neo-cx34-cls) nil [] [] #s(#7) (:custom-groups nil :documentation \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" :abstract t))) [] #s(hash-table test eq) (neo-cx349-mid) nil [] [] #s(#5) (:custom-groups nil))) [] #s(hash-table test eq) (neo-cx349-leaf) nil [] [] #s(#3) (:custom-groups nil))) [] #s(hash-table test eq) nil nil [] [] #s(#1) (:custom-groups nil)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -160,15 +168,14 @@ fn div_cx349_eieio_initialize_instance_custom_and_class_query() {
               (find-class 'neo-cx349-leaf))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (:init-ran (#s(eieio--class neo-cx349-mid nil (#s(eieio--class neo-cx349-root nil (#s(eieio--class eieio-default-superclass \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" (#s(built-in-class record \"Abstract type of objects with slots.\" (#s(built-in-class atom \"Abstract supertype of anything but cons cells.\" (#s(built-in-class t \"Abstract supertype of everything.\" nil nil nil nil)) nil nil nil)) nil nil nil)) [] #s(hash-table test eq) (neo-cx349-root neo-cx349-init neo-cx349-cls neo-cx349-po neo-cx349-v2 neo-cx349-v1 neo-cx349-sb neo-cx349-mc neo-cx349-b neo-cx349-a neo-cx34-cls) nil [] [] #s(#6) (:custom-groups nil :documentation \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" :abstract t))) [] #s(hash-table test eq) (neo-cx349-mid) nil [] [] #s(#4) (:custom-groups nil))) [] #s(hash-table test eq) (neo-cx349-leaf) nil [] [] #s(#2) (:custom-groups nil))) (#s(eieio--class neo-cx349-root nil (#s(eieio--class eieio-default-superclass \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" (#s(built-in-class record \"Abstract type of objects with slots.\" (#s(built-in-class atom \"Abstract supertype of anything but cons cells.\" (#s(built-in-class t \"Abstract supertype of everything.\" nil nil nil nil)) nil nil nil)) nil nil nil)) [] #s(hash-table test eq) (neo-cx349-root neo-cx349-init neo-cx349-cls neo-cx349-po neo-cx349-v2 neo-cx349-v1 neo-cx349-sb neo-cx349-mc neo-cx349-b neo-cx349-a neo-cx34-cls) nil [] [] #s(#4) (:custom-groups nil :documentation \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" :abstract t))) [] #s(hash-table test eq) (neo-cx349-mid) nil [] [] #s(#2) (:custom-groups nil))) (neo-cx349-mid) #s(eieio--class neo-cx349-leaf nil (#s(eieio--class neo-cx349-mid nil (#s(eieio--class neo-cx349-root nil (#s(eieio--class eieio-default-superclass \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" (#s(built-in-class record \"Abstract type of objects with slots.\" (#s(built-in-class atom \"Abstract supertype of anything but cons cells.\" (#s(built-in-class t \"Abstract supertype of everything.\" nil nil nil nil)) nil nil nil)) nil nil nil)) [] #s(hash-table test eq) (neo-cx349-root neo-cx349-init neo-cx349-cls neo-cx349-po neo-cx349-v2 neo-cx349-v1 neo-cx349-sb neo-cx349-mc neo-cx349-b neo-cx349-a neo-cx34-cls) nil [] [] #s(#7) (:custom-groups nil :documentation \"Default parent class for classes with no specified parent class.\nIts slots are automatically adopted by classes with no specified parents.\" :abstract t))) [] #s(hash-table test eq) (neo-cx349-mid) nil [] [] #s(#5) (:custom-groups nil))) [] #s(hash-table test eq) (neo-cx349-leaf) nil [] [] #s(#3) (:custom-groups nil))) [] #s(hash-table test eq) nil nil [] [] #s(#1) (:custom-groups nil)))""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx349_eieio_no_primary_and_no_applicable_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:caught-no-primary)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -184,13 +191,15 @@ fn div_cx349_eieio_no_primary_and_no_applicable_method() {
           (error (list :caught-other (car err))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:caught-no-primary)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx349_eieio_defmethod_with_keyword_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((#s(neo-cx349-kw) :a nil) (#s(neo-cx349-kw) :b t))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -205,13 +214,14 @@ fn div_cx349_eieio_defmethod_with_keyword_args() {
               (neo-cx349-kw-call inst :mode :b :verbose t))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK ((#s(neo-cx349-kw) :a nil) (#s(neo-cx349-kw) :b t))""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx349_eieio_with_accessors_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -225,13 +235,14 @@ fn div_cx349_eieio_with_accessors_macro() {
           (list gx gy))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx349_eieio_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -272,6 +283,6 @@ fn div_cx349_eieio_with_marker_overlay_undo_narrow_mega() {
                       (text-properties-at 1))))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]],
+        expect,
     )
 }

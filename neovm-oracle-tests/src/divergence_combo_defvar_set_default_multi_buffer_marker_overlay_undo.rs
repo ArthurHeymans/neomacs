@@ -15,6 +15,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_defvar_make_local_multi_buffer_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar dmml-var 'global)
@@ -67,7 +68,7 @@ fn combo_defvar_make_local_multi_buffer_marker_overlay_undo() {
     (kill-buffer b1)
     (kill-buffer b2)
     (list (nreverse results) (default-value 'dmml-var)))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -75,6 +76,7 @@ fn combo_defvar_make_local_multi_buffer_marker_overlay_undo() {
 fn combo_set_default_buffer_local_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar sd-var 'initial)
@@ -121,7 +123,7 @@ fn combo_set_default_buffer_local_marker_overlay_undo() {
             (set-default 'sd-var 'initial)
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -129,6 +131,9 @@ fn combo_set_default_buffer_local_marker_overlay_undo() {
 fn combo_make_variable_buffer_local_kill_buffer_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (((#(\"AAAAXX-BBBB-CCCC\" 0 4 (zone a) 7 11 (zone b) 12 16 (zone c)) b1-val 5 1 17 a nil) (#(\"DDDD-EEEE-FFFF\" 0 4 (zone d) 5 9 (zone e) 10 14 (zone f)) b2-val d e)) global)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar mvbl-kill 'global)
@@ -171,9 +176,7 @@ fn combo_make_variable_buffer_local_kill_buffer_marker_overlay_undo() {
             results))
     (kill-buffer b2)
     (list (nreverse results) mvbl-kill))) "#,
-        expect_test::expect![[
-            r#""OK (((#(\"AAAAXX-BBBB-CCCC\" 0 4 (zone a) 7 11 (zone b) 12 16 (zone c)) b1-val 5 1 17 a nil) (#(\"DDDD-EEEE-FFFF\" 0 4 (zone d) 5 9 (zone e) 10 14 (zone f)) b2-val d e)) global)""#
-        ]],
+        expect,
     );
 }
 
@@ -181,6 +184,7 @@ fn combo_make_variable_buffer_local_kill_buffer_marker_overlay_undo() {
 fn combo_defvar_let_binding_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar dlet-var 'global)
@@ -224,7 +228,7 @@ fn combo_defvar_let_binding_marker_overlay_undo() {
                                 (get-text-property 16 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -232,6 +236,7 @@ fn combo_defvar_let_binding_marker_overlay_undo() {
 fn combo_defvar_narrow_set_default_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar dnsd-var 'original)
@@ -281,6 +286,6 @@ fn combo_defvar_narrow_set_default_marker_overlay_undo() {
             (set-default 'dnsd-var 'original)
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }

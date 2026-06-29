@@ -41,12 +41,10 @@ fn oracle_prop_process_string_match_replace_pipeline() {
         (= rev-num 42)
         (string= year "2025")))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"2025\" \"12\" \"31\" \"2025-12-31\" \"Date: 31/12/2025, Author: JohnDoe, Rev: 42\" \"JohnDoe\" \"42\" 42 t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"2025\" \"12\" \"31\" \"2025-12-31\" \"Date: 31/12/2025, Author: JohnDoe, Rev: 42\" \"JohnDoe\" \"42\" 42 t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -81,10 +79,8 @@ fn oracle_prop_process_string_nested_group_extraction() {
         (string= reversed-args "arg3, arg2, arg1")
         (string= args-str "arg1, arg2, arg3")))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t \"func(arg3, arg2, arg1)\" t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t \"func(arg3, arg2, arg1)\" t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -127,10 +123,9 @@ fn oracle_prop_process_string_split_mapconcat_transform() {
         formatted
         (string= roles-upper "ENGINEER, DESIGNER, MANAGER")))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t \"alice (30) | bob (25) | carol (35)\" t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (t t t t t \"alice (30) | bob (25) | carol (35)\" t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -185,12 +180,10 @@ fn oracle_prop_process_string_format_all_specifiers() {
   (format "100%%")
   (format "%d%%done" 50))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"hello\" \"42\" \"nil\" \"t\" \"(1 2 3)\" \"255\" \"-42\" \"00042\" \"42        \" \"+42\" \"-42\" \"377\" \"10\" \"0377\" \"ff\" \"1000\" \"0xff\" \"FF\" \"BEEF\" \"3.141590e+00\" \"1.000000e-03\" \"3.141590\" \"3.14\" \"     3.140\" \"3.14\" \"0.0001\" \"100000\" \"A\" \"z\" \"100%\" \"50%done\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"hello\" \"42\" \"nil\" \"t\" \"(1 2 3)\" \"255\" \"-42\" \"00042\" \"42        \" \"+42\" \"-42\" \"377\" \"10\" \"0377\" \"ff\" \"1000\" \"0xff\" \"FF\" \"BEEF\" \"3.141590e+00\" \"1.000000e-03\" \"3.141590\" \"3.14\" \"     3.140\" \"3.14\" \"0.0001\" \"100000\" \"A\" \"z\" \"100%\" \"50%done\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -231,10 +224,9 @@ fn oracle_prop_process_string_concat_substring_number_chain() {
         (string= last-octet-str "100")
         padded))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t 3232235876 t t t \"[  192.168.1.100]\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (t t t t t 3232235876 t t t \"[  192.168.1.100]\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -277,12 +269,10 @@ fn oracle_prop_process_string_case_conversion_pipeline() {
         (string= initials-up "Hello World")
         normalized))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"The Quick Brown Fox Jumps Over The Lazy Dog\" t t t t t t \"The quick brown fox jumps over the lazy dog\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"The Quick Brown Fox Jumps Over The Lazy Dog\" t t t t t t \"The quick brown fox jumps over the lazy dog\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -319,10 +309,9 @@ fn oracle_prop_process_string_multi_pass_regexp_replace() {
         with-digits
         func-replace))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t \"h-el-lo-Wo-rl-d\" \"HELLO WORLD 123 TEST\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (t t t t t \"h-el-lo-Wo-rl-d\" \"HELLO WORLD 123 TEST\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -361,12 +350,10 @@ fn oracle_prop_process_string_format_padding_precision() {
   ;; Format with characters
   (format "%c%c%c" 72 101 108))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"     hello\" \"        hi\" \"toolong\" \"hello     \" \"hi        \" \"00000042\" \"-0000042\" \"000000ff\" \"4\" \"3.1\" \"3.14000\" \"      3.1400\" \"      3.14\" \"3.14      |\" \"[test] 00042     3.14 %\" \"outer(inner(99))\" \"Hel\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"     hello\" \"        hi\" \"toolong\" \"hello     \" \"hi        \" \"00000042\" \"-0000042\" \"000000ff\" \"4\" \"3.1\" \"3.14000\" \"      3.1400\" \"      3.14\" \"3.14      |\" \"[test] 00042     3.14 %\" \"outer(inner(99))\" \"Hel\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -407,7 +394,8 @@ fn oracle_prop_process_string_tokenizer_loop() {
           (equal (mapcar #'car result)
                  '(ident op number op ident op number op string)))))
 "#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (0 nil nil)""#]]);
+    let expect = expect_test::expect![[r#""OK (0 nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -460,8 +448,6 @@ fn oracle_prop_process_string_multibyte_operations() {
         (= ch-back 72)
         cjk-multi))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t \"Hello 世界\" 8 t t t t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t \"Hello 世界\" 8 t t t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

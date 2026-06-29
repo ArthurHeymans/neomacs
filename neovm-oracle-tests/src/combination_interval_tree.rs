@@ -95,12 +95,10 @@ fn oracle_prop_interval_tree_insert() {
     (fmakunbound 'neovm--itree-node)
     (fmakunbound 'neovm--itree-insert)
     (fmakunbound 'neovm--itree-inorder)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((5 20 \"D\") (10 30 \"B\") (12 15 \"E\") (15 20 \"A\") (17 19 \"C\") (30 40 \"F\")) 40 (15 20 \"A\") ((1 5 \"solo\")) 6)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((5 20 \"D\") (10 30 \"B\") (12 15 \"E\") (15 20 \"A\") (17 19 \"C\") (30 40 \"F\")) 40 (15 20 \"A\") ((1 5 \"solo\")) 6)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -206,12 +204,10 @@ fn oracle_prop_interval_tree_point_query() {
     (fmakunbound 'neovm--itree-node)
     (fmakunbound 'neovm--itree-insert)
     (fmakunbound 'neovm--itree-point-query)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 10 \"A\") (5 15 \"B\")) ((5 15 \"B\") (8 18 \"E\") (12 20 \"C\")) nil ((25 30 \"D\")) ((1 10 \"A\") (5 15 \"B\") (8 18 \"E\")) nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 10 \"A\") (5 15 \"B\")) ((5 15 \"B\") (8 18 \"E\") (12 20 \"C\")) nil ((25 30 \"D\")) ((1 10 \"A\") (5 15 \"B\") (8 18 \"E\")) nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -326,12 +322,10 @@ fn oracle_prop_interval_tree_overlap_query() {
     (fmakunbound 'neovm--itree-insert)
     (fmakunbound 'neovm--itree-overlaps-p)
     (fmakunbound 'neovm--itree-overlap-query)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((0 5 \"A\") (3 8 \"B\") (6 10 \"C\")) nil ((15 20 \"D\") (18 25 \"E\")) ((0 5 \"A\") (3 8 \"B\") (6 10 \"C\") (15 20 \"D\") (18 25 \"E\")) ((0 5 \"A\") (3 8 \"B\")) nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((0 5 \"A\") (3 8 \"B\") (6 10 \"C\")) nil ((15 20 \"D\") (18 25 \"E\")) ((0 5 \"A\") (3 8 \"B\") (6 10 \"C\") (15 20 \"D\") (18 25 \"E\")) ((0 5 \"A\") (3 8 \"B\")) nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -415,12 +409,10 @@ fn oracle_prop_interval_tree_merge_overlapping() {
     (fmakunbound 'neovm--interval-merge)
     (fmakunbound 'neovm--interval-covers-p)
     (fmakunbound 'neovm--interval-gaps)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 3) (5 7) (9 11)) ((1 10)) ((1 10)) ((1 7)) ((1 4) (5 15)) ((1 5)) nil t nil ((0 1) (3 5) (7 10) (12 15)) nil ((0 2) (4 6) (8 10)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 3) (5 7) (9 11)) ((1 10)) ((1 10)) ((1 7)) ((1 4) (5 15)) ((1 5)) nil t nil ((0 1) (3 5) (7 10) (12 15)) nil ((0 2) (4 6) (8 10)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -530,12 +522,10 @@ fn oracle_prop_interval_tree_scheduling() {
     (fmakunbound 'neovm--sched-conflicts)
     (fmakunbound 'neovm--sched-free-slots)
     (fmakunbound 'neovm--sched-total-busy)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((900 1000 \"standup\")) ((1000 1130 \"design-review\") (1100 1200 \"1on1\")) nil ((\"design-review\" \"1on1\")) ((1200 1400) (1500 1600)) 500 ((900 1700)) 0)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((900 1000 \"standup\")) ((1000 1130 \"design-review\") (1100 1200 \"1on1\")) nil ((\"design-review\" \"1on1\")) ((1200 1400) (1500 1600)) 500 ((900 1700)) 0)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -615,8 +605,6 @@ fn oracle_prop_interval_tree_count_and_size() {
     (fmakunbound 'neovm--iv-total-span)
     (fmakunbound 'neovm--iv-max-overlap)
     (fmakunbound 'neovm--iv-contains-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (24 2 t nil t t 0 0 1 1 4)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (24 2 t nil t t 0 0 1 1 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

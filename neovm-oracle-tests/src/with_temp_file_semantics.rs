@@ -43,12 +43,10 @@ fn oracle_prop_with_temp_file_writes_after_body_and_returns_body_value() {
       (delete-file file))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:body-value (nil t nil \"\" nil t \"\") t \"alpha\n(beta gamma)\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:body-value (nil t nil \"\" nil t \"\") t \"alpha\n(beta gamma)\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -84,10 +82,8 @@ fn oracle_prop_with_temp_file_does_not_write_file_when_body_errors() {
       (delete-file file))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 27 27)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 27 27)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -126,8 +122,6 @@ fn oracle_prop_with_temp_file_cleanup_skips_kill_buffer_hooks() {
       (delete-file file))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (:done nil nil nil \"hook-test\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (:done nil nil nil \"hook-test\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

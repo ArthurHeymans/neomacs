@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_environment_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'getenv)
@@ -14,7 +15,7 @@ fn divergence_environment_vars() {
   (stringp (getenv "HOME"))
   (stringp (getenv "PATH"))
   (listp process-environment)) "#,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
@@ -22,6 +23,7 @@ fn divergence_environment_vars() {
 fn divergence_locale() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'locale-info)
@@ -29,7 +31,7 @@ fn divergence_locale() {
   (boundp 'system-messages-locale)
   (boundp 'system-time-locale)
   (fboundp 'current-locale)) "#,
-        expect_test::expect![[r#""OK (t t t t nil)""#]],
+        expect,
     );
 }
 
@@ -37,6 +39,7 @@ fn divergence_locale() {
 fn divergence_system_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'system-name)
@@ -47,7 +50,7 @@ fn divergence_system_info() {
   (stringp (emacs-version))
   (fboundp 'emacs-build-time)
   (fboundp 'emacs-build-number)) "#,
-        expect_test::expect![[r#""OK (t t t t t t nil nil)""#]],
+        expect,
     );
 }
 
@@ -55,6 +58,7 @@ fn divergence_system_info() {
 fn divergence_configuration_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil nil t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'configuration-options)
@@ -62,7 +66,7 @@ fn divergence_configuration_info() {
   (stringp system-configuration)
   (fboundp 'system-configuration-features)
   (stringp system-configuration-features)) "#,
-        expect_test::expect![[r#""OK (nil nil t nil t)""#]],
+        expect,
     );
 }
 
@@ -70,6 +74,7 @@ fn divergence_configuration_info() {
 fn divergence_user_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'user-login-name)
@@ -79,7 +84,7 @@ fn divergence_user_info() {
   (stringp user-login-name)
   (stringp (user-full-name))
   (integerp (user-real-uid))) "#,
-        expect_test::expect![[r#""OK (t t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -87,6 +92,7 @@ fn divergence_user_info() {
 fn divergence_path_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'exec-path)
@@ -95,7 +101,7 @@ fn divergence_path_vars() {
   (listp load-path)
   (boundp 'exec-suffixes)
   (listp exec-suffixes)) "#,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -103,6 +109,7 @@ fn divergence_path_vars() {
 fn divergence_data_directory() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'data-directory)
@@ -111,7 +118,7 @@ fn divergence_data_directory() {
   (stringp user-emacs-directory)
   (boundp 'user-init-file)
   (boundp 'user-emacs-directory)) "#,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -119,6 +126,7 @@ fn divergence_data_directory() {
 fn divergence_invocation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'invocation-name)
@@ -127,7 +135,7 @@ fn divergence_invocation() {
   (stringp invocation-directory)
   (boundp 'command-line-args)
   (listp command-line-args)) "#,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -135,6 +143,7 @@ fn divergence_invocation() {
 fn divergence_memory_info_func() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'memory-use-counts)
@@ -143,7 +152,7 @@ fn divergence_memory_info_func() {
   (integerp gc-cons-threshold)
   (fboundp 'garbage-collect)
   (listp (garbage-collect))) "#,
-        expect_test::expect![[r#""OK (t t nil t t t)""#]],
+        expect,
     );
 }
 
@@ -151,9 +160,10 @@ fn divergence_memory_info_func() {
 fn divergence_feature_checks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (featurep 'emacs)) "#,
-        expect_test::expect![[r#""OK (t)""#]],
+        expect,
     );
 }

@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_defmethod_dispatch_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass base-handler ()
@@ -59,7 +60,7 @@ fn combo_eieio_defmethod_dispatch_basic() {
                 (overlay-start ov) (overlay-end ov)
                 (process-edit my-th 1 5 'check)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -67,6 +68,7 @@ fn combo_eieio_defmethod_dispatch_basic() {
 fn combo_eieio_defmethod_dispatch_change_class() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass marker-policy ()
@@ -121,7 +123,7 @@ fn combo_eieio_defmethod_dispatch_change_class() {
                 (overlay-start ov) (overlay-end ov)
                 (marker-insertion-type m)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 4)""#]],
+        expect,
     );
 }
 
@@ -129,6 +131,7 @@ fn combo_eieio_defmethod_dispatch_change_class() {
 fn combo_eieio_defmethod_multi_dispatch_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass edit-action ()
@@ -184,7 +187,7 @@ fn combo_eieio_defmethod_multi_dispatch_overlay() {
                 (overlay-start ov) (overlay-end ov)
                 (log-action ia 1 1 my-handler))))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -192,6 +195,7 @@ fn combo_eieio_defmethod_multi_dispatch_overlay() {
 fn combo_eieio_defmethod_narrow_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 54 23)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass narrow-strategy ()
@@ -247,7 +251,7 @@ fn combo_eieio_defmethod_narrow_dispatch() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 54 23)""#]],
+        expect,
     );
 }
 
@@ -255,6 +259,7 @@ fn combo_eieio_defmethod_narrow_dispatch() {
 fn combo_eieio_defmethod_undo_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 54 23)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass undo-strategy ()
@@ -310,6 +315,6 @@ fn combo_eieio_defmethod_undo_dispatch() {
               (marker-position m)
               (overlay-start ov) (overlay-end ov))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 54 23)""#]],
+        expect,
     );
 }

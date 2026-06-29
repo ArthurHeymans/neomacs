@@ -8,6 +8,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx96_filter_buffer_substring_with_invisible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"Visible hidden visibl\" \"Visible hidden visibl\" \"Visible hidden visibl\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -19,15 +22,16 @@ fn div_cx96_filter_buffer_substring_with_invisible() {
         (filter-buffer-substring 1 22)
         (filter-buffer-substring 1 22 t)))
 "##,
-        expect_test::expect![[
-            r#""OK (\"Visible hidden visibl\" \"Visible hidden visibl\" \"Visible hidden visibl\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx96_filter_buffer_substring_with_display_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"Text with display pro\" \"Text with display pro\" \"Text with display pro\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -38,15 +42,14 @@ fn div_cx96_filter_buffer_substring_with_display_overlay() {
         (filter-buffer-substring 1 22)
         (filter-buffer-substring 1 22 t)))
 "##,
-        expect_test::expect![[
-            r#""OK (\"Text with display pro\" \"Text with display pro\" \"Text with display pro\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx96_format_mode_line_per_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil \"\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -58,13 +61,16 @@ fn div_cx96_format_mode_line_per_buffer() {
               (format-mode-line "%b %p"))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t nil \"\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx96_buffer_substring_with_text_properties_vs_without() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (#(\"alpha beta gamma delt\" 0 4 (face bold) 6 9 (face italic) 12 16 (face underline)) \"alpha beta gamma delt\" (face bold) (face bold) (face italic) 21 21)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -80,15 +86,14 @@ fn div_cx96_buffer_substring_with_text_properties_vs_without() {
     (list with-props no-props props-1 props-3 props-7
           (length with-props) (length no-props))))
 "##,
-        expect_test::expect![[
-            r#""OK (#(\"alpha beta gamma delt\" 0 4 (face bold) 6 9 (face italic) 12 16 (face underline)) \"alpha beta gamma delt\" (face bold) (face bold) (face italic) 21 21)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx96_text_property_search_backwards_with_value_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil 19 23 :y)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -109,13 +114,14 @@ fn div_cx96_text_property_search_backwards_with_value_match() {
                 (and bwd (prop-match-value bwd))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil 19 23 :y)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx96_indent_rigidly_with_tabs_across_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"\tline1\n\tline2\n\tline3\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -125,13 +131,14 @@ fn div_cx96_indent_rigidly_with_tabs_across_lines() {
     (indent-rigidly (point-min) (point-max) 4)
     (buffer-string)))
 "##,
-        expect_test::expect![[r#""OK \"\tline1\n\tline2\n\tline3\n\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx96_indent_rigidly_with_spaces_across_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"      line1\n      line2\n      line3\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -140,13 +147,16 @@ fn div_cx96_indent_rigidly_with_spaces_across_lines() {
     (indent-rigidly (point-min) (point-max) 6)
     (buffer-string)))
 "##,
-        expect_test::expect![[r#""OK \"      line1\n      line2\n      line3\n\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx96_buffer_substring_with_overlay_text_props_combined() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (#(\"ABCDEFGH\" 0 3 (face bold)) \"ABCDEFGH\" (face bold) (face bold) nil 8 8)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -163,15 +173,14 @@ fn div_cx96_buffer_substring_with_overlay_text_props_combined() {
           (text-properties-at 5 sub)
           (length sub) (length no-props))))
 "##,
-        expect_test::expect![[
-            r#""OK (#(\"ABCDEFGH\" 0 3 (face bold)) \"ABCDEFGH\" (face bold) (face bold) nil 8 8)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx96_buffer_substring_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 1 38)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -200,13 +209,16 @@ fn div_cx96_buffer_substring_with_marker_overlay_undo_narrow_mega() {
             (overlay-start invis-ov) (overlay-end invis-ov)
             (text-properties-at 1)))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 1 38)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx96_buffer_formatted_substring_no_text_props_in_field() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (#(\"field1\tfield2\tfield3\tfield\" 0 5 (field a) 7 12 (field b) 14 19 (field c) 21 26 (field d)) \"field1\tfield2\tfield3\tfield\" (field a) (field b) (field c) (field d))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -222,15 +234,14 @@ fn div_cx96_buffer_formatted_substring_no_text_props_in_field() {
         (text-properties-at 14 (buffer-substring 1 27))
         (text-properties-at 21 (buffer-substring 1 27))))
 "##,
-        expect_test::expect![[
-            r#""OK (#(\"field1\tfield2\tfield3\tfield\" 0 5 (field a) 7 12 (field b) 14 19 (field c) 21 26 (field d)) \"field1\tfield2\tfield3\tfield\" (field a) (field b) (field c) (field d))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx96_add_text_properties_vs_set_text_properties_idempotent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((b 2 a 1) (b 2 a 1) nil (b 2 a 1))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -244,6 +255,6 @@ fn div_cx96_add_text_properties_vs_set_text_properties_idempotent() {
             (after-clear-2 (text-properties-at 2)))
         (list first-add second-add after-clear-3 after-clear-2)))))
 "##,
-        expect_test::expect![[r#""OK ((b 2 a 1) (b 2 a 1) nil (b 2 a 1))""#]],
+        expect,
     );
 }

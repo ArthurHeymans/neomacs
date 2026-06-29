@@ -16,8 +16,8 @@ fn oracle_prop_fset_and_funcall() {
                   (unwind-protect
                       (funcall 'neovm--test-fset-fn 5)
                     (fmakunbound 'neovm--test-fset-fn)))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 6""#]]);
+    let expect = expect_test::expect![[r#""OK 6""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("6", &o, &n);
 }
 
@@ -30,8 +30,8 @@ fn oracle_prop_symbol_function_retrieves_definition() {
                   (unwind-protect
                       (funcall (symbol-function 'neovm--test-sf-fn) 7)
                     (fmakunbound 'neovm--test-sf-fn)))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 14""#]]);
+    let expect = expect_test::expect![[r#""OK 14""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("14", &o, &n);
 }
 
@@ -44,8 +44,8 @@ fn oracle_prop_fboundp_true() {
                   (unwind-protect
                       (fboundp 'neovm--test-fbp-fn)
                     (fmakunbound 'neovm--test-fbp-fn)))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK t""#]]);
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("t", &o, &n);
 }
 
@@ -53,9 +53,10 @@ fn oracle_prop_fboundp_true() {
 fn oracle_prop_fboundp_false() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         "(fboundp 'neovm--surely-unbound-symbol-xyz)",
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
     assert_ok_eq("nil", &o, &n);
 }
@@ -68,8 +69,8 @@ fn oracle_prop_fmakunbound_makes_unbound() {
                   (fset 'neovm--test-fmub-fn (lambda () 42))
                   (fmakunbound 'neovm--test-fmub-fn)
                   (fboundp 'neovm--test-fmub-fn))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -85,8 +86,8 @@ fn oracle_prop_fset_overwrite() {
                           (fset 'neovm--test-fow-fn (lambda (x) (* x 10)))
                           (list r1 (funcall 'neovm--test-fow-fn 5))))
                     (fmakunbound 'neovm--test-fow-fn)))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK (6 50)""#]]);
+    let expect = expect_test::expect![[r#""OK (6 50)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(6 50)", &o, &n);
 }
 
@@ -97,13 +98,13 @@ fn oracle_prop_symbol_function_on_unbound() {
     let form = "(condition-case err
                   (symbol-function 'neovm--definitely-unbound-xyz)
                   (void-function (car err)))";
+    let expect = expect_test::expect![[r#""OK nil""#]];
     // GNU Emacs `symbol-function` on an unbound symbol signals void-function,
     // and condition-case catches it. The oracle returns OK nil because
     // `(car err)` on a void-function error yields the symbol `void-function`,
     // but Emacs normalizes the condition-case result to nil in this context.
     // Both should agree on the result.
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_eq!(n, o, "neovm and oracle should match");
 }
 
@@ -117,8 +118,8 @@ fn oracle_prop_fset_with_builtin() {
                   (unwind-protect
                       (funcall 'neovm--test-alias 1 2 3)
                     (fmakunbound 'neovm--test-alias)))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 6""#]]);
+    let expect = expect_test::expect![[r#""OK 6""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("6", &o, &n);
 }
 
@@ -134,7 +135,8 @@ fn oracle_prop_indirect_function() {
                       (funcall 'neovm--test-alias2 5)
                     (fmakunbound 'neovm--test-orig)
                     (fmakunbound 'neovm--test-alias2)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 105""#]]);
+    let expect = expect_test::expect![[r#""OK 105""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -164,8 +166,6 @@ fn oracle_indirect_function_follows_long_function_alias_chain() {
       (ignore-errors (fmakunbound sym)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t (tail 17) t (closure (t) (x) (list 'tail x)))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t (tail 17) t (closure (t) (x) (list 'tail x)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

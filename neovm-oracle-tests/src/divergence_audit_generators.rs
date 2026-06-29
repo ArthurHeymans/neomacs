@@ -12,6 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_agen_basic_yield_next_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 2 (:eos . :done))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'generator)
@@ -21,7 +22,7 @@ fn div_agen_basic_yield_next_end() {
             (iter-end-of-sequence (cons :eos (cdr e)))
             (error (cons :err (car e)))))))
 "##,
-        expect_test::expect![[r#""OK (1 2 (:eos . :done))""#]],
+        expect,
     );
 }
 
@@ -40,6 +41,9 @@ fn div_agen_iter_next_explicit_end_value() {
 #[test]
 fn div_agen_iter_do_collect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-number-of-arguments (closure (t) nil (let (cps-current-state-5 cps-current-value-4 cps-state-terminal-6 cps-state-iter-yield-7 cps-state-atom-8 cps-state-iter-yield-9 cps-state-atom-10 cps-state-iter-yield-11 cps-state-atom-12) (setq cps-state-terminal-6 #'(lambda nil (signal 'iter-end-of-sequence cps-current-value-4))) (setq cps-state-iter-yield-7 #'(lambda nil (progn (setq cps-current-state-5 cps-state-terminal-6) (throw 'cps--yield cps-current-value-4)))) (setq cps-state-atom-8 #'(lambda nil (setq cps-current-value-4 (prog1 3 (setq cps-current-state-5 cps-state-iter-yield-7))))) (setq cps-state-iter-yield-9 #'(lambda nil (progn (setq cps-current-state-5 cps-state-atom-8) (throw 'cps--yield cps-current-value-4)))) (setq cps-state-atom-10 #'(lambda nil (setq cps-current-value-4 (prog1 2 (setq cps-current-state-5 cps-state-iter-yield-9))))) (setq cps-state-iter-yield-11 #'(lambda nil (progn (setq cps-current-state-5 cps-state-atom-10) (throw 'cps--yield cps-current-value-4)))) (setq cps-state-atom-12 #'(lambda nil (setq cps-current-value-4 (prog1 1 (setq cps-current-state-5 cps-state-iter-yield-11))))) (setq cps-current-state-5 cps-state-atom-12) (let ((iterator #'(lambda (op value) (cond ((eq op :close) (progn (setq cps-current-state-5 cps-state-terminal-6) (setq cps-current-value-4 nil))) ((eq op :next) (setq cps-current-value-4 value) (let ((yielded nil)) (unwind-protect (prog1 (catch 'cps--yield (while t (funcall cps-current-state-5))) (setq yielded t)) (if yielded nil (progn (setq cps-current-state-5 cps-state-terminal-6) (setq cps-current-value-4 nil)))))) (t (error \"Unknown iterator operation %S\" op)))))) nil iterator))) 2)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'generator)
@@ -48,15 +52,14 @@ fn div_agen_iter_do_collect() {
       (push x acc))
     (nreverse acc)))
 "##,
-        expect_test::expect![[
-            r#""ERR (wrong-number-of-arguments (closure (t) nil (let (cps-current-state-5 cps-current-value-4 cps-state-terminal-6 cps-state-iter-yield-7 cps-state-atom-8 cps-state-iter-yield-9 cps-state-atom-10 cps-state-iter-yield-11 cps-state-atom-12) (setq cps-state-terminal-6 #'(lambda nil (signal 'iter-end-of-sequence cps-current-value-4))) (setq cps-state-iter-yield-7 #'(lambda nil (progn (setq cps-current-state-5 cps-state-terminal-6) (throw 'cps--yield cps-current-value-4)))) (setq cps-state-atom-8 #'(lambda nil (setq cps-current-value-4 (prog1 3 (setq cps-current-state-5 cps-state-iter-yield-7))))) (setq cps-state-iter-yield-9 #'(lambda nil (progn (setq cps-current-state-5 cps-state-atom-8) (throw 'cps--yield cps-current-value-4)))) (setq cps-state-atom-10 #'(lambda nil (setq cps-current-value-4 (prog1 2 (setq cps-current-state-5 cps-state-iter-yield-9))))) (setq cps-state-iter-yield-11 #'(lambda nil (progn (setq cps-current-state-5 cps-state-atom-10) (throw 'cps--yield cps-current-value-4)))) (setq cps-state-atom-12 #'(lambda nil (setq cps-current-value-4 (prog1 1 (setq cps-current-state-5 cps-state-iter-yield-11))))) (setq cps-current-state-5 cps-state-atom-12) (let ((iterator #'(lambda (op value) (cond ((eq op :close) (progn (setq cps-current-state-5 cps-state-terminal-6) (setq cps-current-value-4 nil))) ((eq op :next) (setq cps-current-value-4 value) (let ((yielded nil)) (unwind-protect (prog1 (catch 'cps--yield (while t (funcall cps-current-state-5))) (setq yielded t)) (if yielded nil (progn (setq cps-current-state-5 cps-state-terminal-6) (setq cps-current-value-4 nil)))))) (t (error \"Unknown iterator operation %S\" op)))))) nil iterator))) 2)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_agen_iter_close() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK :closed""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'generator)
@@ -65,13 +68,14 @@ fn div_agen_iter_close() {
     (iter-close g)
     :closed))
 "##,
-        expect_test::expect![[r#""OK :closed""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_agen_iter_defun() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 1 2 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'generator)
@@ -79,26 +83,28 @@ fn div_agen_iter_defun() {
   (let ((g (neo-igen 4)))
     (list (iter-next g) (iter-next g) (iter-next g) (iter-next g))))
 "##,
-        expect_test::expect![[r#""OK (0 1 2 3)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_agen_infinite_generator_external_limit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 2 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'generator)
   (let ((g (funcall (iter-lambda () (let ((i 0)) (while t (iter-yield (setq i (1+ i)))))))))
     (list (iter-next g) (iter-next g) (iter-next g))))
 "##,
-        expect_test::expect![[r#""OK (1 2 3)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_agen_cleanup_on_close() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK :ran""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'generator)
@@ -108,13 +114,14 @@ fn div_agen_cleanup_on_close() {
       (iter-close g))
     cleaned))
 "##,
-        expect_test::expect![[r#""OK :ran""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_agen_repeated_next_past_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:eos1 :eos2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'generator)
@@ -123,13 +130,14 @@ fn div_agen_repeated_next_past_end() {
     (list (condition-case e (iter-next g) (iter-end-of-sequence :eos1) (error :other1))
           (condition-case e (iter-next g) (iter-end-of-sequence :eos2) (error :other2)))))
 "##,
-        expect_test::expect![[r#""OK (:eos1 :eos2)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_agen_yield_from_delegation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 2 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'generator)
@@ -138,13 +146,14 @@ fn div_agen_yield_from_delegation() {
                       (iter-yield 3)))))
     (list (iter-next g) (iter-next g) (iter-next g))))
 "##,
-        expect_test::expect![[r#""OK (1 2 3)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_agen_generator_final_value_then_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:a (:eos . :final))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'generator)
@@ -154,13 +163,14 @@ fn div_agen_generator_final_value_then_end() {
             (iter-end-of-sequence (cons :eos (cdr e)))
             (error (cons :err (car e)))))))
 "##,
-        expect_test::expect![[r#""OK (:a (:eos . :final))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_agen_iter_next_end_of_sequence_lambda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'generator)
@@ -168,6 +178,6 @@ fn div_agen_iter_next_end_of_sequence_lambda() {
     (iter-next g)
     (iter-next g (lambda () :custom-eos))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

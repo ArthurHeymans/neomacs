@@ -35,12 +35,10 @@ fn oracle_prop_assoc_with_testfn() {
                           (lambda (a b) (< (abs (- a b)) 0.1)))
                    ;; eq as testfn: like assq
                    (assoc 'b '((a . 1) (b . 2) (c . 3)) #'eq))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"hello\" . 1) (\"hello\" . 1) (\"hello\" . 1) (3.0 . \"three\") nil (b . 2))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"hello\" . 1) (\"hello\" . 1) (\"hello\" . 1) (3.0 . \"three\") nil (b . 2))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -70,12 +68,10 @@ fn oracle_prop_assq_vs_assoc_key_types() {
                      (let ((list-alist '(((1 2) . "pair1") ((3 4) . "pair2"))))
                        (list (assoc '(1 2) list-alist)
                              (assq '(1 2) list-alist)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"beta\" . 2) nil ((y . 20) (y . 20)) ((2 . \"b\") (2 . \"b\")) (((1 2) . \"pair1\") nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"beta\" . 2) nil ((y . 20) (y . 20)) ((2 . \"b\") (2 . \"b\")) (((1 2) . \"pair1\") nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -105,12 +101,10 @@ fn oracle_prop_rassoc_rassq_reverse_lookup() {
                      (let ((num-alist '((a . 1) (b . 2) (c . 3) (d . 2))))
                        (list (rassoc 2 num-alist)
                              (rassq 2 num-alist)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((a . \"alpha\") (c . \"gamma\") nil nil ((\"x\" . found) (\"y\" . lost) nil) ((b . 2) (b . 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((a . \"alpha\") (c . \"gamma\") nil nil ((\"x\" . found) (\"y\" . lost) nil) ((b . 2) (b . 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -139,10 +133,8 @@ fn oracle_prop_assoc_default_behavior() {
                    (assoc-default 99 '((1 . "one") (2 . "two")))
                    ;; assoc-default with default parameter
                    (assoc-default 'missing '((a . 1)) nil 'fallback))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (2 nil \"world\" \"world\" 2 nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 nil \"world\" \"world\" 2 nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -180,12 +172,10 @@ fn oracle_prop_nested_alist_lookups() {
                        ;; Top-level config values
                        (funcall lookup '(config debug) db)
                        (funcall lookup '(config version) db))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((alice (age . 30) (role . admin)) (bob (age . 25) (role . user))) 30 user 100 30 nil t \"1.0\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((alice (age . 30) (role . admin)) (bob (age . 25) (role . user))) 30 user 100 30 nil t \"1.0\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -246,12 +236,10 @@ fn oracle_prop_alist_multimap() {
                          result-before
                          (funcall mm-get mm 'tag)
                          (funcall mm-get mm 'category)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((((post3) (post2) (post1)) ((science) (tech)) (category tag)) ((post3) (post2) (post1)) ((science) (tech)))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((((post3) (post2) (post1)) ((science) (tech)) (category tag)) ((post3) (post2) (post1)) ((science) (tech)))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -305,12 +293,10 @@ fn oracle_prop_alist_merge_strategies() {
                                            '((a . 1) (b . 2) (c . 3))
                                            '((b . 10) (c . 20) (d . 30))
                                            (lambda (old new) (+ old new))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (((color . blue) (font . mono) (height . 24) (width . 80)) ((color . red) (font . mono) (height . 24) (width . 120)) ((a . 1) (b . 12) (c . 23) (d . 30)))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (((color . blue) (font . mono) (height . 24) (width . 80)) ((color . red) (font . mono) (height . 24) (width . 120)) ((a . 1) (b . 12) (c . 23) (d . 30)))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -388,10 +374,8 @@ fn oracle_prop_alist_query_engine() {
                                                 (lambda (v) (> v 26)))
                                        'age 'asc)
                               '(name age))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((((name . \"Alice\") (age . 30)) ((name . \"Bob\") (age . 25)) ((name . \"Dave\") (age . 28))) (((name . \"Eve\")) ((name . \"Carol\"))) 3 (((name . \"Dave\") (age . 28)) ((name . \"Alice\") (age . 30))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((((name . \"Alice\") (age . 30)) ((name . \"Bob\") (age . 25)) ((name . \"Dave\") (age . 28))) (((name . \"Eve\")) ((name . \"Carol\"))) 3 (((name . \"Dave\") (age . 28)) ((name . \"Alice\") (age . 30))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

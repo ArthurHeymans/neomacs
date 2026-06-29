@@ -105,12 +105,10 @@ fn oracle_prop_dag_representation_and_queries() {
     (fmakunbound 'neovm--dag-successors)
     (fmakunbound 'neovm--dag-predecessors)
     (fmakunbound 'neovm--dag-edge-count)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"a\" \"b\" \"c\" \"d\" \"e\" \"f\" \"g\") (\"b\" \"c\") (\"d\" \"e\") nil (\"d\" \"e\" \"f\") nil (\"b\" \"c\") 9 7)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"a\" \"b\" \"c\" \"d\" \"e\" \"f\" \"g\") (\"b\" \"c\") (\"d\" \"e\") nil (\"d\" \"e\" \"f\") nil (\"b\" \"c\") 9 7)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -202,12 +200,10 @@ fn oracle_prop_dag_topological_ordering() {
                 (puthash "z" '("x") cyclic)
                 (funcall 'neovm--dag-topo-dfs cyclic))))))
     (fmakunbound 'neovm--dag-topo-dfs)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"a\" \"c\" \"b\" \"d\" \"e\") t t t t t (\"x\" \"y\" \"z\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"a\" \"c\" \"b\" \"d\" \"e\") t t t t t (\"x\" \"y\" \"z\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -309,10 +305,8 @@ fn oracle_prop_dag_longest_path() {
             ;; vs a(3)->b(5)->e(1)->f(4) = 13
             (= (car result) 15))))
     (fmakunbound 'neovm--dag-longest-path)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (15 (\"a\" \"c\" \"e\" \"f\") t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (15 (\"a\" \"c\" \"e\" \"f\") t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -376,12 +370,10 @@ fn oracle_prop_dag_all_paths() {
             ;; Paths from a to t
             (funcall 'neovm--dag-all-paths adj "a" "t"))))
     (fmakunbound 'neovm--dag-all-paths)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"s\" \"a\" \"c\" \"t\") (\"s\" \"a\" \"d\" \"t\") (\"s\" \"b\" \"d\" \"t\") (\"s\" \"b\" \"e\" \"t\")) 4 4 4 nil ((\"s\")) ((\"a\" \"c\" \"t\") (\"a\" \"d\" \"t\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"s\" \"a\" \"c\" \"t\") (\"s\" \"a\" \"d\" \"t\") (\"s\" \"b\" \"d\" \"t\") (\"s\" \"b\" \"e\" \"t\")) 4 4 4 nil ((\"s\")) ((\"a\" \"c\" \"t\") (\"a\" \"d\" \"t\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -479,10 +471,8 @@ fn oracle_prop_dag_task_scheduling() {
               ;; package starts after all 3 deps
               (nth 1 (assoc "package" timeline))))))
     (fmakunbound 'neovm--dag-schedule)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (setting-constant t)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (setting-constant t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -582,12 +572,10 @@ fn oracle_prop_dag_transitive_reduction() {
           (puthash "e" nil adj5)
           (funcall 'neovm--dag-trans-reduce adj5)))
     (fmakunbound 'neovm--dag-trans-reduce)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"a\" \"b\") (\"b\" \"c\") (\"c\")) ((\"a\" \"b\" \"c\") (\"b\" \"d\") (\"c\" \"d\") (\"d\")) ((\"a\" \"b\") (\"b\" \"c\") (\"c\" \"d\") (\"d\")) ((\"a\" \"b\") (\"b\" \"c\") (\"c\")) ((\"a\" \"b\" \"c\") (\"b\" \"d\") (\"c\" \"d\") (\"d\" \"e\") (\"e\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"a\" \"b\") (\"b\" \"c\") (\"c\")) ((\"a\" \"b\" \"c\") (\"b\" \"d\") (\"c\" \"d\") (\"d\")) ((\"a\" \"b\") (\"b\" \"c\") (\"c\" \"d\") (\"d\")) ((\"a\" \"b\") (\"b\" \"c\") (\"c\")) ((\"a\" \"b\" \"c\") (\"b\" \"d\") (\"c\" \"d\") (\"d\" \"e\") (\"e\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -672,10 +660,8 @@ fn oracle_prop_dag_depth_and_width() {
           (puthash "b1" '("b2") adj) (puthash "b2" '("b3") adj) (puthash "b3" nil adj)
           (funcall 'neovm--dag-depth-width adj)))
     (fmakunbound 'neovm--dag-depth-width)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((5 1 ((\"a\") (\"b\") (\"c\") (\"d\") (\"e\"))) (2 4 ((\"root\") (\"a\" \"b\" \"c\" \"d\"))) (3 2 ((\"top\") (\"left\" \"right\") (\"bottom\"))) (3 2 ((\"a1\" \"b1\") (\"a2\" \"b2\") (\"a3\" \"b3\"))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((5 1 ((\"a\") (\"b\") (\"c\") (\"d\") (\"e\"))) (2 4 ((\"root\") (\"a\" \"b\" \"c\" \"d\"))) (3 2 ((\"top\") (\"left\" \"right\") (\"bottom\"))) (3 2 ((\"a1\" \"b1\") (\"a2\" \"b2\") (\"a3\" \"b3\"))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

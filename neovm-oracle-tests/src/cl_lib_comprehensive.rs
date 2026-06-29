@@ -38,10 +38,8 @@ fn oracle_prop_cl_lib_comp_reduce_comprehensive() {
     (cl-reduce #'+ '() :initial-value 42)
     ;; Single-element list, no initial value
     (cl-reduce #'+ '(99))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (15 115 (a b c d) (d c b a) 6 24 122 42 99)""#],
-    );
+    let expect = expect_test::expect![r#""OK (15 115 (a b c d) (d c b a) 6 24 122 42 99)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -77,10 +75,8 @@ fn oracle_prop_cl_lib_comp_quantifiers() {
     (cl-some #'cl-plusp '())
     (cl-notany #'cl-plusp '())
     (cl-notevery #'cl-plusp '())))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (t nil t nil nil t 40 t nil nil t t nil t nil)""#],
-    );
+    let expect = expect_test::expect![r#""OK (t nil t nil nil t 40 t nil nil t t nil t nil)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -112,10 +108,8 @@ fn oracle_prop_cl_lib_comp_count_comprehensive() {
     (cl-count 'x [a x b x c x])
     ;; cl-count on string
     (cl-count ?a "banana")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (3 2 2 2 4 2 2 3 3)""#],
-    );
+    let expect = expect_test::expect![r#""OK (3 2 2 2 4 2 2 3 3)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -151,10 +145,9 @@ fn oracle_prop_cl_lib_comp_find_comprehensive() {
     (cl-find-if #'cl-oddp '(2 3 4 5 6) :from-end t)
     ;; cl-find on vector
     (cl-find 'c [a b c d e])))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 nil \"b\" (2 . beta) (x . 3) 5 4 (15 . b) 5 c)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (3 nil \"b\" (2 . beta) (x . 3) 5 4 (15 . b) 5 c)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -189,10 +182,8 @@ fn oracle_prop_cl_lib_comp_position_comprehensive() {
     (cl-position 'c [a b c d e])
     ;; Position in string
     (cl-position ?n "banana")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (2 nil 1 4 2 1 3 3 2 2)""#],
-    );
+    let expect = expect_test::expect![r#""OK (2 nil 1 4 2 1 3 3 2 2)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -226,10 +217,8 @@ fn oracle_prop_cl_lib_comp_search_mismatch() {
     (cl-mismatch '(a b c d e) '(x b c y z) :start1 1 :end1 3 :start2 1 :end2 3)
     ;; cl-search with :key
     (cl-search '(2 3) '((1 . a) (2 . b) (3 . c) (4 . d)) :key #'car)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""ERR (wrong-type-argument listp 2)""#],
-    );
+    let expect = expect_test::expect![r#""ERR (wrong-type-argument listp 2)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -264,12 +253,10 @@ fn oracle_prop_cl_lib_comp_subseq_comprehensive() {
     (let ((v (vector 1 2 3 4 5)))
       (setf (cl-subseq v 1 3) '(20 30))
       (append v nil))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((b c) (a b) (c d e) (1 2 3) [20 30 40] \"world\" \"hello\" nil (b) (1 20 30 4 5))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((b c) (a b) (c d e) (1 2 3) [20 30 40] \"world\" \"hello\" nil (b) (1 20 30 4 5))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -307,12 +294,10 @@ fn oracle_prop_cl_lib_comp_substitute_comprehensive() {
     (let ((orig '(1 2 3 2 1)))
       (cl-substitute 99 2 orig)
       orig)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((a x c x d) (a x c x d b) (a b c b d x) (3 1 99 2 99 4 3) ((1 . a) new (3 . c) new) (\"a\" FOUND \"b\" FOUND) (1 0 3 0 5) ((1 . a) (0 . zero) (3 . c) (0 . zero)) [a X c X d] (1 2 3 2 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((a x c x d) (a x c x d b) (a b c b d x) (3 1 99 2 99 4 3) ((1 . a) new (3 . c) new) (\"a\" FOUND \"b\" FOUND) (1 0 3 0 5) ((1 . a) (0 . zero) (3 . c) (0 . zero)) [a X c X d] (1 2 3 2 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -346,12 +331,10 @@ fn oracle_prop_cl_lib_comp_remove_duplicates_comprehensive() {
     (cl-remove-duplicates '())
     ;; All same
     (cl-remove-duplicates '(x x x x))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((2 1 4 3 5) (a c b d) (a b c d) (\"A\" \"b\" \"B\" \"a\") ((2 . b) (1 . c) (3 . d)) (1 2 3 4 5) [3 2 1] \"cdbra\" nil (x))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((2 1 4 3 5) (a c b d) (a b c d) (\"A\" \"b\" \"B\" \"a\") ((2 . b) (1 . c) (3 . d)) (1 2 3 4 5) [3 2 1] \"cdbra\" nil (x))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -394,12 +377,10 @@ fn oracle_prop_cl_lib_comp_set_operations() {
     (sort (cl-set-difference '(1 2 3) '()) #'<)
     (cl-intersection '() '(1 2 3))
     (sort (cl-union '() '(1 2 3)) #'<)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 3 5) (\"a\" \"c\") (1) (2 4) (\"banana\" \"cherry\") (1 2 3 4 5) (\"a\" \"b\" \"c\") (1 2 3) nil (1 2 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 3 5) (\"a\" \"c\") (1) (2 4) (\"banana\" \"cherry\") (1 2 3 4 5) (\"a\" \"b\" \"c\") (1 2 3) nil (1 2 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -433,10 +414,8 @@ fn oracle_prop_cl_lib_comp_adjoin_comprehensive() {
       (setq s (cl-adjoin 'c s))
       (setq s (cl-adjoin 'b s))
       (length s))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""ERR (wrong-type-argument listp 2)""#],
-    );
+    let expect = expect_test::expect![r#""ERR (wrong-type-argument listp 2)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -462,8 +441,6 @@ fn oracle_prop_cl_lib_comp_reduce_frequency_table() {
     ;; Sort by key for deterministic output
     (sort freq (lambda (a b) (string< (symbol-name (car a))
                                        (symbol-name (car b)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((a . 4) (b . 3) (c . 2) (d . 1))""#],
-    );
+    let expect = expect_test::expect![r#""OK ((a . 4) (b . 3) (c . 2) (d . 1))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

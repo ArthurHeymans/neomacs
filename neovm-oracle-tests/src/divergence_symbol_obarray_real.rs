@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_intern_unintern_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (42 test-sym-cycle-xxx t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let* ((sym (intern \"test-sym-cycle-xxx\" obarray)))
   (set sym 42)
@@ -14,7 +15,7 @@ fn divergence_intern_unintern_cycle() {
         (intern-soft \"test-sym-cycle-xxx\" obarray)
         (unintern sym obarray)
         (intern-soft \"test-sym-cycle-xxx\" obarray))) ",
-        expect_test::expect![[r#""OK (42 test-sym-cycle-xxx t nil)""#]],
+        expect,
     );
 }
 
@@ -22,6 +23,7 @@ fn divergence_intern_unintern_cycle() {
 fn divergence_symbol_plist_real() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (1 2 3 nil (a 1 b 2 c 3 d 4) 4 4 8)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((sym (make-symbol \"temp\")))
   (setplist sym '(a 1 b 2 c 3))
@@ -33,7 +35,7 @@ fn divergence_symbol_plist_real() {
         (put sym 'd 4)
         (get sym 'd)
         (length (symbol-plist sym)))) ",
-        expect_test::expect![[r#""OK (1 2 3 nil (a 1 b 2 c 3 d 4) 4 4 8)""#]],
+        expect,
     );
 }
 
@@ -41,6 +43,8 @@ fn divergence_symbol_plist_real() {
 fn divergence_symbol_function_indirect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""OK (car #<subr car> #<subr car> 1 t test-alias-xxx nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (defalias 'test-alias-xxx 'car)
@@ -51,7 +55,7 @@ fn divergence_symbol_function_indirect() {
         (fboundp 'test-alias-xxx)
         (fmakunbound 'test-alias-xxx)
         (fboundp 'test-alias-xxx))) ",
-        expect_test::expect![[r#""OK (car #<subr car> #<subr car> 1 t test-alias-xxx nil)""#]],
+        expect,
     );
 }
 
@@ -59,6 +63,7 @@ fn divergence_symbol_function_indirect() {
 fn divergence_mapatoms_obarray() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (intern \"test-mapatoms-a-xxx\" obarray)
@@ -70,7 +75,7 @@ fn divergence_mapatoms_obarray() {
                                        (symbol-name s))
                   (push (symbol-name s) names))))
     (sort names #'string<))) ",
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -78,6 +83,7 @@ fn divergence_mapatoms_obarray() {
 fn divergence_keyword_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t nil t t \":hello\" t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (keywordp :hello)
@@ -87,7 +93,7 @@ fn divergence_keyword_symbols() {
   (symbol-name :hello)
   (eq :hello :hello)
   (equal :hello ':hello)) ",
-        expect_test::expect![[r#""OK (t nil t t \":hello\" t t)""#]],
+        expect,
     );
 }
 
@@ -95,6 +101,7 @@ fn divergence_keyword_symbols() {
 fn deficiency_symbol_circular_naming() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil t t \"test-circ-1-xxx\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let* ((s1 (intern \"test-circ-1-xxx\"))
         (s2 (intern \"test-circ-2-xxx\")))
@@ -103,7 +110,7 @@ fn deficiency_symbol_circular_naming() {
         (eq s1 (intern-soft \"test-circ-1-xxx\" obarray))
         (symbol-name s1)
         (string= (symbol-name s1) \"test-circ-1-xxx\"))) ",
-        expect_test::expect![[r#""OK (nil t t \"test-circ-1-xxx\" t)""#]],
+        expect,
     );
 }
 
@@ -111,6 +118,8 @@ fn deficiency_symbol_circular_naming() {
 fn divergence_symbol_doctoring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""OK (initial t test-doctor-xxx nil restored restored t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((sym (intern \"test-doctor-xxx\")))
   (set sym 'initial)
@@ -121,7 +130,7 @@ fn divergence_symbol_doctoring() {
         (set sym 'restored)
         (symbol-value sym)
         (boundp sym))) ",
-        expect_test::expect![[r#""OK (initial t test-doctor-xxx nil restored restored t)""#]],
+        expect,
     );
 }
 
@@ -129,6 +138,7 @@ fn divergence_symbol_doctoring() {
 fn divergence_default_value_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (case-fold-search t (nil nil))""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((v (make-variable-buffer-local 'case-fold-search)))
   (list v
@@ -136,7 +146,7 @@ fn divergence_default_value_binding() {
         (let ((case-fold-search nil))
           (list case-fold-search
                 (default-value 'case-fold-search))))) ",
-        expect_test::expect![[r#""OK (case-fold-search t (nil nil))""#]],
+        expect,
     );
 }
 
@@ -144,6 +154,7 @@ fn divergence_default_value_binding() {
 fn divergence_dynamic_binding_scope() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil 42 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (defvar test-dyn-var-xxx nil)
@@ -152,7 +163,7 @@ fn divergence_dynamic_binding_scope() {
         (let ((test-dyn-var-xxx 42))
           (test-dyn-check-xxx))
         (test-dyn-check-xxx))) ",
-        expect_test::expect![[r#""OK (nil 42 nil)""#]],
+        expect,
     );
 }
 
@@ -160,6 +171,7 @@ fn divergence_dynamic_binding_scope() {
 fn deficiency_special_form_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (special-form-p 'if)
@@ -169,6 +181,6 @@ fn deficiency_special_form_p() {
   (special-form-p 'car)
   (macrop 'when)
   (macrop 'if)) ",
-        expect_test::expect![[r#""OK (t t t t nil t nil)""#]],
+        expect,
     );
 }

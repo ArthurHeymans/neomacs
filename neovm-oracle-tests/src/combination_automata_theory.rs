@@ -91,10 +91,9 @@ fn oracle_prop_automata_pushdown_automaton() {
           (list (nth 0 result) (nth 1 result) (nth 2 result))))
     (makunbound 'neovm--test-pda-trans)
     (fmakunbound 'neovm--test-pda-run)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((q0 q1) (q1) (q1) (q1) nil nil nil nil ((q1) q1 0))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((q0 q1) (q1) (q1) (q1) nil nil nil nil ((q1) q1 0))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -191,10 +190,9 @@ fn oracle_prop_automata_turing_machine_single_tape() {
                          neovm--test-tm-inc 'scan '(done) nil "111" 100)))
     (makunbound 'neovm--test-tm-inc)
     (fmakunbound 'neovm--test-tm-run)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"1\" \"10\" \"11\" \"100\" \"1000\" \"1011\" 8)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (\"1\" \"10\" \"11\" \"100\" \"1000\" \"1011\" 8)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -282,12 +280,10 @@ fn oracle_prop_automata_multi_tape_turing_machine() {
         (funcall 'neovm--test-mt-run "" 200))
     (makunbound 'neovm--test-mt-trans)
     (fmakunbound 'neovm--test-mt-run)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((accept \"abc\" \"abc\" 8) (accept \"aaa\" \"aaa\" 8) (accept \"b\" \"b\" 4) (accept \"abcabc\" \"abcabc\" 14) t (accept \"\" \"\" 2))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((accept \"abc\" \"abc\" 8) (accept \"aaa\" \"aaa\" 8) (accept \"b\" \"b\" 4) (accept \"abcabc\" \"abcabc\" 14) t (accept \"\" \"\" 2))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -425,7 +421,8 @@ fn oracle_prop_automata_cfg_cyk_parser() {
     (makunbound 'neovm--test-cyk-rules)
     (fmakunbound 'neovm--test-cyk-parse)
     (fmakunbound 'neovm--test-anbn-check)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -593,10 +590,8 @@ fn oracle_prop_automata_regular_language_operations() {
     (fmakunbound 'neovm--test-nfa-star)
     (fmakunbound 'neovm--test-nfa-eps-closure)
     (fmakunbound 'neovm--test-nfa-simulate)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t nil nil nil t nil nil nil t t t nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t nil nil nil t nil nil nil t t t nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -710,7 +705,8 @@ fn oracle_prop_automata_dfa_minimization() {
             (puthash '(Q . ?0) 'Q t3) (puthash '(Q . ?1) 'Q t3)
             (funcall 'neovm--test-dfa-minimize '(Q) '(?0 ?1) t3 'Q '(Q)))))
     (fmakunbound 'neovm--test-dfa-minimize)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (3 2 1)""#]]);
+    let expect = expect_test::expect![[r#""OK (3 2 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -807,8 +803,6 @@ fn oracle_prop_automata_language_equivalence() {
           (funcall 'neovm--test-dfa-equivalent
                    t1 'q0 '(q0) t2 'r0 nil '(?a ?b))))
     (fmakunbound 'neovm--test-dfa-equivalent)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t nil t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t nil t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

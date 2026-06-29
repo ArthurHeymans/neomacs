@@ -100,12 +100,10 @@ fn oracle_prop_parser_sm_dfa_tokenizer() {
         (funcall 'neovm--psm-dfa-tokenize "(x + y) * z"))
     (fmakunbound 'neovm--psm-char-class)
     (fmakunbound 'neovm--psm-dfa-tokenize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((IDENT \"x\") (OP \"=\") (NUMBER \"42\") (OP \"+\") (IDENT \"y\")) ((IDENT \"foo123\") (IDENT \"bar456\")) ((IDENT \"a\") (OP \"+\") (IDENT \"b\") (OP \"*\") (IDENT \"c\") (OP \"-\") (IDENT \"d\") (OP \"/\") (IDENT \"e\")) nil nil ((IDENT \"hello\")) ((NUMBER \"12345\")) ((PUNCT \"(\") (IDENT \"x\") (OP \"+\") (IDENT \"y\") (PUNCT \")\") (OP \"*\") (IDENT \"z\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((IDENT \"x\") (OP \"=\") (NUMBER \"42\") (OP \"+\") (IDENT \"y\")) ((IDENT \"foo123\") (IDENT \"bar456\")) ((IDENT \"a\") (OP \"+\") (IDENT \"b\") (OP \"*\") (IDENT \"c\") (OP \"-\") (IDENT \"d\") (OP \"/\") (IDENT \"e\")) nil nil ((IDENT \"hello\")) ((NUMBER \"12345\")) ((PUNCT \"(\") (IDENT \"x\") (OP \"+\") (IDENT \"y\") (PUNCT \")\") (OP \"*\") (IDENT \"z\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -218,12 +216,10 @@ Inputs: alpha, digit, op, ws, other."
     (fmakunbound 'neovm--psm-build-table)
     (fmakunbound 'neovm--psm-classify)
     (fmakunbound 'neovm--psm-run-dfa)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((IDENT \"abc\") (OP \"+\") (NUMBER \"123\")) ((IDENT \"x\") (OP \"=\") (IDENT \"y\")) ((IDENT \"hello_world\") (NUMBER \"42\")) nil ((IDENT \"abc\")) ((IDENT \"a\") (OP \"+\") (IDENT \"b\") (OP \"+\") (IDENT \"c\")) ((NUMBER \"999\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((IDENT \"abc\") (OP \"+\") (NUMBER \"123\")) ((IDENT \"x\") (OP \"=\") (IDENT \"y\")) ((IDENT \"hello_world\") (NUMBER \"42\")) nil ((IDENT \"abc\")) ((IDENT \"a\") (OP \"+\") (IDENT \"b\") (OP \"+\") (IDENT \"c\")) ((NUMBER \"999\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -325,12 +321,10 @@ fn oracle_prop_parser_sm_structured_lexer() {
           (list toks reconstructed)))
     (fmakunbound 'neovm--psm-lex)
     (makunbound 'neovm--psm-kw-list)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((KEYWORD \"let\" 0 3) (IDENT \"x\" 4 1) (PUNCT \"=\" 6 1) (INT \"42\" 8 2) (PUNCT \";\" 10 1)) ((KEYWORD \"if\" 0 2) (IDENT \"x\" 3 1) (OP \">=\" 5 2) (INT \"10\" 8 2) (PUNCT \"{\" 11 1) (KEYWORD \"return\" 13 6) (STRING \"ok\" 20 4) (PUNCT \"}\" 25 1)) ((KEYWORD \"while\" 0 5) (IDENT \"i\" 6 1) (OP \"!=\" 8 2) (INT \"0\" 11 1) (PUNCT \"{\" 13 1) (IDENT \"i\" 15 1) (PUNCT \"=\" 17 1) (IDENT \"i\" 19 1) (PUNCT \"-\" 21 1) (INT \"1\" 23 1) (PUNCT \"}\" 25 1)) ((FLOAT \"3.14\" 0 4) (PUNCT \"+\" 5 1) (FLOAT \"2.71\" 7 4)) nil (((KEYWORD \"let\" 0 3) (IDENT \"x\" 4 1) (PUNCT \"=\" 6 1) (INT \"42\" 8 2)) (\"let\" \"x\" \"=\" \"42\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((KEYWORD \"let\" 0 3) (IDENT \"x\" 4 1) (PUNCT \"=\" 6 1) (INT \"42\" 8 2) (PUNCT \";\" 10 1)) ((KEYWORD \"if\" 0 2) (IDENT \"x\" 3 1) (OP \">=\" 5 2) (INT \"10\" 8 2) (PUNCT \"{\" 11 1) (KEYWORD \"return\" 13 6) (STRING \"ok\" 20 4) (PUNCT \"}\" 25 1)) ((KEYWORD \"while\" 0 5) (IDENT \"i\" 6 1) (OP \"!=\" 8 2) (INT \"0\" 11 1) (PUNCT \"{\" 13 1) (IDENT \"i\" 15 1) (PUNCT \"=\" 17 1) (IDENT \"i\" 19 1) (PUNCT \"-\" 21 1) (INT \"1\" 23 1) (PUNCT \"}\" 25 1)) ((FLOAT \"3.14\" 0 4) (PUNCT \"+\" 5 1) (FLOAT \"2.71\" 7 4)) nil (((KEYWORD \"let\" 0 3) (IDENT \"x\" 4 1) (PUNCT \"=\" 6 1) (INT \"42\" 8 2)) (\"let\" \"x\" \"=\" \"42\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -445,12 +439,10 @@ fn oracle_prop_parser_sm_csv_parser() {
           (list rows counts (apply '= counts))))
     (fmakunbound 'neovm--psm-csv-parse-row)
     (fmakunbound 'neovm--psm-csv-parse)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"a\" \"b\" \"c\") (\"a\" \"b,c\" \"d\") (\"a\" \"he said \\\"hello\\\"\" \"b\") (\"\" \"\" \"a\" \"\" \"b\" \"\" \"\") (\"x\" \"y\" \"z\") (\"hello\" \"world, earth\" \"42\") (\"solo\") (\"\") ((\"name\" \"age\" \"city\") (\"Alice\" \"30\" \"New York\") (\"Bob\" \"25\" \"London\") (\"Charlie\" \"35\" \"San Francisco\")) (((\"a\" \"b\" \"c\") (\"1\" \"2\" \"3\") (\"x\" \"y\" \"z\")) (3 3 3) t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"a\" \"b\" \"c\") (\"a\" \"b,c\" \"d\") (\"a\" \"he said \\\"hello\\\"\" \"b\") (\"\" \"\" \"a\" \"\" \"b\" \"\" \"\") (\"x\" \"y\" \"z\") (\"hello\" \"world, earth\" \"42\") (\"solo\") (\"\") ((\"name\" \"age\" \"city\") (\"Alice\" \"30\" \"New York\") (\"Bob\" \"25\" \"London\") (\"Charlie\" \"35\" \"San Francisco\")) (((\"a\" \"b\" \"c\") (\"1\" \"2\" \"3\") (\"x\" \"y\" \"z\")) (3 3 3) t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -560,12 +552,10 @@ fn oracle_prop_parser_sm_html_tag_parser() {
         ;; Multiple attributes
         (funcall 'neovm--psm-parse-html-tag "<meta name=\"viewport\" content=\"width=device-width\">"))
     (fmakunbound 'neovm--psm-parse-html-tag)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((opening \"div\" nil) (closing \"div\" nil) (self-closing \"br\" nil) (self-closing \"img\" ((\"src\" . \"pic.jpg\"))) (opening \"a\" ((\"href\" . \"http://example.com\") (\"target\" . \"_blank\"))) (opening \"div\" ((\"id\" . \"main\") (\"class\" . \"container\"))) (opening \"input\" ((\"disabled\" . t))) (opening \"input\" ((\"type\" . \"text\") (\"required\" . t))) (opening \"div\" ((\"CLASS\" . \"foo\"))) (self-closing \"hr\" nil) (opening \"meta\" ((\"name\" . \"viewport\") (\"content\" . \"width=device-width\"))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((opening \"div\" nil) (closing \"div\" nil) (self-closing \"br\" nil) (self-closing \"img\" ((\"src\" . \"pic.jpg\"))) (opening \"a\" ((\"href\" . \"http://example.com\") (\"target\" . \"_blank\"))) (opening \"div\" ((\"id\" . \"main\") (\"class\" . \"container\"))) (opening \"input\" ((\"disabled\" . t))) (opening \"input\" ((\"type\" . \"text\") (\"required\" . t))) (opening \"div\" ((\"CLASS\" . \"foo\"))) (self-closing \"hr\" nil) (opening \"meta\" ((\"name\" . \"viewport\") (\"content\" . \"width=device-width\"))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -699,10 +689,8 @@ fn oracle_prop_parser_sm_html_stream() {
     (fmakunbound 'neovm--psm2-parse-tag)
     (fmakunbound 'neovm--psm2-extract-tags)
     (fmakunbound 'neovm--psm2-validate-nesting)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((opening \"div\" nil) (opening \"p\" nil) (closing \"p\" nil) (closing \"div\" nil)) ((opening \"div\" ((\"class\" . \"main\"))) (opening \"h1\" nil) (closing \"h1\" nil) (opening \"p\" nil) (closing \"p\" nil) (self-closing \"br\" nil) (closing \"div\" nil)) (3 3 1) t t (unclosed (\"p\" \"div\")) (\"div\" \"h1\" \"h1\" \"p\" \"p\" \"br\" \"div\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((opening \"div\" nil) (opening \"p\" nil) (closing \"p\" nil) (closing \"div\" nil)) ((opening \"div\" ((\"class\" . \"main\"))) (opening \"h1\" nil) (closing \"h1\" nil) (opening \"p\" nil) (closing \"p\" nil) (self-closing \"br\" nil) (closing \"div\" nil)) (3 3 1) t t (unclosed (\"p\" \"div\")) (\"div\" \"h1\" \"h1\" \"p\" \"p\" \"br\" \"div\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

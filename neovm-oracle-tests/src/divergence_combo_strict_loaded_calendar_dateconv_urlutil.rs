@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_o6_calendar_gregorian_absolute() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((11 2 2018) 739417 0 \"Sunday\" \"June\")""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (calendar-gregorian-from-absolute 737000)
@@ -19,13 +20,14 @@ fn div_o6_calendar_gregorian_absolute() {
       (calendar-month-name 6))
 "##,
         &["calendar/calendar.el"],
-        expect_test::expect![[r#""OK ((11 2 2018) 739417 0 \"Sunday\" \"June\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_o6_calendar_other_calendars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function calendar-islamic-from-absolute)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (let ((abs (calendar-absolute-from-gregorian '(6 15 2025))))
@@ -36,13 +38,16 @@ fn div_o6_calendar_other_calendars() {
         (calendar-coptic-from-absolute abs)))
 "##,
         &["calendar/calendar.el"],
-        expect_test::expect![[r#""ERR (void-function calendar-islamic-from-absolute)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_o6_url_hexify_unhex_encode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"hello%20world%20%26%20stuff\" \"hello\" \"caf%C3%A9\" \"http://host/path%20with%20spaces\" \"round trip 123\")""#
+    ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (url-hexify-string "hello world & stuff")
@@ -52,8 +57,6 @@ fn div_o6_url_hexify_unhex_encode() {
       (url-unhex-string (url-hexify-string "round trip 123")))
 "##,
         &["url/url-util.el"],
-        expect_test::expect![[
-            r#""OK (\"hello%20world%20%26%20stuff\" \"hello\" \"caf%C3%A9\" \"http://host/path%20with%20spaces\" \"round trip 123\")""#
-        ]],
+        expect,
     );
 }

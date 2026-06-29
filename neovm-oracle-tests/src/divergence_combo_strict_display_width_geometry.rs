@@ -11,6 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_e8_string_width_with_display_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 1 2 0 3 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-width "abc")
@@ -20,13 +21,15 @@ fn div_e8_string_width_with_display_props() {
       (string-width (propertize "abc" 'display '(space :width 5)))
       (string-width (propertize "abc" 'display '(space :align-to 10))))
 "##,
-        expect_test::expect![[r#""OK (3 1 2 0 3 3)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_e8_window_internal_metrics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((nil) (0 0 nil nil) (nil 0 t nil 0 t nil) 0 80 80)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-wim*")))
@@ -43,13 +46,14 @@ fn div_e8_window_internal_metrics() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
-        expect_test::expect![[r#""OK ((nil) (0 0 nil nil) (nil 0 t nil 0 t nil) 0 80 80)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_e8_justification_fill_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (70 0 left 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -59,13 +63,14 @@ fn div_e8_justification_fill_column() {
         (current-justification)
         (current-indentation)))
 "##,
-        expect_test::expect![[r#""OK (70 0 left 0)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_e8_geometry_count_screen_lines_wrapped() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 80 23)""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK (3 80 23)
     // Neomacs:   OK (1 80 23)
@@ -86,13 +91,14 @@ fn div_e8_geometry_count_screen_lines_wrapped() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
-        expect_test::expect![[r#""OK (3 80 23)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_e8_geometry_pos_visible_in_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil 1 411)""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK (nil nil 1 411)
     // Neomacs:   OK (nil nil 1 152)
@@ -116,13 +122,14 @@ fn div_e8_geometry_pos_visible_in_window() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
-        expect_test::expect![[r#""OK (nil nil 1 411)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_e8_geometry_move_to_window_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 80 1 80)""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK (1 80 1 80)
     // Neomacs:   OK (1 1 1 80)
@@ -148,13 +155,16 @@ fn div_e8_geometry_move_to_window_line() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
-        expect_test::expect![[r#""OK (1 80 1 80)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_e8_format_control_char_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"\u{7}\u{7}\u{7}\" \"\\\"\u{7}\u{7}\u{7}\\\"\" \"\\\"\u{7}\u{8}\\\"\" \"\t\n\\r\" \"\\\"\t\n\\r\\\"\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%s" (make-string 3 7))
@@ -163,8 +173,6 @@ fn div_e8_format_control_char_strings() {
       (format "%s" (string 9 10 13))
       (prin1-to-string (string 9 10 13)))
 "##,
-        expect_test::expect![[
-            r#""OK (\"\u{7}\u{7}\u{7}\" \"\\\"\u{7}\u{7}\u{7}\\\"\" \"\\\"\u{7}\u{8}\\\"\" \"\t\n\\r\" \"\\\"\t\n\\r\\\"\")""#
-        ]],
+        expect,
     );
 }

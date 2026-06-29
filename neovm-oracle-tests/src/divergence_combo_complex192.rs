@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx192_mega_1_buflocal_undo_textprop_overlay_marker_narrow_process_timer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
@@ -49,13 +50,16 @@ fn div_cx192_mega_1_buflocal_undo_textprop_overlay_marker_narrow_process_timer()
           (kill-buffer buf)
           (list state (buffer-live-p buf)))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx192_mega_2_eieio_clloop_closure_coding_charset_secure_hash_advice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"café 世界 😀\" \"caf\\303\\251 \\344\\270\\226\\347\\225\\214 \\360\\237\\230\\200\" \"café 世界 😀\" \"17941ef6be03a9dd6fc80b897dd78db65f774c5fb06a8a821892535f1bd2ecbc\" t 2 ((\"alpha\" . 1) (\"beta\" . 2)) 42 (if t :yes :no) ((:before 21) (:primary 21)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -92,15 +96,14 @@ fn div_cx192_mega_2_eieio_clloop_closure_coding_charset_secure_hash_advice() {
                 snapshot))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (\"café 世界 😀\" \"caf\\303\\251 \\344\\270\\226\\347\\225\\214 \\360\\237\\230\\200\" \"café 世界 😀\" \"17941ef6be03a9dd6fc80b897dd78db65f774c5fb06a8a821892535f1bd2ecbc\" t 2 ((\"alpha\" . 1) (\"beta\" . 2)) 42 (if t :yes :no) ((:before 21) (:primary 21)))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx192_mega_3_pcase_rx_syntax_textprop_marker_overlay_register_window_config() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -139,13 +142,14 @@ fn div_cx192_mega_3_pcase_rx_syntax_textprop_marker_overlay_register_window_conf
                     (text-properties-at 1)))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx192_mega_4_process_buflocal_undo_textprop_marker_overlay_narrow_coding_env_timer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
@@ -186,13 +190,14 @@ fn div_cx192_mega_4_process_buflocal_undo_textprop_marker_overlay_narrow_coding_
         (kill-buffer buf))
       (list snapshot (buffer-live-p buf)))))
 "##,
-        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx192_mega_5_search_replace_format_time_buflocal_undo_invis_textprop_clloop_advice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
@@ -236,6 +241,6 @@ fn div_cx192_mega_5_search_replace_format_time_buflocal_undo_invis_textprop_cllo
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }

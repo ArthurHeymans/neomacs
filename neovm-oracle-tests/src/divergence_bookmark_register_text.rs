@@ -7,13 +7,14 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_bookmark_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'bookmark-set)
   (fboundp 'bookmark-jump)
   (fboundp 'bookmark-bmenu-list)
   (featurep 'bookmark))"#,
-        expect_test::expect![[r#""OK (t t t nil)""#]],
+        expect,
     );
 }
 
@@ -21,13 +22,14 @@ fn divergence_bookmark_functions() {
 fn divergence_bookmark_save() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable bookmark-default-file)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'bookmark-save)
   (fboundp 'bookmark-load)
   (boundp 'bookmark-default-file)
   (stringp bookmark-default-file)) "#,
-        expect_test::expect![[r#""ERR (void-variable bookmark-default-file)""#]],
+        expect,
     );
 }
 
@@ -35,6 +37,7 @@ fn divergence_bookmark_save() {
 fn divergence_register_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'point-to-register)
@@ -44,7 +47,7 @@ fn divergence_register_functions() {
   (fboundp 'register-alist-defaults)
   (boundp 'register-alist)
   (listp register-alist)) "#,
-        expect_test::expect![[r#""OK (t t t t nil t t)""#]],
+        expect,
     );
 }
 
@@ -52,12 +55,13 @@ fn divergence_register_functions() {
 fn divergence_register_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'register-describe-oneline)
   (fboundp 'get-register)
   (fboundp 'set-register)) "#,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
@@ -65,6 +69,7 @@ fn divergence_register_types() {
 fn divergence_abbrev_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'define-abbrev)
@@ -72,7 +77,7 @@ fn divergence_abbrev_functions() {
   (fboundp 'write-abbrev-file)
   (fboundp 'read-abbrev-file)
   (featurep 'abbrev)) "#,
-        expect_test::expect![[r#""OK (t nil t t t)""#]],
+        expect,
     );
 }
 
@@ -80,6 +85,7 @@ fn divergence_abbrev_functions() {
 fn divergence_abbrev_tables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'make-abbrev-table)
@@ -87,7 +93,7 @@ fn divergence_abbrev_tables() {
   (fboundp 'define-abbrev-table)
   (boundp 'global-abbrev-table)
   (listp global-abbrev-table)) "#,
-        expect_test::expect![[r#""OK (t t t t nil)""#]],
+        expect,
     );
 }
 
@@ -95,6 +101,7 @@ fn divergence_abbrev_tables() {
 fn divergence_auto_fill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'auto-fill-mode)
@@ -102,7 +109,7 @@ fn divergence_auto_fill() {
   (boundp 'normal-auto-fill-function)
   (boundp 'fill-prefix)
   (stringp fill-prefix)) "#,
-        expect_test::expect![[r#""OK (t t t t nil)""#]],
+        expect,
     );
 }
 
@@ -110,6 +117,7 @@ fn divergence_auto_fill() {
 fn divergence_paragraph_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'forward-paragraph)
@@ -117,7 +125,7 @@ fn divergence_paragraph_functions() {
   (fboundp 'mark-paragraph)
   (boundp 'paragraph-start)
   (boundp 'paragraph-separate)) "#,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
@@ -125,6 +133,7 @@ fn divergence_paragraph_functions() {
 fn divergence_page_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'forward-page)
@@ -132,7 +141,7 @@ fn divergence_page_functions() {
   (fboundp 'count-lines-page)
   (boundp 'page-delimiter)
   (stringp page-delimiter)) "#,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
@@ -140,6 +149,7 @@ fn divergence_page_functions() {
 fn divergence_sentence_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'forward-sentence)
@@ -147,6 +157,6 @@ fn divergence_sentence_functions() {
   (boundp 'sentence-end)
   (boundp 'sentence-end-double-space)
   (booleanp sentence-end-double-space)) "#,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }

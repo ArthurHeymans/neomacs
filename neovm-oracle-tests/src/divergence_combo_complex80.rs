@@ -8,6 +8,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx80_backquote_complex_nesting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((simple 10) (a b c 10) ((nested 10) a b c (deeply (10))) (2 3 4) (:big :ok))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((x 10)
@@ -18,15 +21,16 @@ fn div_cx80_backquote_complex_nesting() {
         `(,@(mapcar #'1+ '(1 2 3)))
         `(,(if (> x 5) :big :small) ,@(if (> x 5) '(:ok) '(:no)))))
 "##,
-        expect_test::expect![[
-            r#""OK ((simple 10) (a b c 10) ((nested 10) a b c (deeply (10))) (2 3 4) (:big :ok))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx80_macroexpand_vs_macroexpand_one() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((list :wrapped (+ 1 2)) (list :wrapped (neo-cx80-wrap (+ 1 2))) (neo-cx80-wrap (neo-cx80-wrap (+ 1 2))))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (defmacro neo-cx80-wrap (form)
@@ -38,15 +42,16 @@ fn div_cx80_macroexpand_vs_macroexpand_one() {
         (macroexpand '(neo-cx80-double-wrap (+ 1 2)))
         (macroexpand-1 '(neo-cx80-double-wrap (+ 1 2)))))
 "##,
-        expect_test::expect![[
-            r#""OK ((list :wrapped (+ 1 2)) (list :wrapped (neo-cx80-wrap (+ 1 2))) (neo-cx80-wrap (neo-cx80-wrap (+ 1 2))))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx80_defmacro_with_body_and_rest_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((if (> x 5) (progn (incf x) (message \"hi\")) nil) (cl--block-wrapper (let ((--cl-block-nil-- (cons '--cl-block-nil-- nil))) (catch --cl-block-nil-- (dolist (x '(1 2 3)) (print x))))) 42 6)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (defmacro neo-cx80-when* (cond &rest body)
@@ -59,15 +64,14 @@ fn div_cx80_defmacro_with_body_and_rest_args() {
       (eval '(neo-cx80-when* t 42) t)
       (eval '(let ((acc 0)) (neo-cx80-dolist-mac x '(1 2 3) (cl-incf acc x)) acc) t))
 "##,
-        expect_test::expect![[
-            r#""OK ((if (> x 5) (progn (incf x) (message \"hi\")) nil) (cl--block-wrapper (let ((--cl-block-nil-- (cons '--cl-block-nil-- nil))) (catch --cl-block-nil-- (dolist (x '(1 2 3)) (print x))))) 42 6)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx80_gensym_uniqueness_in_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (g0 g1 prefix-2 t nil nil \"prefix-2\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s1 (gensym))
@@ -80,13 +84,16 @@ fn div_cx80_gensym_uniqueness_in_macro() {
         (symbol-name s3)
         (string-prefix-p "prefix-" (symbol-name s3))))
 "##,
-        expect_test::expect![[r#""OK (g0 g1 prefix-2 t nil nil \"prefix-2\" t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx80_pcase_basic_with_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:int 42) (:str \"hello\") (:list (1 2 3)) (:vec [1 2 3]) :unknown)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (v)
@@ -98,15 +105,16 @@ fn div_cx80_pcase_basic_with_predicates() {
             (_ :unknown)))
         '(42 "hello" (1 2 3) [1 2 3] symbol-key))
 "##,
-        expect_test::expect![[
-            r#""OK ((:int 42) (:str \"hello\") (:list (1 2 3)) (:vec [1 2 3]) :unknown)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx80_pcase_app_and_quote_patterns() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:start 1) (:mid 1 2) (:end (1 2 3)) :all :has-first-car :no-match)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (v)
@@ -119,15 +127,16 @@ fn div_cx80_pcase_app_and_quote_patterns() {
             (_ :no-match)))
         '((start 1) (mid 1 2) (end 1 2 3) all (first . rest) (other)))
 "##,
-        expect_test::expect![[
-            r#""OK ((:start 1) (:mid 1 2) (:end (1 2 3)) :all :has-first-car :no-match)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx80_pcase_with_or_and_and_patterns() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:yes :yes :yes :no :positive-int :no :no (:string-of-len 5) (:string-of-len 1))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (v)
@@ -138,15 +147,16 @@ fn div_cx80_pcase_with_or_and_and_patterns() {
             (_ :no)))
         '(yes y true true-symbol 42 -5 0 "hello" "x"))
 "##,
-        expect_test::expect![[
-            r#""OK (:yes :yes :yes :no :positive-int :no :no (:string-of-len 5) (:string-of-len 1))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx80_pcase_let_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (name \"alpha\" value 42 ((name . \"alpha\") (value . 42) (tags a b c)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data '((name . "alpha") (value . 42) (tags . (a b c)))))
@@ -154,15 +164,14 @@ fn div_cx80_pcase_let_destructuring() {
               (`(,(and value-sym 'value) . ,value-val) (cadr data)))
     (list name-sym name-val value-sym value-val data)))
 "##,
-        expect_test::expect![[
-            r#""OK (name \"alpha\" value 42 ((name . \"alpha\") (value . 42) (tags a b c)))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx80_pcase_lambda_and_macros() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-function (pred integerp))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((classifier (pcase-lambda (x)
@@ -175,13 +184,14 @@ fn div_cx80_pcase_lambda_and_macros() {
         (funcall classifier '(1 2 3))
         (funcall classifier [1 2])))
 "##,
-        expect_test::expect![[r#""ERR (invalid-function (pred integerp))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx80_rx_regexp_macros_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function rx-or)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((var-name 'identifier)
@@ -197,13 +207,14 @@ fn div_cx80_rx_regexp_macros_complex() {
         (rx-let-eval ((kw (name) `(seq ,name ":")))
           (rx-to-string `(kw "key")))))
 "##,
-        expect_test::expect![[r#""ERR (void-function rx-or)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx80_defmacro_recursive_lexical_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (defmacro neo-cx80-my-while (cond &rest body)
@@ -217,13 +228,14 @@ fn div_cx80_defmacro_recursive_lexical_capture() {
     (cl-incf count))
   (list x count))
 "##,
-        expect_test::expect![[r#""OK (5 5)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx80_declared_macro_with_debug_and_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t (list 1 2) (:a :b))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (defmacro neo-cx80-with-decl (x &optional y)
@@ -233,13 +245,16 @@ fn div_cx80_declared_macro_with_debug_and_indent() {
       (macroexpand '(neo-cx80-with-decl 1 2))
       (eval '(neo-cx80-with-decl :a :b) t))
 "##,
-        expect_test::expect![[r#""OK (t (list 1 2) (:a :b))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx80_pcase_macro_pcase_dolist_with_marker_overlay_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (((1 . a) (2 . b) (3 . c)) 4 3 8 #(\"0123456789\" 0 4 (face bold)) (face bold))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -259,8 +274,6 @@ fn div_cx80_pcase_macro_pcase_dolist_with_marker_overlay_mega() {
             (buffer-string)
             (text-properties-at 1)))))
 "##,
-        expect_test::expect![[
-            r#""OK (((1 . a) (2 . b) (3 . c)) 4 3 8 #(\"0123456789\" 0 4 (face bold)) (face bold))""#
-        ]],
+        expect,
     );
 }

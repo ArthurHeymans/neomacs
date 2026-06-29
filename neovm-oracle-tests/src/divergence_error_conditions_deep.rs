@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_condition_case_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((caught (error . \"test\")) (caught (wrong-type-argument . \"test\")))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (condition-case err
@@ -16,9 +19,7 @@ fn divergence_condition_case_basic() {
       (signal 'wrong-type-argument "test")
     (wrong-type-argument (list 'caught err))
     (error (list 'caught-error err)))) "#,
-        expect_test::expect![[
-            r#""OK ((caught (error . \"test\")) (caught (wrong-type-argument . \"test\")))""#
-        ]],
+        expect,
     );
 }
 
@@ -26,6 +27,7 @@ fn divergence_condition_case_basic() {
 fn divergence_condition_case_hierarchy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (args-caught)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (condition-case err
@@ -33,7 +35,7 @@ fn divergence_condition_case_hierarchy() {
     (args-out-of-range 'args-caught)
     (wrong-type-argument 'wrong-type-caught)
     (error 'error-caught))) "#,
-        expect_test::expect![[r#""OK (args-caught)""#]],
+        expect,
     );
 }
 
@@ -41,6 +43,7 @@ fn divergence_condition_case_hierarchy() {
 fn divergence_error_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'define-error)
@@ -49,7 +52,7 @@ fn divergence_error_symbols() {
   (fboundp 'warn)
   (fboundp 'user-error)
   (fboundp 'message)) "#,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -57,6 +60,7 @@ fn divergence_error_symbols() {
 fn divergence_unwind_protect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (error . \"test\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((result nil))
   (unwind-protect
@@ -64,7 +68,7 @@ fn divergence_unwind_protect() {
              (signal 'error "test"))
     (push 'cleanup result))
   result) "#,
-        expect_test::expect![[r#""ERR (error . \"test\")""#]],
+        expect,
     );
 }
 
@@ -72,6 +76,7 @@ fn divergence_unwind_protect() {
 fn divergence_with_condition_unwind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (handler cleanup body)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((result nil))
   (condition-case err
@@ -82,7 +87,7 @@ fn divergence_with_condition_unwind() {
         (push 'cleanup result))
     (error (push 'handler result)))
   result) "#,
-        expect_test::expect![[r#""OK (handler cleanup body)""#]],
+        expect,
     );
 }
 
@@ -90,12 +95,13 @@ fn divergence_with_condition_unwind() {
 fn divergence_error_message() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'error-message-string)
   (stringp (error-message-string '(error "test message")))
   (fboundp 'format-message)) "#,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
@@ -103,13 +109,14 @@ fn divergence_error_message() {
 fn divergence_debug_on_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'debug-on-error)
   (booleanp debug-on-error)
   (boundp 'debug-on-quit)
   (booleanp debug-on-quit)) "#,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -117,6 +124,7 @@ fn divergence_debug_on_error() {
 fn divergence_signal_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t user-error-caught)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'signal)
@@ -126,7 +134,7 @@ fn divergence_signal_functions() {
       (user-error "test")
     (user-error 'user-error-caught)
     (error 'error-caught))) "#,
-        expect_test::expect![[r#""OK (t t t user-error-caught)""#]],
+        expect,
     );
 }
 
@@ -134,12 +142,14 @@ fn divergence_signal_functions() {
 fn divergence_wrong_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""OK (caught wrong-type-argument (listp \"not-a-list\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(condition-case err
     (car "not-a-list")
   (wrong-type-argument
    (list 'caught (car err) (cdr err)))) "#,
-        expect_test::expect![[r#""OK (caught wrong-type-argument (listp \"not-a-list\"))""#]],
+        expect,
     );
 }
 
@@ -147,6 +157,7 @@ fn divergence_wrong_type() {
 fn divergence_void_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (caught void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(condition-case err
     (nonexistent-function-xyz-123)
@@ -154,6 +165,6 @@ fn divergence_void_function() {
    (list 'caught (car err)))
   (error
    (list 'caught-error (car err)))) "#,
-        expect_test::expect![[r#""OK (caught void-function)""#]],
+        expect,
     );
 }

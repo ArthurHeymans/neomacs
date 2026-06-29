@@ -62,12 +62,10 @@ fn oracle_prop_textproc_rot13_cipher() {
                                         (unless (= actual expected)
                                           (setq check-pairs nil))))
                                     check-pairs)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Hello, World! The Quick Brown Fox 123.\" \"Uryyb, Jbeyq! Gur Dhvpx Oebja Sbk 123.\" \"Hello, World! The Quick Brown Fox 123.\" t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Hello, World! The Quick Brown Fox 123.\" \"Uryyb, Jbeyq! Gur Dhvpx Oebja Sbk 123.\" \"Hello, World! The Quick Brown Fox 123.\" t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -116,12 +114,10 @@ fn oracle_prop_textproc_line_sort() {
                             num-sorted
                             len-sorted
                             name-len-sorted)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"apple 10\" \"banana 3\" \"cherry 1\" \"date 7\" \"elderberry 2\" \"fig 5\") (\"apple 10\" \"date 7\" \"fig 5\" \"banana 3\" \"elderberry 2\" \"cherry 1\") (\"fig 5\" \"date 7\" \"banana 3\" \"apple 10\" \"cherry 1\" \"elderberry 2\") (\"fig 5\" \"date 7\" \"apple 10\" \"banana 3\" \"cherry 1\" \"elderberry 2\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"apple 10\" \"banana 3\" \"cherry 1\" \"date 7\" \"elderberry 2\" \"fig 5\") (\"apple 10\" \"date 7\" \"fig 5\" \"banana 3\" \"elderberry 2\" \"cherry 1\") (\"fig 5\" \"date 7\" \"banana 3\" \"apple 10\" \"cherry 1\" \"elderberry 2\") (\"fig 5\" \"date 7\" \"apple 10\" \"banana 3\" \"cherry 1\" \"elderberry 2\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -168,12 +164,10 @@ fn oracle_prop_textproc_transpose_regions() {
                                 (string= (buffer-string)
                                          "AAAA-BBBB-CCCC-DDDD-EEEE")
                                 text1 text2)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"AAAA-DDDD-CCCC-BBBB-EEEE\" \"AAAA-BBBB-CCCC-DDDD-EEEE\" t \"BBBB\" \"DDDD\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"AAAA-DDDD-CCCC-BBBB-EEEE\" \"AAAA-BBBB-CCCC-DDDD-EEEE\" t \"BBBB\" \"DDDD\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -228,12 +222,10 @@ fn oracle_prop_textproc_word_wrap() {
                            (matches (string= reconstructed text)))
                       (list w20 w30 w10 w80
                             all-ok-20 matches)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"The quick brown fox\" \"jumps over the lazy\" \"dog and then runs\" \"away very fast\") (\"The quick brown fox jumps over\" \"the lazy dog and then runs\" \"away very fast\") (\"The quick\" \"brown fox\" \"jumps over\" \"the lazy\" \"dog and\" \"then runs\" \"away very\" \"fast\") (\"The quick brown fox jumps over the lazy dog and then runs away very fast\") t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"The quick brown fox\" \"jumps over the lazy\" \"dog and then runs\" \"away very fast\") (\"The quick brown fox jumps over\" \"the lazy dog and then runs\" \"away very fast\") (\"The quick\" \"brown fox\" \"jumps over\" \"the lazy\" \"dog and\" \"then runs\" \"away very\" \"fast\") (\"The quick brown fox jumps over the lazy dog and then runs away very fast\") t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -298,12 +290,10 @@ fn oracle_prop_textproc_search_replace_count() {
                             after-first-replace
                             the-count
                             final)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (6 (5 29 41 55 64 73) 6 t \"The dog sat on the mat. The dog and the dog played. A dog is a dog is a dog.\" 4 \"a dog sat on a mat. a dog and a dog played. A dog is a dog is a dog.\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (6 (5 29 41 55 64 73) 6 t \"The dog sat on the mat. The dog and the dog played. A dog is a dog is a dog.\" 4 \"a dog sat on a mat. a dog and a dog played. A dog is a dog is a dog.\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -385,12 +375,10 @@ fn oracle_prop_textproc_multi_buffer_merge() {
                         (list (buffer-string)
                               (length all-sections)
                               (mapcar #'car all-sections)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"=== CSV-DATA ===\n  name,age,city\n  Alice,30,NYC\n  Bob,25,LA\n\n=== CONFIG ===\n  host: localhost\n  port: 8080\n  debug: true\n\n=== ITEMS ===\n  1: First item\n  2: Second item\n  3: Third item\n\n\" 3 (\"CSV-DATA\" \"CONFIG\" \"ITEMS\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"=== CSV-DATA ===\n  name,age,city\n  Alice,30,NYC\n  Bob,25,LA\n\n=== CONFIG ===\n  host: localhost\n  port: 8080\n  debug: true\n\n=== ITEMS ===\n  1: First item\n  2: Second item\n  3: Third item\n\n\" 3 (\"CSV-DATA\" \"CONFIG\" \"ITEMS\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -460,10 +448,8 @@ fn oracle_prop_textproc_csv_field_extraction() {
                             total avg max-score min-score
                             a-students
                             sorted-names)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"name\" \"score\" \"grade\") 5 (95 72 88 91 65) 411 82.2 95 65 (\"Alice\" \"Dave\") (\"Alice\" \"Dave\" \"Carol\" \"Bob\" \"Eve\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"name\" \"score\" \"grade\") 5 (95 72 88 91 65) 411 82.2 95 65 (\"Alice\" \"Dave\") (\"Alice\" \"Dave\" \"Carol\" \"Bob\" \"Eve\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -29,7 +29,8 @@ fn oracle_prop_combination_macro_advice_apply_roundtrip() {
                       (fmakunbound target)
                       (fmakunbound around)
                       (fmakunbound 'neovm--combo-call-twice))))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (12 12)""#]]);
+    let expect = expect_test::expect![[r#""OK (12 12)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -52,10 +53,8 @@ fn oracle_prop_combination_throw_from_advised_function_keeps_log_order() {
                     (condition-case nil (advice-remove target before) (error nil))
                     (fmakunbound target)
                     (fmakunbound before)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (5 ((before 4) (orig 4)))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (5 ((before 4) (orig 4)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -68,10 +67,8 @@ fn oracle_prop_combination_cleanup_error_overrides_throw() {
                         (throw 'neovm--combo-tag 'ok)
                       (car 1)))
                 (wrong-type-argument (car err)))";
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK wrong-type-argument""#]],
-    );
+    let expect = expect_test::expect![[r#""OK wrong-type-argument""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("wrong-type-argument", &oracle, &neovm);
 }
 
@@ -88,7 +85,8 @@ fn oracle_prop_combination_macro_expansion_side_effect_count() {
                             (neovm--combo-expander 1)
                             expands)
                     (fmakunbound 'neovm--combo-expander)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (1 bad 2)""#]]);
+    let expect = expect_test::expect![[r#""OK (1 bad 2)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -103,10 +101,8 @@ fn oracle_prop_combination_eval_defmacro_then_expand_and_eval() {
                         (neovm--combo-eval-m + 2 3)
                         (funcall (lambda (f) (neovm--combo-eval-m f 10 4)) '-))
                     (fmakunbound 'neovm--combo-eval-m)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-function f)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-function f)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -129,10 +125,8 @@ fn oracle_prop_combination_nested_condition_case_throw_and_cleanup() {
                             (setq state (cons 'cleanup state))))
                       (error (list 'err (car err))))
                     (nreverse state)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (thrown (enter handled cleanup))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (thrown (enter handled cleanup))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -148,10 +142,8 @@ fn oracle_prop_combination_macroexpand_env_override_then_eval() {
                                            '((neovm--combo-mx . (lambda (x) (list '- x 1))))))
                         (eval (macroexpand '(neovm--combo-mx 7))))
                     (fmakunbound 'neovm--combo-mx)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((+ 7 1) 6 8)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((+ 7 1) 6 8)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -169,7 +161,8 @@ fn oracle_prop_combination_apply_with_symbol_function_mutation() {
                             (apply sym '(2)))
                           (apply orig '(2))))
                     (fmakunbound sym)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (3 20 3)""#]]);
+    let expect = expect_test::expect![[r#""OK (3 20 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -187,10 +180,8 @@ fn oracle_prop_combination_nested_unwind_cleanup_stack_order() {
                             (setq log (cons 'inner-clean log)))
                         (setq log (cons 'outer-clean log))))
                     log))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (done (outer-clean inner-clean body))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (done (outer-clean inner-clean body))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -208,10 +199,8 @@ fn oracle_prop_combination_macro_guards_apply_with_condition_case() {
                         (neovm--combo-guarded-call '+ '(1 2 3))
                         (neovm--combo-guarded-call 'car '(1)))
                     (fmakunbound 'neovm--combo-guarded-call)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (6 (wta wrong-type-argument))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (6 (wta wrong-type-argument))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -234,10 +223,8 @@ fn oracle_prop_combination_macroexpand_and_filter_return_advice() {
                     (fmakunbound 'neovm--combo-target)
                     (fmakunbound 'neovm--combo-filter-ret)
                     (fmakunbound 'neovm--combo-call-target)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((neovm--combo-target 4) 15)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((neovm--combo-target 4) 15)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -252,10 +239,8 @@ fn oracle_prop_combination_eval_macro_with_lexenv_shadowing() {
                           (eval '(neovm--combo-eval-env x))
                           (eval '(neovm--combo-eval-env x) '((x . 11)))))
                     (fmakunbound 'neovm--combo-eval-env)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable x)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable x)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -283,10 +268,8 @@ fn oracle_prop_combination_apply_with_filter_chain_and_log() {
                     (fmakunbound target)
                     (fmakunbound fargs)
                     (fmakunbound fret)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (18 ((orig 3 6) (ret 9)))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (18 ((orig 3 6) (ret 9)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -309,7 +292,8 @@ fn oracle_prop_combination_macro_generated_unwind_with_nonlocal_exit() {
                                   (setq x 2)))))
                           x)
                       (fmakunbound 'neovm--combo-wrap))))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (stop 2)""#]]);
+    let expect = expect_test::expect![[r#""OK (stop 2)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -332,10 +316,8 @@ fn oracle_prop_combination_filter_return_advice_call_path_matrix() {
                       (error nil))
                     (fmakunbound 'neovm--combo-path-target)
                     (fmakunbound 'neovm--combo-path-filter)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (15 15 15 15)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (15 15 15 15)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -362,12 +344,10 @@ fn oracle_prop_combination_before_advice_call_path_logging_matrix() {
                       (error nil))
                     (fmakunbound 'neovm--combo-before-path-target)
                     (fmakunbound 'neovm--combo-before-path)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (1 2 3 4 ((before 1) (orig 1) (before 2) (orig 2) (before 3) (orig 3) (before 4) (orig 4)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (1 2 3 4 ((before 1) (orig 1) (before 2) (orig 2) (before 3) (orig 3) (before 4) (orig 4)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -394,12 +374,10 @@ fn oracle_prop_combination_macro_direct_vs_funcall_under_advice() {
                     (fmakunbound 'neovm--combo-call-funcall)
                     (fmakunbound 'neovm--combo-macro-path-target)
                     (fmakunbound 'neovm--combo-macro-path-filter)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (18 18 (neovm--combo-macro-path-target 5) (funcall 'neovm--combo-macro-path-target 5))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (18 18 (neovm--combo-macro-path-target 5) (funcall 'neovm--combo-macro-path-target 5))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -425,10 +403,8 @@ fn oracle_prop_combination_filter_args_advice_call_path_matrix() {
                       (error nil))
                     (fmakunbound 'neovm--combo-fargs-path-target)
                     (fmakunbound 'neovm--combo-fargs-path)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (33 33 33 33)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (33 33 33 33)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -451,10 +427,8 @@ fn oracle_prop_combination_override_advice_call_path_matrix() {
                       (error nil))
                     (fmakunbound 'neovm--combo-override-path-target)
                     (fmakunbound 'neovm--combo-override-path)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (99 99 99 99)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (99 99 99 99)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -481,12 +455,10 @@ fn oracle_prop_combination_after_advice_call_path_matrix_logging() {
                       (error nil))
                     (fmakunbound 'neovm--combo-after-path-target)
                     (fmakunbound 'neovm--combo-after-path)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (1 2 3 4 ((orig 1) (after 1) (orig 2) (after 2) (orig 3) (after 3) (orig 4) (after 4)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (1 2 3 4 ((orig 1) (after 1) (orig 2) (after 2) (orig 3) (after 3) (orig 4) (after 4)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -504,10 +476,8 @@ fn oracle_prop_combination_eval_macroexpand_error_recovery() {
                             (eval (macroexpand '(neovm--combo-bad-macro '(9 8))))
                           (error (car err))))
                     (fmakunbound 'neovm--combo-bad-macro)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (wrong-type-argument 9)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (wrong-type-argument 9)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -527,7 +497,8 @@ fn oracle_prop_combination_unwind_cleanup_with_mutating_closure_state() {
                       (setq x (funcall f 10)))
                     x
                     (funcall f 1)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (7 17 18)""#]]);
+    let expect = expect_test::expect![[r#""OK (7 17 18)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -545,7 +516,8 @@ fn oracle_prop_combination_macro_generated_tags_and_nonlocal_exit() {
                         (neovm--combo-with-tag 'neovm--t1 11)
                         (neovm--combo-with-tag 'neovm--t2 22))
                     (fmakunbound 'neovm--combo-with-tag)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (11 22)""#]]);
+    let expect = expect_test::expect![[r#""OK (11 22)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -559,10 +531,8 @@ fn oracle_prop_combination_runtime_macro_definition_lifecycle() {
                         (eval '(neovm--combo-runtime 5))
                         (macroexpand '(neovm--combo-runtime 9)))
                     (fmakunbound 'neovm--combo-runtime)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((5 5) (list 9 9))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((5 5) (list 9 9))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -576,10 +546,8 @@ fn oracle_prop_combination_direct_dynamic_tag_catch_throw() {
                     (condition-case err
                         (catch tag (throw 'neovm--combo-other 1))
                       (no-catch (car err)))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (10 20 no-catch)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (10 20 no-catch)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -595,7 +563,8 @@ fn oracle_prop_combination_macro_parameterized_tag_simple() {
                         (let ((tg 'neovm--combo-b))
                           (neovm--combo-catch-throw-param tg 4)))
                     (fmakunbound 'neovm--combo-catch-throw-param)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (3 4)""#]]);
+    let expect = expect_test::expect![[r#""OK (3 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -611,10 +580,9 @@ fn oracle_prop_combination_macroexpanded_tag_form_eval_roundtrip() {
                                 '(neovm--combo-catch-throw-param 'neovm--combo-c 9))))
                         (list expanded (eval expanded)))
                     (fmakunbound 'neovm--combo-catch-throw-param)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((catch 'neovm--combo-c (throw 'neovm--combo-c 9)) 9)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((catch 'neovm--combo-c (throw 'neovm--combo-c 9)) 9)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -626,7 +594,8 @@ fn oracle_prop_combination_eval_constructed_catch_throw_runtime_tag() {
                                    (list 'quote tag)
                                    (list 'throw (list 'quote tag) 77))))
                   (eval form))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 77""#]]);
+    let expect = expect_test::expect![[r#""OK 77""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -644,7 +613,8 @@ fn oracle_prop_combination_apply_eval_macro_generated_throw() {
                                           'neovm--combo-ap
                                           13)))))
                     (fmakunbound 'neovm--combo-build-throw)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 13""#]]);
+    let expect = expect_test::expect![[r#""OK 13""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -656,7 +626,8 @@ fn oracle_prop_combination_dynamic_tag_with_condition_case_without_macro() {
                     (condition-case err
                         (throw tag 31)
                       (error (list 'err (car err))))))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 31""#]]);
+    let expect = expect_test::expect![[r#""OK 31""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -674,12 +645,10 @@ fn oracle_prop_combination_macro_tag_with_condition_case_expansion_and_eval() {
                             (b (macroexpand '(neovm--combo-with-tag-cc 'neovm--combo-c2 42))))
                         (list a b (eval a) (eval b)))
                     (fmakunbound 'neovm--combo-with-tag-cc)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((catch 'neovm--combo-c1 (condition-case err (throw 'neovm--combo-c1 41) (error (list 'err (car err))))) (catch 'neovm--combo-c2 (condition-case err (throw 'neovm--combo-c2 42) (error (list 'err (car err))))) 41 42)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((catch 'neovm--combo-c1 (condition-case err (throw 'neovm--combo-c1 41) (error (list 'err (car err))))) (catch 'neovm--combo-c2 (condition-case err (throw 'neovm--combo-c2 42) (error (list 'err (car err))))) 41 42)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -693,7 +662,8 @@ fn oracle_prop_combination_eval_macroexpanded_lambda_with_lexenv() {
                       (let ((f (eval '(neovm--combo-make-adder x) '((x . 9)))))
                         (list (funcall f 1) (apply f '(2))))
                     (fmakunbound 'neovm--combo-make-adder)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (10 11)""#]]);
+    let expect = expect_test::expect![[r#""OK (10 11)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -712,7 +682,8 @@ fn oracle_prop_combination_unwind_cleanup_rebinds_function_seen_by_eval() {
                         (funcall sym 3)
                         (eval (list sym 3)))
                     (fmakunbound sym)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (4 5 30 30)""#]]);
+    let expect = expect_test::expect![[r#""OK (4 5 30 30)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -729,10 +700,8 @@ fn oracle_prop_combination_macro_runtime_redefinition_changes_future_expansion()
                           (macroexpand '(neovm--combo-rdef 7))
                           (neovm--combo-rdef 7)))
                     (fmakunbound 'neovm--combo-rdef)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((+ 7 1) (- 7 1) 6)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((+ 7 1) (- 7 1) 6)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -744,7 +713,8 @@ fn oracle_prop_combination_dynamic_tag_throw_inside_unwind_protect() {
                     (unwind-protect
                         (throw tag 55)
                       'cleanup)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 55""#]]);
+    let expect = expect_test::expect![[r#""OK 55""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -758,7 +728,8 @@ fn oracle_prop_combination_dynamic_tag_throw_in_condition_case_inside_unwind() {
                             (throw tag 66)
                           (error (list 'err (car err))))
                       'cleanup)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 66""#]]);
+    let expect = expect_test::expect![[r#""OK 66""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -771,10 +742,8 @@ fn oracle_prop_combination_no_catch_handler_rethrows_to_outer_catch() {
                         (throw 'neovm--combo-other 1)
                       (no-catch
                        (throw tag (list 'rescued (car err)))))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (rescued no-catch)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (rescued no-catch)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -791,7 +760,8 @@ fn oracle_prop_combination_macro_wrapped_condition_case_throw_with_dynamic_tag()
                         (catch tag
                           (neovm--combo-cc-throw tag 77)))
                     (fmakunbound 'neovm--combo-cc-throw)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 77""#]]);
+    let expect = expect_test::expect![[r#""OK 77""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -801,7 +771,8 @@ fn oracle_prop_combination_apply_throw_with_dynamic_tag() {
     let form = "(let ((tag 'neovm--combo-apply-tag))
                   (catch tag
                     (apply #'throw (list tag 88))))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 88""#]]);
+    let expect = expect_test::expect![[r#""OK 88""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -814,7 +785,8 @@ fn oracle_prop_combination_throw_through_condition_case_unrelated_error_handlers
                         (progn (throw tag 91) 'tail)
                       (arith-error 'arith)
                       (wrong-type-argument 'wta))))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 91""#]]);
+    let expect = expect_test::expect![[r#""OK 91""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -828,7 +800,8 @@ fn oracle_prop_combination_throw_through_multiple_condition_case_layers() {
                             (throw tag 92)
                           (wrong-type-argument 'inner))
                       (arith-error 'outer))))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 92""#]]);
+    let expect = expect_test::expect![[r#""OK 92""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -845,7 +818,8 @@ fn oracle_prop_combination_throw_through_condition_case_and_unwind_cleanup() {
                             (setq x 1))
                         (error 'caught)))
                     x))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (93 1)""#]]);
+    let expect = expect_test::expect![[r#""OK (93 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -857,7 +831,8 @@ fn oracle_prop_combination_apply_throw_inside_condition_case_to_outer_catch() {
                     (condition-case nil
                         (apply #'throw (list tag 94))
                       (error 'caught))))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 94""#]]);
+    let expect = expect_test::expect![[r#""OK 94""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -868,7 +843,8 @@ fn oracle_prop_combination_throw_not_caught_by_condition_case_error_clause() {
                   (condition-case nil
                       (throw 'neovm--combo-cc-basic-tag 95)
                     (error 'caught)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 95""#]]);
+    let expect = expect_test::expect![[r#""OK 95""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -892,10 +868,8 @@ fn oracle_prop_combination_symbol_function_after_advice_call_paths() {
                       (error nil))
                     (fmakunbound 'neovm--combo-sf-target)
                     (fmakunbound 'neovm--combo-sf-filter)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (18 18 18 18)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (18 18 18 18)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -917,7 +891,8 @@ fn oracle_prop_combination_fset_after_advice_add_keeps_wrapping_behavior() {
                       (error nil))
                     (fmakunbound 'neovm--combo-fset-target)
                     (fmakunbound 'neovm--combo-fset-filter)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (13 13)""#]]);
+    let expect = expect_test::expect![[r#""OK (13 13)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -942,7 +917,8 @@ fn oracle_prop_combination_defalias_to_advised_symbol_call_paths() {
                     (fmakunbound 'neovm--combo-alias-target)
                     (fmakunbound 'neovm--combo-alias)
                     (fmakunbound 'neovm--combo-alias-filter)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (9 9 9 9)""#]]);
+    let expect = expect_test::expect![[r#""OK (9 9 9 9)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -953,10 +929,8 @@ fn oracle_prop_combination_catch_throw_non_symbol_tag_basics() {
                   (catch 1 (throw 1 'int-tag))
                   (let ((tag (list 'a)))
                     (catch tag (throw tag 'cons-tag))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (int-tag cons-tag)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (int-tag cons-tag)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -967,7 +941,8 @@ fn oracle_prop_combination_catch_throw_tag_identity_uses_eq() {
                   (let ((tag (list 'a)))
                     (catch tag (throw (list 'a) 'mismatch)))
                 (no-catch (car err)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK no-catch""#]]);
+    let expect = expect_test::expect![[r#""OK no-catch""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -979,7 +954,8 @@ fn oracle_prop_combination_catch_tag_expression_evaluated_once() {
                     (catch (progn (setq n (1+ n)) 'neovm--combo-once-tag)
                       (throw 'neovm--combo-once-tag n))
                     n))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (1 1)""#]]);
+    let expect = expect_test::expect![[r#""OK (1 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -991,7 +967,8 @@ fn oracle_prop_combination_non_symbol_tag_throw_through_condition_case() {
                     (condition-case nil
                         (throw tag 96)
                       (error 'caught))))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 96""#]]);
+    let expect = expect_test::expect![[r#""OK 96""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1003,7 +980,8 @@ fn oracle_prop_combination_throw_through_condition_case_with_no_catch_clause() {
                       (throw 'neovm--combo-nc-tag 97)
                     (no-catch (list 'handled (car err)))
                     (error 'caught)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 97""#]]);
+    let expect = expect_test::expect![[r#""OK 97""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1016,7 +994,8 @@ fn oracle_prop_combination_non_symbol_throw_with_no_catch_clause() {
                         (throw tag 98)
                       (no-catch (list 'handled (car err)))
                       (error 'caught))))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 98""#]]);
+    let expect = expect_test::expect![[r#""OK 98""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1027,7 +1006,8 @@ fn oracle_prop_combination_throw_from_funcall_inside_condition_case() {
                   (condition-case nil
                       (funcall (lambda () (throw 'neovm--combo-funcall-tag 99)))
                     (error 'caught)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 99""#]]);
+    let expect = expect_test::expect![[r#""OK 99""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1043,7 +1023,8 @@ fn oracle_prop_combination_throw_from_while_inside_condition_case() {
                             (if (= i 3)
                                 (throw 'neovm--combo-while-tag i))))
                       (error 'caught))))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 3""#]]);
+    let expect = expect_test::expect![[r#""OK 3""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1062,10 +1043,8 @@ fn oracle_prop_combination_throw_from_condition_case_handler_to_outer_catch() {
                              (throw 'neovm--combo-handler-tag 'handled)
                            (setq log (cons 'cleanup log))))))
                     (nreverse log)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (handled (body cleanup))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (handled (body cleanup))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1080,10 +1059,8 @@ fn oracle_prop_combination_no_catch_payload_shape_outside_catch() {
                      (car (cdr err))
                      (car (cdr (cdr err)))))
                   (error 'caught))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (no-catch neovm--combo-no-catch-tag 77)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (no-catch neovm--combo-no-catch-tag 77)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1103,10 +1080,8 @@ fn oracle_prop_combination_prog1_unwind_throw_cleanup_order() {
                         (setq log (cons 'tail log))))
                     x
                     (nreverse log)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (2 11 (body cleanup))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 11 (body cleanup))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1122,7 +1097,8 @@ fn oracle_prop_combination_throw_from_error_handler_lambda() {
                      (funcall
                       (lambda ()
                         (throw 'neovm--combo-handler-lambda-tag 123))))))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 123""#]]);
+    let expect = expect_test::expect![[r#""OK 123""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1152,10 +1128,8 @@ fn oracle_prop_combination_around_advice_throw_call_path_matrix() {
                     (condition-case nil (advice-remove target around) (error nil))
                     (fmakunbound target)
                     (fmakunbound around)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-function target)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-function target)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1185,12 +1159,10 @@ fn oracle_prop_combination_macro_advice_condition_case_lifecycle() {
                     (fmakunbound 'neovm--combo-macro-advice-target)
                     (fmakunbound 'neovm--combo-macro-advice-around)
                     (fmakunbound 'neovm--combo-m-call-cc)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((condition-case err (neovm--combo-macro-advice-target 7) (error (list 'err (car err)))) 22 22 22 22)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((condition-case err (neovm--combo-macro-advice-target 7) (error (list 'err (car err)))) 22 22 22 22)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1216,10 +1188,8 @@ fn oracle_prop_combination_macro_filter_return_call_path_matrix() {
                     (fmakunbound 'neovm--combo-m-fr-target)
                     (fmakunbound 'neovm--combo-m-fr-filter)
                     (fmakunbound 'neovm--combo-m-fr-call)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (25 25 25 25)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (25 25 25 25)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1248,10 +1218,8 @@ fn oracle_prop_combination_macro_filter_args_call_path_matrix() {
                     (fmakunbound 'neovm--combo-m-fa-target)
                     (fmakunbound 'neovm--combo-m-fa-filter)
                     (fmakunbound 'neovm--combo-m-fa-call)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (33 33 33 33)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (33 33 33 33)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1284,10 +1252,8 @@ fn oracle_prop_combination_macro_before_advice_throw_call_path_matrix() {
                     (fmakunbound 'neovm--combo-m-before-throw-target)
                     (fmakunbound 'neovm--combo-m-before-throw)
                     (fmakunbound 'neovm--combo-m-before-throw-call)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((thrown 3) (thrown 3) (thrown 3) (thrown 3))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((thrown 3) (thrown 3) (thrown 3) (thrown 3))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1314,10 +1280,8 @@ fn oracle_prop_combination_macro_override_advice_call_path_matrix() {
                     (fmakunbound 'neovm--combo-m-override-target)
                     (fmakunbound 'neovm--combo-m-override)
                     (fmakunbound 'neovm--combo-m-override-call)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (103 103 103 103)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (103 103 103 103)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1348,10 +1312,8 @@ fn oracle_prop_combination_macro_after_advice_side_effect_matrix() {
                       (fmakunbound 'neovm--combo-m-after-target)
                       (fmakunbound 'neovm--combo-m-after)
                       (fmakunbound 'neovm--combo-m-after-call))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (6 6 6 6 4 (6 6 6 6))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (6 6 6 6 4 (6 6 6 6))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1393,7 +1355,8 @@ fn oracle_prop_combination_macro_condition_case_throw_before_advice_matrix() {
                       (fmakunbound 'neovm--combo-m-cc-throw-target)
                       (fmakunbound 'neovm--combo-m-cc-throw-before)
                       (fmakunbound 'neovm--combo-m-cc-throw-call))))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (4 4 4 4 4)""#]]);
+    let expect = expect_test::expect![[r#""OK (4 4 4 4 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1422,12 +1385,10 @@ fn oracle_prop_combination_macro_symbol_function_under_advice_matrix() {
                     (fmakunbound 'neovm--combo-m-sf-target)
                     (fmakunbound 'neovm--combo-m-sf-around)
                     (fmakunbound 'neovm--combo-m-sf-call)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""ERR (invalid-function (symbol-function 'neovm--combo-m-sf-target))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""ERR (invalid-function (symbol-function 'neovm--combo-m-sf-target))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1462,10 +1423,8 @@ fn oracle_prop_combination_macro_stacked_around_and_filter_return_matrix() {
                     (fmakunbound 'neovm--combo-m-stack-around)
                     (fmakunbound 'neovm--combo-m-stack-fr)
                     (fmakunbound 'neovm--combo-m-stack-call)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((neovm--combo-m-stack-target 4) 17 17 17 17)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((neovm--combo-m-stack-target 4) 17 17 17 17)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1493,7 +1452,8 @@ fn oracle_prop_combination_macro_fset_after_advice_call_path_matrix() {
                     (fmakunbound 'neovm--combo-m-fset-target)
                     (fmakunbound 'neovm--combo-m-fset-around)
                     (fmakunbound 'neovm--combo-m-fset-call)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (6 6 6 6)""#]]);
+    let expect = expect_test::expect![[r#""OK (6 6 6 6)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1522,10 +1482,8 @@ fn oracle_prop_combination_macro_non_symbol_throw_from_around_matrix() {
                       (fmakunbound 'neovm--combo-m-nsym-target)
                       (fmakunbound 'neovm--combo-m-nsym-around)
                       (fmakunbound 'neovm--combo-m-nsym-call))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (14 14 14 14)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (14 14 14 14)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1556,10 +1514,8 @@ fn oracle_prop_combination_macro_defalias_under_advice_matrix() {
                     (fmakunbound 'neovm--combo-m-alias-target)
                     (fmakunbound 'neovm--combo-m-alias-around)
                     (fmakunbound 'neovm--combo-m-alias-call)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (12 12 12 12 12 12)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (12 12 12 12 12 12)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1597,12 +1553,10 @@ fn oracle_prop_combination_macro_after_advice_throw_call_path_matrix() {
                       (fmakunbound 'neovm--combo-m-after-throw-target)
                       (fmakunbound 'neovm--combo-m-after-throw)
                       (fmakunbound 'neovm--combo-m-after-throw-call))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (52 52 52 52 ((orig 2) (after 2) (orig 2) (after 2) (orig 2) (after 2) (orig 2) (after 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (52 52 52 52 ((orig 2) (after 2) (orig 2) (after 2) (orig 2) (after 2) (orig 2) (after 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1638,10 +1592,8 @@ fn oracle_prop_combination_macro_filter_return_advice_toggle_matrix() {
                     (fmakunbound 'neovm--combo-m-toggle-target)
                     (fmakunbound 'neovm--combo-m-toggle-filter)
                     (fmakunbound 'neovm--combo-m-toggle-call)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 3 (10 10 10 10) (3 3 3 3))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 3 (10 10 10 10) (3 3 3 3))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1685,10 +1637,8 @@ fn oracle_prop_combination_macro_around_translates_error_to_throw_matrix() {
                     (fmakunbound 'neovm--combo-m-err-throw-target)
                     (fmakunbound 'neovm--combo-m-err-throw-around)
                     (fmakunbound 'neovm--combo-m-err-throw-call)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (54 54 54 54)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (54 54 54 54)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1725,10 +1675,8 @@ fn oracle_prop_combination_macro_advice_member_state_and_paths() {
                     (fmakunbound 'neovm--combo-m-member-target)
                     (fmakunbound 'neovm--combo-m-member-filter)
                     (fmakunbound 'neovm--combo-m-member-call)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil (t 9 9 9 9) (nil 2 2 2 2))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil (t 9 9 9 9) (nil 2 2 2 2))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1768,12 +1716,10 @@ fn oracle_prop_combination_macro_expansion_shape_under_around_advice() {
                     (fmakunbound 'neovm--combo-m-shape-direct)
                     (fmakunbound 'neovm--combo-m-shape-funcall)
                     (fmakunbound 'neovm--combo-m-shape-apply)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((neovm--combo-m-shape-target 4) (funcall 'neovm--combo-m-shape-target 4) (apply 'neovm--combo-m-shape-target (list 4)) 105 105 105 105 105 105 105 105)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((neovm--combo-m-shape-target 4) (funcall 'neovm--combo-m-shape-target 4) (apply 'neovm--combo-m-shape-target (list 4)) 105 105 105 105 105 105 105 105)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1800,10 +1746,8 @@ fn oracle_prop_combination_macro_float_eq_call_shape_matrix() {
                       (eval '(neovm--combo-m-float-aeq 1.0 1.0))
                       (let ((y x)) (eq x y))
                       (memq 1.0 '(1.0 2.0)))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil nil nil nil nil nil nil nil t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil nil nil nil nil t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1829,10 +1773,8 @@ fn oracle_prop_combination_macro_float_eq_funcall_apply_matrix() {
                           (funcall 'eq g h)
                           (apply 'eq (list g h))
                           (eq g h))))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil nil nil t t (nil nil nil))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil t t (nil nil nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1861,10 +1803,8 @@ fn oracle_prop_combination_macro_float_eq_hash_table_key_identity() {
                       (list
                         (neovm--combo-m-ht-get k1 ht)
                         (neovm--combo-m-ht-get k2 ht)))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable k1)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable k1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1898,10 +1838,8 @@ fn oracle_prop_combination_macro_generated_lambda_call_shape_under_advice() {
                     (fmakunbound 'neovm--combo-m-lambda-target)
                     (fmakunbound 'neovm--combo-m-lambda-filter)
                     (fmakunbound 'neovm--combo-m-make-caller)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (10 10 10 10 10 10)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (10 10 10 10 10 10)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1921,10 +1859,8 @@ fn oracle_prop_combination_macro_eval_quoted_symbol_arg_lambda_call() {
                           (eval '(funcall (neovm--combo-m-min-caller 'funcall) n))
                           (eval '(funcall (neovm--combo-m-min-caller 'apply) n)))
                       (fmakunbound 'neovm--combo-m-min-caller))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable n)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable n)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1956,10 +1892,8 @@ fn oracle_prop_combination_macro_generated_lambda_advice_toggle_matrix() {
                     (fmakunbound 'neovm--combo-m-toggle-lambda-target)
                     (fmakunbound 'neovm--combo-m-toggle-lambda-filter)
                     (fmakunbound 'neovm--combo-m-toggle-make-caller)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (2 2 (9 9) (2 2))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 2 (9 9) (2 2))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -1984,7 +1918,8 @@ fn oracle_prop_combination_macro_advice_member_alias_visibility_matrix() {
                     (fmakunbound 'neovm--combo-m-member-alias)
                     (fmakunbound 'neovm--combo-m-member-alias-target)
                     (fmakunbound 'neovm--combo-m-member-alias-filter)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t nil 9 2)""#]]);
+    let expect = expect_test::expect![[r#""OK (t nil 9 2)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2039,12 +1974,10 @@ fn oracle_prop_combination_macro_stacked_advice_order_call_path_logs() {
                     (fmakunbound 'neovm--combo-m-order-before)
                     (fmakunbound 'neovm--combo-m-order-around)
                     (fmakunbound 'neovm--combo-m-order-after)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 (around-enter before orig around-exit after)) (1 (around-enter before orig around-exit after)) (1 (around-enter before orig around-exit after)) (1 (around-enter before orig around-exit after)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 (around-enter before orig around-exit after)) (1 (around-enter before orig around-exit after)) (1 (around-enter before orig around-exit after)) (1 (around-enter before orig around-exit after)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2111,12 +2044,10 @@ fn oracle_prop_combination_macro_stacked_advice_throw_order_matrix() {
                     (fmakunbound 'neovm--combo-m-order-throw-before)
                     (fmakunbound 'neovm--combo-m-order-throw-around)
                     (fmakunbound 'neovm--combo-m-order-throw-after)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 (around-enter before orig around-exit)) (1 (around-enter before orig around-exit)) (1 (around-enter before orig around-exit)) (1 (around-enter before orig around-exit)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 (around-enter before orig around-exit)) (1 (around-enter before orig around-exit)) (1 (around-enter before orig around-exit)) (1 (around-enter before orig around-exit)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2159,10 +2090,9 @@ fn oracle_prop_combination_alias_stacked_advice_order_visibility_matrix() {
                     (fmakunbound 'neovm--combo-alias-order-target)
                     (fmakunbound 'neovm--combo-alias-order-before)
                     (fmakunbound 'neovm--combo-alias-order-around)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 (around-enter before orig around-exit)) (1 (orig)))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((1 (around-enter before orig around-exit)) (1 (orig)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2196,12 +2126,10 @@ fn oracle_prop_combination_advice_mapc_order_and_path_matrix() {
                     (fmakunbound 'neovm--combo-mapc-target)
                     (fmakunbound 'neovm--combo-mapc-before)
                     (fmakunbound 'neovm--combo-mapc-around)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((neovm--combo-mapc-around nil) (neovm--combo-mapc-before nil)) 4 4 4 4)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((neovm--combo-mapc-around nil) (neovm--combo-mapc-before nil)) 4 4 4 4)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2232,10 +2160,8 @@ fn oracle_prop_combination_symbol_function_identity_during_advice_toggle() {
                       (error nil))
                     (fmakunbound 'neovm--combo-sf-toggle-target)
                     (fmakunbound 'neovm--combo-sf-toggle-filter)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t (nil 8 8) (t 1 1))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t (nil 8 8) (t 1 1))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2272,10 +2198,8 @@ fn oracle_prop_combination_defalias_rebind_under_active_advice_matrix() {
                     (fmakunbound 'neovm--combo-alias-rebind-target-a)
                     (fmakunbound 'neovm--combo-alias-rebind-target-b)
                     (fmakunbound 'neovm--combo-alias-rebind-filter)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (104 4 (106 6 106 106) (6 6))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (104 4 (106 6 106 106) (6 6))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2323,10 +2247,8 @@ fn oracle_prop_combination_throw_caught_by_around_toggle_call_paths() {
                     (fmakunbound 'neovm--combo-m-throw-around-target)
                     (fmakunbound 'neovm--combo-m-throw-around)
                     (fmakunbound 'neovm--combo-m-throw-around-call)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((105 105 105 105) (5 5 5 5))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((105 105 105 105) (5 5 5 5))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2368,10 +2290,8 @@ fn oracle_prop_combination_defalias_rebind_filter_args_lifecycle_matrix() {
                     (fmakunbound 'neovm--combo-alias-fargs-target-a)
                     (fmakunbound 'neovm--combo-alias-fargs-target-b)
                     (fmakunbound 'neovm--combo-alias-fargs-filter)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (33 33 (242 242 242 242 2) (2 2 2))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (33 33 (242 242 242 242 2) (2 2 2))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2406,10 +2326,8 @@ fn oracle_prop_combination_before_advice_error_call_path_matrix() {
                     (fmakunbound 'neovm--combo-m-before-err-target)
                     (fmakunbound 'neovm--combo-m-before-err)
                     (fmakunbound 'neovm--combo-m-before-err-call)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (arith arith arith arith)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (arith arith arith arith)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2463,10 +2381,8 @@ fn oracle_prop_combination_multi_stage_advice_removal_call_path_matrix() {
                     (fmakunbound 'neovm--combo-m-stage-around)
                     (fmakunbound 'neovm--combo-m-stage-filter)
                     (fmakunbound 'neovm--combo-m-stage-call)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((16 16 16 16) (13 13 13 13) (3 3 3 3))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((16 16 16 16) (13 13 13 13) (3 3 3 3))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2503,10 +2419,8 @@ fn oracle_prop_combination_symbol_function_capture_across_advice_lifecycle() {
                         (error nil))
                       (fmakunbound 'neovm--combo-sf-cap-target)
                       (fmakunbound 'neovm--combo-sf-cap-filter))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((nil 1 8 8 8 8) (t 1 1 1 1))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((nil 1 8 8 8 8) (t 1 1 1 1))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2538,7 +2452,8 @@ fn oracle_prop_combination_recursive_around_advice_call_path_matrix() {
                     (fmakunbound 'neovm--combo-m-rec-around-target)
                     (fmakunbound 'neovm--combo-m-rec-around)
                     (fmakunbound 'neovm--combo-m-rec-around-call)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (3 3 3 3 3)""#]]);
+    let expect = expect_test::expect![[r#""OK (3 3 3 3 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2578,10 +2493,8 @@ fn oracle_prop_combination_advice_added_on_alias_removed_on_target_matrix() {
                     (fmakunbound 'neovm--combo-alias-cross)
                     (fmakunbound 'neovm--combo-alias-cross-target)
                     (fmakunbound 'neovm--combo-alias-cross-filter)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((9 2 9 9 t nil) (9 2 9 9 t nil))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((9 2 9 9 t nil) (9 2 9 9 t nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2623,10 +2536,8 @@ fn oracle_prop_combination_alias_symbol_function_snapshot_across_rebind_and_advi
                       (fmakunbound 'neovm--combo-alias-snap-target-a)
                       (fmakunbound 'neovm--combo-alias-snap-target-b)
                       (fmakunbound 'neovm--combo-alias-snap-filter))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil 4 104 104 (4 104 106 106 106) (6 6))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil 4 104 104 (4 104 106 106 106) (6 6))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2666,10 +2577,8 @@ fn oracle_prop_combination_advice_added_on_target_removed_on_alias_matrix() {
                     (fmakunbound 'neovm--combo-target-cross)
                     (fmakunbound 'neovm--combo-target-cross-target)
                     (fmakunbound 'neovm--combo-target-cross-filter)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((9 9 9 9 nil t) (9 9 9 9 nil t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((9 9 9 9 nil t) (9 9 9 9 nil t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2706,10 +2615,8 @@ fn oracle_prop_combination_duplicate_advice_add_remove_lifecycle_matrix() {
                       (error nil))
                     (fmakunbound 'neovm--combo-dup-target)
                     (fmakunbound 'neovm--combo-dup-filter)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((4 t) (4 t) (3 nil) (3 nil))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((4 t) (4 t) (3 nil) (3 nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2739,10 +2646,8 @@ fn oracle_prop_combination_captured_advised_function_after_remove_matrix() {
                       (error nil))
                     (fmakunbound 'neovm--combo-cap-remove-target)
                     (fmakunbound 'neovm--combo-cap-remove-filter)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (9 9 (9 2 9 2 nil))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (9 9 (9 2 9 2 nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2777,10 +2682,8 @@ fn oracle_prop_combination_macro_eval_advice_toggle_call_path_matrix() {
                     (fmakunbound 'neovm--combo-m-eval-toggle-target)
                     (fmakunbound 'neovm--combo-m-eval-toggle-filter)
                     (fmakunbound 'neovm--combo-m-eval-toggle-call)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (2 (9 9 9 9) (2 2 2 2))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 (9 9 9 9) (2 2 2 2))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2825,10 +2728,8 @@ fn oracle_prop_combination_two_aliases_cross_advice_remove_matrix() {
                     (fmakunbound 'neovm--combo-two-alias-a)
                     (fmakunbound 'neovm--combo-two-alias-b)
                     (fmakunbound 'neovm--combo-two-alias-filter)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((9 2 2 t nil nil) (9 2 2 t nil nil))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((9 2 2 t nil nil) (9 2 2 t nil nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2890,10 +2791,8 @@ fn oracle_prop_combination_throwing_before_advice_cleanup_removal_matrix() {
                             (setq after (neovm--combo-clean-target 1))))
                         after)))
                   )";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((99 1) (99 1) (99 1) (99 1))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((99 1) (99 1) (99 1) (99 1))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -2983,10 +2882,8 @@ fn oracle_prop_combination_advice_depth_order_call_path_matrix() {
                       (fmakunbound 'neovm--combo-depth-after-low)
                       (fmakunbound 'neovm--combo-depth-after-high)
                       (fmakunbound 'neovm--combo-depth-call))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((36 nil) (36 nil) (36 nil) (36 nil))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((36 nil) (36 nil) (36 nil) (36 nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -3039,12 +2936,10 @@ fn oracle_prop_combination_anonymous_around_advice_alias_remove_matrix() {
                       (fmakunbound 'neovm--combo-anon-target)
                       (fmakunbound 'neovm--combo-anon-alias)
                       (fmakunbound 'neovm--combo-anon-call))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((15 15 15 15 15 t nil (3 3 3 3 3)) (15 15 15 15 15 t nil (3 3 3 3 3)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((15 15 15 15 15 t nil (3 3 3 3 3)) (15 15 15 15 15 t nil (3 3 3 3 3)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]

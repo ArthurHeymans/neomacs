@@ -33,12 +33,10 @@ fn oracle_prop_huffman_frequency_table() {
                      (funcall build-freq "hello world")
                      (funcall build-freq "aaaaaaa")
                      (funcall build-freq "abcdef")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((97 . 2) (98 . 3) (99 . 4)) ((100 . 1) (114 . 1) (119 . 1) (32 . 1) (101 . 1) (104 . 1) (111 . 2) (108 . 3)) ((97 . 7)) ((102 . 1) (101 . 1) (100 . 1) (99 . 1) (98 . 1) (97 . 1)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((97 . 2) (98 . 3) (99 . 4)) ((100 . 1) (114 . 1) (119 . 1) (32 . 1) (101 . 1) (104 . 1) (111 . 2) (108 . 3)) ((97 . 7)) ((102 . 1) (101 . 1) (100 . 1) (99 . 1) (98 . 1) (97 . 1)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -79,10 +77,8 @@ fn oracle_prop_huffman_priority_queue() {
                             (setq result (cons (car popped) result)
                                   q (cdr popped))))
                         (nreverse result))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable pq-insert)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable pq-insert)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -169,10 +165,8 @@ fn oracle_prop_huffman_tree_and_codes() {
                                     ;; 'd' appears 1 time, should have longer code
                                     (length d-code)
                                     (<= (length a-code) (length d-code)))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable pq-insert)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable pq-insert)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -261,10 +255,8 @@ fn oracle_prop_huffman_encode_decode_roundtrip() {
                      (funcall huffman-roundtrip "aaaaaaa")
                      (funcall huffman-roundtrip "abcdefgh")
                      (funcall huffman-roundtrip "mississippi")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable huffman-roundtrip)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable huffman-roundtrip)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -352,10 +344,8 @@ fn oracle_prop_huffman_compression_ratio() {
                      (funcall compute-ratio "abcdefghij")
                      ;; Single char
                      (funcall compute-ratio "xxxxx")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable pq-insert)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable pq-insert)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -444,8 +434,6 @@ fn oracle_prop_huffman_tree_properties() {
                                     (hash-table-count codes)
                                     ;; Root weight should equal text length
                                     (= (car tree) (length text))))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable pq-insert)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable pq-insert)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

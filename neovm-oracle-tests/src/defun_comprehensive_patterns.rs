@@ -37,12 +37,10 @@ fn oracle_prop_defun_optional_args_comprehensive() {
         (neovm--test-opt1 1 nil nil))
     (fmakunbound 'neovm--test-opt1)
     (fmakunbound 'neovm--test-opt2)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3) (10 nil nil) (10 20 nil) (x nil nil nil nil) (x y z nil nil) (x y z w v) (1 nil 3) (1 nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3) (10 nil nil) (10 20 nil) (x nil nil nil nil) (x y z nil nil) (x y z w v) (1 nil 3) (1 nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -79,12 +77,10 @@ fn oracle_prop_defun_rest_args_comprehensive() {
     (fmakunbound 'neovm--test-rest1)
     (fmakunbound 'neovm--test-rest2)
     (fmakunbound 'neovm--test-opt-rest)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((x nil 0) (x (1 2 3) 3) (x (a b c d e) 5) (0 0) (5 15) (3 60) (1 nil nil) (1 2 nil) (1 2 (3 4 5)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((x nil 0) (x (1 2 3) 3) (x (a b c d e) 5) (0 0) (5 15) (3 60) (1 nil nil) (1 2 nil) (1 2 (3 4 5)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -120,10 +116,8 @@ fn oracle_prop_defun_docstring_patterns() {
     (fmakunbound 'neovm--test-doc1)
     (fmakunbound 'neovm--test-doc2)
     (fmakunbound 'neovm--test-nodoc)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (42 42 100 0 -10 t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (42 42 100 0 -10 t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,10 +143,8 @@ fn oracle_prop_defun_overwrite_redefinition() {
             (let ((r4 (neovm--test-overwrite 10)))
               (list r1 r2 r3 r4)))))
     (fmakunbound 'neovm--test-overwrite)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (11 100 30 -10)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (11 100 30 -10)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -195,10 +187,8 @@ fn oracle_prop_defun_returning_lambda() {
     (fmakunbound 'neovm--test-make-adder)
     (fmakunbound 'neovm--test-make-multiplier)
     (fmakunbound 'neovm--test-compose)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (15 0 21 21 11 t t (15 5 10))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (15 0 21 21 11 t t (15 5 10))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -248,10 +238,9 @@ fn oracle_prop_defun_mutual_recursion() {
     (fmakunbound 'neovm--test-my-odd-p)
     (fmakunbound 'neovm--test-collatz-a)
     (fmakunbound 'neovm--test-collatz-b)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil t nil nil t t nil (6 3 10 5 16 8 4 2 1) (1))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (t nil t nil nil t t nil (6 3 10 5 16 8 4 2 1) (1))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -286,10 +275,8 @@ fn oracle_prop_defun_nested_definitions() {
     (fmakunbound 'neovm--test-inner)
     (fmakunbound 'neovm--test-outer2)
     (fmakunbound 'neovm--test-inner2)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (25 61 100 (105 100))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (25 61 100 (105 100))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -327,10 +314,8 @@ fn oracle_prop_defun_symbol_function_fmakunbound() {
         (fboundp 'neovm--nonexistent-fn-xyz))  ;; nil
     (fmakunbound 'neovm--test-sf1)
     (fmakunbound 'neovm--test-sf2)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t 11 20 nil 10 9 t t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t 11 20 nil 10 9 t t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -373,12 +358,10 @@ fn oracle_prop_defun_complex_arglists() {
     (fmakunbound 'neovm--test-complex2)
     (fmakunbound 'neovm--test-complex3)
     (fmakunbound 'neovm--test-complex4)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((a 1 b 2 c nil d nil more nil) (a 1 b 2 c 3 d nil more nil) (a 1 b 2 c 3 d 4 more nil) (a 1 b 2 c 3 d 4 more (5 6 7)) (only) (1 2 3 4 5) no-args 15 (a \"a\" b nil c t d :kw more (sym 3.14)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((a 1 b 2 c nil d nil more nil) (a 1 b 2 c 3 d nil more nil) (a 1 b 2 c 3 d 4 more nil) (a 1 b 2 c 3 d 4 more (5 6 7)) (only) (1 2 3 4 5) no-args 15 (a \"a\" b nil c t d :kw more (sym 3.14)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -421,10 +404,8 @@ fn oracle_prop_defun_body_side_effects() {
     (fmakunbound 'neovm--test-side-effect)
     (fmakunbound 'neovm--test-multi-body)
     (makunbound 'neovm--test-counter)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (5 5 8 30 38)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (5 5 8 30 38)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -468,10 +449,8 @@ fn oracle_prop_defun_interactive_spec() {
     (fmakunbound 'neovm--test-interactive2)
     (fmakunbound 'neovm--test-interactive3)
     (fmakunbound 'neovm--test-non-cmd)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (49 42 7 t t t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (49 42 7 t t t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -521,10 +500,8 @@ fn oracle_prop_defun_recursive_accumulator() {
     (fmakunbound 'neovm--test-factorial)
     (fmakunbound 'neovm--test-factorial-acc)
     (fmakunbound 'neovm--test-flatten)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (1 1 120 3628800 1 1 120 3628800 t (1 2 3 4 5 6 7) (a b c d e f g) nil (42))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (1 1 120 3628800 1 1 120 3628800 t (1 2 3 4 5 6 7) (a b c d e f g) nil (42))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

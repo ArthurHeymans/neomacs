@@ -10,10 +10,9 @@ use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_setq_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(let ((x 1)) (setq x 2) x)",
-        expect_test::expect![[r#""OK 2""#]],
-    );
+    let expect = expect_test::expect![[r#""OK 2""#]];
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect("(let ((x 1)) (setq x 2) x)", expect);
     assert_ok_eq("2", &oracle, &neovm);
 }
 
@@ -21,10 +20,8 @@ fn oracle_prop_setq_basic() {
 fn oracle_prop_setq_odd_arity_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(setq x)",
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments setq 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments setq 1)""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect("(setq x)", expect);
     assert_err_kind(&oracle, &neovm, "wrong-number-of-arguments");
 }
 

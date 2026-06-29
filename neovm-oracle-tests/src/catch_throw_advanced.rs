@@ -20,10 +20,8 @@ fn oracle_prop_catch_throw_complex_value() {
                            (list 'result
                                  '(nested data)
                                  (cons "key" "val"))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (result (nested data) (\"key\" . \"val\"))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (result (nested data) (\"key\" . \"val\"))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -32,8 +30,8 @@ fn oracle_prop_catch_no_throw() {
 
     // When no throw happens, catch returns the body value
     let form = "(catch 'tag (+ 1 2 3))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 6""#]]);
+    let expect = expect_test::expect![[r#""OK 6""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("6", &o, &n);
 }
 
@@ -50,10 +48,8 @@ fn oracle_prop_catch_nested_different_tags() {
                         (catch 'inner
                           (throw 'inner 'inner-result))
                         'after))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (before inner-result after)""#],
-    );
+    let expect = expect_test::expect![r#""OK (before inner-result after)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -64,10 +60,8 @@ fn oracle_prop_catch_nested_throw_to_outer() {
     let form = "(catch 'outer
                   (catch 'inner
                     (throw 'outer 'escaped)))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK escaped""#]],
-    );
+    let expect = expect_test::expect![[r#""OK escaped""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("escaped", &o, &n);
 }
 
@@ -81,10 +75,8 @@ fn oracle_prop_catch_same_tag_nested() {
                         (catch 'tag
                           (throw 'tag 'inner-val))
                         'after-inner))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (outer inner-val after-inner)""#],
-    );
+    let expect = expect_test::expect![r#""OK (outer inner-val after-inner)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -101,8 +93,8 @@ fn oracle_prop_catch_throw_across_funcall() {
                     (list 'before
                           (funcall bail)
                           'never-reached)))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK bailed""#]]);
+    let expect = expect_test::expect![[r#""OK bailed""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("bailed", &o, &n);
 }
 
@@ -117,10 +109,8 @@ fn oracle_prop_catch_throw_deep_stack() {
                             (funcall fn2 fn3))))
                   (catch 'done
                     (funcall f1 f2 f3)))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK from-f3""#]],
-    );
+    let expect = expect_test::expect![[r#""OK from-f3""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("from-f3", &o, &n);
 }
 
@@ -138,7 +128,8 @@ fn oracle_prop_catch_early_return_pattern() {
                     (when (> x 8)
                       (throw 'found (list 'found x))))
                   'not-found)";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (found 9)""#]);
+    let expect = expect_test::expect![r#""OK (found 9)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -153,7 +144,8 @@ fn oracle_prop_catch_break_nested_loops() {
                         (when (= (* x y) 60)
                           (throw 'break (list x y)))))
                     'not-found))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (2 30)""#]);
+    let expect = expect_test::expect![r#""OK (2 30)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -170,10 +162,8 @@ fn oracle_prop_catch_accumulate_then_bail() {
                                    (list 'negative-found sum))
                           (setq sum (+ sum item))))
                       sum)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (negative-found 6)""#],
-    );
+    let expect = expect_test::expect![r#""OK (negative-found 6)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -193,10 +183,8 @@ fn oracle_prop_catch_throw_unwind_protect() {
                           (throw 'exit 'done))
                       (setq log (cons 'cleanup log))))
                   (nreverse log))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (body cleanup)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (body cleanup)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(body cleanup)", &o, &n);
 }
 
@@ -216,10 +204,8 @@ fn oracle_prop_catch_throw_nested_unwind() {
                                  (setq log (cons 'inner-cleanup log)))
                              (setq log (cons 'outer-cleanup log))))))
                     (list result (nreverse log))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (42 (deep inner-cleanup outer-cleanup))""#],
-    );
+    let expect = expect_test::expect![r#""OK (42 (deep inner-cleanup outer-cleanup))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -253,8 +239,6 @@ fn oracle_prop_catch_multi_tag_dispatch() {
                     (funcall process-items '(1 2 3 4 5))
                     (funcall process-items '(1 2 3 stop 4 5))
                     (funcall process-items '(1 2 fail 3 4))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((1 4 9 16 25) (1 4 9) (failed (1 4)))""#],
-    );
+    let expect = expect_test::expect![r#""OK ((1 4 9 16 25) (1 4 9) (failed (1 4)))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -16,6 +16,8 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo52_org_id_multi_uniqueness() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (error \"‘org-id-get’ expects a file-visiting buffer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -43,7 +45,7 @@ fn combo52_org_id_multi_uniqueness() {
       (let ((all-ids (plist-get (nth 0 r) :all-ids)))
         (push (list :all-non-nil (cl-every (lambda (x) (and (plist-get x :id) (stringp (plist-get x :id)))) all-ids)) r))
       (nreverse r))))"##,
-        expect_test::expect![[r#""ERR (error \"‘org-id-get’ expects a file-visiting buffer\")""#]],
+        expect,
     );
 }
 
@@ -54,6 +56,9 @@ fn combo52_org_id_multi_uniqueness() {
 #[test]
 fn combo52_checkbox_nested_dependency_cookies() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:init \"* Tasks [/]\n- [ ] Root A\n  - [X] Child A1\n  - [ ] Child A2\n- [-] Parent B [/]\n  - [X] Child B1\n  - [ ] Child B2\n    - [X] Grand B2a\n    - [ ] Grand B2b\n\") (:after-update \"* Tasks [0/2]\n- [ ] Root A\n  - [X] Child A1\n  - [ ] Child A2\n- [-] Parent B [1/2]\n  - [X] Child B1\n  - [ ] Child B2\n    - [X] Grand B2a\n    - [ ] Grand B2b\n\") (:after-a2 \"* Tasks [1/2]\n- [X] Root A\n  - [X] Child A1\n  - [X] Child A2\n- [-] Parent B [1/2]\n  - [X] Child B1\n  - [-] Child B2\n    - [X] Grand B2a\n    - [ ] Grand B2b\n\") (:after-b2b \"* Tasks [2/2]\n- [X] Root A\n  - [X] Child A1\n  - [X] Child A2\n- [X] Parent B [2/2]\n  - [X] Child B1\n  - [X] Child B2\n    - [X] Grand B2a\n    - [X] Grand B2b\n\") (:item-count 8) (:checked-count 0) (:partial-count 0))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -91,9 +96,7 @@ fn combo52_checkbox_nested_dependency_cookies() {
                 (length (org-element-map (org-element-parse-buffer) 'item
                           (lambda (i) (when (equal "-" (org-element-property :checkbox i)) i))))) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:init \"* Tasks [/]\n- [ ] Root A\n  - [X] Child A1\n  - [ ] Child A2\n- [-] Parent B [/]\n  - [X] Child B1\n  - [ ] Child B2\n    - [X] Grand B2a\n    - [ ] Grand B2b\n\") (:after-update \"* Tasks [0/2]\n- [ ] Root A\n  - [X] Child A1\n  - [ ] Child A2\n- [-] Parent B [1/2]\n  - [X] Child B1\n  - [ ] Child B2\n    - [X] Grand B2a\n    - [ ] Grand B2b\n\") (:after-a2 \"* Tasks [1/2]\n- [X] Root A\n  - [X] Child A1\n  - [X] Child A2\n- [-] Parent B [1/2]\n  - [X] Child B1\n  - [-] Child B2\n    - [X] Grand B2a\n    - [ ] Grand B2b\n\") (:after-b2b \"* Tasks [2/2]\n- [X] Root A\n  - [X] Child A1\n  - [X] Child A2\n- [X] Parent B [2/2]\n  - [X] Child B1\n  - [X] Child B2\n    - [X] Grand B2a\n    - [X] Grand B2b\n\") (:item-count 8) (:checked-count 0) (:partial-count 0))""#
-        ]],
+        expect,
     );
 }
 
@@ -104,6 +107,9 @@ fn combo52_checkbox_nested_dependency_cookies() {
 #[test]
 fn combo52_sparse_tree_narrow_widen_rematch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:match-work (\"A\" \"A1\" \"A2\" \"B\" \"B1\" \"C\")) (:narrow-match-urgent (\"B\" \"B1\")) (:match-home (\"A\" \"A2\" \"B\" \"C\")))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -130,9 +136,7 @@ fn combo52_sparse_tree_narrow_widen_rematch() {
                                     (org-element-map (org-element-parse-buffer nil t) 'headline #'identity))) r)
     (org-remove-occur-highlights)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:match-work (\"A\" \"A1\" \"A2\" \"B\" \"B1\" \"C\")) (:narrow-match-urgent (\"B\" \"B1\")) (:match-home (\"A\" \"A2\" \"B\" \"C\")))""#
-        ]],
+        expect,
     );
 }
 
@@ -143,6 +147,9 @@ fn combo52_sparse_tree_narrow_widen_rematch() {
 #[test]
 fn combo52_outline_path_demote_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:path1 (\"A\" \"A1\" \"A1a\")) (:level1 4) (:path2 (\"A1\" \"A1a\")) (:level2 4) (:path3 nil) (:level3 1))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -177,9 +184,7 @@ fn combo52_outline_path_demote_chain() {
       (push (list :path3 path3) r)
       (push (list :level3 level3) r))
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:path1 (\"A\" \"A1\" \"A1a\")) (:level1 4) (:path2 (\"A1\" \"A1a\")) (:level2 4) (:path3 nil) (:level3 1))""#
-        ]],
+        expect,
     );
 }
 
@@ -190,6 +195,7 @@ fn combo52_outline_path_demote_chain() {
 #[test]
 fn combo52_sort_multi_criteria_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (user-error \"Nothing to sort\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -223,7 +229,7 @@ fn combo52_sort_multi_criteria_chain() {
     ;; final buffer
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (user-error \"Nothing to sort\")""#]],
+        expect,
     );
 }
 
@@ -234,6 +240,9 @@ fn combo52_sort_multi_criteria_chain() {
 #[test]
 fn combo52_drawer_property_logbook_clock_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:prop-count 1) (:prop-keys (\"CATEGORY\")) (:total-drawers 1) (:logbooks 1) (:prop-drawers-now 1) (:clock-count 1) (:status-still \"active\") (:owner-still \"alice\") (:buffer \"* Task\n:PROPERTIES:\n:STATUS:   active\n:OWNER:    alice\n:END:\n:LOGBOOK:\nCLOCK: [2026-06-29 Mon 06:31]--[2026-06-29 Mon 06:31] =>  0:00\n:END:\n\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -264,9 +273,7 @@ fn combo52_drawer_property_logbook_clock_cycle() {
       ;; buffer content
       (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
       (nreverse r))))"##,
-        expect_test::expect![[
-            r#""OK ((:prop-count 1) (:prop-keys (\"CATEGORY\")) (:total-drawers 1) (:logbooks 1) (:prop-drawers-now 1) (:clock-count 1) (:status-still \"active\") (:owner-still \"alice\") (:buffer \"* Task\n:PROPERTIES:\n:STATUS:   active\n:OWNER:    alice\n:END:\n:LOGBOOK:\nCLOCK: [2026-06-29 Mon 06:31]--[2026-06-29 Mon 06:31] =>  0:00\n:END:\n\"))""#
-        ]],
+        expect,
     );
 }
 
@@ -277,6 +284,9 @@ fn combo52_drawer_property_logbook_clock_cycle() {
 #[test]
 fn combo52_internal_link_create_resolve_modify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:link-types (\"custom-id\" \"fuzzy\")) (:link-paths (\"my-sec\" \"*Target Section\")) (:link-count 2) (:after-rename-paths (\"my-sec\" \"*Target Section\")) (:after-link-fix-paths (\"renamed-sec\" \"*Target Section\")))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -308,9 +318,7 @@ fn combo52_internal_link_create_resolve_modify() {
            (links (org-element-map tree 'link #'identity)))
       (push (list :after-link-fix-paths (mapcar (lambda (l) (org-element-property :path l)) links)) r))
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:link-types (\"custom-id\" \"fuzzy\")) (:link-paths (\"my-sec\" \"*Target Section\")) (:link-count 2) (:after-rename-paths (\"my-sec\" \"*Target Section\")) (:after-link-fix-paths (\"renamed-sec\" \"*Target Section\")))""#
-        ]],
+        expect,
     );
 }
 
@@ -321,6 +329,9 @@ fn combo52_internal_link_create_resolve_modify() {
 #[test]
 fn combo52_timestamp_schedule_reschedule_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:after-sched (\"scheduled\")) (:after-resched ((\"scheduled\" (timestamp (:standard-properties [20 nil nil nil 36 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2024-04-01 Mon>\" :year-start 2024 :month-start 4 :day-start 1 :hour-start nil :minute-start nil :year-end 2024 :month-end 4 :day-end 1 :hour-end nil :minute-end nil))))) (:after-dead ((\"S\" \"D\"))) (:after-remove-sched ((nil \"D\"))) (:after-remove-dead 0) (:buffer \"* Event\n\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -360,9 +371,7 @@ fn combo52_timestamp_schedule_reschedule_remove() {
     ;; buffer state
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:after-sched (\"scheduled\")) (:after-resched ((\"scheduled\" (timestamp (:standard-properties [20 nil nil nil 36 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2024-04-01 Mon>\" :year-start 2024 :month-start 4 :day-start 1 :hour-start nil :minute-start nil :year-end 2024 :month-end 4 :day-end 1 :hour-end nil :minute-end nil))))) (:after-dead ((\"S\" \"D\"))) (:after-remove-sched ((nil \"D\"))) (:after-remove-dead 0) (:buffer \"* Event\n\"))""#
-        ]],
+        expect,
     );
 }
 
@@ -373,6 +382,8 @@ fn combo52_timestamp_schedule_reschedule_remove() {
 #[test]
 fn combo52_list_3level_indent_sort() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (error \"Cannot outdent an item without its children\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -418,7 +429,7 @@ fn combo52_list_3level_indent_sort() {
     (push (list :plain-lists (length (org-element-map (org-element-parse-buffer) 'plain-list #'identity))) r)
     (push (list :buffer (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (error \"Cannot outdent an item without its children\")""#]],
+        expect,
     );
 }
 
@@ -429,6 +440,9 @@ fn combo52_list_3level_indent_sort() {
 #[test]
 fn combo52_macro_cross_reference_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:raw-headline \"{{{full}}} Release Notes\") (:has-pkg 13) (:has-ver 36) (:has-full nil) (:no-braces nil) (:has-greeting 108) (:macro-count 4))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -456,8 +470,6 @@ fn combo52_macro_cross_reference_expansion() {
     (push (list :macro-count (length (org-element-map (org-element-parse-buffer) 'keyword
                                       (lambda (k) (when (equal "MACRO" (org-element-property :key k)) k))))) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:raw-headline \"{{{full}}} Release Notes\") (:has-pkg 13) (:has-ver 36) (:has-full nil) (:no-braces nil) (:has-greeting 108) (:macro-count 4))""#
-        ]],
+        expect,
     );
 }

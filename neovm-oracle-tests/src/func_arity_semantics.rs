@@ -29,12 +29,10 @@ fn oracle_func_arity_lambda_and_macro_arglist_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((2 . 2) (1 . 3) (0 . many) (1 . 2) (invalid-function ((lambda . bogus))) (invalid-function ((lambda (a . b) nil))) (invalid-function ((macro bogus))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((2 . 2) (1 . 3) (0 . many) (1 . 2) (invalid-function ((lambda . bogus))) (invalid-function ((lambda (a . b) nil))) (invalid-function ((macro bogus))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -65,12 +63,10 @@ fn oracle_func_arity_symbol_indirection_and_subr_dispatch() {
       (fmakunbound sym))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 . 1) (1 . 1) (1 . many) (2 . 3) (2 . 3) (2 . unevalled))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 . 1) (1 . 1) (1 . many) (2 . 3) (2 . 3) (2 . unevalled))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -93,10 +89,8 @@ fn oracle_func_arity_error_ordering_for_non_functions_and_autoloads() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((void-function (nil)) (invalid-function (42)) (invalid-function (\"not-a-function\")) (wrong-type-argument (symbolp (autoload \"missing-func-arity-file\" nil nil nil))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((void-function (nil)) (invalid-function (42)) (invalid-function (\"not-a-function\")) (wrong-type-argument (symbolp (autoload \"missing-func-arity-file\" nil nil nil))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

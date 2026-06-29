@@ -31,10 +31,8 @@ fn oracle_prop_copy_alist_deep_vs_shallow() {
                               cdr-shared
                               (cdar orig)
                               (cdar cp)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t (999 2 3) (999 2 3))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t (999 2 3) (999 2 3))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -62,10 +60,8 @@ fn oracle_prop_copy_alist_modification_independence() {
                      (mapcar #'cdr cp)
                      ;; Lengths differ
                      (list (length orig) (length cp))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((10 20 30) (400 100 200 300) (3 4))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((10 20 30) (400 100 200 300) (3 4))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -96,10 +92,8 @@ fn oracle_prop_copy_alist_nested_alist_of_alists() {
                             (cdr (assq 'name (cdr (assq 'user orig))))
                             ;; Copy user changed
                             (cdr (assq 'name (cdr (assq 'user cp)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t \"Alice\" \"Bob\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t \"Alice\" \"Bob\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -134,12 +128,10 @@ fn oracle_prop_copy_alist_merge() {
                          (cdr (assq 'b merged))
                          (cdr (assq 'e merged))
                          (cdr (assq 'a merged))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((a . 1) (b . 20) (c . 3) (d . 40) (e . 50)) ((a . 1) (b . 2) (c . 3) (d . 4)) 20 50 1)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((a . 1) (b . 20) (c . 3) (d . 40) (e . 50)) ((a . 1) (b . 2) (c . 3) (d . 4)) 20 50 1)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -170,10 +162,8 @@ fn oracle_prop_copy_alist_difference() {
                                      (nreverse only-b)
                                      (nreverse common))))))
                       (funcall diff alist-a alist-b)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (((x . 1) (w . 4)) ((v . 50)) (y z))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (((x . 1) (w . 4)) ((v . 50)) (y z))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -216,10 +206,8 @@ fn oracle_prop_copy_alist_computed_record() {
                             (cdr (assq 'perimeter r2))
                             ;; Original unchanged after scaling
                             (cdr (assq 'width r1)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (12 14 5.0 48 28 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (12 14 5.0 48 28 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -265,12 +253,10 @@ fn oracle_prop_copy_alist_schema_migration() {
                        (mapcar (lambda (r) (cdr (assq 'active r))) v2-rows)
                        ;; Scores preserved
                        (mapcar (lambda (r) (cdr (assq 'score r))) v2-rows))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"Alice\" \"Bob\" \"Carol\") (\"Alice\" \"Bob\" \"Carol\") (nil nil nil) (t t t) (95 80 88))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"Alice\" \"Bob\" \"Carol\") (\"Alice\" \"Bob\" \"Carol\") (nil nil nil) (t t t) (95 80 88))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -317,10 +303,8 @@ fn oracle_prop_copy_alist_serialization_roundtrip() {
                        (equal (cdr (assq 'scores roundtripped)) '(95 88 92))
                        (equal (cdr (assq 'active roundtripped)) t)
                        (equal (cdr (assq 'meta roundtripped)) nil))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"name=\\\"Alice\\\"\" \"age=30\" \"scores=(95 88 92)\" \"active=t\" \"meta=nil\") t t t t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"name=\\\"Alice\\\"\" \"age=30\" \"scores=(95 88 92)\" \"active=t\" \"meta=nil\") t t t t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

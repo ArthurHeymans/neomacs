@@ -46,10 +46,8 @@ fn oracle_file_remote_and_local_name_edges() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil nil nil \"/tmp/neomacs-oracle-local.txt\" nil \"/ssh:user@host:\" \"ssh\" \"user\" \"host\" \"/tmp/remote.txt\" \"/tmp/remote.txt\" #(\"/sudo:root@Matrix:\" 6 10 (tramp-default t) 11 17 (tramp-default t)) \"sudo\" \"/etc/hosts\" (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil nil nil \"/tmp/neomacs-oracle-local.txt\" nil \"/ssh:user@host:\" \"ssh\" \"user\" \"host\" \"/tmp/remote.txt\" \"/tmp/remote.txt\" #(\"/sudo:root@Matrix:\" 6 10 (tramp-default t) 11 17 (tramp-default t)) \"sudo\" \"/etc/hosts\" (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

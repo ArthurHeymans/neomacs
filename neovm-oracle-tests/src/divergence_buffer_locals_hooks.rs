@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_make_variable_buffer_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar my-perm-bl 0)
@@ -17,7 +18,7 @@ fn divergence_make_variable_buffer_local() {
       (list my-perm-bl
             (default-value 'my-perm-bl)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -25,6 +26,7 @@ fn divergence_make_variable_buffer_local() {
 fn divergence_buffer_local_which_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments mapcar 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar my-blf-test 0)
@@ -40,7 +42,7 @@ fn divergence_buffer_local_which_file() {
                     entry))
                 (buffer-local-variables))
         (assq 'my-blf-test (buffer-local-variables))))"#,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments mapcar 1)""#]],
+        expect,
     );
 }
 
@@ -48,6 +50,7 @@ fn divergence_buffer_local_which_file() {
 fn divergence_kill_all_local_variables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (0 nil 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar my-kalv-test 0)
@@ -57,7 +60,7 @@ fn divergence_kill_all_local_variables() {
   (list my-kalv-test
         (local-variable-p 'my-kalv-test)
         (default-value 'my-kalv-test)))"#,
-        expect_test::expect![[r#""OK (0 nil 0)""#]],
+        expect,
     );
 }
 
@@ -65,6 +68,7 @@ fn divergence_kill_all_local_variables() {
 fn divergence_default_value_vssetq_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (20 10 30 30)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar my-dv-vs 0)
@@ -75,7 +79,7 @@ fn divergence_default_value_vssetq_default() {
         (default-value 'my-dv-vs)
         (setq-default my-dv-vs 30)
         (default-value 'my-dv-vs)))"#,
-        expect_test::expect![[r#""OK (20 10 30 30)""#]],
+        expect,
     );
 }
 
@@ -83,6 +87,7 @@ fn divergence_default_value_vssetq_default() {
 fn divergence_set_default_to_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar my-sdn-test 0)
@@ -90,7 +95,7 @@ fn divergence_set_default_to_nil() {
   (list (default-value 'my-sdn-test)
         my-sdn-test
         (boundp 'my-sdn-test)))"#,
-        expect_test::expect![[r#""OK (nil nil t)""#]],
+        expect,
     );
 }
 
@@ -98,6 +103,7 @@ fn divergence_set_default_to_nil() {
 fn divergence_buffer_local_force() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (1 2 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar my-blf-var 0)
@@ -111,7 +117,7 @@ fn divergence_buffer_local_force() {
               (buffer-local-value 'my-blf-var buf)
               (default-value 'my-blf-var))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""OK (1 2 0)""#]],
+        expect,
     );
 }
 
@@ -119,6 +125,7 @@ fn divergence_buffer_local_force() {
 fn divergence_hook_run_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (1 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar my-hook-result nil)
@@ -126,7 +133,7 @@ fn divergence_hook_run_functions() {
   (add-hook 'my-test-hook-xyz (lambda () (push 2 my-hook-result)))
   (run-hooks 'my-test-hook-xyz)
   my-hook-result)"#,
-        expect_test::expect![[r#""OK (1 2)""#]],
+        expect,
     );
 }
 
@@ -134,6 +141,7 @@ fn divergence_hook_run_functions() {
 fn divergence_hook_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar my-hook-remove-result nil)
@@ -142,7 +150,7 @@ fn divergence_hook_remove() {
     (remove-hook 'my-test-hook-rm fn)
     (run-hooks 'my-test-hook-rm)
     my-hook-remove-result))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -150,6 +158,7 @@ fn divergence_hook_remove() {
 fn divergence_change_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'before-change-functions)
@@ -157,7 +166,7 @@ fn divergence_change_hooks() {
   (boundp 'first-change-hook)
   (listp before-change-functions)
   (listp after-change-functions))"#,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
@@ -165,12 +174,13 @@ fn divergence_change_hooks() {
 fn divergence_find_file_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'find-file-hook)
   (listp find-file-hook)
   (boundp 'kill-buffer-hook)
   (listp kill-buffer-hook))"#,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }

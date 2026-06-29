@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_file_name_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (\"/foo/bar/\" \"baz.txt\" \"/foo/bar/baz\" \"txt\" \"gz\" \"baz\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (file-name-directory \"/foo/bar/baz.txt\")
@@ -15,9 +18,7 @@ fn divergence_file_name_ops() {
   (file-name-extension \"baz.txt\")
   (file-name-extension \"baz.tar.gz\")
   (file-name-base \"/foo/bar/baz.txt\")) ",
-        expect_test::expect![[
-            r#""OK (\"/foo/bar/\" \"baz.txt\" \"/foo/bar/baz\" \"txt\" \"gz\" \"baz\")""#
-        ]],
+        expect,
     );
 }
 
@@ -25,15 +26,16 @@ fn divergence_file_name_ops() {
 fn divergence_expand_file_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (\"/tmp/foo.txt\" \"/var/foo.txt\" \"/var/foo.txt\" \"/var/log/foo.txt\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(let ((default-directory \"/tmp/\"))
   (list (expand-file-name \"foo.txt\")
         (expand-file-name \"foo.txt\" \"/var\")
         (expand-file-name \"../foo.txt\" \"/var/log/\")
         (expand-file-name \"./foo.txt\" \"/var/log/\"))) ",
-        expect_test::expect![[
-            r#""OK (\"/tmp/foo.txt\" \"/var/foo.txt\" \"/var/foo.txt\" \"/var/log/foo.txt\")""#
-        ]],
+        expect,
     );
 }
 
@@ -41,13 +43,14 @@ fn divergence_expand_file_name() {
 fn divergence_file_attributes_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (file-exists-p \"/tmp\")
   (file-directory-p \"/tmp\")
   (file-readable-p \"/tmp\")
   (file-writable-p \"/tmp\")) ",
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -55,13 +58,14 @@ fn divergence_file_attributes_check() {
 fn divergence_path_concat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (\"/foo/bar\" \"/foo/\" \"/foo\" \"/foo\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (concat (file-name-as-directory \"/foo\") \"bar\")
   (file-name-as-directory \"/foo\")
   (directory-file-name \"/foo/\")
   (directory-file-name \"/foo\")) ",
-        expect_test::expect![[r#""OK (\"/foo/bar\" \"/foo/\" \"/foo\" \"/foo\")""#]],
+        expect,
     );
 }
 
@@ -69,6 +73,7 @@ fn divergence_path_concat() {
 fn divergence_file_truename_tilde() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((h1 (expand-file-name \"~\"))
         (h2 (expand-file-name \"~/\")))
@@ -76,7 +81,7 @@ fn divergence_file_truename_tilde() {
         (string-prefix-p \"/\" h1)
         (string-prefix-p \"/\" h2)
         (> (length h1) 1))) ",
-        expect_test::expect![[r#""OK (nil t t t)""#]],
+        expect,
     );
 }
 
@@ -84,6 +89,7 @@ fn divergence_file_truename_tilde() {
 fn divergence_make_temp_files() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t \"hello\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((tmp1 (make-temp-file \"test-neovm-\")))
   (let ((exists (file-exists-p tmp1)))
@@ -95,7 +101,7 @@ fn divergence_make_temp_files() {
       (list exists
             contents
             (file-exists-p tmp1))))) ",
-        expect_test::expect![[r#""OK (t \"hello\" nil)""#]],
+        expect,
     );
 }
 
@@ -103,6 +109,7 @@ fn divergence_make_temp_files() {
 fn divergence_directory_listing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((\"a\" \"b\") 2)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((tmp (make-temp-file \"test-dir-\")))
   (delete-file tmp)
@@ -116,7 +123,7 @@ fn divergence_directory_listing() {
     (delete-directory tmp)
     (list (sort files #'string<)
           (length full)))) ",
-        expect_test::expect![[r#""OK ((\"a\" \"b\") 2)""#]],
+        expect,
     );
 }
 
@@ -124,13 +131,14 @@ fn divergence_directory_listing() {
 fn divergence_insert_file_contents() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""Hello WorldOK (11 \"Hello World\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((tmp (make-temp-file \"test-read-\")))
   (write-region \"Hello World\" nil tmp nil 'silent)
   (let ((result (insert-file-contents tmp)))
     (delete-file tmp)
     (list (cadr result) (buffer-string)))) ",
-        expect_test::expect![[r#""Hello WorldOK (11 \"Hello World\")""#]],
+        expect,
     );
 }
 
@@ -138,6 +146,7 @@ fn divergence_insert_file_contents() {
 fn divergence_write_region_append() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((\"line1\" \"line2\") 12)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((tmp (make-temp-file \"test-append-\")))
   (write-region \"line1\\n\" nil tmp nil 'silent)
@@ -148,7 +157,7 @@ fn divergence_write_region_append() {
     (delete-file tmp)
     (list (split-string contents \"\\n\" t)
           (length contents)))) ",
-        expect_test::expect![[r#""OK ((\"line1\" \"line2\") 12)""#]],
+        expect,
     );
 }
 
@@ -156,6 +165,7 @@ fn divergence_write_region_append() {
 fn divergence_file_symlink() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((tmp1 (make-temp-file \"test-link-target-\")))
   (write-region \"data\" nil tmp1 nil 'silent)
@@ -167,6 +177,6 @@ fn divergence_file_symlink() {
       (delete-file tmp2)
       (delete-file tmp1)
       result))) ",
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }

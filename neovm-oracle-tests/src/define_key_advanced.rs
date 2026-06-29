@@ -43,12 +43,10 @@ fn oracle_prop_define_key_string_sequences() {
     (keymapp (lookup-key m (kbd "C-x 4")))
     ;; Verify the intermediate prefix for C-c
     (keymapp (lookup-key m (kbd "C-c")))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (cmd-a cmd-b cmd-ret cmd-tab cmd-spc cmd-del cmd-cx-f cmd-cc-cc cmd-cx-4-f t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (cmd-a cmd-b cmd-ret cmd-tab cmd-spc cmd-del cmd-cx-f cmd-cc-cc cmd-cx-4-f t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -101,12 +99,10 @@ fn oracle_prop_define_key_vector_sequences() {
     (lookup-key m [f1 ?x])
     (lookup-key m [f1 ?y ?z])
     (keymapp (lookup-key m [f1 ?y]))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""ERR (error \"Key sequence a b starts with non-prefix key a\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Key sequence a b starts with non-prefix key a\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -145,10 +141,8 @@ fn oracle_prop_define_key_lambda_bindings() {
     ;; Call the lambda to check it works
     (funcall (lookup-key m [?a]))
     (funcall (lookup-key m [?b]) 7)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t nil nil 3 49)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t t nil nil 3 49)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -186,10 +180,9 @@ fn oracle_prop_define_key_symbol_bindings() {
     ;; Verify the symbol is exactly what we set
     (lookup-key m [?a])
     (lookup-key m (kbd "C-x C-f"))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t t t self-insert-command find-file)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (t t t t t t t t t self-insert-command find-file)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -235,12 +228,10 @@ fn oracle_prop_define_key_nil_unbind() {
         (lookup-key m [?a])
         ;; C-x prefix still exists even though C-x C-f was unbound
         (keymapp (lookup-key m (kbd "C-x")))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (cmd-a cmd-b cmd-c cmd-find cmd-save nil cmd-b nil nil cmd-save new-cmd-a t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (cmd-a cmd-b cmd-c cmd-find cmd-save nil cmd-b nil nil cmd-save new-cmd-a t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -289,12 +280,10 @@ fn oracle_prop_define_key_prefix_nested_keymaps() {
     (keymapp (lookup-key root (kbd "C-c p q")))
     ;; Too-long returns integer
     (numberp (lookup-key root [?a ?b]))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (root-a sub1-a sub2-a sub3-a t t t t t t deep-cmd t t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (root-a sub1-a sub2-a sub3-a t t t t t t deep-cmd t t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -350,12 +339,10 @@ fn oracle_prop_define_key_modifier_keys() {
     ;; Unbound modifier combos
     (lookup-key m (kbd "C-b"))
     (lookup-key m (kbd "M-b"))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (ctrl-a ctrl-z meta-a meta-z ctrl-meta-a ctrl-meta-z shift-return shift-f1 ctrl-f1 meta-f1 ctrl-shift-f2 cx-ca cc-ma mg-mg nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (ctrl-a ctrl-z meta-a meta-z ctrl-meta-a ctrl-meta-z shift-return shift-f1 ctrl-f1 meta-f1 ctrl-shift-f2 cx-ca cc-ma mg-mg nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -430,12 +417,10 @@ fn oracle_prop_define_key_complete_hierarchy() {
     (lookup-key local (kbd "C-x 3"))
     (lookup-key local (kbd "C-x b"))
     (lookup-key local (kbd "C-x k"))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (local-compile local-eval kill-compilation lint find-file local-save-and-lint keyboard-quit execute-extended-command find-definition help-command compile nil save-buffer 1 nil delete-window delete-other-windows split-window-below split-window-right switch-to-buffer kill-buffer)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (local-compile local-eval kill-compilation lint find-file local-save-and-lint keyboard-quit execute-extended-command find-definition help-command compile nil save-buffer 1 nil delete-window delete-other-windows split-window-below split-window-right switch-to-buffer kill-buffer)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -501,12 +486,10 @@ fn oracle_prop_define_key_inheritance_overrides() {
                     (lookup-key top [?f])   ;; alt-f (from alt-base)
                     (lookup-key top (kbd "C-x f")))))  ;; mid-cxf (mid's own)
           (list p1 p2-b p3-a p4))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((mid-a top-b base-c mid-d top-e mid-cxf) nil nil (nil nil nil mid-d top-e alt-f mid-cxf))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((mid-a top-b base-c mid-d top-e mid-cxf) nil nil (nil nil nil mid-d top-e alt-f mid-cxf))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -556,10 +539,8 @@ fn oracle_prop_define_key_overwrite_and_numeric() {
     (let ((count 0))
       (map-keymap (lambda (key binding) (setq count (1+ count))) m)
       (> count 0))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (third prefix-second prefix-b ctrl-a-new ctrl-b-num ctrl-z-num \"macro-string\" t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (third prefix-second prefix-b ctrl-a-new ctrl-b-num ctrl-z-num \"macro-string\" t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

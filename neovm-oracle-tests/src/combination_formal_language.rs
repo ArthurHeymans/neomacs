@@ -85,12 +85,10 @@ fn oracle_prop_formal_lang_dfa_parity() {
             (funcall 'neovm--fl-dfa-run dfa "1010"))))
     (fmakunbound 'neovm--fl-dfa-make)
     (fmakunbound 'neovm--fl-dfa-run)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t nil t t nil nil t (t even ((even 49 odd) (odd 48 odd) (odd 49 even) (even 48 even))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t nil t t nil nil t (t even ((even 49 odd) (odd 48 odd) (odd 49 even) (even 48 even))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +221,8 @@ fn oracle_prop_formal_lang_nfa_to_dfa() {
     (fmakunbound 'neovm--fl-nfa-move)
     (fmakunbound 'neovm--fl-subset-construct)
     (fmakunbound 'neovm--fl-run-dfa-table)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -362,10 +361,8 @@ fn oracle_prop_formal_lang_thompson_construction() {
     (fmakunbound 'neovm--fl-tc-eps-close)
     (fmakunbound 'neovm--fl-tc-match)
     (makunbound 'neovm--fl-tc-next)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (22 t t t t t t t nil nil nil t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (22 t t t t t t t nil nil nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -465,10 +462,9 @@ fn oracle_prop_formal_lang_cyk_parser() {
           ;; Full result for "(())"
           (funcall 'neovm--fl-cyk-parse grammar 'S "(())")))
     (fmakunbound 'neovm--fl-cyk-parse)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil nil nil nil nil nil nil (nil 0 nil) (nil 4 nil))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (nil nil nil nil nil nil nil nil (nil 0 nil) (nil 4 nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -569,10 +565,8 @@ fn oracle_prop_formal_lang_cnf_conversion() {
             (list (length long-cnf) long-cnf))))
     (fmakunbound 'neovm--fl-is-terminal)
     (fmakunbound 'neovm--fl-cnf-convert)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable long-rules)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable long-rules)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -679,12 +673,10 @@ fn oracle_prop_formal_lang_recognition() {
     (fmakunbound 'neovm--fl-recog-an-bn)
     (fmakunbound 'neovm--fl-recog-an-bn-cn)
     (fmakunbound 'neovm--fl-recog-palindrome)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t t t t t t nil nil t nil) (t t t t nil nil nil nil nil nil) (t t t nil nil nil nil nil) (t t t nil t nil t nil t t) ((t t nil t) (t t nil nil) (nil nil t nil) (nil nil nil t) (t t nil nil) (nil nil t nil)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t t t t t t nil nil t nil) (t t t t nil nil nil nil nil nil) (t t t nil nil nil nil nil) (t t t nil t nil t nil t t) ((t t nil t) (t t nil nil) (nil nil t nil) (nil nil nil t) (t t nil nil) (nil nil t nil)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -786,8 +778,6 @@ fn oracle_prop_formal_lang_first_follow_sets() {
     (fmakunbound 'neovm--fl-is-term)
     (fmakunbound 'neovm--fl-compute-first)
     (fmakunbound 'neovm--fl-first-to-alist)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable lhs)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable lhs)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

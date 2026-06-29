@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_marker_adjust_replace_match_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "mar")))
@@ -47,7 +48,7 @@ fn combo_marker_adjust_replace_match_narrow_undo() {
                 (overlay-end ov)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -55,6 +56,7 @@ fn combo_marker_adjust_replace_match_narrow_undo() {
 fn combo_marker_adjust_replace_longer_shorter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "mrl")))
@@ -97,7 +99,7 @@ fn combo_marker_adjust_replace_longer_shorter() {
                 (overlay-end ov)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -105,6 +107,7 @@ fn combo_marker_adjust_replace_longer_shorter() {
 fn combo_marker_adjust_multi_replace_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (search-failed \"baz\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "mmr")))
@@ -150,7 +153,7 @@ fn combo_marker_adjust_multi_replace_overlay() {
                 (overlay-end ov3)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (search-failed \"baz\")""#]],
+        expect,
     );
 }
 
@@ -158,6 +161,7 @@ fn combo_marker_adjust_multi_replace_overlay() {
 fn combo_marker_adjust_narrow_replace_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "mnr")))
@@ -187,7 +191,7 @@ fn combo_marker_adjust_narrow_replace_textprop() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -195,6 +199,7 @@ fn combo_marker_adjust_narrow_replace_textprop() {
 fn combo_marker_adjust_clone_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "mcu")))
@@ -228,6 +233,6 @@ fn combo_marker_adjust_clone_replace_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

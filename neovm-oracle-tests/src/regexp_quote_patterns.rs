@@ -27,12 +27,10 @@ fn oracle_prop_regexp_quote_individual_metacharacters() {
                    (longer (> (length quoted) (length ch))))
               (list ch quoted match-result longer)))
           metas))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\".\" \"\\\\.\" 0 t) (\"*\" \"\\\\*\" 0 t) (\"+\" \"\\\\+\" 0 t) (\"?\" \"\\\\?\" 0 t) (\"[\" \"\\\\[\" 0 t) (\"]\" \"]\" 0 nil) (\"^\" \"\\\\^\" 0 t) (\"$\" \"\\\\$\" 0 t) (\"\\\\\" \"\\\\\\\\\" 0 t) (\"(\" \"(\" 0 nil) (\")\" \")\" 0 nil) (\"{\" \"{\" 0 nil) (\"}\" \"}\" 0 nil) (\"|\" \"|\" 0 nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\".\" \"\\\\.\" 0 t) (\"*\" \"\\\\*\" 0 t) (\"+\" \"\\\\+\" 0 t) (\"?\" \"\\\\?\" 0 t) (\"[\" \"\\\\[\" 0 t) (\"]\" \"]\" 0 nil) (\"^\" \"\\\\^\" 0 t) (\"$\" \"\\\\$\" 0 t) (\"\\\\\" \"\\\\\\\\\" 0 t) (\"(\" \"(\" 0 nil) (\")\" \")\" 0 nil) (\"{\" \"{\" 0 nil) (\"}\" \"}\" 0 nil) (\"|\" \"|\" 0 nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -61,12 +59,10 @@ fn oracle_prop_regexp_quote_no_metacharacters() {
                     ;; Quoted version should still match the original
                     (if (string-match (regexp-quote s) s) t nil))))
           safe-strings))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"hello\" t t) (\"world\" t t) (\"abc123\" t t) (\"foobar\" t t) (\"UPPERCASE\" t t) (\"MiXeD\" t t) (\"a\" t t) (\"Z\" t t) (\"with spaces\" t t) (\"line1\nline2\" t t) (\"tab\there\" t t) (\"0123456789\" t t) (\"hyphen-ated\" t t) (\"under_scored\" t t) (\"at@sign\" t t) (\"hash#tag\" t t) (\"percent%\" t t) (\"ampersand&\" t t) (\"tilde~\" t t) (\"comma,\" t t) (\"semicolon;\" t t) (\"colon:\" t t) (\"bang!\" t t) (\"slash/\" t t) (\"equals=\" t t) (\"less<\" t t) (\"greater>\" t t) (\"quote'\" t t) (\"double\\\"\" t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"hello\" t t) (\"world\" t t) (\"abc123\" t t) (\"foobar\" t t) (\"UPPERCASE\" t t) (\"MiXeD\" t t) (\"a\" t t) (\"Z\" t t) (\"with spaces\" t t) (\"line1\nline2\" t t) (\"tab\there\" t t) (\"0123456789\" t t) (\"hyphen-ated\" t t) (\"under_scored\" t t) (\"at@sign\" t t) (\"hash#tag\" t t) (\"percent%\" t t) (\"ampersand&\" t t) (\"tilde~\" t t) (\"comma,\" t t) (\"semicolon;\" t t) (\"colon:\" t t) (\"bang!\" t t) (\"slash/\" t t) (\"equals=\" t t) (\"less<\" t t) (\"greater>\" t t) (\"quote'\" t t) (\"double\\\"\" t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -87,10 +83,8 @@ fn oracle_prop_regexp_quote_empty_string() {
   (string-match (regexp-quote "") "")
   ;; Using empty regexp-quote in concat still works
   (string-match (concat "foo" (regexp-quote "") "bar") "foobar"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"\" t 0 0 0 0)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"\" t 0 0 0 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -134,10 +128,8 @@ fn oracle_prop_regexp_quote_in_search_functions() {
     (insert "^start of line$")
     (goto-char (point-min))
     (if (looking-at (regexp-quote "^start of line$")) t nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (4 t (18 \"foo.bar\") (16 8) t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (4 t (18 \"foo.bar\") (16 8) t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -181,10 +173,9 @@ fn oracle_prop_regexp_quote_dynamic_pattern_building() {
         ;; Overlapping-position search for meta-heavy pattern
         (funcall 'neovm--rqp-find-all "??" "a??b??c"))
     (fmakunbound 'neovm--rqp-find-all)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 3 5) (1 3 4) (1 5) (1 8) (5 12 20) (1 3) nil (1 4))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((1 3 5) (1 3 4) (1 5) (1 8) (5 12 20) (1 3) nil (1 4))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -217,12 +208,10 @@ fn oracle_prop_regexp_quote_in_replace() {
     (regexp-quote "f(x) = x^2 + $c")
     "FORMULA"
     "Given f(x) = x^2 + $c, compute f(3)."))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"a!b!c!d\" \"axbxcxd\" \"Price: 100 dollars each\" \"Use <tag> and <tag>\" \"barFOObazFOOqux\" \"c:/users/docs\" \"xcaret2 + ycaret3\" \"Given FORMULA, compute f(3).\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"a!b!c!d\" \"axbxcxd\" \"Price: 100 dollars each\" \"Use <tag> and <tag>\" \"barFOObazFOOqux\" \"c:/users/docs\" \"xcaret2 + ycaret3\" \"Given FORMULA, compute f(3).\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -266,8 +255,7 @@ fn oracle_prop_regexp_quote_combined_with_anchors() {
   (let ((pat (concat (regexp-quote "[") "[0-9]+" (regexp-quote "]"))))
     (if (string-match pat "value [42] found")
         (match-string 0) nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 0 6)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 0 6)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

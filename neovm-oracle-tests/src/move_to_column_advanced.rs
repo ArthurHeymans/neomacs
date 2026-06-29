@@ -32,10 +32,8 @@ fn oracle_prop_move_to_column_force_tab_expansion() {
                           (list r1 c1 p1
                                 r2 (current-column) (point)
                                 (buffer-string))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (8 8 2 3 3 4 \"   \thello\n\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (8 8 2 3 3 4 \"   \thello\n\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -49,10 +47,8 @@ fn oracle_prop_move_to_column_force_past_eol() {
                     (let ((r (move-to-column 10 t)))
                       (list r (current-column) (point)
                             (buffer-string))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (10 10 7 \"abc\t  \ndef\n\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (10 10 7 \"abc\t  \ndef\n\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -84,7 +80,8 @@ fn oracle_prop_current_column_tab_stops() {
                       (forward-char 3) ;; skip three tabs
                       (setq results (cons (current-column) results))
                       (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (16 8 24)""#]]);
+    let expect = expect_test::expect![[r#""OK (16 8 24)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -105,7 +102,8 @@ fn oracle_prop_current_column_multibyte() {
                       (forward-char 1)
                       (setq results (cons (current-column) results))
                       (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (0 1 2)""#]]);
+    let expect = expect_test::expect![[r#""OK (0 1 2)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -132,10 +130,8 @@ fn oracle_prop_count_lines_varied_content() {
                       (count-lines (point-min) (point-max))
                       ;; Range that starts at a newline
                       (count-lines 6 10)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (6 1 3 1 6 4)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (6 1 3 1 6 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -165,10 +161,8 @@ fn oracle_prop_line_number_at_pos_with_narrowing() {
                                         (line-number-at-pos (point-max) t))))
                         (widen)
                         (list normal narrowed absolute))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3) (1 3) (2 4))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 2 3) (1 3) (2 4))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -196,10 +190,8 @@ fn oracle_prop_bol_eol_with_counts() {
                         (end-of-line n)
                         (setq results (cons (point) results)))
                       (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (9 5 1 13 17 12 8 4 16 20)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (9 5 1 13 17 12 8 4 16 20)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -242,12 +234,10 @@ fn oracle_prop_column_based_text_formatting() {
                           (forward-line 1))
                         (list (buffer-string)
                               (nreverse col-checks)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Alice\t    30\t  Engineer\nBob\t    25\t  Designer\nCarol\t    35\t  Manager\nDave\t    28\t  Analyst\n\" ((12 18) (12 18) (12 18) (12 18)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Alice\t    30\t  Engineer\nBob\t    25\t  Designer\nCarol\t    35\t  Manager\nDave\t    28\t  Analyst\n\" ((12 18) (12 18) (12 18) (12 18)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -282,8 +272,7 @@ fn oracle_prop_rectangular_region_extraction() {
                       ;; Also compute width of each extracted piece
                       (let ((widths (mapcar 'length (reverse rect))))
                         (list (nreverse rect) widths))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((\"fghij\" \"FGHIJ\" \"56789\" \"zzzzz\") (5 5 5 5))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((\"fghij\" \"FGHIJ\" \"56789\" \"zzzzz\") (5 5 5 5))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -45,7 +45,8 @@ fn oracle_prop_algo_challenge_nqueens() {
            (funcall 'neovm--nq-solve 6 (make-vector 6 -1) 0))
         (fmakunbound 'neovm--nq-safe-p)
         (fmakunbound 'neovm--nq-solve)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (2 10 4)""#]]);
+    let expect = expect_test::expect![[r#""OK (2 10 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -87,7 +88,8 @@ fn oracle_prop_algo_challenge_knapsack() {
                            (setq j (- j (aref weights (1- i)))))
                          (setq i (1- i)))
                        (list (aref (aref dp n) capacity) items))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (10 (2 4))""#]]);
+    let expect = expect_test::expect![[r#""OK (10 (2 4))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -126,10 +128,8 @@ fn oracle_prop_algo_challenge_lis() {
                            (setq seq (cons (aref arr idx) seq))
                            (setq idx (aref parent idx)))
                          (list max-len seq)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (5 (2 3 4 6 8))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (5 (2 3 4 6 8))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -191,12 +191,10 @@ fn oracle_prop_algo_challenge_balanced_parens() {
         (fmakunbound 'neovm--bp-fact)
         (fmakunbound 'neovm--bp-catalan)
         (makunbound 'neovm--bp-results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 t (\"()\")) (2 t (\"(())\" \"()()\")) (5 t (\"((()))\" \"(()())\" \"(())()\" \"()(())\" \"()()()\")) (14 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 t (\"()\")) (2 t (\"(())\" \"()()\")) (5 t (\"((()))\" \"(()())\" \"(())()\" \"()(())\" \"()()()\")) (14 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -258,12 +256,10 @@ fn oracle_prop_algo_challenge_huffman() {
         (fmakunbound 'neovm--huf-insert)
         (fmakunbound 'neovm--huf-build)
         (fmakunbound 'neovm--huf-codes)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((97 . 2) (98 . 2) (99 . 3) (100 . 3) (101 . 3) (102 . 3)) 1596)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((97 . 2) (98 . 2) (99 . 3) (100 . 3) (101 . 3) (102 . 3)) 1596)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -324,10 +320,8 @@ fn oracle_prop_algo_challenge_shortest_path() {
                                                   (symbol-name (car b)))))))
         (fmakunbound 'neovm--dj-pq-insert)
         (fmakunbound 'neovm--dj-shortest)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((A . 0) (B . 1) (C . 3) (D . 4) (E . 7))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((A . 0) (B . 1) (C . 3) (D . 4) (E . 7))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -386,5 +380,6 @@ fn oracle_prop_algo_challenge_topological_sort() {
                         (setq new-q (cons nbr new-q)))
                       (setq queue (nreverse new-q))))))))
           (nreverse result))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (A B C D E)""#]]);
+    let expect = expect_test::expect![[r#""OK (A B C D E)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

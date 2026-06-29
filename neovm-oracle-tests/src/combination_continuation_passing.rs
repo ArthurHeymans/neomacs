@@ -78,10 +78,8 @@ fn oracle_prop_cps_direct_to_cps_arithmetic() {
     (fmakunbound 'neovm--cp-div)
     (fmakunbound 'neovm--cp-mod)
     (fmakunbound 'neovm--cp-neg)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (7 30 9 -23 180 t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (7 30 9 -23 180 t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -162,10 +160,8 @@ fn oracle_prop_cps_explicit_continuations() {
     (fmakunbound 'neovm--cp-compose-k)
     (fmakunbound 'neovm--cp-pipe-k)
     (fmakunbound 'neovm--cp-apply-n)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (36 18 \"100\" \"49\" 42 25 16 15 7)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (36 18 \"100\" \"49\" 42 25 16 15 7)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -284,12 +280,10 @@ fn oracle_prop_cps_conditional_expressions() {
     (fmakunbound 'neovm--cp-lt-k)
     (fmakunbound 'neovm--cp-gt-k)
     (fmakunbound 'neovm--cp-eq-k)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"yes\" \"no\" \"zero\" \"B\" (\"A\" \"C\" \"F\" \"B\" \"D\") \"long-5\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"yes\" \"no\" \"zero\" \"B\" (\"A\" \"C\" \"F\" \"B\" \"D\") \"long-5\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -384,10 +378,9 @@ fn oracle_prop_cps_recursive_functions() {
     (fmakunbound 'neovm--cp-pow)
     (fmakunbound 'neovm--cp-sum-list)
     (fmakunbound 'neovm--cp-length)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (error \"Lisp nesting exceeds ‘max-lisp-eval-depth’\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""ERR (error \"Lisp nesting exceeds ‘max-lisp-eval-depth’\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -522,12 +515,10 @@ fn oracle_prop_cps_multiple_continuations() {
     (fmakunbound 'neovm--cp-parse-int)
     (fmakunbound 'neovm--cp-chain-2k)
     (fmakunbound 'neovm--cp-try-2k)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:ok 3) (:err \"division by zero: 10 / 0\") (:ok 5) (:err \"division by zero: 20 / 0\") (:ok 7) (:err \"not a number: abc\") (:recovered-from \"division by zero: 10 / 0\") -1 (:ok (10 20 30)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:ok 3) (:err \"division by zero: 10 / 0\") (:ok 5) (:err \"division by zero: 20 / 0\") (:ok 7) (:err \"not a number: abc\") (:recovered-from \"division by zero: 10 / 0\") -1 (:ok (10 20 30)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -660,12 +651,10 @@ fn oracle_prop_cps_trampoline_stack_safe() {
     (fmakunbound 'neovm--cp-tfib)
     (fmakunbound 'neovm--cp-tmap)
     (fmakunbound 'neovm--cp-tfilter)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (1 1 120 3628800 0 55 5050 0 1 55 (1 4 9 16 25) (2 4 6 8 10) t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (1 1 120 3628800 0 55 5050 0 1 55 (1 4 9 16 25) (2 4 6 8 10) t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -785,10 +774,8 @@ fn oracle_prop_cps_accumulator_pattern() {
     (fmakunbound 'neovm--cp-flatten1)
     (fmakunbound 'neovm--cp-group-by)
     (fmakunbound 'neovm--cp-zip)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (15 120 9 4 (5 4 3 2 1) (1 2 3 4 5 6 7 8) ((odd 1 3 5 7) (even 2 4 6 8)) ((a . 1) (b . 2) (c . 3)) ((a . 1) (b . 2)) nil \"hello new brave world\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (15 120 9 4 (5 4 3 2 1) (1 2 3 4 5 6 7 8) ((odd 1 3 5 7) (even 2 4 6 8)) ((a . 1) (b . 2) (c . 3)) ((a . 1) (b . 2)) nil \"hello new brave world\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

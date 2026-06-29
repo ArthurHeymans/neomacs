@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_marker_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""Hello WorldOK (3 8 t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"Hello World\")
@@ -19,7 +20,7 @@ fn divergence_marker_creation() {
           (markerp m1)
           (markerp m2)
           (eq (marker-buffer m1) (current-buffer))))) ",
-        expect_test::expect![[r#""Hello WorldOK (3 8 t t t)""#]],
+        expect,
     );
 }
 
@@ -27,6 +28,7 @@ fn divergence_marker_creation() {
 fn divergence_marker_insertion_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""HellXYo WorldOK (7 t \"HellXYo World\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"Hello World\")
@@ -38,7 +40,7 @@ fn divergence_marker_insertion_type() {
     (list (marker-position m)
           (marker-insertion-type m)
           (buffer-string)))) ",
-        expect_test::expect![[r#""HellXYo WorldOK (7 t \"HellXYo World\")""#]],
+        expect,
     );
 }
 
@@ -46,6 +48,7 @@ fn divergence_marker_insertion_type() {
 fn divergence_marker_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABXXCDEFGHIJOK (7 \"ABXXCDEFGHIJ\" 69)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
@@ -56,7 +59,7 @@ fn divergence_marker_tracking() {
     (list (marker-position m)
           (buffer-string)
           (char-after m)))) ",
-        expect_test::expect![[r#""ABXXCDEFGHIJOK (7 \"ABXXCDEFGHIJ\" 69)""#]],
+        expect,
     );
 }
 
@@ -64,6 +67,8 @@ fn divergence_marker_tracking() {
 fn divergence_marker_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""ABFGHIJOK (5 \"ABFGHIJ\" #<buffer  *neovm-oracle-stdout*>)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
@@ -73,7 +78,7 @@ fn divergence_marker_delete() {
     (list (marker-position m)
           (buffer-string)
           (marker-buffer m)))) ",
-        expect_test::expect![[r#""ABFGHIJOK (5 \"ABFGHIJ\" #<buffer  *neovm-oracle-stdout*>)""#]],
+        expect,
     );
 }
 
@@ -81,6 +86,7 @@ fn divergence_marker_delete() {
 fn divergence_many_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCDEFGHIJERR (void-function buffer-has-markers-at)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
@@ -92,7 +98,7 @@ fn divergence_many_markers() {
           (length markers)
           (buffer-has-markers-at 1)
           (= (car (mapcar 'marker-position markers)) 1)))) ",
-        expect_test::expect![[r#""ABCDEFGHIJERR (void-function buffer-has-markers-at)""#]],
+        expect,
     );
 }
 
@@ -100,6 +106,7 @@ fn divergence_many_markers() {
 fn divergence_point_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""XXHello WorldOK (14 3 \"XXHello World\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"Hello World\")
@@ -109,7 +116,7 @@ fn divergence_point_marker() {
     (list (marker-position pm)
           (point)
           (buffer-string)))) ",
-        expect_test::expect![[r#""XXHello WorldOK (14 3 \"XXHello World\")""#]],
+        expect,
     );
 }
 
@@ -117,6 +124,7 @@ fn divergence_point_marker() {
 fn divergence_region_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (fboundp 'region-beginning)
@@ -124,7 +132,7 @@ fn divergence_region_marker() {
   (fboundp 'use-region-p)
   (fboundp 'region-noncontiguous-p)
   (fboundp 'region-extract-function)) ",
-        expect_test::expect![[r#""OK (t t t t nil)""#]],
+        expect,
     );
 }
 
@@ -132,6 +140,7 @@ fn divergence_region_marker() {
 fn divergence_temporary_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (fboundp 'copy-marker)
@@ -139,7 +148,7 @@ fn divergence_temporary_marker() {
   (fboundp 'move-marker)
   (fboundp 'marker-buffer)
   (fboundp 'marker-position)) ",
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
@@ -147,6 +156,7 @@ fn divergence_temporary_marker() {
 fn divergence_field_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""Hello WorldOK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"Hello World\")
@@ -155,7 +165,7 @@ fn divergence_field_boundary() {
         (fboundp 'field-end)
         (fboundp 'field-string)
         (fboundp 'delete-field))) ",
-        expect_test::expect![[r#""Hello WorldOK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -163,12 +173,13 @@ fn divergence_field_boundary() {
 fn divergence_restriction_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(list
   (fboundp 'internal--char-to-point)
   (fboundp 'posnp)
   (fboundp 'posn-at-point)
   (fboundp 'posn-at-x-y)) ",
-        expect_test::expect![[r#""OK (nil t t t)""#]],
+        expect,
     );
 }

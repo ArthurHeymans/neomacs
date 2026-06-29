@@ -18,10 +18,8 @@ fn oracle_prop_vconcat_two_vectors() {
                         (vconcat [a] [b])
                         (vconcat [1] [2 3 4 5])
                         (vconcat [100 200] [300]))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ([1 2 3 4 5 6] [a b] [1 2 3 4 5] [100 200 300])""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ([1 2 3 4 5 6] [a b] [1 2 3 4 5] [100 200 300])""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -36,10 +34,8 @@ fn oracle_prop_vconcat_vector_and_list() {
                         (vconcat '(a b) [c d])
                         (vconcat [10] '(20 30 40))
                         (vconcat '(x) '(y) [z]))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ([1 2 3 4] [a b c d] [10 20 30 40] [x y z])""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ([1 2 3 4] [a b c d] [10 20 30 40] [x y z])""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -54,12 +50,10 @@ fn oracle_prop_vconcat_vector_and_string() {
                         (vconcat "hello" [33])
                         (vconcat "AB" "CD")
                         (vconcat [0] "x" [255]))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ([1 2 97 98 99] [104 101 108 108 111 33] [65 66 67 68] [0 120 255])""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ([1 2 97 98 99] [104 101 108 108 111 33] [65 66 67 68] [0 120 255])""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -74,12 +68,10 @@ fn oracle_prop_vconcat_multiple_args() {
                         (vconcat '(a) [b] '(c) [d])
                         (vconcat "A" [66] '(67) "D")
                         (vconcat [1 2] '(3 4) [5 6] '(7 8) [9 10]))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ([1 2 3 4 5] [a b c d] [65 66 67 68] [1 2 3 4 5 6 7 8 9 10])""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ([1 2 3 4 5] [a b c d] [65 66 67 68] [1 2 3 4 5 6 7 8 9 10])""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -96,10 +88,8 @@ fn oracle_prop_vconcat_empty_args() {
                         (vconcat [] [1 2] [])
                         (vconcat '() [3 4] '())
                         (vconcat "" [5]))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ([] [] [] [1 2] [3 4] [5])""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ([] [] [] [1 2] [3 4] [5])""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -115,10 +105,8 @@ fn oracle_prop_vconcat_nil_args() {
                         (vconcat nil [1 2 3])
                         (vconcat [4 5] nil [6])
                         (vconcat nil nil nil))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ([] [] [1 2 3] [4 5 6] [])""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ([] [] [1 2 3] [4 5 6] [])""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -155,10 +143,9 @@ fn oracle_prop_vconcat_matrix_build() {
                             (nreverse diag)
                             off-diag-sum
                             (length matrix))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ([1 0 0 0 0 2 0 0 0 0 3 0 0 0 0 4] (1 2 3 4) 0 16)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ([1 0 0 0 0 2 0 0 0 0 3 0 0 0 0 4] (1 2 3 4) 0 16)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -186,10 +173,8 @@ fn oracle_prop_vconcat_flatten_chunks() {
                               sum
                               ;; Verify sum is 1+2+...+10 = 55
                               (= sum 55)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ([1 2 3 4 5 6 7 8 9 10] 10 t 55 t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ([1 2 3 4 5 6 7 8 9 10] 10 t 55 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -221,8 +206,6 @@ fn oracle_prop_vconcat_interleave() {
                      (funcall interleave [p] [q r s])
                      (funcall interleave [] [a b])
                      (funcall interleave [] [])))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ([1 a 2 b 3 c] [1 x 2 y 3 4] [p q r s] [a b] [])""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ([1 a 2 b 3 c] [1 x 2 y 3 4] [p q r s] [a b] [])""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

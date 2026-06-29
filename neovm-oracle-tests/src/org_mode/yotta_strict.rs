@@ -10,6 +10,9 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn yotta_all_fill_element_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r##""OK (#(\"| a |\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table-row)) \"some \\\\\\\\\nlong text\" \"A B\" \"- A B\" \"  # A B\" \"#+BEGIN_COMMENT\nSome text\n#+END_COMMENT\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -33,9 +36,7 @@ fn yotta_all_fill_element_combinations() {
      ;; Comment block fill.
      (with-temp-buffer (org-mode) (insert "#+BEGIN_COMMENT\nSome\ntext\n#+END_COMMENT")
        (goto-char (point-min)) (forward-line) (let ((fill-column 20)) (org-fill-element)) (buffer-string)))))"##,
-        expect_test::expect![[
-            r##""OK (#(\"| a |\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table-row)) \"some \\\\\\\\\nlong text\" \"A B\" \"- A B\" \"  # A B\" \"#+BEGIN_COMMENT\nSome text\n#+END_COMMENT\")""##
-        ]],
+        expect,
     );
 }
 
@@ -46,6 +47,9 @@ fn yotta_all_fill_element_combinations() {
 #[test]
 fn yotta_all_indent_line_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (0 0 2 0 t \"* H\n:PROPERTIES:\n:key:      value\n:END:\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -71,9 +75,7 @@ fn yotta_all_indent_line_combinations() {
      (with-temp-buffer (org-mode) (insert "* H\n:PROPERTIES:\n:key: value\n:END:")
        (goto-char (point-min)) (forward-line 2)
        (let ((org-property-format "%-10s %s")) (org-indent-line)) (buffer-string)))))"##,
-        expect_test::expect![[
-            r#""OK (0 0 2 0 t \"* H\n:PROPERTIES:\n:key:      value\n:END:\")""#
-        ]],
+        expect,
     );
 }
 
@@ -84,6 +86,9 @@ fn yotta_all_indent_line_combinations() {
 #[test]
 fn yotta_all_return_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"Para\n graph\" \"  Para\n  graph\" t \"* H :tag:\n\" \"* TODO H :tag:\n\" \"\n* h\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -107,9 +112,7 @@ fn yotta_all_return_combinations() {
      ;; At bol of headline.
      (with-temp-buffer (org-mode) (insert "* h")
        (goto-char (point-min)) (org-return) (buffer-string)))))"##,
-        expect_test::expect![[
-            r#""OK (\"Para\n graph\" \"  Para\n  graph\" t \"* H :tag:\n\" \"* TODO H :tag:\n\" \"\n* h\")""#
-        ]],
+        expect,
     );
 }
 
@@ -120,6 +123,9 @@ fn yotta_all_return_combinations() {
 #[test]
 fn yotta_all_meta_return_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"* a\" \"- \n- a\" #(\"|   |\n| a |\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table-row) 6 7 (face org-table) 7 8 (face org-table rear-nonsticky t display (space :relative-width 1)) 8 9 (face org-table) 9 10 (face org-table display (space :relative-width 1.001)) 10 11 (face org-table) 11 12 (face org-table-row)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -134,9 +140,7 @@ fn yotta_all_meta_return_combinations() {
      ;; In table: insert row above.
      (with-temp-buffer (org-mode) (insert "| a |")
        (goto-char (point-min)) (forward-char 2) (org-meta-return) (buffer-string)))))"##,
-        expect_test::expect![[
-            r#""OK (\"* a\" \"- \n- a\" #(\"|   |\n| a |\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table-row) 6 7 (face org-table) 7 8 (face org-table rear-nonsticky t display (space :relative-width 1)) 8 9 (face org-table) 9 10 (face org-table display (space :relative-width 1.001)) 10 11 (face org-table) 11 12 (face org-table-row)))""#
-        ]],
+        expect,
     );
 }
 
@@ -147,6 +151,7 @@ fn yotta_all_meta_return_combinations() {
 #[test]
 fn yotta_all_entry_blocked_p_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -174,7 +179,7 @@ fn yotta_all_entry_blocked_p_combinations() {
      (with-temp-buffer (org-mode)
        (insert "* H\n:PROPERTIES:\n:ORDERED: t\n:END:\n** TODO one\n** DONE two")
        (goto-char (point-min)) (org-entry-blocked-p)))))"##,
-        expect_test::expect![[r#""OK (t nil nil nil nil nil)""#]],
+        expect,
     );
 }
 
@@ -185,6 +190,9 @@ fn yotta_all_entry_blocked_p_combinations() {
 #[test]
 fn yotta_all_find_olp_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (#<marker in no buffer> #<marker in no buffer> #<marker in no buffer> #<marker in no buffer> #<marker in no buffer> #<marker in no buffer> #<marker in no buffer>)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -200,9 +208,7 @@ fn yotta_all_find_olp_combinations() {
        (org-find-olp '("Headline" "headline6") t)
        (org-find-olp '("Headline" "headline7") t)
        (org-find-olp '("Headline" "headline8") t)))))"##,
-        expect_test::expect![[
-            r#""OK (#<marker in no buffer> #<marker in no buffer> #<marker in no buffer> #<marker in no buffer> #<marker in no buffer> #<marker in no buffer> #<marker in no buffer>)""#
-        ]],
+        expect,
     );
 }
 
@@ -213,6 +219,7 @@ fn yotta_all_find_olp_combinations() {
 #[test]
 fn yotta_all_map_entries_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((1 11) (1) (6) (11) (1) (1) (23) (1 12) (22))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -248,7 +255,7 @@ fn yotta_all_map_entries_combinations() {
      ;; And criteria.
      (with-temp-buffer (org-mode) (insert "* H1 :yes:\n* H2 :no:\n* H3 :yes:no:")
        (goto-char (point-min)) (let (org-odd-levels-only) (org-map-entries #'point "yes&no"))))))"##,
-        expect_test::expect![[r#""OK ((1 11) (1) (6) (11) (1) (1) (23) (1 12) (22))""#]],
+        expect,
     );
 }
 
@@ -259,6 +266,9 @@ fn yotta_all_map_entries_combinations() {
 #[test]
 fn yotta_all_edit_headline_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"* B\" \"* \" \"* A\" \"* TODO B\" \"* [#A] B\" \"* TODO [#A] B\" \"* B :tag:\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -285,9 +295,7 @@ fn yotta_all_edit_headline_combinations() {
      ;; With tags.
      (with-temp-buffer (org-mode) (insert "* A :tag:")
        (goto-char (point-min)) (let ((org-tags-column 4)) (org-edit-headline "B")) (buffer-string)))))"##,
-        expect_test::expect![[
-            r#""OK (\"* B\" \"* \" \"* A\" \"* TODO B\" \"* [#A] B\" \"* TODO [#A] B\" \"* B :tag:\")""#
-        ]],
+        expect,
     );
 }
 
@@ -298,6 +306,9 @@ fn yotta_all_edit_headline_combinations() {
 #[test]
 fn yotta_all_insert_heading_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"* \" \"* P\" \"* \n* H\" \"** H\nP\n** \" \"\n* \n\n* H1\" \"* \n* \")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -321,9 +332,7 @@ fn yotta_all_insert_heading_combinations() {
      ;; Corner case: empty headline.
      (with-temp-buffer (org-mode) (insert "* ")
        (goto-char (point-min)) (org-insert-heading) (buffer-string)))))"##,
-        expect_test::expect![[
-            r#""OK (\"* \" \"* P\" \"* \n* H\" \"** H\nP\n** \" \"\n* \n\n* H1\" \"* \n* \")""#
-        ]],
+        expect,
     );
 }
 
@@ -334,6 +343,7 @@ fn yotta_all_insert_heading_combinations() {
 #[test]
 fn yotta_all_kill_line_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"\" \"ab\" \"\n123\" \"* A :tag:\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -352,7 +362,7 @@ fn yotta_all_kill_line_combinations() {
      (with-temp-buffer (org-mode) (insert "* AB :tag:")
        (goto-char (point-min)) (forward-char 3)
        (let ((org-special-ctrl-k t) (org-tags-column 0)) (org-kill-line)) (buffer-string)))))"##,
-        expect_test::expect![[r#""OK (\"\" \"ab\" \"\n123\" \"* A :tag:\")""#]],
+        expect,
     );
 }
 
@@ -363,6 +373,9 @@ fn yotta_all_kill_line_combinations() {
 #[test]
 fn yotta_all_sort_entries_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"\n* abc\n* def\n* xyz\n\" \"\n* xyz\n* def\n* abc\n\" \"\n* 1\n* 2\n* 10\n\" \"\n* [#A] h2\n* [#B] h3\n* [#C] h1\n\" \"\n* [#C] h1\n* [#B] h3\n* [#A] h2\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -383,9 +396,7 @@ fn yotta_all_sort_entries_combinations() {
      ;; Sort by priority descending.
      (with-temp-buffer (org-mode) (insert "\n* [#C] h1\n* [#A] h2\n* [#B] h3\n")
        (goto-char (point-min)) (org-sort-entries nil ?P) (buffer-string)))))"##,
-        expect_test::expect![[
-            r#""OK (\"\n* abc\n* def\n* xyz\n\" \"\n* xyz\n* def\n* abc\n\" \"\n* 1\n* 2\n* 10\n\" \"\n* [#A] h2\n* [#B] h3\n* [#C] h1\n\" \"\n* [#C] h1\n* [#B] h3\n* [#A] h2\n\")""#
-        ]],
+        expect,
     );
 }
 
@@ -396,6 +407,7 @@ fn yotta_all_sort_entries_combinations() {
 #[test]
 fn yotta_all_mark_element_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((t t) (t t))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -408,7 +420,7 @@ fn yotta_all_mark_element_combinations() {
      (with-temp-buffer (org-mode) (insert "P1\n\nParagraph\n\nP2")
        (goto-char (point-min)) (forward-line 2) (org-mark-element)
        (list (looking-at "Paragraph") (org-with-point-at (mark) (looking-at "P2")))))))"##,
-        expect_test::expect![[r#""OK ((t t) (t t))""#]],
+        expect,
     );
 }
 
@@ -419,6 +431,7 @@ fn yotta_all_mark_element_combinations() {
 #[test]
 fn yotta_all_mark_subtree_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((12 32) (1 32))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -434,7 +447,7 @@ fn yotta_all_mark_subtree_combinations() {
        (insert "* Headline\n** Sub-headline\nBody")
        (goto-char (point-min)) (forward-line 2) (org-mark-subtree 1)
        (list (region-beginning) (region-end))))))"##,
-        expect_test::expect![[r#""OK ((12 32) (1 32))""#]],
+        expect,
     );
 }
 
@@ -445,6 +458,8 @@ fn yotta_all_mark_subtree_combinations() {
 #[test]
 fn yotta_all_collect_keywords_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (((\"TITLE\" \"My Title\") (\"AUTHOR\" \"Me\")) nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -458,7 +473,7 @@ fn yotta_all_collect_keywords_combinations() {
      (with-temp-buffer (org-mode)
        (insert "#+begin_example\n#+foo: bar\n#+end_example")
        (goto-char (point-min)) (org-collect-keywords '("FOO"))))))"##,
-        expect_test::expect![[r#""OK (((\"TITLE\" \"My Title\") (\"AUTHOR\" \"Me\")) nil)""#]],
+        expect,
     );
 }
 
@@ -469,6 +484,9 @@ fn yotta_all_collect_keywords_combinations() {
 #[test]
 fn yotta_all_shiftright_heading_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (#(\"* TODO a1\n** a2\n* DONE b1\n\" 0 9 (org-todo-head \"TODO\")) #(\"* TODO a1\n** a2\n* b1\n\" 0 9 (org-todo-head \"TODO\") 16 20 (org-todo-head nil)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -485,9 +503,7 @@ fn yotta_all_shiftright_heading_combinations() {
          (transient-mark-mode 1) (push-mark (point) t t)
          (search-forward "* DONE b1") (org-shiftright))
        (buffer-string)))))"##,
-        expect_test::expect![[
-            r#""OK (#(\"* TODO a1\n** a2\n* DONE b1\n\" 0 9 (org-todo-head \"TODO\")) #(\"* TODO a1\n** a2\n* b1\n\" 0 9 (org-todo-head \"TODO\") 16 20 (org-todo-head nil)))""#
-        ]],
+        expect,
     );
 }
 
@@ -498,6 +514,7 @@ fn yotta_all_shiftright_heading_combinations() {
 #[test]
 fn yotta_all_beginning_of_line_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -519,7 +536,7 @@ fn yotta_all_beginning_of_line_combinations() {
        (let ((org-special-ctrl-a/e t))
          (list (progn (org-beginning-of-line) (looking-at-p "Item"))
                (progn (org-beginning-of-line) (bolp)))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -530,6 +547,7 @@ fn yotta_all_beginning_of_line_combinations() {
 #[test]
 fn yotta_all_end_of_line_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -544,7 +562,7 @@ fn yotta_all_end_of_line_combinations() {
        (let ((org-special-ctrl-a/e t))
          (list (progn (org-end-of-line) (looking-back "Headline" nil))
                (progn (org-end-of-line) (eolp)))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -555,6 +573,7 @@ fn yotta_all_end_of_line_combinations() {
 #[test]
 fn yotta_all_at_property_p_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -564,7 +583,7 @@ fn yotta_all_at_property_p_combinations() {
        (goto-char (point-min)) (forward-line 2) (org-at-property-p))
      (with-temp-buffer (org-mode) (insert ":PROPERTIES:\n:PROP: t\n:END:")
        (goto-char (point-min)) (forward-line 1) (org-at-property-p)))))"##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
@@ -575,6 +594,7 @@ fn yotta_all_at_property_p_combinations() {
 #[test]
 fn yotta_all_at_property_drawer_p_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -589,7 +609,7 @@ fn yotta_all_at_property_drawer_p_combinations() {
      ;; Incomplete drawer.
      (with-temp-buffer (org-mode) (insert ":PROPERTIES:\n:PROP: t")
        (goto-char (point-min)) (forward-line 1) (org-at-property-drawer-p)))))"##,
-        expect_test::expect![[r#""OK (t nil nil)""#]],
+        expect,
     );
 }
 
@@ -600,6 +620,8 @@ fn yotta_all_at_property_drawer_p_combinations() {
 #[test]
 fn yotta_all_get_property_block_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((14 . 14) (14 . 23) \"* H\n:PROPERTIES:\n:END:\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -616,7 +638,7 @@ fn yotta_all_get_property_block_combinations() {
        (goto-char (point-min))
        (let ((org-adapt-indentation nil)) (org-get-property-block nil 'force))
        (buffer-string)))))"##,
-        expect_test::expect![[r#""OK ((14 . 14) (14 . 23) \"* H\n:PROPERTIES:\n:END:\n\")""#]],
+        expect,
     );
 }
 
@@ -627,6 +649,9 @@ fn yotta_all_get_property_block_combinations() {
 #[test]
 fn yotta_all_insert_property_drawer_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\":PROPERTIES:\n:END:\n\" \"* H\n:PROPERTIES:\n:END:\nParagraph\" \"* H\nDEADLINE: <2014-03-04 tue.>\n:PROPERTIES:\n:END:\nParagraph\" \"* H\n  :PROPERTIES:\n  :END:\nParagraph\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -648,8 +673,6 @@ fn yotta_all_insert_property_drawer_combinations() {
      (with-temp-buffer (org-mode) (insert "* H\nParagraph")
        (goto-char (point-min))
        (let ((org-adapt-indentation t)) (org-insert-property-drawer)) (buffer-string)))))"##,
-        expect_test::expect![[
-            r#""OK (\":PROPERTIES:\n:END:\n\" \"* H\n:PROPERTIES:\n:END:\nParagraph\" \"* H\nDEADLINE: <2014-03-04 tue.>\n:PROPERTIES:\n:END:\nParagraph\" \"* H\n  :PROPERTIES:\n  :END:\nParagraph\")""#
-        ]],
+        expect,
     );
 }

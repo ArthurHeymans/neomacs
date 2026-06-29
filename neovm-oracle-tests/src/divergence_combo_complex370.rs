@@ -8,6 +8,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx370_read_reader_macros_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:err . invalid-read-syntax) (:err . invalid-read-syntax) skipped (a . b))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (car (read-from-string "#.(+ 1 2)")) (error (cons :err (car e))))
@@ -15,15 +18,15 @@ fn div_cx370_read_reader_macros_all() {
       (condition-case e (car (read-from-string "#_skipped actual-value")) (error (cons :err (car e))))
       (condition-case e (car (read-from-string "#1=(a . b) #1#")) (error (cons :err (car e)))))
 "##,
-        expect_test::expect![[
-            r#""OK ((:err . invalid-read-syntax) (:err . invalid-read-syntax) skipped (a . b))""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx370_print_circle_deeply_shared_and_circular() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (\"(#1=(1 2 3) #1# #1#)\" \"((1 2 3) (1 2 3) (1 2 3))\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((inner (list 1 2 3))
@@ -32,13 +35,14 @@ fn div_cx370_print_circle_deeply_shared_and_circular() {
         (let ((print-circle nil))
           (condition-case e (prin1-to-string shared) (error (car e))))))
 "##,
-        expect_test::expect![[r#""OK (\"(#1=(1 2 3) #1# #1#)\" \"((1 2 3) (1 2 3) (1 2 3))\")""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx370_print_circle_circular_list_print_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r##""OK (\"#1=(1 2 3 . #1#)\" \"(1 2 3 1 2 . #2)\")""##]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((circular (list 1 2 3)))
@@ -47,13 +51,14 @@ fn div_cx370_print_circle_circular_list_print_round_trip() {
         (let ((print-circle nil))
           (condition-case e (prin1-to-string circular) (error (car e))))))
 "##,
-        expect_test::expect![[r##""OK (\"#1=(1 2 3 . #1#)\" \"(1 2 3 1 2 . #2)\")""##]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx370_print_gensym_uninterned_in_shared() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r##""OK (\"G-0\" \"#:G-0\" \"G-0\" \"(#1=#:G-0 #1#)\")""##]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((gs (gensym "G-")))
@@ -63,13 +68,16 @@ fn div_cx370_print_gensym_uninterned_in_shared() {
         (let ((print-gensym t) (print-circle t))
           (prin1-to-string (list gs gs)))))
 "##,
-        expect_test::expect![[r##""OK (\"G-0\" \"#:G-0\" \"G-0\" \"(#1=#:G-0 #1#)\")""##]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx370_print_length_and_level_combined() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"((...) (1 2 3 ...))\" \"...\" \"(((((\\\"deep\\\")))) (1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50))\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((deep '(((("deep")))))
@@ -81,15 +89,14 @@ fn div_cx370_print_length_and_level_combined() {
         (let ((print-length nil) (print-level nil))
           (prin1-to-string (list deep long)))))
 "##,
-        expect_test::expect![[
-            r#""OK (\"((...) (1 2 3 ...))\" \"...\" \"(((((\\\"deep\\\")))) (1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50))\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx370_read_circle_shared_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"(#1=(1 2 3) #1#)\" ((1 2 3) (1 2 3)) t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((shared (list 1 2 3))
@@ -100,13 +107,14 @@ fn div_cx370_read_circle_shared_round_trip() {
         (car read-with)
         (eq (car (car read-with)) (cadr (car read-with)))))
 "##,
-        expect_test::expect![[r#""OK (\"(#1=(1 2 3) #1#)\" ((1 2 3) (1 2 3)) t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx370_prin1_vs_princ_with_strings_and_structures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function princ-to-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "with \"quotes\" and \\ backslash")
@@ -118,13 +126,16 @@ fn div_cx370_prin1_vs_princ_with_strings_and_structures() {
         (length (prin1-to-string s))
         (length (princ-to-string s))))
 "##,
-        expect_test::expect![[r#""ERR (void-function princ-to-string)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx370_pp_to_string_with_deep_indent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (t nil \"(:config (:option-a \\\"value\\\" :option-b (:nested-a 1 :nested-b 2))\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data '(:config
@@ -138,15 +149,16 @@ fn div_cx370_pp_to_string_with_deep_indent() {
           (> (length (split-string pp-str "\n")) 3)
           (car (split-string pp-str "\n")))))
 "##,
-        expect_test::expect![[
-            r#""OK (t nil \"(:config (:option-a \\\"value\\\" :option-b (:nested-a 1 :nested-b 2))\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx370_read_special_syntaxes_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r##""OK ((\"[1 2 3]\" [1 2 3] vector) (\"#(1 2 3)\" :err invalid-read-syntax) (\"#s(record a b c)\" #s(record a b c) record) (\"?A\" 65 integer) (\"#x10\" 16 integer) (\"#o17\" 15 integer) (\"#b1010\" 10 integer) (\"1.5\" 1.5 float) (\"1/2\" 1/2 symbol) (\"1000000000000000000000\" 1000000000000000000000 integer))""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (s)
@@ -165,15 +177,14 @@ fn div_cx370_read_special_syntaxes_matrix() {
           "1/2"
           "1000000000000000000000"))
 "##,
-        expect_test::expect![[
-            r##""OK ((\"[1 2 3]\" [1 2 3] vector) (\"#(1 2 3)\" :err invalid-read-syntax) (\"#s(record a b c)\" #s(record a b c) record) (\"?A\" 65 integer) (\"#x10\" 16 integer) (\"#o17\" 15 integer) (\"#b1010\" 10 integer) (\"1.5\" 1.5 float) (\"1/2\" 1/2 symbol) (\"1000000000000000000000\" 1000000000000000000000 integer))""##
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx370_print_read_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((shared (list 1 2 3))
@@ -200,6 +211,6 @@ fn div_cx370_print_read_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     )
 }

@@ -85,10 +85,8 @@ fn oracle_backup_file_name_default_and_directory_alist_edges() {
       (ignore-errors (delete-directory root t)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"sub/plain.txt~\" \"sub/plain.txt.bak\" (\"sub/backups/plain.txt~\" t) (\"abs-backups/<root>!sub!bang!!file.txt~\" t t t) (nil 9 12 nil) (wrong-type-argument (stringp 42)) (wrong-number-of-arguments ((1 . 1) 0)) (wrong-number-of-arguments ((1 . 1) 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"sub/plain.txt~\" \"sub/plain.txt.bak\" (\"sub/backups/plain.txt~\" t) (\"abs-backups/<root>!sub!bang!!file.txt~\" t t t) (nil 9 12 nil) (wrong-type-argument (stringp 42)) (wrong-number-of-arguments ((1 . 1) 0)) (wrong-number-of-arguments ((1 . 1) 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

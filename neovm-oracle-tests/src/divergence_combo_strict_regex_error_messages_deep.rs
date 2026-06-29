@@ -9,6 +9,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_r4_malformed_regex_error_messages_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (nil \"Unmatched [ or [^\" \"Invalid content of \\\\{\\\\}\" nil nil nil \"Unmatched [ or [^\")""#
+    ]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK (nil "Unmatched [ or [^" "Invalid content of \\{\\}" nil nil nil "Unmatched [ or [^")
     // Neomacs:   OK (nil "Unmatched [ or [^" nil nil nil nil "Unmatched [ or [^]")
@@ -27,15 +30,16 @@ fn div_r4_malformed_regex_error_messages_deep() {
       (condition-case err (string-match "\\+" "text") (invalid-regexp (cadr err)) (error 'other))
       (condition-case err (string-match "[^]" "text") (invalid-regexp (cadr err)) (error 'other)))
 "##,
-        expect_test::expect![[
-            r#""OK (nil \"Unmatched [ or [^\" \"Invalid content of \\\\{\\\\}\" nil nil nil \"Unmatched [ or [^\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_r4_c_level_error_messages() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (other (fixnump nil) (fixnump nil) (characterp nil) (wholenump -1))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case err (format "%d" "x") (wrong-type-argument (cdr err)) (error 'other))
@@ -44,8 +48,6 @@ fn div_r4_c_level_error_messages() {
       (condition-case err (char-to-string nil) (wrong-type-argument (cdr err)) (error 'other))
       (condition-case err (make-string -1 ?x) (wrong-type-argument (cdr err)) (error 'other)))
 "##,
-        expect_test::expect![[
-            r#""OK (other (fixnump nil) (fixnump nil) (characterp nil) (wholenump -1))""#
-        ]],
+        expect,
     );
 }

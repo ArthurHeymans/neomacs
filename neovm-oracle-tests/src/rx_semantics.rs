@@ -22,12 +22,10 @@ fn oracle_prop_rx_to_string_core_forms() {
    (rx-to-string '(seq (syntax word) (not (syntax whitespace))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"\\\\(?:\\\\`\\\\(?:cat\\\\|dog\\\\)[[:digit:]]+\\\\'\\\\)\" \"\\\\(?:\\\\_<[_[:word:]-]+\\\\_>\\\\)\" \"\\\\(?:\\\\(?2:[[:alpha:]]+\\\\):\\\\2\\\\)\" \"\\\\(?:[^a-c][^z-a]*?\\\\)\" \"\\\\(?:\\\\w\\\\S-\\\\)\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"\\\\(?:\\\\`\\\\(?:cat\\\\|dog\\\\)[[:digit:]]+\\\\'\\\\)\" \"\\\\(?:\\\\_<[_[:word:]-]+\\\\_>\\\\)\" \"\\\\(?:\\\\(?2:[[:alpha:]]+\\\\):\\\\2\\\\)\" \"\\\\(?:[^a-c][^z-a]*?\\\\)\" \"\\\\(?:\\\\w\\\\S-\\\\)\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -46,12 +44,10 @@ fn oracle_prop_rx_macro_expansion_and_match_behavior() {
      (string-match re "abc-"))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"\\\\`\\\\([[:alpha:]]+\\\\)-\\\\([[:digit:]]+\\\\)\\\\'\" 0 \"abc\" \"123\" nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"\\\\`\\\\([[:alpha:]]+\\\\)-\\\\([[:digit:]]+\\\\)\\\\'\" 0 \"abc\" \"123\" nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -73,10 +69,9 @@ fn oracle_prop_rx_let_and_rx_let_eval_definitions() {
        (rx-to-string 'runtime-chars)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (error \"Cannot redefine built-in rx name ‘hex’\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""ERR (error \"Cannot redefine built-in rx name ‘hex’\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -107,12 +102,10 @@ fn oracle_prop_rx_let_rest_and_binding_error_contracts() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"a\\\\.b\\\\(?:[0-9]+\\\\)\" (error \"rx ‘literal’ form with non-string argument\") (\"\\\\<[[:alpha:]]+-[[:digit:]]+\\\\>\" \"{\\\\<x\\\\>}\") (error \"Cannot redefine built-in rx name ‘any’\") (wrong-type-argument listp))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"a\\\\.b\\\\(?:[0-9]+\\\\)\" (error \"rx ‘literal’ form with non-string argument\") (\"\\\\<[[:alpha:]]+-[[:digit:]]+\\\\>\" \"{\\\\<x\\\\>}\") (error \"Cannot redefine built-in rx name ‘any’\") (wrong-type-argument listp))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -136,10 +129,8 @@ fn oracle_prop_rx_define_and_error_signaling() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"\\\\(?:\\\\<[[:word:]]+\\\\>\\\\)\" \"\\\\(?:<h1>\\\\)\" \"\\\\<[[:word:]]+\\\\>:<h1>\" (error \"Expanding rx def ‘oracle-rx-tag’: too few arguments (got 0, need 1)\") (error \"Unknown rx form ‘unknown-rx-form’\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"\\\\(?:\\\\<[[:word:]]+\\\\>\\\\)\" \"\\\\(?:<h1>\\\\)\" \"\\\\<[[:word:]]+\\\\>:<h1>\" (error \"Expanding rx def ‘oracle-rx-tag’: too few arguments (got 0, need 1)\") (error \"Unknown rx form ‘unknown-rx-form’\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

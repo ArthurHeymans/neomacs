@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_extract_rectangle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass rect-extract ()
@@ -54,7 +55,7 @@ fn combo_eieio_extract_rectangle() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -62,6 +63,7 @@ fn combo_eieio_extract_rectangle() {
 fn combo_eieio_insert_rectangle_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 21 27)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass rect-insert-snap ()
@@ -111,7 +113,7 @@ fn combo_eieio_insert_rectangle_with_markers() {
                 (marker-position m1) (marker-position m2)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 21 27)""#]],
+        expect,
     );
 }
 
@@ -119,6 +121,7 @@ fn combo_eieio_insert_rectangle_with_markers() {
 fn combo_eieio_delete_rectangle_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass rect-del-snap ()
@@ -171,7 +174,7 @@ fn combo_eieio_delete_rectangle_overlay() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -179,6 +182,7 @@ fn combo_eieio_delete_rectangle_overlay() {
 fn combo_eieio_rect_narrow_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass rect-narrow-snap ()
@@ -230,7 +234,7 @@ fn combo_eieio_rect_narrow_interaction() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -238,6 +242,7 @@ fn combo_eieio_rect_narrow_interaction() {
 fn combo_eieio_rect_kill_yank_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass rect-kill-snap ()
@@ -295,6 +300,6 @@ fn combo_eieio_rect_kill_yank_with_props() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

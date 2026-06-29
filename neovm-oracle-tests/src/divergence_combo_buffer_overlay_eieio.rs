@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_eieio_buffer_undo_with_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-ebut-xxx ()
@@ -56,7 +57,7 @@ fn divergence_eieio_buffer_undo_with_tracking() {
               (eq (nth 4 state-after) widget)
               (eq (nth 5 state-after) t)
               (= (nth 1 state-after) 1)))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -64,6 +65,8 @@ fn divergence_eieio_buffer_undo_with_tracking() {
 fn divergence_overlay_textprop_advice_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""AAA-XXYYY-CCC-DDD-EEEERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAA-BBB-CCC-DDD-EEE")
@@ -110,7 +113,7 @@ fn divergence_overlay_textprop_advice_chain() {
             (get-text-property 9 'group) (eq (get-text-property 9 'group) 'c)
             (get-text-property 13 'group) (eq (get-text-property 13 'group) 'd)
             (get-text-property 17 'group) (eq (get-text-property 17 'group) 'e))))) "#,
-        expect_test::expect![[r#""AAA-XXYYY-CCC-DDD-EEEERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -118,6 +121,7 @@ fn divergence_overlay_textprop_advice_chain() {
 fn divergence_multi_buffer_overlay_sync() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let* ((buf1 (generate-new-buffer " test-mbos1-xxx"))
@@ -170,7 +174,7 @@ fn divergence_multi_buffer_overlay_sync() {
               (= m2-after 1)
               (overlay-get ov1 'source) (eq (overlay-get ov1 'source) 'buf1)
               (overlay-get ov2 'source) (eq (overlay-get ov2 'source) 'buf2)))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -178,6 +182,8 @@ fn divergence_multi_buffer_overlay_sync() {
 fn divergence_prop_change_undo_with_face() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""AAAA-BBBB-CCCC-DDDDERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")
@@ -206,7 +212,7 @@ fn divergence_prop_change_undo_with_face() {
             (get-text-property 13 'face) (eq (get-text-property 13 'face) 'default)
             (overlay-get ov 'face) (eq (overlay-get ov 'face) 'highlight)
             (overlay-get ov 'tag) (eq (overlay-get ov 'tag) 'highlighted))))) "#,
-        expect_test::expect![[r#""AAAA-BBBB-CCCC-DDDDERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -214,6 +220,7 @@ fn divergence_prop_change_undo_with_face() {
 fn divergence_eieio_polymorphic_buffer_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass test-pbe-editor-xxx ()
@@ -255,6 +262,6 @@ fn divergence_eieio_polymorphic_buffer_edit() {
               (string= s-after "TARGET-CONTENT")
               (get-text-property 1 'type)
               (eq (get-text-property 1 'type) 'target)))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }

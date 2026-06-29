@@ -63,12 +63,10 @@ fn oracle_prop_db_relational_select_where_compound() {
             (unless (member d depts)
               (setq depts (cons d depts)))))
         (sort (nreverse depts) #'string<)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((((name . \"Alice\") (salary . 95000)) ((name . \"Carol\") (salary . 105000)) ((name . \"Grace\") (salary . 110000))) (\"Alice\" \"Carol\" \"Dave\" \"Eve\" \"Grace\" \"Hank\") (((name . \"Bob\")) ((name . \"Dave\")) ((name . \"Frank\")) ((name . \"Hank\"))) (((name . \"Bob\") (level . 2)) ((name . \"Eve\") (level . 3)) ((name . \"Frank\") (level . 2))) 8 (\"Eng\" \"HR\" \"Sales\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((((name . \"Alice\") (salary . 95000)) ((name . \"Carol\") (salary . 105000)) ((name . \"Grace\") (salary . 110000))) (\"Alice\" \"Carol\" \"Dave\" \"Eve\" \"Grace\" \"Hank\") (((name . \"Bob\")) ((name . \"Dave\")) ((name . \"Frank\")) ((name . \"Hank\"))) (((name . \"Bob\") (level . 2)) ((name . \"Eve\") (level . 3)) ((name . \"Frank\") (level . 2))) 8 (\"Eng\" \"HR\" \"Sales\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -134,12 +132,10 @@ fn oracle_prop_db_relational_left_join() {
               (funcall left-join customers orders 'cust-id 'cust-id))
       ;; Alice appears twice (two orders)
       (length (funcall left-join customers orders 'cust-id 'cust-id)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 \"Alice\" \"Laptop\") (2 \"Bob\" \"Phone\") (3 \"Alice\" \"Tablet\") (4 \"Carol\" \"Monitor\") (5 nil \"Mouse\")) 5 ((\"Alice\" \"Tablet\") (\"Alice\" \"Laptop\") (\"Bob\" \"Phone\") (\"Carol\" \"Monitor\") (\"Dave\" nil)) 5)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 \"Alice\" \"Laptop\") (2 \"Bob\" \"Phone\") (3 \"Alice\" \"Tablet\") (4 \"Carol\" \"Monitor\") (5 nil \"Mouse\")) 5 ((\"Alice\" \"Tablet\") (\"Alice\" \"Laptop\") (\"Bob\" \"Phone\") (\"Carol\" \"Monitor\") (\"Dave\" nil)) 5)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -172,12 +168,10 @@ fn oracle_prop_db_relational_cross_join() {
           (length (funcall cross-join colors singles)))
         ;; Cross join with empty table
         (length (funcall cross-join colors nil))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (9 ((\"Red\" \"S\") (\"Red\" \"M\") (\"Red\" \"L\") (\"Blue\" \"S\") (\"Blue\" \"M\") (\"Blue\" \"L\") (\"Green\" \"S\") (\"Green\" \"M\") (\"Green\" \"L\")) 3 0)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (9 ((\"Red\" \"S\") (\"Red\" \"M\") (\"Red\" \"L\") (\"Blue\" \"S\") (\"Blue\" \"M\") (\"Blue\" \"L\") (\"Green\" \"S\") (\"Green\" \"M\") (\"Green\" \"L\")) 3 0)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -263,7 +257,8 @@ fn oracle_prop_db_relational_group_by_having() {
       (funcall group-by-agg sales 'region
                '((cnt count nil) (total sum amount))
                (lambda (r) (> (cdr (assq 'cnt r)) 4))))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -341,12 +336,10 @@ fn oracle_prop_db_relational_distinct_union_intersect() {
             (unless (member row except)
               (setq except (cons row except)))))
         (length except)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"Alice\" \"Bob\" \"Carol\") (\"Java\" \"Python\" \"Rust\") 8 9 (((name . \"Alice\") (skill . \"Python\"))) (\"Alice\" \"Carol\") 4)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"Alice\" \"Bob\" \"Carol\") (\"Java\" \"Python\" \"Rust\") 8 9 (((name . \"Alice\") (skill . \"Python\"))) (\"Alice\" \"Carol\") 4)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -435,10 +428,8 @@ fn oracle_prop_db_relational_insert_update_delete_constraints() {
         (car r5)
         (length t5)
         (mapcar (lambda (r) (cdr (assq 'name r))) t5)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (ok 4 error 1 nil 2 2 2 (\"Alice\" \"Dave\"))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (ok 4 error 1 nil 2 2 2 (\"Alice\" \"Dave\"))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -501,12 +492,10 @@ fn oracle_prop_db_relational_index_lookup() {
               (when (= (cdr (assq 'age r)) 35)
                 (setq result (cons (cdr (assq 'uname r)) result))))
             (nreverse result)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"Alice\" \"Carol\" \"Eve\" \"Hank\") (\"Bob\" \"Frank\") nil (\"Bob\" \"Frank\") (\"Alice\" \"Grace\") ((\"CHI\" . 1) (\"LA\" . 2) (\"NYC\" . 4) (\"SF\" . 1)) (\"Carol\" \"Hank\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"Alice\" \"Carol\" \"Eve\" \"Hank\") (\"Bob\" \"Frank\") nil (\"Bob\" \"Frank\") (\"Alice\" \"Grace\") ((\"CHI\" . 1) (\"LA\" . 2) (\"NYC\" . 4) (\"SF\" . 1)) (\"Carol\" \"Hank\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -586,12 +575,10 @@ fn oracle_prop_db_relational_multi_table_query() {
                            report))))
            dept-groups)
           (sort report (lambda (a b) (string< (car a) (car b)))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"Engineering\" (emp-count . 3) (total-salary . 288000) (active-projects . 2) (budget . 500000) (salary-ratio . 57)) (\"Marketing\" (emp-count . 1) (total-salary . 76000) (active-projects . 1) (budget . 200000) (salary-ratio . 38)) (\"Sales\" (emp-count . 2) (total-salary . 140000) (active-projects . 1) (budget . 300000) (salary-ratio . 46)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"Engineering\" (emp-count . 3) (total-salary . 288000) (active-projects . 2) (budget . 500000) (salary-ratio . 57)) (\"Marketing\" (emp-count . 1) (total-salary . 76000) (active-projects . 1) (budget . 200000) (salary-ratio . 38)) (\"Sales\" (emp-count . 2) (total-salary . 140000) (active-projects . 1) (budget . 300000) (salary-ratio . 46)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -661,10 +648,8 @@ fn oracle_prop_db_relational_order_by_multi_key() {
                       (setq result (cons row result))
                       (setq i (1+ i))))
                   (nreverse result)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"Grace\" \"A\" 98) (\"Alice\" \"A\" 95) (\"Eve\" \"A\" 95) (\"Carol\" \"A\" 92) (\"Bob\" \"B\" 85) (\"Hank\" \"B\" 85) (\"Frank\" \"B\" 82) (\"Dave\" \"C\" 78)) ((1 \"A\" \"Grace\") (1 \"B\" \"Hank\") (1 \"C\" \"Dave\") (2 \"A\" \"Eve\") (2 \"B\" \"Bob\") (3 \"A\" \"Alice\") (3 \"A\" \"Carol\") (3 \"B\" \"Frank\")) ((\"Grace\" 98) (\"Alice\" 95) (\"Eve\" 95) (\"Carol\" 92) (\"Bob\" 85) (\"Hank\" 85) (\"Frank\" 82) (\"Dave\" 78)) (\"Grace\" \"Alice\" \"Eve\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"Grace\" \"A\" 98) (\"Alice\" \"A\" 95) (\"Eve\" \"A\" 95) (\"Carol\" \"A\" 92) (\"Bob\" \"B\" 85) (\"Hank\" \"B\" 85) (\"Frank\" \"B\" 82) (\"Dave\" \"C\" 78)) ((1 \"A\" \"Grace\") (1 \"B\" \"Hank\") (1 \"C\" \"Dave\") (2 \"A\" \"Eve\") (2 \"B\" \"Bob\") (3 \"A\" \"Alice\") (3 \"A\" \"Carol\") (3 \"B\" \"Frank\")) ((\"Grace\" 98) (\"Alice\" 95) (\"Eve\" 95) (\"Carol\" 92) (\"Bob\" 85) (\"Hank\" 85) (\"Frank\" 82) (\"Dave\" 78)) (\"Grace\" \"Alice\" \"Eve\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

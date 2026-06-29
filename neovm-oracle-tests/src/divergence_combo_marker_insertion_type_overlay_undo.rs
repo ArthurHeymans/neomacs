@@ -13,6 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_marker_insertion_type_insert_delete_undo_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-mit")))
@@ -53,7 +54,7 @@ fn combo_marker_insertion_type_insert_delete_undo_overlay() {
                                   (get-text-property 16 'grp))))
             (kill-buffer buf)
             (list after-insert after-undo))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -61,6 +62,7 @@ fn combo_marker_insertion_type_insert_delete_undo_overlay() {
 fn combo_marker_insertion_type_delete_region_undo_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-mitdel")))
@@ -101,7 +103,7 @@ fn combo_marker_insertion_type_delete_region_undo_overlay() {
                                   (get-text-property 21 'grp))))
             (kill-buffer buf)
             (list after-delete after-undo))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -109,6 +111,7 @@ fn combo_marker_insertion_type_delete_region_undo_overlay() {
 fn combo_marker_insertion_type_replace_match_undo_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-mitrep")))
@@ -150,7 +153,7 @@ fn combo_marker_insertion_type_replace_match_undo_overlay() {
                                   (get-text-property 23 'grp))))
             (kill-buffer buf)
             (list after-replace after-undo))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -158,6 +161,7 @@ fn combo_marker_insertion_type_replace_match_undo_overlay() {
 fn combo_marker_insertion_type_narrow_insert_undo_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-mitnar")))
@@ -202,7 +206,7 @@ fn combo_marker_insertion_type_narrow_insert_undo_overlay() {
                                 (get-text-property 21 'sect))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -210,6 +214,7 @@ fn combo_marker_insertion_type_narrow_insert_undo_overlay() {
 fn combo_marker_insertion_type_buffer_local_insert_undo_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-mitbl")))
@@ -248,6 +253,6 @@ fn combo_marker_insertion_type_buffer_local_insert_undo_overlay() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }

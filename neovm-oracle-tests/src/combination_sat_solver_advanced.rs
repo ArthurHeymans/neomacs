@@ -131,10 +131,8 @@ fn oracle_prop_sat_adv_dpll_with_learning() {
     (fmakunbound 'neovm--sal-propagate)
     (fmakunbound 'neovm--sal-solve)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((t t 0) t (t t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((t t 0) t (t t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -216,10 +214,8 @@ fn oracle_prop_sat_adv_watched_literals() {
     (fmakunbound 'neovm--swl-init-watches)
     (fmakunbound 'neovm--swl-propagate)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t 4 t (t t t) t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t 4 t (t t t) t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -314,12 +310,10 @@ fn oracle_prop_sat_adv_horn_sat() {
     (fmakunbound 'neovm--shs-solve)
     (fmakunbound 'neovm--shs-model)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t t t t) ((1 . T) (2 . T) (3 . T)) t ((1 . F) (2 . F) (3 . T)) ((1 . F) (2 . F) (3 . F) (4 . F)) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t t t t) ((1 . T) (2 . T) (3 . T)) t ((1 . F) (2 . F) (3 . T)) ((1 . F) (2 . F) (3 . F) (4 . F)) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -432,10 +426,8 @@ fn oracle_prop_sat_adv_random_ksat_generation() {
     (fmakunbound 'neovm--srk-all-sat)
     (fmakunbound 'neovm--srk-solve)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((10 t t) (3 t t) (15 t t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((10 t t) (3 t t) (15 t t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -548,10 +540,8 @@ fn oracle_prop_sat_adv_pigeonhole_unsat() {
     (fmakunbound 'neovm--sph-all-sat)
     (fmakunbound 'neovm--sph-solve)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((5 t) (15 t) (34 t) (8 nil nil) (21 nil nil))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((5 t) (15 t) (34 t) (8 nil nil) (21 nil nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -694,10 +684,8 @@ fn oracle_prop_sat_adv_2sat_with_model() {
     (fmakunbound 'neovm--s2m-solve)
     (fmakunbound 'neovm--s2m-verify)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable dfs)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable dfs)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -759,10 +747,8 @@ fn oracle_prop_sat_adv_unsat_certificate() {
     (fmakunbound 'neovm--suc-resolve)
     (fmakunbound 'neovm--suc-subsumes-p)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((2 3) (2) nil tautology ((2) nil t) t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((2 3) (2) nil tautology ((2) nil t) t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -823,10 +809,8 @@ fn oracle_prop_sat_adv_model_counting() {
     (fmakunbound 'neovm--smc-eval-cnf)
     (fmakunbound 'neovm--smc-count)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 0 2 2 8 6 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 0 2 2 8 6 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -947,8 +931,6 @@ fn oracle_prop_sat_adv_scheduling_encoding() {
     (fmakunbound 'neovm--sse-solve)
     (fmakunbound 'neovm--sse-decode)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((t t) t (t t) t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((t t) t (t t) t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

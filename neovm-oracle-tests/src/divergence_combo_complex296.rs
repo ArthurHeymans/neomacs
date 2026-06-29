@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx296_byte_compile_lambda_with_closure_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 2 1 t 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t))
@@ -20,13 +21,16 @@ fn div_cx296_byte_compile_lambda_with_closure_capture() {
             (byte-code-function-p bc-inc)
             counter))))
 "##,
-        expect_test::expect![[r#""OK (1 2 1 t 2)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx296_byte_compile_with_rest_and_optional() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((1 . many) (1 . many) (1 nil nil) (1 2 nil) (1 2 (3 4 5)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((lex (lambda (a &optional b &rest c) (list a b c)))
@@ -37,15 +41,14 @@ fn div_cx296_byte_compile_with_rest_and_optional() {
         (funcall bc 1 2)
         (funcall bc 1 2 3 4 5)))
 "##,
-        expect_test::expect![[
-            r#""OK ((1 . many) (1 . many) (1 nil nil) (1 2 nil) (1 2 (3 4 5)))""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx296_disassemble_compiled_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((lex (lambda (x) (* x x)))
@@ -56,13 +59,14 @@ fn div_cx296_disassemble_compiled_function() {
               (stringp (car disassembled))))
     (error (list :err (car e)))))
 "##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx296_compiled_function_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil t nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((lex (lambda (x) x))
@@ -74,13 +78,14 @@ fn div_cx296_compiled_function_predicates() {
         (closurep bc)
         (closurep lex)))
 "##,
-        expect_test::expect![[r#""OK (t nil t nil t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx296_byte_compile_constant_folding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((lex (lambda () (+ 1 2 3)))
@@ -88,13 +93,14 @@ fn div_cx296_byte_compile_constant_folding() {
   (list (byte-code-function-p bc)
         (funcall bc)))
 "##,
-        expect_test::expect![[r#""OK (t 6)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx296_byte_compile_warning_categories_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((categories '(free-vars unresolved callargs redefine obsolete
@@ -103,13 +109,14 @@ fn div_cx296_byte_compile_warning_categories_query() {
             (list cat (memq cat byte-compile-warnings)))
           categories))
 "##,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx296_byte_compile_dest_file_function_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((el (expand-file-name "neo-cx296-test.el" temporary-file-directory))
@@ -117,13 +124,14 @@ fn div_cx296_byte_compile_dest_file_function_query() {
   (list (stringp elc)
         (string-suffix-p ".elc" elc)))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx296_native_comp_availability_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -133,13 +141,14 @@ fn div_cx296_native_comp_availability_query() {
           (boundp 'native-comp-driver-options))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx296_byte_optimize_with_mapcar() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t (2 4 6 8 10))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((lex (lambda (lst) (mapcar (lambda (x) (* x 2)) lst)))
@@ -147,13 +156,14 @@ fn div_cx296_byte_optimize_with_mapcar() {
   (list (byte-code-function-p bc)
         (funcall bc '(1 2 3 4 5))))
 "##,
-        expect_test::expect![[r#""OK (t (2 4 6 8 10))""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx296_byte_compile_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((lex (let ((lexical-binding t)) (lambda (x) (* x x))))
@@ -181,6 +191,6 @@ fn div_cx296_byte_compile_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     )
 }

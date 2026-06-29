@@ -25,12 +25,10 @@ fn oracle_prop_nts_adv_integers_edge_cases() {
   (number-to-string -9999999999)
   (number-to-string most-positive-fixnum)
   (number-to-string most-negative-fixnum))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"0\" \"1\" \"-1\" \"2147483647\" \"-2147483648\" \"9999999999\" \"-9999999999\" \"2305843009213693951\" \"-2305843009213693952\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"0\" \"1\" \"-1\" \"2147483647\" \"-2147483648\" \"9999999999\" \"-9999999999\" \"2305843009213693951\" \"-2305843009213693952\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -56,12 +54,10 @@ fn oracle_prop_nts_adv_floats_edge_cases() {
   (number-to-string 0.1)
   (number-to-string 0.2)
   (number-to-string (+ 0.1 0.2)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"3.14159265358979\" \"0.0\" \"-0.0\" \"1e+308\" \"-1e+308\" \"1e-300\" \"5e-324\" \"1.7976931348623157e+308\" \"10000000000.0\" \"1e-10\" \"1e+100\" \"0.1\" \"0.2\" \"0.30000000000000004\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"3.14159265358979\" \"0.0\" \"-0.0\" \"1e+308\" \"-1e+308\" \"1e-300\" \"5e-324\" \"1.7976931348623157e+308\" \"10000000000.0\" \"1e-10\" \"1e+100\" \"0.1\" \"0.2\" \"0.30000000000000004\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -95,12 +91,10 @@ fn oracle_prop_nts_adv_string_to_number_bases() {
   (string-to-number "0" 2)
   (string-to-number "1" 2)
   (string-to-number "10000000" 2))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (42 -100 0 999999999 255 255 3735928559 0 6699 63 0 511 5349 10 255 0 1 128)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (42 -100 0 999999999 255 255 3735928559 0 6699 63 0 511 5349 10 255 0 1 128)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -133,12 +127,10 @@ fn oracle_prop_nts_adv_string_to_number_whitespace_invalid() {
   (string-to-number "1G" 16)
   (string-to-number "29" 8)
   (string-to-number "12" 2))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (42 -7 100 42 3.14 100 0 0 0 3.14 -2.718 10000000000.0 1500.0 1 2 1)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (42 -7 100 42 3.14 100 0 0 0 3.14 -2.718 10000000000.0 1500.0 1 2 1)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -176,12 +168,10 @@ fn oracle_prop_nts_adv_format_integer_directives() {
   ;; Multiple format in one string
   (format "dec=%d hex=%x oct=%o" 255 255 255)
   (format "%d+%d=%d" 3 4 7))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"42\" \"-42\" \"0\" \"255\" \"65536\" \"ff\" \"0\" \"ffff\" \"100\" \"FF\" \"BEEF\" \"10\" \"377\" \"0\" \"777\" \"00042\" \"        42\" \"42        \" \"000000ff\" \"dec=255 hex=ff oct=377\" \"3+4=7\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"42\" \"-42\" \"0\" \"255\" \"65536\" \"ff\" \"0\" \"ffff\" \"100\" \"FF\" \"BEEF\" \"10\" \"377\" \"0\" \"777\" \"00042\" \"        42\" \"42        \" \"000000ff\" \"dec=255 hex=ff oct=377\" \"3+4=7\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -243,12 +233,10 @@ fn oracle_prop_nts_adv_base_converter() {
    (funcall base-to-int "-42" 10)
    ;; Zero
    (funcall int-to-base 0 16)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"101010\" 42 \"377\" 255 \"BEEF\" 48879 \"ZZ\" 1295 t t t \"-42\" -42 \"0\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"101010\" 42 \"377\" 255 \"BEEF\" 48879 \"ZZ\" 1295 t t t \"-42\" -42 \"0\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -291,12 +279,10 @@ fn oracle_prop_nts_adv_thousands_separator() {
    (string= (funcall format-thousands 1234567 ?,) "1,234,567")
    (string= (funcall format-thousands 1000000000 ?,) "1,000,000,000")
    (string= (funcall format-thousands -42000 ?,) "-42,000")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"0\" \"1\" \"100\" \"1,000\" \"1,000,000\" \"1,234,567,890\" \"-9,876,543\" \"999\" \"1.000\" \"100 000\" t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"0\" \"1\" \"100\" \"1,000\" \"1,000,000\" \"1,234,567,890\" \"-9,876,543\" \"999\" \"1.000\" \"100 000\" t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -365,10 +351,8 @@ fn oracle_prop_nts_adv_float_precision_analysis() {
      ;; Float equality pitfalls
      (= 1.0 (+ 0.5 0.5))
      (= 1.0 (+ 0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1 0.1)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (0.30000000000000004 t 3.125 1.0000000000000007 1.0 t 0 0 t t t nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (0.30000000000000004 t 3.125 1.0000000000000007 1.0 t 0 0 t t t nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

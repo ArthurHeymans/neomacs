@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx329_cl_defstruct_full_options_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t nil 1 2 nil 1 2 3 (99 1))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx329-full
@@ -30,13 +31,15 @@ fn div_cx329_cl_defstruct_full_options_matrix() {
           (setf (neo-cx329-f-a c) 99)
           (list (neo-cx329-f-a c) (neo-cx329-f-a r2)))))
 "##,
-        expect_test::expect![[r#""OK (t t nil 1 2 nil 1 2 3 (99 1))""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx329_cl_defstruct_inheritance_with_extra_slots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (\"Rex\" \"Woof\" \"Lab\" \"Generic\" \"...\" t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx329-animal (:conc-name neo-cx329-an-)) name sound)
@@ -48,26 +51,28 @@ fn div_cx329_cl_defstruct_inheritance_with_extra_slots() {
         (neo-cx329-an-name a) (neo-cx329-an-sound a)
         (neo-cx329-animal-p d) (neo-cx329-dog-p a)))
 "##,
-        expect_test::expect![[r#""OK (\"Rex\" \"Woof\" \"Lab\" \"Generic\" \"...\" t nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx329_cl_defstruct_no_constructor_anonymous() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t neo-cx329-noc 1 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx329-noc (:constructor nil) (:type vector) :named) x y)
 (let ((r (vector 'neo-cx329-noc 1 2)))
   (list (neo-cx329-noc-p r) (aref r 0) (aref r 1) (aref r 2)))
 "##,
-        expect_test::expect![[r#""OK (t neo-cx329-noc 1 2)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx329_cl_defstruct_read_only_and_mutable_slots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (99 1 100 100 error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct neo-cx329-ro (id 0 :read-only t) (mutable 0))
@@ -78,13 +83,14 @@ fn div_cx329_cl_defstruct_read_only_and_mutable_slots() {
         (neo-cx329-ro-mutable r)
         (condition-case e (setf (neo-cx329-ro-id r) 100) (error (car e)))))
 "##,
-        expect_test::expect![[r#""OK (99 1 100 100 error)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx329_cl_defstruct_type_list_anonymous() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((1 2 3) 1 2 3 t t t cons)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx329-anon (:type list)) a b c)
@@ -92,13 +98,14 @@ fn div_cx329_cl_defstruct_type_list_anonymous() {
   (list r (neo-cx329-anon-a r) (neo-cx329-anon-b r) (neo-cx329-anon-c r)
         (eq (car r) 1) (eq (cadr r) 2) (eq (caddr r) 3) (type-of r)))
 "##,
-        expect_test::expect![[r#""OK ((1 2 3) 1 2 3 t t t cons)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx329_cl_defstruct_setf_chain_through_accessor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function make-neo-cx329-ro)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((v (vector 0 1 2 3 4))
@@ -111,13 +118,14 @@ fn div_cx329_cl_defstruct_setf_chain_through_accessor() {
         (neo-cx329-ro-mutable (caddr structs))
         (length structs)))
 "##,
-        expect_test::expect![[r#""ERR (void-function make-neo-cx329-ro)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx329_cl_defstruct_equal_vs_eq() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct neo-cx329-eq name value)
@@ -126,13 +134,14 @@ fn div_cx329_cl_defstruct_equal_vs_eq() {
   (list (eq r1 r2) (equal r1 r2)
         (equal (neo-cx329-eq-name r1) (neo-cx329-eq-name r2))))
 "##,
-        expect_test::expect![[r#""OK (nil t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx329_cl_defstruct_copier_independence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 99 nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct neo-cx329-indep a b)
@@ -144,13 +153,14 @@ fn div_cx329_cl_defstruct_copier_independence() {
         (eq orig copy)
         (equal orig copy)))
 "##,
-        expect_test::expect![[r#""OK (1 99 nil nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx329_cl_defstruct_slot_documentation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"alpha\" 42)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -163,13 +173,14 @@ fn div_cx329_cl_defstruct_slot_documentation() {
         (list (neo-cx329-documented-name r) (neo-cx329-documented-value r))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"alpha\" 42)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx329_cl_defstruct_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx329-mega (:type vector) :named) a b c d)
@@ -195,6 +206,6 @@ fn div_cx329_cl_defstruct_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     )
 }

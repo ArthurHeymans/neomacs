@@ -13,22 +13,16 @@ use super::common::{
 fn oracle_prop_number_to_string_integers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        "(number-to-string 42)",
-        expect_test::expect![[r#""OK \"42\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"42\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect("(number-to-string 42)", expect);
     assert_ok_eq(r#""42""#, &o, &n);
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        "(number-to-string 0)",
-        expect_test::expect![[r#""OK \"0\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"0\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect("(number-to-string 0)", expect);
     assert_ok_eq(r#""0""#, &o, &n);
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        "(number-to-string -100)",
-        expect_test::expect![[r#""OK \"-100\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"-100\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect("(number-to-string -100)", expect);
     assert_ok_eq(r#""-100""#, &o, &n);
 }
 
@@ -36,22 +30,14 @@ fn oracle_prop_number_to_string_integers() {
 fn oracle_prop_number_to_string_floats() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    crate::common::assert_oracle_parity_expect(
-        "(number-to-string 3.14)",
-        expect_test::expect![[r#""OK \"3.14\"""#]],
-    );
-    crate::common::assert_oracle_parity_expect(
-        "(number-to-string 0.0)",
-        expect_test::expect![[r#""OK \"0.0\"""#]],
-    );
-    crate::common::assert_oracle_parity_expect(
-        "(number-to-string -2.5)",
-        expect_test::expect![[r#""OK \"-2.5\"""#]],
-    );
-    crate::common::assert_oracle_parity_expect(
-        "(number-to-string 1.0e10)",
-        expect_test::expect![[r#""OK \"10000000000.0\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"3.14\"""#]];
+    crate::common::assert_oracle_parity_expect("(number-to-string 3.14)", expect);
+    let expect = expect_test::expect![[r#""OK \"0.0\"""#]];
+    crate::common::assert_oracle_parity_expect("(number-to-string 0.0)", expect);
+    let expect = expect_test::expect![[r#""OK \"-2.5\"""#]];
+    crate::common::assert_oracle_parity_expect("(number-to-string -2.5)", expect);
+    let expect = expect_test::expect![[r#""OK \"10000000000.0\"""#]];
+    crate::common::assert_oracle_parity_expect("(number-to-string 1.0e10)", expect);
 }
 
 #[test]
@@ -68,14 +54,10 @@ fn oracle_prop_number_to_string_wrong_type() {
 fn oracle_prop_number_to_string_large_numbers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    crate::common::assert_oracle_parity_expect(
-        "(number-to-string 1000000)",
-        expect_test::expect![[r#""OK \"1000000\"""#]],
-    );
-    crate::common::assert_oracle_parity_expect(
-        "(number-to-string -999999)",
-        expect_test::expect![[r#""OK \"-999999\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"1000000\"""#]];
+    crate::common::assert_oracle_parity_expect("(number-to-string 1000000)", expect);
+    let expect = expect_test::expect![[r#""OK \"-999999\"""#]];
+    crate::common::assert_oracle_parity_expect("(number-to-string -999999)", expect);
 }
 
 proptest! {

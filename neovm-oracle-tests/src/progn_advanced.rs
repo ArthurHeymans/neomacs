@@ -31,10 +31,9 @@ fn oracle_prop_progn_side_effects_and_return() {
            ;; Return value is this last expression
            (format "final=%d" counter))))
     (list result counter (nreverse trace))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"final=17\" 17 ((step1 1) (step2 10) (step3 17)))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (\"final=17\" 17 ((step1 1) (step2 10) (step3 17)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -76,12 +75,10 @@ fn oracle_prop_progn_nested_in_let_if_cond() {
                    (setq log (cons 'large log))
                    'large))))
         (list a b r1 r2 (nreverse log))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (42 13 29 medium (computing-a computing-b a-is-big medium))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (42 13 29 medium (computing-a computing-b a-is-big medium))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -117,12 +114,10 @@ fn oracle_prop_progn_prog1_prog2_comparison() {
            (setq effects (cons 'prog2-3 effects)))))
     (list r-progn r-prog1 r-prog2
           (nreverse effects))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (progn-last prog1-val prog2-val (progn-1 progn-2 progn-3 prog1-first prog1-2 prog1-3 prog2-1 prog2-second prog2-3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (progn-last prog1-val prog2-val (progn-1 progn-2 progn-3 prog1-first prog1-2 prog1-3 prog2-1 prog2-second prog2-3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -150,10 +145,9 @@ fn oracle_prop_progn_with_condition_case() {
             (list 'error-caught (car err))))))
     ;; step1 and step2 should have been logged, step3 should not
     (list result (nreverse log))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((error-caught arith-error) (step1 step2 caught-error))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((error-caught arith-error) (step1 step2 caught-error))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -200,10 +194,8 @@ fn oracle_prop_progn_build_state_pipeline() {
   (list (gethash "status" state)
         (gethash "count" state)
         (gethash "items" state)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"filtered\" 3 (\"ALPHA\" \"GAMMA\" \"DELTA\"))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"filtered\" 3 (\"ALPHA\" \"GAMMA\" \"DELTA\"))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -234,10 +226,8 @@ fn oracle_prop_progn_in_macro_expansion() {
                    (+ x 5))))))
         (list result neovm--trace))
     (fmakunbound 'neovm--test-with-trace)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable neovm--trace)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable neovm--trace)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -276,12 +266,10 @@ fn oracle_prop_progn_implicit_body_forms() {
       (setq resource 'released)
       (setq trace (cons (list 'cleanup-resource resource) trace))))
   (list sum (nreverse trace)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (20 ((while-iter 0 0) (while-iter 1 1) (while-iter 2 3) (while-iter 3 6) (while-iter 4 10) sum-is-10 \"verified: 10\" not-999 (resource acquired) cleanup-1 (cleanup-resource released)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (20 ((while-iter 0 0) (while-iter 1 1) (while-iter 2 3) (while-iter 3 6) (while-iter 4 10) sum-is-10 \"verified: 10\" not-999 (resource acquired) cleanup-1 (cleanup-resource released)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -312,8 +300,6 @@ fn oracle_prop_progn_deeply_nested_return() {
                      0)))))))
     ;; 10 + (3 * 7) = 31
     (list result (nreverse log))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (31 (a b c d))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (31 (a b c d))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

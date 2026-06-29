@@ -23,10 +23,8 @@ fn oracle_prop_sort_lines_respects_region_and_fold_case() {
     (buffer-string)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK \"keep\nAlpha\nalpha\nbeta\nzeta\nkeep2\n\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"keep\nAlpha\nalpha\nbeta\nzeta\nkeep2\n\"""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -48,12 +46,10 @@ fn oracle_prop_sort_fields_positive_and_negative_field_numbers() {
     (list first second)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"c 01 a\nb 02 z\na 03 m\n\" \"c 01 a\na 03 m\nb 02 z\n\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"c 01 a\nb 02 z\na 03 m\n\" \"c 01 a\na 03 m\nb 02 z\n\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -70,10 +66,8 @@ fn oracle_prop_sort_numeric_fields_base_detection_and_blank_lines() {
     (buffer-string)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (error \"Line has too few fields: blank   \")""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (error \"Line has too few fields: blank   \")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -91,10 +85,8 @@ fn oracle_prop_reverse_region_uses_only_full_lines() {
     (buffer-string)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK \"outer-a\none\nthree\ntwo\nouter-b\n\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"outer-a\none\nthree\ntwo\nouter-b\n\"""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -124,10 +116,8 @@ fn oracle_prop_delete_duplicate_lines_modes_and_return_count() {
     (list normal reverse adjacent keep-blanks)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((3 \"a\nb\n\n\") (3 \"a\n\nb\n\") (2 \"a\nb\na\nb\n\") (1 \"a\n\n\nb\n\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((3 \"a\nb\n\n\") (3 \"a\n\nb\n\") (2 \"a\nb\na\nb\n\") (1 \"a\n\n\nb\n\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

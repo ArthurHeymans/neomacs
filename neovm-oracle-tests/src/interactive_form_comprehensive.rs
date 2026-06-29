@@ -52,12 +52,10 @@ fn oracle_prop_interactive_form_extraction() {
     (fmakunbound 'neovm--test-if-multi-spec)
     (fmakunbound 'neovm--test-if-noninteractive)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((interactive nil) (interactive \"p\") (interactive (list 1 2)) (interactive \"sEnter: \nnNumber: \") nil (interactive nil) nil t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((interactive nil) (interactive \"p\") (interactive (list 1 2)) (interactive \"sEnter: \nnNumber: \") nil (interactive nil) nil t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -104,12 +102,10 @@ fn oracle_prop_interactive_commandp_comprehensive() {
   (commandp (lambda () (interactive) t) t)
   (commandp (lambda () t) t))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t nil t t t t t nil nil nil nil nil nil nil t nil t t nil t nil t nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t nil t t t t t nil nil nil nil nil nil nil t nil t t nil t nil t nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -176,12 +172,10 @@ fn oracle_prop_interactive_spec_codes_basic() {
     (fmakunbound 'neovm--test-spec-x)
     (fmakunbound 'neovm--test-spec-X)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t t t t t t t t t t (interactive \"d\") (interactive \"p\") (interactive \"r\") (interactive \"sInput: \") 42 \"hello\" 99)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t t t t t t t t t t (interactive \"d\") (interactive \"p\") (interactive \"r\") (interactive \"sInput: \") 42 \"hello\" 99)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -227,12 +221,10 @@ fn oracle_prop_interactive_spec_codes_buffer_file() {
     (fmakunbound 'neovm--test-spec-F)
     (fmakunbound 'neovm--test-spec-D)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t t t (interactive \"bBuffer: \") (interactive \"BBuffer: \") (interactive \"fFile: \") (interactive \"FFile: \") (interactive \"DDirectory: \") \"test-buffer\" \"/tmp/test.txt\" \"/tmp/\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t t t (interactive \"bBuffer: \") (interactive \"BBuffer: \") (interactive \"fFile: \") (interactive \"FFile: \") (interactive \"DDirectory: \") \"test-buffer\" \"/tmp/test.txt\" \"/tmp/\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -284,12 +276,10 @@ fn oracle_prop_interactive_multi_arg_specs() {
     (fmakunbound 'neovm--test-multi3)
     (fmakunbound 'neovm--test-multi4)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t t (interactive \"sString: \nnNumber: \") (interactive \"nFirst: \nnSecond: \nnThird: \") (interactive \"r\nsReplace with: \") (interactive \"p\nsInput: \") (\"hello\" 42) 6 (1 10 \"replacement\") (4 \"test\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t t (interactive \"sString: \nnNumber: \") (interactive \"nFirst: \nnSecond: \nnThird: \") (interactive \"r\nsReplace with: \") (interactive \"p\nsInput: \") (\"hello\" 42) 6 (1 10 \"replacement\") (4 \"test\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -339,12 +329,10 @@ fn oracle_prop_interactive_list_form_advanced() {
     (fmakunbound 'neovm--test-list-conditional)
     (fmakunbound 'neovm--test-list-nested)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t t (interactive (list 10 20)) (interactive (list (current-buffer) (point))) 10 (x . y))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t t (interactive (list 10 20)) (interactive (list (current-buffer) (point))) 10 (x . y))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -369,10 +357,8 @@ fn oracle_prop_interactive_prefix_arg() {
   ;; current-prefix-arg is nil when no prefix is active
   current-prefix-arg)
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 4 16 -1 -3 7 4 16 nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 4 16 -1 -3 7 4 16 nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -426,12 +412,10 @@ fn oracle_prop_interactive_defun_command() {
     (fmakunbound 'neovm--test-defun-cmd3)
     (fmakunbound 'neovm--test-defun-fn)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t nil (interactive nil) (interactive \"p\") (interactive \"r\") nil cmd1-result 25 10 14)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t nil (interactive nil) (interactive \"p\") (interactive \"r\") nil cmd1-result 25 10 14)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -480,12 +464,10 @@ fn oracle_prop_interactive_command_execute_vs_funcall() {
     (fmakunbound 'neovm--test-exec-cmd)
     (fmakunbound 'neovm--test-exec-with-arg)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (result 10 (executed (with-arg 5)) t t (interactive nil) (interactive \"p\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (result 10 (executed (with-arg 5)) t t (interactive nil) (interactive \"p\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -517,10 +499,8 @@ fn oracle_prop_interactive_defalias() {
     (fmakunbound 'neovm--test-defalias-orig)
     (fmakunbound 'neovm--test-defalias-alias)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t (interactive \"p\") 21 t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t (interactive \"p\") 21 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -581,12 +561,10 @@ fn oracle_prop_interactive_command_framework() {
     (fmakunbound 'neovm--test-fw-cmd-repeat)
     (fmakunbound 'neovm--test-fw-cmd-count)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((count t t \"Count elements\") (repeat t t \"Repeat a string\") (upcase t t \"Upcase a string\")) \"HELLO\" \"abababab\" 5)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((count t t \"Count elements\") (repeat t t \"Repeat a string\") (upcase t t \"Upcase a string\")) \"HELLO\" \"abababab\" 5)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -628,12 +606,10 @@ fn oracle_prop_interactive_optional_rest_params() {
     (fmakunbound 'neovm--test-opt-cmd)
     (fmakunbound 'neovm--test-rest-cmd)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t (1 default-b default-c) (1 2 default-c) (1 2 3) (x) (x y z) (interactive \"p\") (interactive (list 'initial)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t (1 default-b default-c) (1 2 default-c) (1 2 3) (x) (x y z) (interactive \"p\") (interactive (list 'initial)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -683,12 +659,10 @@ fn oracle_prop_interactive_spec_char_key() {
     (fmakunbound 'neovm--test-spec-z)
     (fmakunbound 'neovm--test-spec-Z)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t t t (interactive \"cChar: \") (interactive \"kKey: \") (interactive \"KKey: \") (interactive \"zCoding system: \") (interactive \"ZCoding system: \") 120 [24 6])""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t t t (interactive \"cChar: \") (interactive \"kKey: \") (interactive \"KKey: \") (interactive \"zCoding system: \") (interactive \"ZCoding system: \") 120 [24 6])""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -732,12 +706,10 @@ fn oracle_prop_interactive_list_spec_buffer_state() {
     (fmakunbound 'neovm--test-bufstate-cmd)
     (fmakunbound 'neovm--test-bufprops-cmd)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\" *temp*\" 6 12) (\" *temp*\" 11 t) t t (interactive (list (buffer-name) (point) (point-max))) (interactive (list (buffer-name) (buffer-size) (buffer-modified-p))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\" *temp*\" 6 12) (\" *temp*\" 11 t) t t (interactive (list (buffer-name) (point) (point-max))) (interactive (list (buffer-name) (buffer-size) (buffer-modified-p))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -785,10 +757,8 @@ fn oracle_prop_interactive_spec_special_chars() {
     (fmakunbound 'neovm--test-star-p-cmd)
     (fmakunbound 'neovm--test-star-caret-p)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t t (interactive \"*\") (interactive \"^\") (interactive \"*p\") (interactive \"*^p\") modified-buffer shifted 42 7)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t t (interactive \"*\") (interactive \"^\") (interactive \"*p\") (interactive \"*^p\") modified-buffer shifted 42 7)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

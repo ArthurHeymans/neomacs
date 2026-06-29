@@ -24,7 +24,8 @@ fn oracle_prop_symbol_plist_basic() {
                               (plist-get plist 'size)
                               (plist-get plist 'active)))
                     (setplist 'neovm--test-plist-sym nil)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (red 42 t)""#]]);
+    let expect = expect_test::expect![[r#""OK (red 42 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -38,10 +39,8 @@ fn oracle_prop_setplist_replace() {
                       (list (get 'neovm--test-setplist 'old-prop)
                             (get 'neovm--test-setplist 'new-prop))
                     (setplist 'neovm--test-setplist nil)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil new-val)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil new-val)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -57,10 +56,8 @@ fn oracle_prop_plist_keyword_keys() {
                         (plist-get pl :age)
                         (plist-get pl :active)
                         (plist-get pl :missing)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"Alice\" 30 t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"Alice\" 30 t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -74,7 +71,8 @@ fn oracle_prop_plist_put_creates_and_updates() {
                   (list (plist-get pl :a)
                         (plist-get pl :b)
                         (length pl)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (10 2 4)""#]]);
+    let expect = expect_test::expect![[r#""OK (10 2 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -85,10 +83,8 @@ fn oracle_prop_plist_member_check() {
                   (list (plist-member pl :x)
                         (plist-member pl :y)
                         (plist-member pl :missing)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((:x 1 :y 2 :z 3) (:y 2 :z 3) nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((:x 1 :y 2 :z 3) (:y 2 :z 3) nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,10 +110,8 @@ fn oracle_prop_plist_merge() {
                   (let ((defaults '(:color blue :size 10 :weight normal))
                         (custom '(:color red :style bold)))
                     (funcall plist-merge defaults custom)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (:color red :size 10 :weight normal :style bold)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (:color red :size 10 :weight normal :style bold)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -137,10 +131,8 @@ fn oracle_prop_plist_select_keys() {
                   (funcall plist-select
                            '(:a 1 :b 2 :c 3 :d 4 :e 5)
                            '(:b :d :e)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (:b 2 :d 4 :e 5)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (:b 2 :d 4 :e 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -171,12 +163,10 @@ fn oracle_prop_plist_to_alist() {
                     (let ((al (funcall plist-to-alist pl)))
                       (let ((roundtrip (funcall alist-to-plist al)))
                         (list al roundtrip (equal pl roundtrip))))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((:name . alice) (:age . 30) (:role . engineer)) (:name alice :age 30 :role engineer) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((:name . alice) (:age . 30) (:role . engineer)) (:name alice :age 30 :role engineer) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -207,10 +197,8 @@ fn oracle_prop_plist_diff() {
                   (funcall plist-diff
                            '(:a 1 :b 2 :c 3)
                            '(:a 1 :b 20 :d 4)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (((:d 4)) ((:b 2 20)))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (((:d 4)) ((:b 2 20)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -239,10 +227,8 @@ fn oracle_prop_plist_as_config() {
                           (setq valid nil
                                 errors (cons "port must be integer" errors)))
                         (list config valid errors))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:host \"localhost\" :port 3000 :debug t :timeout 30) t nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:host \"localhost\" :port 3000 :debug t :timeout 30) t nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

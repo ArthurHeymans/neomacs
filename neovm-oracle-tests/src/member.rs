@@ -12,16 +12,14 @@ use super::common::{
 fn oracle_prop_member_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle_found, neovm_found) = crate::common::eval_oracle_and_neovm_expect(
-        "(member 2 '(1 2 3))",
-        expect_test::expect![[r#""OK (2 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 3)""#]];
+    let (oracle_found, neovm_found) =
+        crate::common::eval_oracle_and_neovm_expect("(member 2 '(1 2 3))", expect);
     assert_ok_eq("(2 3)", &oracle_found, &neovm_found);
 
-    let (oracle_missing, neovm_missing) = crate::common::eval_oracle_and_neovm_expect(
-        "(member 9 '(1 2 3))",
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (oracle_missing, neovm_missing) =
+        crate::common::eval_oracle_and_neovm_expect("(member 9 '(1 2 3))", expect);
     assert_ok_eq("nil", &oracle_missing, &neovm_missing);
 }
 
@@ -29,10 +27,8 @@ fn oracle_prop_member_basics() {
 fn oracle_prop_member_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(member 1 2)",
-        expect_test::expect![[r#""ERR (wrong-type-argument listp 2)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp 2)""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect("(member 1 2)", expect);
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
@@ -55,12 +51,10 @@ fn oracle_member_ignore_case_ignores_non_strings_and_returns_tail() {
      (member-ignore-case 'foo '("foo"))
    (error (list (car err) (cdr err)))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"FoO\" \"later\") (\"FoO\" . bad-tail) (wrong-type-argument (listp bad-tail)) (wrong-type-argument (stringp foo)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"FoO\" \"later\") (\"FoO\" . bad-tail) (wrong-type-argument (listp bad-tail)) (wrong-type-argument (stringp foo)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -88,12 +82,10 @@ fn oracle_member_ignore_case_strict_edge_semantics() {
    (funcall capture '(member-ignore-case))
    (funcall capture '(member-ignore-case "x" nil 'extra))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((#(\"FoO\" 0 3 (face bold)) \"later\") (\"\" \"later\") nil (wrong-type-argument stringp bad) (wrong-type-argument listp bad-tail) (wrong-type-argument listp 42) (wrong-number-of-arguments (2 . 2) 0) (wrong-number-of-arguments (2 . 2) 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((#(\"FoO\" 0 3 (face bold)) \"later\") (\"\" \"later\") nil (wrong-type-argument stringp bad) (wrong-type-argument listp bad-tail) (wrong-type-argument listp 42) (wrong-number-of-arguments (2 . 2) 0) (wrong-number-of-arguments (2 . 2) 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 proptest! {

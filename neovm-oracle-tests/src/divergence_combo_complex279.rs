@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx279_format_dynamic_field_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (error \"Invalid format operation %*\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%*d" 5 42)
@@ -15,13 +16,14 @@ fn div_cx279_format_dynamic_field_width() {
       (format "%-*s|" 10 "hi")
       (format "%*.*f" 10 3 3.14159))
 "##,
-        expect_test::expect![[r#""ERR (error \"Invalid format operation %*\")""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx279_format_spec_missing_and_extra() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function format-spec-make)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((spec (format-spec-make ?a "alpha" ?b "beta")))
@@ -31,13 +33,15 @@ fn div_cx279_format_spec_missing_and_extra() {
         (format-spec "%a %a %a" spec)
         (condition-case e (format-spec "%a-%b-%c" spec) (error (car e)))))
 "##,
-        expect_test::expect![[r#""ERR (void-function format-spec-make)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx279_prin1_print_circle_deeply_shared() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (\"(#1=(1 2 3) #1# #1#)\" \"((1 2 3) (1 2 3) (1 2 3))\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((inner (list 1 2 3))
@@ -46,13 +50,14 @@ fn div_cx279_prin1_print_circle_deeply_shared() {
         (let ((print-circle nil))
           (condition-case e (prin1-to-string shared) (error (car e))))))
 "##,
-        expect_test::expect![[r#""OK (\"(#1=(1 2 3) #1# #1#)\" \"((1 2 3) (1 2 3) (1 2 3))\")""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx279_prin1_print_circle_circular_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r##""OK (\"#1=(1 2 3 . #1#)\" \"(1 2 3 1 2 . #2)\")""##]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((circular (list 1 2 3)))
@@ -61,13 +66,14 @@ fn div_cx279_prin1_print_circle_circular_list() {
         (let ((print-circle nil))
           (condition-case e (prin1-to-string circular) (error (car e))))))
 "##,
-        expect_test::expect![[r##""OK (\"#1=(1 2 3 . #1#)\" \"(1 2 3 1 2 . #2)\")""##]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx279_read_circle_shared_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"(#1=(1 2 3) #1#)\" t (1 2 3) (1 2 3))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((a (list 1 2 3))
@@ -78,13 +84,14 @@ fn div_cx279_read_circle_shared_round_trip() {
         (eq (car read-back) (cadr read-back))
         (car read-back) (cadr read-back)))
 "##,
-        expect_test::expect![[r#""OK (\"(#1=(1 2 3) #1#)\" t (1 2 3) (1 2 3))""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx279_prin1_print_gensym_uninterned() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r##""OK (\"G-19\" \"#:G-19\" \"G-19\")""##]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((gs (gensym "G-")))
@@ -92,13 +99,16 @@ fn div_cx279_prin1_print_gensym_uninterned() {
         (let ((print-gensym t)) (prin1-to-string gs))
         (let ((print-gensym nil)) (prin1-to-string gs))))
 "##,
-        expect_test::expect![[r##""OK (\"G-19\" \"#:G-19\" \"G-19\")""##]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx279_print_length_and_level_combined() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"((...) (1 2 3 ...))\" \"...\" \"(((((\\\"deep\\\")))) (1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50))\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((deep '(((("deep")))))
@@ -110,15 +120,14 @@ fn div_cx279_print_length_and_level_combined() {
         (let ((print-length nil) (print-level nil))
           (prin1-to-string (list deep long)))))
 "##,
-        expect_test::expect![[
-            r#""OK (\"((...) (1 2 3 ...))\" \"...\" \"(((((\\\"deep\\\")))) (1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50))\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx279_format_with_nan_and_inf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"inf\" \"inf\" \"inf\" \"-nan\" \"inf\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (format "%f" (/ 1.0 0.0)) (error (cons :err (car e))))
@@ -127,13 +136,14 @@ fn div_cx279_format_with_nan_and_inf() {
       (condition-case e (format "%f" (/ 0.0 0.0)) (error (cons :err (car e))))
       (condition-case e (format "%d" (/ 1.0 0.0)) (error (cons :err (car e)))))
 "##,
-        expect_test::expect![[r#""OK (\"inf\" \"inf\" \"inf\" \"-nan\" \"inf\")""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx279_format_with_bignum_and_ratio() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable 355/113)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((big (expt 2 128))
@@ -146,13 +156,14 @@ fn div_cx279_format_with_bignum_and_ratio() {
         (format "%f" ratio)
         (format "%.10f" ratio)))
 "##,
-        expect_test::expect![[r#""ERR (void-variable 355/113)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx279_format_read_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((shared (list 1 2 3))
@@ -179,6 +190,6 @@ fn div_cx279_format_read_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     )
 }

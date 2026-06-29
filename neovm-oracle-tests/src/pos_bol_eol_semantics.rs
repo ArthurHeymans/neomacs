@@ -11,12 +11,13 @@ use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
 fn oracle_pos_bol_at_buffer_start() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK 1""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (switch-to-buffer (get-buffer-create "*neovm-test-pos-bol*"))
   (erase-buffer)
   (pos-bol))"#,
-        expect_test::expect![[r#""OK 1""#]],
+        expect,
     );
     assert_ok_eq("1", &oracle, &neovm);
 }
@@ -25,12 +26,13 @@ fn oracle_pos_bol_at_buffer_start() {
 fn oracle_pos_eol_at_empty_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK 1""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (switch-to-buffer (get-buffer-create "*neovm-test-pos-eol*"))
   (erase-buffer)
   (pos-eol))"#,
-        expect_test::expect![[r#""OK 1""#]],
+        expect,
     );
     assert_ok_eq("1", &oracle, &neovm);
 }
@@ -39,9 +41,7 @@ fn oracle_pos_eol_at_empty_buffer() {
 fn oracle_pos_bol_wrong_type_arg() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(pos-bol 'a)",
-        expect_test::expect![[r#""ERR (wrong-type-argument integerp a)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument integerp a)""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect("(pos-bol 'a)", expect);
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }

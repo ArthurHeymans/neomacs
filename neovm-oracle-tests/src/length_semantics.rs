@@ -27,12 +27,10 @@ fn oracle_length_dotted_and_type_error_payloads() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-type-argument (listp c)) (wrong-type-argument (listp b)) (wrong-type-argument (sequencep 42)) (wrong-type-argument (fixnump x)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-type-argument (listp c)) (wrong-type-argument (listp b)) (wrong-type-argument (sequencep 42)) (wrong-type-argument (fixnump x)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -53,10 +51,8 @@ fn oracle_length_comparisons_on_dotted_lists() {
  (length= '(a b . c) 2))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil t t t nil nil nil nil t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil t t t nil nil nil nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -79,10 +75,8 @@ fn oracle_length_comparisons_on_circular_lists() {
    (integerp (safe-length x))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil nil t t nil nil nil nil t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil nil t t nil nil nil nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -111,10 +105,9 @@ fn oracle_length_circular_list_error_payloads() {
                     (car arg)))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((circular-list 1 t t c) (circular-list 1 t t c))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((circular-list 1 t t c) (circular-list 1 t t c))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -141,10 +134,8 @@ fn oracle_safe_length_and_proper_list_exact_edges() {
    (proper-list-p lasso)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 0 1 2 1 4 0 3 nil nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 0 1 2 1 4 0 3 nil nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -164,8 +155,7 @@ fn oracle_length_on_non_list_sequences() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 5 3 5 4194304 (wrong-type-argument (stringp 42)))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (3 5 3 5 4194304 (wrong-type-argument (stringp 42)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

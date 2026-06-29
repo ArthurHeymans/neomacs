@@ -25,10 +25,8 @@ fn oracle_prop_apply_partially_fixed_args_and_late_args() {
     (condition-case e
         (funcall (apply-partially (lambda (a) a) 1 2))
       (error (list 'error (car e))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (((fixed) b c d) ((fixed) b) (fixed-eval ((fixed) b c d) ((fixed) b)) t (error wrong-number-of-arguments))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (((fixed) b c d) ((fixed) b) (fixed-eval ((fixed) b c d) ((fixed) b)) t (error wrong-number-of-arguments))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

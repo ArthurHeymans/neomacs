@@ -14,6 +14,8 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo51_clone_mutate_verify_isolation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (error \"‘org-id-get’ expects a file-visiting buffer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -39,7 +41,7 @@ fn combo51_clone_mutate_verify_isolation() {
     ;; counts
     (push (list :headline-count (length (org-element-map (org-element-parse-buffer) 'headline #'identity))) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (error \"‘org-id-get’ expects a file-visiting buffer\")""#]],
+        expect,
     );
 }
 
@@ -50,6 +52,9 @@ fn combo51_clone_mutate_verify_isolation() {
 #[test]
 fn combo51_narrow_edit_widen_reparse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:pre-narrow-headlines 5) (:pre-narrow-sections 3) (:narrow-headlines 3) (:after-edit-narrow-headlines 4) (:after-widen-headlines 6) (:after-widen-raw (\"A\" \"B\" \"C\" \"B1\" \"D\" \"E\")) (:d-at headline))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -83,9 +88,7 @@ fn combo51_narrow_edit_widen_reparse() {
     (search-forward "* D") (beginning-of-line)
     (push (list :d-at (org-element-type (org-element-at-point))) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:pre-narrow-headlines 5) (:pre-narrow-sections 3) (:narrow-headlines 3) (:after-edit-narrow-headlines 4) (:after-widen-headlines 6) (:after-widen-raw (\"A\" \"B\" \"C\" \"B1\" \"D\" \"E\")) (:d-at headline))""#
-        ]],
+        expect,
     );
 }
 
@@ -96,6 +99,7 @@ fn combo51_narrow_edit_widen_reparse() {
 #[test]
 fn combo51_table_formula_error_recovery() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (search-failed \"| a |\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -144,7 +148,7 @@ fn combo51_table_formula_error_recovery() {
     (goto-char (point-min))
     (push (list :to-lisp (org-table-to-lisp)) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (search-failed \"| a |\")""#]],
+        expect,
     );
 }
 
@@ -155,6 +159,9 @@ fn combo51_table_formula_error_recovery() {
 #[test]
 fn combo51_babel_result_type_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5) (:after-value \"* Babel\n#+begin_src emacs-lisp :results value\n'(1 2 3 4 5)\n#+end_src\n\n#+RESULTS:\n| 1 | 2 | 3 | 4 | 5 |\n\") \"0123456789\" (:after-output \"* Babel\n#+begin_src emacs-lisp :results output\n(princ \\\"0123456789\\\")\n#+end_src\n\n#+RESULTS:\n: 0123456789\n\") (:result-count 0))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -188,9 +195,7 @@ fn combo51_babel_result_type_change() {
           (push (list :result-type (org-element-type res)) r)
           (push (list :result-begin (org-element-property :begin res)) r)))
       (nreverse r))))"##,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4 5) (:after-value \"* Babel\n#+begin_src emacs-lisp :results value\n'(1 2 3 4 5)\n#+end_src\n\n#+RESULTS:\n| 1 | 2 | 3 | 4 | 5 |\n\") \"0123456789\" (:after-output \"* Babel\n#+begin_src emacs-lisp :results output\n(princ \\\"0123456789\\\")\n#+end_src\n\n#+RESULTS:\n: 0123456789\n\") (:result-count 0))""#
-        ]],
+        expect,
     );
 }
 
@@ -201,6 +206,9 @@ fn combo51_babel_result_type_change() {
 #[test]
 fn combo51_property_special_char_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:set1 \"key=value;path=/usr/local:8080\") (:set2 \"key=value;path=/usr/local:8080;extra=true\") (:set3 \"https://user:pass@host.com:8443/path?q=1\") (:set4 \"http://simple.com\") (:deleted nil) (:url-still-there \"http://simple.com\") (:all-keys (\"CATEGORY\")))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -226,9 +234,7 @@ fn combo51_property_special_char_cycle() {
     ;; get all properties
     (push (list :all-keys (sort (mapcar #'car (org-entry-properties nil t)) #'string-lessp)) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:set1 \"key=value;path=/usr/local:8080\") (:set2 \"key=value;path=/usr/local:8080;extra=true\") (:set3 \"https://user:pass@host.com:8443/path?q=1\") (:set4 \"http://simple.com\") (:deleted nil) (:url-still-there \"http://simple.com\") (:all-keys (\"CATEGORY\")))""#
-        ]],
+        expect,
     );
 }
 
@@ -239,6 +245,9 @@ fn combo51_property_special_char_cycle() {
 #[test]
 fn combo51_fold_edit_unfold_verify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:before-paras 4) (:after-unfold-headlines 5) (:after-unfold-raw (\"A\" \"A1\" \"A2\" \"A3\" \"B\")) (:after-unfold-paras 5))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -268,9 +277,7 @@ fn combo51_fold_edit_unfold_verify() {
     ;; parse full buffer after all
     (push (list :after-unfold-paras (length (org-element-map (org-element-parse-buffer) 'paragraph #'identity))) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:before-paras 4) (:after-unfold-headlines 5) (:after-unfold-raw (\"A\" \"A1\" \"A2\" \"A3\" \"B\")) (:after-unfold-paras 5))""#
-        ]],
+        expect,
     );
 }
 
@@ -281,6 +288,8 @@ fn combo51_fold_edit_unfold_verify() {
 #[test]
 fn combo51_multi_heading_mutation_remap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (user-error \"State ‘WAIT’ not valid in this file\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -316,7 +325,7 @@ fn combo51_multi_heading_mutation_remap() {
     ;; map only DONEs
     (push (list :dones (org-map-entries (lambda () (org-get-heading t t t t)) "TODO=\"DONE\"")) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (user-error \"State ‘WAIT’ not valid in this file\")""#]],
+        expect,
     );
 }
 
@@ -327,6 +336,9 @@ fn combo51_multi_heading_mutation_remap() {
 #[test]
 fn combo51_export_select_exclude_tag_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:has-A nil) (:has-B nil) (:has-C 80) (:has-D nil) (:after-has-B nil) (:after-has-D 170) (:after-has-A nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -357,9 +369,7 @@ fn combo51_export_select_exclude_tag_chain() {
         (push (list :after-has-D (and out (string-match-p "Body D" out))) r)
         (push (list :after-has-A (and out (string-match-p "Body A" out))) r))
       (nreverse r))))"##,
-        expect_test::expect![[
-            r#""OK ((:has-A nil) (:has-B nil) (:has-C 80) (:has-D nil) (:after-has-B nil) (:after-has-D 170) (:after-has-A nil))""#
-        ]],
+        expect,
     );
 }
 
@@ -370,6 +380,7 @@ fn combo51_export_select_exclude_tag_chain() {
 #[test]
 fn combo51_element_adopt_extract_adopt_back() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-element-adopt-element)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -398,7 +409,7 @@ fn combo51_element_adopt_extract_adopt_back() {
     ;; tree is still interpretable
     (push (list :interpretable (> (length (substring-no-properties (org-element-interpret-data tree))) 0)) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (void-function org-element-adopt-element)""#]],
+        expect,
     );
 }
 
@@ -409,6 +420,9 @@ fn combo51_element_adopt_extract_adopt_back() {
 #[test]
 fn combo51_multi_clock_sum_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:t1-minutes 0) (:t2-minutes 0) (:t3-minutes 0) (:total-clocks 3) (:total-logbooks 3))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -436,8 +450,6 @@ fn combo51_multi_clock_sum_all() {
       (push (list :total-logbooks (length (org-element-map (org-element-parse-buffer) 'drawer
                                             (lambda (d) (when (equal "LOGBOOK" (org-element-property :drawer-name d)) d))))) r)
       (nreverse r))))"##,
-        expect_test::expect![[
-            r#""OK ((:t1-minutes 0) (:t2-minutes 0) (:t3-minutes 0) (:total-clocks 3) (:total-logbooks 3))""#
-        ]],
+        expect,
     );
 }

@@ -73,12 +73,10 @@ fn oracle_prop_diff_lcs_dynamic_programming() {
        (funcall 'neovm--diff-lcs '(h e l l o w o r l d) '(h e l p w o r k)))
     (fmakunbound 'neovm--diff-lcs)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:length 4 :lcs (a c d f)) (:length 3 :lcs (x y z)) (:length 0 :lcs nil) (:length 0 :lcs nil) (:length 0 :lcs nil) (:length 4 :lcs (2 4 6 8)) (:length 6 :lcs (h e l w o r)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:length 4 :lcs (a c d f)) (:length 3 :lcs (x y z)) (:length 0 :lcs nil) (:length 0 :lcs nil) (:length 0 :lcs nil) (:length 4 :lcs (2 4 6 8)) (:length 6 :lcs (h e l w o r)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -173,12 +171,10 @@ fn oracle_prop_diff_edit_distance_with_ops() {
        (funcall 'neovm--diff-edit-distance '(a b) '()))
     (fmakunbound 'neovm--diff-edit-distance)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:distance 1 :ops ((keep . a) (replace b x) (keep . c))) (:distance 1 :ops ((keep . a) (insert . b) (keep . c))) (:distance 1 :ops ((keep . a) (delete . b) (keep . c))) (:distance 2 :ops ((replace a x) (replace b y))) (:distance 0 :ops ((keep . a) (keep . b) (keep . c))) (:distance 2 :ops ((insert . a) (insert . b))) (:distance 2 :ops ((delete . a) (delete . b))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:distance 1 :ops ((keep . a) (replace b x) (keep . c))) (:distance 1 :ops ((keep . a) (insert . b) (keep . c))) (:distance 1 :ops ((keep . a) (delete . b) (keep . c))) (:distance 2 :ops ((replace a x) (replace b y))) (:distance 0 :ops ((keep . a) (keep . b) (keep . c))) (:distance 2 :ops ((insert . a) (insert . b))) (:distance 2 :ops ((delete . a) (delete . b))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -311,12 +307,10 @@ fn oracle_prop_diff_hunk_generation() {
     (fmakunbound 'neovm--diff-lcs-indices)
     (fmakunbound 'neovm--diff-generate-hunks)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((change 2 4 2 4 (c d) (x y))) ((add 3 5 (d e))) ((delete 1 2 (b)) (delete 3 4 (d))) ((change 1 2 1 2 (b) (x)) (change 4 6 4 6 (e f) (y z))) nil ((change 0 3 0 3 (a b c) (x y z))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((change 2 4 2 4 (c d) (x y))) ((add 3 5 (d e))) ((delete 1 2 (b)) (delete 3 4 (d))) ((change 1 2 1 2 (b) (x)) (change 4 6 4 6 (e f) (y z))) nil ((change 0 3 0 3 (a b c) (x y z))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -408,12 +402,10 @@ fn oracle_prop_diff_patch_application() {
     (fmakunbound 'neovm--diff-compute-patch)
     (fmakunbound 'neovm--diff-apply-patch)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:src (a b c d e) :dst (a b x d e) :patch-len 6 :reconstructed (a b x d e) :match t) (:src (1 2 3) :dst (1 2 3 4 5) :patch-len 5 :reconstructed (1 2 3 4 5) :match t) (:src (x y z w) :dst (y z) :patch-len 4 :reconstructed (y z) :match t) (:src (a b c) :dst (d e f) :patch-len 6 :reconstructed (d e f) :match t) (:src nil :dst (a b c) :patch-len 3 :reconstructed (a b c) :match t) (:src (a b c) :dst nil :patch-len 3 :reconstructed nil :match t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:src (a b c d e) :dst (a b x d e) :patch-len 6 :reconstructed (a b x d e) :match t) (:src (1 2 3) :dst (1 2 3 4 5) :patch-len 5 :reconstructed (1 2 3 4 5) :match t) (:src (x y z w) :dst (y z) :patch-len 4 :reconstructed (y z) :match t) (:src (a b c) :dst (d e f) :patch-len 6 :reconstructed (d e f) :match t) (:src nil :dst (a b c) :patch-len 3 :reconstructed (a b c) :match t) (:src (a b c) :dst nil :patch-len 3 :reconstructed nil :match t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -563,12 +555,10 @@ fn oracle_prop_diff_three_way_merge() {
     (fmakunbound 'neovm--diff3-changes)
     (fmakunbound 'neovm--diff3-merge)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:merged (a b c d e) :has-conflict nil) (:merged (a c d e) :has-conflict nil) (:merged (a c) :has-conflict nil) (:merged (a b c) :has-conflict nil) ((keep 0 0 a) (del 1 b) (add 1 x) (keep 2 2 c) (del 3 d) (add 3 y) (keep 4 4 e)) (b d f))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:merged (a b c d e) :has-conflict nil) (:merged (a c d e) :has-conflict nil) (:merged (a c) :has-conflict nil) (:merged (a b c) :has-conflict nil) ((keep 0 0 a) (del 1 b) (add 1 x) (keep 2 2 c) (del 3 d) (add 3 y) (keep 4 4 e)) (b d f))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -676,12 +666,10 @@ fn oracle_prop_diff_unified_format() {
     (fmakunbound 'neovm--diff-line-lcs)
     (fmakunbound 'neovm--diff-unified)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\" alpha\" \"-beta\" \"+beta-modified\" \" gamma\" \"-delta\" \"+epsilon\") (\" line1\" \" line2\" \" line3\") (\"-a\" \"-b\" \"-c\" \"+x\" \"+y\" \"+z\") (\"+new1\" \"+new2\") (\"hello\" \"world\" \"foo\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\" alpha\" \"-beta\" \"+beta-modified\" \" gamma\" \"-delta\" \"+epsilon\") (\" line1\" \" line2\" \" line3\") (\"-a\" \"-b\" \"-c\" \"+x\" \"+y\" \"+z\") (\"+new1\" \"+new2\") (\"hello\" \"world\" \"foo\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -754,10 +742,8 @@ fn oracle_prop_diff_statistics() {
     (fmakunbound 'neovm--diff-stats-lcs-len)
     (fmakunbound 'neovm--diff-stats)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:src-len 6 :dst-len 5 :lcs-len 3 :deletions 3 :insertions 2 :total-changes 5 :similarity-pct 50) (:src-len 5 :dst-len 5 :lcs-len 5 :deletions 0 :insertions 0 :total-changes 0 :similarity-pct 100) (:src-len 3 :dst-len 3 :lcs-len 0 :deletions 3 :insertions 3 :total-changes 6 :similarity-pct 0) (:src-len 0 :dst-len 4 :lcs-len 0 :deletions 0 :insertions 4 :total-changes 4 :similarity-pct 0) (:src-len 4 :dst-len 0 :lcs-len 0 :deletions 4 :insertions 0 :total-changes 4 :similarity-pct 0) (:src-len 0 :dst-len 0 :lcs-len 0 :deletions 0 :insertions 0 :total-changes 0 :similarity-pct 100) (:src-len 10 :dst-len 7 :lcs-len 5 :deletions 5 :insertions 2 :total-changes 7 :similarity-pct 50))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:src-len 6 :dst-len 5 :lcs-len 3 :deletions 3 :insertions 2 :total-changes 5 :similarity-pct 50) (:src-len 5 :dst-len 5 :lcs-len 5 :deletions 0 :insertions 0 :total-changes 0 :similarity-pct 100) (:src-len 3 :dst-len 3 :lcs-len 0 :deletions 3 :insertions 3 :total-changes 6 :similarity-pct 0) (:src-len 0 :dst-len 4 :lcs-len 0 :deletions 0 :insertions 4 :total-changes 4 :similarity-pct 0) (:src-len 4 :dst-len 0 :lcs-len 0 :deletions 4 :insertions 0 :total-changes 4 :similarity-pct 0) (:src-len 0 :dst-len 0 :lcs-len 0 :deletions 0 :insertions 0 :total-changes 0 :similarity-pct 100) (:src-len 10 :dst-len 7 :lcs-len 5 :deletions 5 :insertions 2 :total-changes 7 :similarity-pct 50))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

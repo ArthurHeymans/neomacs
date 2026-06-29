@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx181_window_start_end_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx181-ws*")))
@@ -21,13 +22,14 @@ fn div_cx181_window_start_end_query() {
     (prog1 (list (integerp start) (integerp end) (> end start))
       (kill-buffer buf))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx181_set_window_hscroll() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (50 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx181-hs*")))
@@ -40,13 +42,16 @@ fn div_cx181_set_window_hscroll() {
     (prog1 (list h (window-hscroll))
       (kill-buffer buf))))
 "##,
-        expect_test::expect![[r#""OK (50 0)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx181_recenter_top_bottom_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (error \"‘recenter’ing a window that does not display current-buffer\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx181-rc*")))
@@ -62,15 +67,14 @@ fn div_cx181_recenter_top_bottom_query() {
       (list (integerp at-top) (integerp at-bottom) (>= at-bottom at-top)
             (kill-buffer buf)))))
 "##,
-        expect_test::expect![[
-            r#""ERR (error \"‘recenter’ing a window that does not display current-buffer\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx181_pos_visible_in_window_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx181-pv*")))
@@ -83,13 +87,14 @@ fn div_cx181_pos_visible_in_window_p() {
     (prog1 (list vis1 vis50)
       (kill-buffer buf))))
 "##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx181_window_text_pixel_size_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function window-text-pixel-width)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
@@ -98,13 +103,14 @@ fn div_cx181_window_text_pixel_size_query() {
         (integerp (window-pixel-width win))
         (integerp (window-pixel-height win))))
 "##,
-        expect_test::expect![[r#""ERR (void-function window-text-pixel-width)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx181_window_vscroll() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
@@ -114,13 +120,14 @@ fn div_cx181_window_vscroll() {
     (let ((v2 (window-vscroll win t)))
       (list v1 v2))))
 "##,
-        expect_test::expect![[r#""OK (0 0)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx181_window_dedicated_p_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
@@ -131,13 +138,14 @@ fn div_cx181_window_dedicated_p_round_trip() {
       (let ((after-unset (window-dedicated-p win)))
         (list before after-set after-unset)))))
 "##,
-        expect_test::expect![[r#""OK (nil t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx181_scroll_up_down_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -156,13 +164,14 @@ fn div_cx181_scroll_up_down_basic() {
               (kill-buffer buf)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx181_window_scroll_functions_hook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 0""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (fired)
@@ -180,13 +189,14 @@ fn div_cx181_window_scroll_functions_hook() {
     (remove-hook 'window-scroll-functions hook t)
     (length fired)))
 "##,
-        expect_test::expect![[r#""OK 0""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx181_window_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx181-mega*")))
@@ -212,6 +222,6 @@ fn div_cx181_window_with_marker_overlay_undo_narrow_mega() {
         (kill-buffer buf)
         (list state (buffer-live-p buf)))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

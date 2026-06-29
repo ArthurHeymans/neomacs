@@ -73,10 +73,8 @@ fn oracle_prop_alist_nested_hierarchical() {
            ;; Original unchanged
            (funcall deep-get config '(server port)))))
     (fmakunbound 'neovm--test-alist-nested-dummy)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable deep-set)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable deep-set)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -108,12 +106,10 @@ fn oracle_prop_alist_get_testfn_default() {
      (list (alist-get 'd sym-al 99)
            (alist-get 'a sym-al 99)
            (alist-get 'b sym-al)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil \"text/html\" \"application/json\" \"Bearer none\" nil not-found (99 1 2))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil \"text/html\" \"application/json\" \"Bearer none\" nil not-found (99 1 2))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -146,10 +142,8 @@ fn oracle_prop_alist_get_remove_flag() {
    (alist-get 'disabled alist 'was-nil t)    ;; was-nil
    (alist-get 'nonexistent alist 'gone t)    ;; gone
    (alist-get 'active alist 'default t)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil nil nil t 0 \"\" nil gone t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil t 0 \"\" nil gone t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -219,12 +213,10 @@ fn oracle_prop_alist_query_results() {
                    (setq depts (cons (cons d 1) depts)))))
              (sort depts (lambda (a b) (string< (car a) (car b))))))))
     (fmakunbound 'neovm--test-alist-query-dummy)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((((name . \"Alice\") (salary . 90000)) ((name . \"Carol\") (salary . 110000)) ((name . \"Eve\") (salary . 95000))) 3 95000 120000 ((\"eng\" . 3) (\"mgmt\" . 1) (\"qa\" . 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((((name . \"Alice\") (salary . 90000)) ((name . \"Carol\") (salary . 110000)) ((name . \"Eve\") (salary . 95000))) 3 95000 120000 ((\"eng\" . 3) (\"mgmt\" . 1) (\"qa\" . 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -294,12 +286,10 @@ fn oracle_prop_alist_config_inheritance() {
                    (cdr (assq 'workers flat))
                    (cdr (assq 'app-name flat)))))))
     (fmakunbound 'neovm--test-alist-inherit-dummy)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t debug 3 \"myapp\" 10 nil (debug timeout app-name log-level workers retries cache) (t debug 10 8 \"myapp\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t debug 3 \"myapp\" 10 nil (debug timeout app-name log-level workers retries cache) (t debug 10 8 \"myapp\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -361,12 +351,10 @@ fn oracle_prop_alist_merge_strategies() {
      (funcall merge-combine
               '((tag . a) (tag . b) (tag . c))
               '((tag . d) (tag . e))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((x . 1) (y . 2) (z . 3) (w . 40)) ((x . 1) (y . 20) (z . 30) (w . 40)) ((x 1) (y 2 20) (z 3 30) (w 40)) ((y . 20) (z . 30) (w . 40)) ((x . 1) (y . 2) (z . 3)) ((tag a b c d e)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((x . 1) (y . 2) (z . 3) (w . 40)) ((x . 1) (y . 20) (z . 30) (w . 40)) ((x 1) (y 2 20) (z 3 30) (w 40)) ((y . 20) (z . 30) (w . 40)) ((x . 1) (y . 2) (z . 3)) ((tag a b c d e)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -448,12 +436,10 @@ fn oracle_prop_alist_routing_table() {
                                       params))))
                (nreverse params))))))
     (fmakunbound 'neovm--test-alist-route-dummy)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((:handler \"list-users\" :path \"/api/users\" :params nil :status 200) (:handler \"user-detail\" :path \"/api/users/42\" :params \"42\" :status 200) (:handler \"list-posts\" :path \"/api/posts\" :params nil :status 200) (:handler \"post-detail\" :path \"/api/posts/hello-world\" :params \"hello-world\" :status 200) (:handler \"health-check\" :path \"/health\" :params nil :status 200) (:handler \"catch-all\" :path \"/unknown/path\" :params \"unknown/path\" :status 200) (:handler \"user-detail\" :path \"/api/users/42/edit\" :params \"42/edit\" :status 200)) (\"list-users\" \"user-detail\" \"list-posts\" \"post-detail\" \"health-check\" \"catch-all\" \"user-detail\") ((\"/api/users/42\" \"42\") (\"/api/posts/hello-world\" \"hello-world\") (\"/unknown/path\" \"unknown/path\") (\"/api/users/42/edit\" \"42/edit\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((:handler \"list-users\" :path \"/api/users\" :params nil :status 200) (:handler \"user-detail\" :path \"/api/users/42\" :params \"42\" :status 200) (:handler \"list-posts\" :path \"/api/posts\" :params nil :status 200) (:handler \"post-detail\" :path \"/api/posts/hello-world\" :params \"hello-world\" :status 200) (:handler \"health-check\" :path \"/health\" :params nil :status 200) (:handler \"catch-all\" :path \"/unknown/path\" :params \"unknown/path\" :status 200) (:handler \"user-detail\" :path \"/api/users/42/edit\" :params \"42/edit\" :status 200)) (\"list-users\" \"user-detail\" \"list-posts\" \"post-detail\" \"health-check\" \"catch-all\" \"user-detail\") ((\"/api/users/42\" \"42\") (\"/api/posts/hello-world\" \"hello-world\") (\"/unknown/path\" \"unknown/path\") (\"/api/users/42/edit\" \"42/edit\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -514,8 +500,6 @@ fn oracle_prop_alist_state_machine() {
          (funcall run-sequence transitions 'idle
                   '(start bogus-event pause cancel))))
     (fmakunbound 'neovm--test-alist-sm-dummy)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable next-state)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable next-state)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

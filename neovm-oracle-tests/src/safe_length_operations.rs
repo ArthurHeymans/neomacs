@@ -19,10 +19,8 @@ fn oracle_prop_safe_length_proper_list() {
                         (safe-length '(a b))
                         (safe-length '(a b c d e f g h i j))
                         (safe-length (make-list 100 'x)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 1 2 10 100)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 1 2 10 100)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -39,7 +37,8 @@ fn oracle_prop_safe_length_circular_list() {
     let form = r#"(let ((lst (list 1 2 3)))
                     (setcdr (last lst) lst)
                     (integerp (safe-length lst)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK t""#]]);
+    let expect = expect_test::expect![[r#""OK t""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -50,7 +49,8 @@ fn oracle_prop_safe_length_circular_single() {
     let form = r#"(let ((cell (cons 'x nil)))
                     (setcdr cell cell)
                     (integerp (safe-length cell)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK t""#]]);
+    let expect = expect_test::expect![[r#""OK t""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -70,7 +70,8 @@ fn oracle_safe_length_circular_exact_detector_counts() {
         (safe-length lasso)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (1 5 5)""#]]);
+    let expect = expect_test::expect![[r#""OK (1 5 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +86,8 @@ fn oracle_prop_safe_length_dotted_pair() {
                         (safe-length '(a b . c))
                         (safe-length '(1 2 3 4 . 5))
                         (safe-length (cons 'only 42)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (1 2 4 1)""#]]);
+    let expect = expect_test::expect![[r#""OK (1 2 4 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -106,10 +108,8 @@ fn oracle_prop_safe_length_vs_length() {
                               (list (length lst) (safe-length lst)
                                     (= (length lst) (safe-length lst))))
                             lists))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((0 0 t) (1 1 t) (3 3 t) (50 50 t) (4 4 t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((0 0 t) (1 1 t) (3 3 t) (50 50 t) (4 4 t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +125,8 @@ fn oracle_prop_safe_length_non_list() {
                         (safe-length 'sym)
                         (safe-length [1 2 3])
                         (safe-length t))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (0 0 0 0 0)""#]]);
+    let expect = expect_test::expect![[r#""OK (0 0 0 0 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -166,12 +167,10 @@ fn oracle_prop_safe_length_structural_classification() {
                       (list (nreverse proper)
                             (nreverse dotted)
                             (nreverse non-list))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((((a b c) 3) ((p q r s t) 5) ((single) 1)) (((1 . 2) 1) ((x y . z) 2) ((head mid . tail) 2)) ((nil 0) (42 0) (\"string\" 0)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((((a b c) 3) ((p q r s t) 5) ((single) 1)) (((1 . 2) 1) ((x y . z) 2) ((head mid . tail) 2)) ((nil 0) (42 0) (\"string\" 0)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -206,10 +205,8 @@ fn oracle_prop_safe_length_guarded_flatten() {
                      (funcall safe-flatten '(1 2 3))
                      (funcall safe-flatten nil)
                      (funcall safe-flatten '(x . y))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3 4 5 6) (a b c d e f) (1 2 3) nil (x y))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 2 3 4 5 6) (a b c d e f) (1 2 3) nil (x y))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -233,10 +230,8 @@ fn oracle_prop_safe_length_progressive_build() {
                       (cons (list 'reversed (safe-length rev)
                                   (= (safe-length rev) (safe-length lst)))
                             (nreverse results))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((reversed 10 t) (0 1 t) (1 2 t) (2 3 t) (3 4 t) (4 5 t) (5 6 t) (6 7 t) (7 8 t) (8 9 t) (9 10 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((reversed 10 t) (0 1 t) (1 2 t) (2 3 t) (3 4 t) (4 5 t) (5 6 t) (6 7 t) (7 8 t) (8 9 t) (9 10 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -82,12 +82,10 @@ fn oracle_prop_protocol_mime_header_parser() {
    accept-parsed
    (cdr (assoc "Content-Length" headers))
    (cdr (assoc "X-Custom-Header" headers))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (5 \"text/html\" ((\"charset\" . \"utf-8\")) \"attachment\" ((\"filename\" . \"report.pdf\\\"\")) ((\"text/html\" . 1.0) (\"application/json\" . 0.9)) \"1234\" \"some value\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (5 \"text/html\" ((\"charset\" . \"utf-8\")) \"attachment\" ((\"filename\" . \"report.pdf\\\"\")) ((\"text/html\" . 1.0) (\"application/json\" . 0.9)) \"1234\" \"some value\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -152,12 +150,10 @@ fn oracle_prop_protocol_url_parser() {
    (funcall parse-url "https://search.example.com/search?q=hello+world")
    (funcall parse-url "https://example.com#top")
    (funcall parse-url "https://example.com:443/path/to/resource?key=value&foo=bar&baz=")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((scheme . \"https\") (host . \"example.com\") (port . 8080) (path . \"/api/v1/users\") (query (\"name\" . \"alice\") (\"age\" . \"30\")) (fragment . \"section1\")) ((scheme . \"http\") (host . \"localhost\") (port) (path . \"/index.html\") (query) (fragment)) ((scheme . \"ftp\") (host . \"files.example.com\") (port) (path . \"/pub/data.tar.gz\") (query) (fragment)) ((scheme . \"https\") (host . \"search.example.com\") (port) (path . \"/search\") (query (\"q\" . \"hello+world\")) (fragment)) ((scheme . \"https\") (host . \"example.com\") (port) (path) (query) (fragment . \"top\")) ((scheme . \"https\") (host . \"example.com\") (port . 443) (path . \"/path/to/resource\") (query (\"key\" . \"value\") (\"foo\" . \"bar\") (\"baz\" . \"\")) (fragment)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((scheme . \"https\") (host . \"example.com\") (port . 8080) (path . \"/api/v1/users\") (query (\"name\" . \"alice\") (\"age\" . \"30\")) (fragment . \"section1\")) ((scheme . \"http\") (host . \"localhost\") (port) (path . \"/index.html\") (query) (fragment)) ((scheme . \"ftp\") (host . \"files.example.com\") (port) (path . \"/pub/data.tar.gz\") (query) (fragment)) ((scheme . \"https\") (host . \"search.example.com\") (port) (path . \"/search\") (query (\"q\" . \"hello+world\")) (fragment)) ((scheme . \"https\") (host . \"example.com\") (port) (path) (query) (fragment . \"top\")) ((scheme . \"https\") (host . \"example.com\") (port . 443) (path . \"/path/to/resource\") (query (\"key\" . \"value\") (\"foo\" . \"bar\") (\"baz\" . \"\")) (fragment)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -216,10 +212,8 @@ fn oracle_prop_protocol_sexp_pretty_printer() {
    (funcall pp-sexp '(42) 0)
    ;; Nested with indent
    (funcall pp-sexp '(if (> x 0) (print x) (print y)) 1)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable pp-sexp)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable pp-sexp)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -308,12 +302,10 @@ fn oracle_prop_protocol_kv_command_parser() {
       (let ((parsed (funcall parse-command cmd)))
         (setq results (cons (funcall execute-command parsed) results))))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"OK\" \"OK\" \"OK\" \"Alice\" \"30\" \"(nil)\" \"2\" \"OK\" \"1\" \"2\" (\"z\" \"y\" \"x\" \"city\" \"age\" \"name\") \"2\" \"0\" \"Alice\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"OK\" \"OK\" \"OK\" \"Alice\" \"30\" \"(nil)\" \"2\" \"OK\" \"1\" \"2\" (\"z\" \"y\" \"x\" \"city\" \"age\" \"name\") \"2\" \"0\" \"Alice\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -377,12 +369,10 @@ fn oracle_prop_protocol_email_parser() {
                           "From: Test <test@test.com>\nTo: user@test.com\nSubject: Hello\n\nWorld"))
           (from-pair (cdr (assoc 'from email))))
      (list (car from-pair) (cdr from-pair)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((headers (\"From\" . \"Alice Smith <alice@example.com>\") (\"To\" . \"bob@example.com, carol@example.com\") (\"Subject\" . \"Meeting Tomorrow\") (\"Date\" . \"Mon, 01 Jan 2024\")) (from \"Alice Smith\" . \"alice@example.com\") (to \"bob@example.com\" \"carol@example.com\") (subject . \"Meeting Tomorrow\") (date . \"Mon, 01 Jan 2024\") (body-words . 14) (body-lines . 7)) ((headers (\"From\" . \"system@server.com\") (\"To\" . \"admin@server.com\") (\"Subject\" . \"Alert: Disk Space Low\")) (from \"\" . \"system@server.com\") (to \"admin@server.com\") (subject . \"Alert: Disk Space Low\") (date) (body-words . 5) (body-lines . 1)) (\"Test\" \"test@test.com\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((headers (\"From\" . \"Alice Smith <alice@example.com>\") (\"To\" . \"bob@example.com, carol@example.com\") (\"Subject\" . \"Meeting Tomorrow\") (\"Date\" . \"Mon, 01 Jan 2024\")) (from \"Alice Smith\" . \"alice@example.com\") (to \"bob@example.com\" \"carol@example.com\") (subject . \"Meeting Tomorrow\") (date . \"Mon, 01 Jan 2024\") (body-words . 14) (body-lines . 7)) ((headers (\"From\" . \"system@server.com\") (\"To\" . \"admin@server.com\") (\"Subject\" . \"Alert: Disk Space Low\")) (from \"\" . \"system@server.com\") (to \"admin@server.com\") (subject . \"Alert: Disk Space Low\") (date) (body-words . 5) (body-lines . 1)) (\"Test\" \"test@test.com\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -463,10 +453,8 @@ fn oracle_prop_protocol_http_response_builder() {
           (numberp starts-301)
           (numberp has-cl)
           (numberp has-sep))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"HTTP/1.1 200 OK\\r\nContent-Type: text/html\\r\nServer: NeoVM/1.0\\r\nContent-Length: 20\\r\n\\r\n<h1>Hello World</h1>\" \"HTTP/1.1 404 Not Found\\r\nContent-Type: text/plain\\r\nContent-Length: 9\\r\n\\r\nNot Found\" \"HTTP/1.1 301 Moved Permanently\\r\nLocation: https://example.com/new-page\\r\nServer: NeoVM/1.0\\r\n\\r\n\" \"HTTP/1.1 200 OK\\r\nContent-Type: application/json\\r\nServer: NeoVM/1.0\\r\nContent-Length: 29\\r\n\\r\n{\\\"status\\\":200,\\\"data\\\":\\\"hello\\\"}\" \"HTTP/1.1 204 No Content\\r\nServer: NeoVM/1.0\\r\n\\r\n\" t t t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"HTTP/1.1 200 OK\\r\nContent-Type: text/html\\r\nServer: NeoVM/1.0\\r\nContent-Length: 20\\r\n\\r\n<h1>Hello World</h1>\" \"HTTP/1.1 404 Not Found\\r\nContent-Type: text/plain\\r\nContent-Length: 9\\r\n\\r\nNot Found\" \"HTTP/1.1 301 Moved Permanently\\r\nLocation: https://example.com/new-page\\r\nServer: NeoVM/1.0\\r\n\\r\n\" \"HTTP/1.1 200 OK\\r\nContent-Type: application/json\\r\nServer: NeoVM/1.0\\r\nContent-Length: 29\\r\n\\r\n{\\\"status\\\":200,\\\"data\\\":\\\"hello\\\"}\" \"HTTP/1.1 204 No Content\\r\nServer: NeoVM/1.0\\r\n\\r\n\" t t t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

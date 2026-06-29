@@ -39,10 +39,8 @@ fn oracle_prop_gnu_lsh_negative_fixnum_and_bignum_semantics() {
      (lsh (1- most-negative-fixnum) -1)
    (error (cons (car err) (cdr err)))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (1 32 16 t t 0 0 0 0 t t t nil t t t (args-out-of-range -2305843009213693953 -1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (1 32 16 t t 0 0 0 0 t t t nil t t t (args-out-of-range -2305843009213693953 -1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

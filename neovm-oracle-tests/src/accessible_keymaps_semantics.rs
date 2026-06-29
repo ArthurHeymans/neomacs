@@ -42,12 +42,10 @@ fn oracle_accessible_keymaps_breadth_first_prefixes_and_filtering() {
            (accessible-keymaps root (string ?\C-x)))
    (accessible-keymaps root [?z])))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (((nil t nil nil nil nil) ((3) t nil nil nil compile) ((24) t find-file (keymap (98 . switch-to-buffer-other-window)) nil nil) ((24 52) t nil nil switch-to-buffer-other-window nil)) (((24) t) ((24 52) t)) (((24) t) ((24 52) t)) nil)""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (((nil t nil nil nil nil) ((3) t nil nil nil compile) ((24) t find-file (keymap (98 . switch-to-buffer-other-window)) nil nil) ((24 52) t nil nil switch-to-buffer-other-window nil)) (((24) t) ((24 52) t)) (((24) t) ((24 52) t)) nil)""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -73,10 +71,8 @@ fn oracle_accessible_keymaps_type_errors() {
        (accessible-keymaps root [] nil)
      (error (list (car err) (cdr err))))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((wrong-type-argument (keymapp 42)) (wrong-type-argument (sequencep t)) (wrong-type-argument (arrayp (a))) (wrong-number-of-arguments (accessible-keymaps 0)) (wrong-number-of-arguments (accessible-keymaps 3)))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((wrong-type-argument (keymapp 42)) (wrong-type-argument (sequencep t)) (wrong-type-argument (arrayp (a))) (wrong-number-of-arguments (accessible-keymaps 0)) (wrong-number-of-arguments (accessible-keymaps 3)))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

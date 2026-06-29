@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_remove_text_props_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments put-text-property 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "rtp")))
@@ -38,7 +39,7 @@ fn combo_remove_text_props_marker_overlay_undo() {
                 (get-text-property 6 'color)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments put-text-property 6)""#]],
+        expect,
     );
 }
 
@@ -46,6 +47,7 @@ fn combo_remove_text_props_marker_overlay_undo() {
 fn combo_add_text_props_narrow_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "atp")))
@@ -77,7 +79,7 @@ fn combo_add_text_props_narrow_marker() {
                 (get-text-property 6 'new)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -85,6 +87,7 @@ fn combo_add_text_props_narrow_marker() {
 fn combo_remove_add_text_props_clone() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "rac")))
@@ -117,7 +120,7 @@ fn combo_remove_add_text_props_clone() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -125,6 +128,7 @@ fn combo_remove_add_text_props_clone() {
 fn combo_remove_text_props_multi_zone_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments put-text-property 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "rmz")))
@@ -159,7 +163,7 @@ fn combo_remove_text_props_multi_zone_undo() {
                 (get-text-property 11 'z)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments put-text-property 6)""#]],
+        expect,
     );
 }
 
@@ -167,6 +171,7 @@ fn combo_remove_text_props_multi_zone_undo() {
 fn combo_add_remove_text_props_overlay_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "aru")))
@@ -197,6 +202,6 @@ fn combo_add_remove_text_props_overlay_narrow_undo() {
                 (get-text-property 6 'z)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

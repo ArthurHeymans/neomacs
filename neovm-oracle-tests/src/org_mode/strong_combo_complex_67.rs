@@ -12,6 +12,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo67_babel_ref_resolution_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (8 (:result-count 0))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -29,13 +30,16 @@ fn combo67_babel_ref_resolution_chain() {
       (push (org-babel-execute-src-block) r)
       (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (nreverse r))))"##,
-        expect_test::expect![[r#""OK (8 (:result-count 0))""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo67_element_create_for_keyword() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:keyword-type keyword) (:keyword-key \"TITLE\") (:keyword-value \"My Title\") (:interpreted-length t) (:re-keywords 1) (:re-tables 1))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -63,15 +67,15 @@ fn combo67_element_create_for_keyword() {
       (push (list :re-keywords (length (org-element-map reparsed 'keyword #'identity))) r)
       (push (list :re-tables (length (org-element-map reparsed 'table #'identity))) r))
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:keyword-type keyword) (:keyword-key \"TITLE\") (:keyword-value \"My Title\") (:interpreted-length t) (:re-keywords 1) (:re-tables 1))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo67_export_to_file_various_backends() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((:ascii-written t) (:html-written t) (:latex-written t))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -90,13 +94,16 @@ fn combo67_export_to_file_various_backends() {
             (error (push (list (intern (concat ":" (car pair) "-error")) t) r)))))
       (condition-case nil (delete-file tmpbase) (error nil))
       (nreverse r))))"##,
-        expect_test::expect![[r#""OK ((:ascii-written t) (:html-written t) (:latex-written t))""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo67_agenda_prefix_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:prefix-fbound t :default-prefix ((agenda . \" %i %-12:c%?-12t% s\") (todo . \" %i %-12:c\") (tags . \" %i %-12:c\") (search . \" %i %-12:c\")) :tags-prefix (tags . \" %i %-12:c\") :todo-prefix (todo . \" %i %-12:c\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-agenda)
@@ -109,15 +116,16 @@ fn combo67_agenda_prefix_format() {
    :todo-prefix (when (boundp 'org-agenda-prefix-format)
                   (assq 'todo org-agenda-prefix-format))
    ))"##,
-        expect_test::expect![[
-            r#""OK (:prefix-fbound t :default-prefix ((agenda . \" %i %-12:c%?-12t% s\") (todo . \" %i %-12:c\") (tags . \" %i %-12:c\") (search . \" %i %-12:c\")) :tags-prefix (tags . \" %i %-12:c\") :todo-prefix (todo . \" %i %-12:c\"))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo67_table_iterate_stability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:after-iterate #(\"| a | a |\n| 1 | 1 |\n| 1 | 1 |\n#+TBLFM: @>$1=vsum(@2..@-1)::$2=$1+0\n\" 0 5 (face org-table) 5 9 (face org-table) 9 10 (face org-table-row) 10 15 (face org-table) 15 19 (face org-table) 19 20 (face org-table-row) 20 21 (face org-table) 21 24 (face org-table :org-untouchable t) 24 25 (face org-table) 25 29 (face org-table) 29 30 (face org-table-row))) (:iterate-error t))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -133,15 +141,16 @@ fn combo67_table_iterate_stability() {
                (push (list :to-lisp (org-table-to-lisp)) r))
       (error (push (list :iterate-error t) r)))
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:after-iterate #(\"| a | a |\n| 1 | 1 |\n| 1 | 1 |\n#+TBLFM: @>$1=vsum(@2..@-1)::$2=$1+0\n\" 0 5 (face org-table) 5 9 (face org-table) 9 10 (face org-table-row) 10 15 (face org-table) 15 19 (face org-table) 19 20 (face org-table-row) 20 21 (face org-table) 21 24 (face org-table :org-untouchable t) 24 25 (face org-table) 25 29 (face org-table) 29 30 (face org-table-row))) (:iterate-error t))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo67_cycle_separator_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:separator-lines-fbound t :separator-lines 2 :empty-lines-before-fbound t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -151,15 +160,16 @@ fn combo67_cycle_separator_lines() {
                       org-cycle-separator-lines)
    :empty-lines-before-fbound (boundp 'org-cycle-separator-lines)
    ))"##,
-        expect_test::expect![[
-            r#""OK (:separator-lines-fbound t :separator-lines 2 :empty-lines-before-fbound t)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo67_element_affiliated_on_keyword() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:keyword-count 1) (:keyword-keys (\"END\")) (:keyword-values (\"\")))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -173,15 +183,16 @@ fn combo67_element_affiliated_on_keyword() {
       (push (list :keyword-keys (mapcar (lambda (k) (org-element-property :key k)) keywords)) r)
       (push (list :keyword-values (mapcar (lambda (k) (org-element-property :value k)) keywords)) r))
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:keyword-count 1) (:keyword-keys (\"END\")) (:keyword-values (\"\")))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo67_table_formula_arithmetic_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:after-recalc #(\"| a | b | b / a |\n| 0 | 5 | 5/0   |\n| 2 | 0 | 0     |\n#+TBLFM: $3=$2/$1\n\" 0 17 (face org-table) 17 18 (face org-table-row) 18 19 (face org-table) 19 20 (face org-table rear-nonsticky t display (space :relative-width 1)) 20 21 (face org-table) 21 22 (face org-table display (space :relative-width 1.001)) 22 23 (face org-table) 23 24 (face org-table rear-nonsticky t display (space :relative-width 1)) 24 25 (face org-table) 25 26 (face org-table display (space :relative-width 1.001)) 26 27 (face org-table) 27 28 (face org-table rear-nonsticky t display (space :relative-width 1)) 28 31 (face org-table) 31 33 (face org-table) 33 34 (face org-table display (space :relative-width 1.001)) 34 35 (face org-table) 35 36 (face org-table-row) 36 37 (face org-table) 37 38 (face org-table rear-nonsticky t display (space :relative-width 1)) 38 39 (face org-table) 39 40 (face org-table display (space :relative-width 1.001)) 40 41 (face org-table) 41 42 (face org-table rear-nonsticky t display (space :relative-width 1)) 42 43 (face org-table) 43 44 (face org-table display (space :relative-width 1.001)) 44 45 (face org-table) 45 46 (face org-table rear-nonsticky t display (space :relative-width 1)) 46 47 (face org-table) 47 51 (face org-table) 51 52 (face org-table display (space :relative-width 1.001)) 52 53 (face org-table) 53 54 (face org-table-row))) (:to-lisp ((#(\"a\" 0 1 (face org-table)) #(\"b\" 0 1 (face org-table)) #(\"b / a\" 0 5 (face org-table))) (#(\"0\" 0 1 (face org-table)) #(\"5\" 0 1 (face org-table)) #(\"5/0\" 0 3 (face org-table))) (#(\"2\" 0 1 (face org-table)) #(\"0\" 0 1 (face org-table)) #(\"0\" 0 1 (face org-table))))))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -197,15 +208,14 @@ fn combo67_table_formula_arithmetic_errors() {
     (goto-char (point-min))
     (push (list :to-lisp (org-table-to-lisp)) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:after-recalc #(\"| a | b | b / a |\n| 0 | 5 | 5/0   |\n| 2 | 0 | 0     |\n#+TBLFM: $3=$2/$1\n\" 0 17 (face org-table) 17 18 (face org-table-row) 18 19 (face org-table) 19 20 (face org-table rear-nonsticky t display (space :relative-width 1)) 20 21 (face org-table) 21 22 (face org-table display (space :relative-width 1.001)) 22 23 (face org-table) 23 24 (face org-table rear-nonsticky t display (space :relative-width 1)) 24 25 (face org-table) 25 26 (face org-table display (space :relative-width 1.001)) 26 27 (face org-table) 27 28 (face org-table rear-nonsticky t display (space :relative-width 1)) 28 31 (face org-table) 31 33 (face org-table) 33 34 (face org-table display (space :relative-width 1.001)) 34 35 (face org-table) 35 36 (face org-table-row) 36 37 (face org-table) 37 38 (face org-table rear-nonsticky t display (space :relative-width 1)) 38 39 (face org-table) 39 40 (face org-table display (space :relative-width 1.001)) 40 41 (face org-table) 41 42 (face org-table rear-nonsticky t display (space :relative-width 1)) 42 43 (face org-table) 43 44 (face org-table display (space :relative-width 1.001)) 44 45 (face org-table) 45 46 (face org-table rear-nonsticky t display (space :relative-width 1)) 46 47 (face org-table) 47 51 (face org-table) 51 52 (face org-table display (space :relative-width 1.001)) 52 53 (face org-table) 53 54 (face org-table-row))) (:to-lisp ((#(\"a\" 0 1 (face org-table)) #(\"b\" 0 1 (face org-table)) #(\"b / a\" 0 5 (face org-table))) (#(\"0\" 0 1 (face org-table)) #(\"5\" 0 1 (face org-table)) #(\"5/0\" 0 3 (face org-table))) (#(\"2\" 0 1 (face org-table)) #(\"0\" 0 1 (face org-table)) #(\"0\" 0 1 (face org-table))))))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo67_babel_insert_result() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:insert-result-fbound t :result-end-fbound t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -215,13 +225,16 @@ fn combo67_babel_insert_result() {
    ;; org-babel-result-end
    :result-end-fbound (fboundp 'org-babel-result-end)
    ))"##,
-        expect_test::expect![[r#""OK (:insert-result-fbound t :result-end-fbound t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo67_org_property_inheritance_settings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:use-prop-inherit-fbound t :use-prop-inherit nil :prop-inherit-var-bound t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -231,8 +244,6 @@ fn combo67_org_property_inheritance_settings() {
                        org-use-property-inheritance)
    :prop-inherit-var-bound (boundp 'org-use-property-inheritance)
    ))"##,
-        expect_test::expect![[
-            r#""OK (:use-prop-inherit-fbound t :use-prop-inherit nil :prop-inherit-var-bound t)""#
-        ]],
+        expect,
     );
 }

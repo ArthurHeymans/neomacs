@@ -10,10 +10,8 @@ use super::common::{ORACLE_PROP_CASES, assert_ok_eq, eval_oracle_and_neovm};
 fn oracle_prop_catch_without_throw_returns_body() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(catch 'tag 1)",
-        expect_test::expect![[r#""OK 1""#]],
-    );
+    let expect = expect_test::expect![[r#""OK 1""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect("(catch 'tag 1)", expect);
     assert_ok_eq("1", &oracle, &neovm);
 }
 

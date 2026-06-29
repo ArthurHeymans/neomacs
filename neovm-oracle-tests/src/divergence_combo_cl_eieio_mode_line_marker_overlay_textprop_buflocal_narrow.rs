@@ -9,6 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_mode_line_basic_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass mode-ctx ()
@@ -71,7 +72,7 @@ fn combo_eieio_mode_line_basic_state() {
               (overlay-start ov) (overlay-end ov)
               my-ml-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -79,6 +80,7 @@ fn combo_eieio_mode_line_basic_state() {
 fn combo_eieio_mode_line_custom_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass mode-tracker ()
@@ -142,7 +144,7 @@ fn combo_eieio_mode_line_custom_format() {
         (list results (mt-log tracker) my-mt-log
               (mt-val tracker) (marker-position m))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -150,6 +152,7 @@ fn combo_eieio_mode_line_custom_format() {
 fn combo_eieio_mode_line_read_only_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ro-ctx ()
@@ -215,7 +218,7 @@ fn combo_eieio_mode_line_read_only_overlay() {
               (overlay-start ov) (overlay-end ov)
               (overlay-start ov-ro) (overlay-end ov-ro))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -223,6 +226,7 @@ fn combo_eieio_mode_line_read_only_overlay() {
 fn combo_eieio_mode_line_multibuf_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass buf-observer ()
@@ -291,7 +295,7 @@ fn combo_eieio_mode_line_multibuf_dispatch() {
           (cl-typep obs-a 'active-observer)
           (cl-typep obs-b 'inactive-observer)
           (cl-typep obs-c 'active-observer))))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -299,6 +303,7 @@ fn combo_eieio_mode_line_multibuf_dispatch() {
 fn combo_eieio_mode_line_props_and_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ml-state ()
@@ -372,6 +377,6 @@ fn combo_eieio_mode_line_props_and_narrow() {
               (marker-position m)
               my-mls-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }

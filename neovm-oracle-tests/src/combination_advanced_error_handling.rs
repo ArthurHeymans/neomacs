@@ -57,12 +57,10 @@ fn oracle_prop_aeh_multiple_handlers_resignal() {
                               (list (nreverse results)
                                     (nreverse neovm--test-aeh-log)))))
                       (makunbound 'neovm--test-aeh-log)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((ok 5 50) (err 0 \"arith-error processing 0\") (ok 3 30) (err -2 \"type-error processing -2\") (ok 7 70)) ((arith-caught 0) (wta-caught -2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((ok 5 50) (err 0 \"arith-error processing 0\") (ok 3 30) (err -2 \"type-error processing -2\") (ok 7 70)) ((arith-caught 0) (wta-caught -2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -112,12 +110,10 @@ fn oracle_prop_aeh_error_wrapping_layers() {
                       (fmakunbound 'neovm--test-data-access)
                       (fmakunbound 'neovm--test-service)
                       (fmakunbound 'neovm--test-controller)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((success \"processed:data:valid\") (failure \"service: key not found: missing\" data-layer (void-variable missing)) (failure \"service: corrupt data for: corrupt\" data-layer (wrong-type-argument stringp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((success \"processed:data:valid\") (failure \"service: key not found: missing\" data-layer (void-variable missing)) (failure \"service: corrupt data for: corrupt\" data-layer (wrong-type-argument stringp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -179,12 +175,10 @@ fn oracle_prop_aeh_retry_exponential_backoff() {
                       (fmakunbound 'neovm--test-with-retry)
                       (makunbound 'neovm--test-retry-log)
                       (makunbound 'neovm--test-retry-attempt)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ok . \"success on attempt 4\") ((attempt 1 delay 100) (failed 1 \"transient failure #1\") (attempt 2 delay 200) (failed 2 \"transient failure #2\") (attempt 3 delay 400) (failed 3 \"transient failure #3\") (attempt 4 delay 800) (success 4)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ok . \"success on attempt 4\") ((attempt 1 delay 100) (failed 1 \"transient failure #1\") (attempt 2 delay 200) (failed 2 \"transient failure #2\") (attempt 3 delay 400) (failed 3 \"transient failure #3\") (attempt 4 delay 800) (success 4)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -245,12 +239,10 @@ fn oracle_prop_aeh_error_aggregation_batch() {
                                 (length successes)
                                 (length failures)))
                       (fmakunbound 'neovm--test-validate-record)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((ok 0 \"Alice\") (ok 4 \"Eve\")) ((fail 1 (\"name is empty or not a string\")) (fail 2 (\"age -5 is invalid\")) (fail 3 (\"email \\\"dave-no-at\\\" missing @\")) (fail 5 (\"name is empty or not a string\" \"age 200 is invalid\" \"email is not a string\"))) 1 1)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((ok 0 \"Alice\") (ok 4 \"Eve\")) ((fail 1 (\"name is empty or not a string\")) (fail 2 (\"age -5 is invalid\")) (fail 3 (\"email \\\"dave-no-at\\\" missing @\")) (fail 5 (\"name is empty or not a string\" \"age 200 is invalid\" \"email is not a string\"))) 1 1)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -329,12 +321,10 @@ fn oracle_prop_aeh_circuit_breaker() {
                       (makunbound 'neovm--test-cb-fail-count)
                       (makunbound 'neovm--test-cb-threshold)
                       (makunbound 'neovm--test-cb-log)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((ok \"ok-1\") (err \"e1\") (err \"e2\") (err \"e3\") (err \"circuit breaker open\") (err \"circuit breaker open\")) ((success \"ok-1\") (failure 1 \"e1\") (failure 2 \"e2\") (failure 3 \"e3\") (circuit-tripped 3) (circuit-open rejected) (circuit-open rejected)) open 3)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((ok \"ok-1\") (err \"e1\") (err \"e2\") (err \"e3\") (err \"circuit breaker open\") (err \"circuit breaker open\")) ((success \"ok-1\") (failure 1 \"e1\") (failure 2 \"e2\") (failure 3 \"e3\") (circuit-tripped 3) (circuit-open rejected) (circuit-open rejected)) open 3)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -427,12 +417,10 @@ fn oracle_prop_aeh_transaction_rollback() {
                       (fmakunbound 'neovm--test-txn-execute)
                       (makunbound 'neovm--test-txn-store)
                       (makunbound 'neovm--test-txn-journal)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((before ((balance . 1000) (name . \"Alice\") (status . active))) (tx1 committed ((last-txn . \"2024-01-01\") (balance . 900) (name . \"Alice Updated\") (status . active))) (tx2 (tx-failed \"payment gateway timeout\") ((last-txn . \"2024-01-01\") (balance . 900) (name . \"Alice Updated\") (status . active))) (rollback-ok t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((before ((balance . 1000) (name . \"Alice\") (status . active))) (tx1 committed ((last-txn . \"2024-01-01\") (balance . 900) (name . \"Alice Updated\") (status . active))) (tx2 (tx-failed \"payment gateway timeout\") ((last-txn . \"2024-01-01\") (balance . 900) (name . \"Alice Updated\") (status . active))) (rollback-ok t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -485,10 +473,8 @@ fn oracle_prop_aeh_handler_priority_chain() {
                        (setq results
                              (cons (list 'propagated (cadr outer)) results))))
                     (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((first-handler arith) (generic-handler file-error) (cleanup-and-catch t \"inner boom\") (propagated some-var))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((first-handler arith) (generic-handler file-error) (cleanup-and-catch t \"inner boom\") (propagated some-var))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

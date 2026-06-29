@@ -9,6 +9,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx344_format_all_specifiers_full_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"42\" \"   42\" \"42   |\" \"00042\" \"+42\" \"100\" \"ff\" \"FF\" \"1010\" \"A\" \"β\" \"1.234568e+04\" \"12345.678900\" \"1e-05\" \"3.14\" \"     3.142\" \"hello\" \"(1 \\\"two\\\" 3)\" \"%\" \"a b c\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%d" 42)
@@ -32,15 +35,14 @@ fn div_cx344_format_all_specifiers_full_matrix() {
       (format "%%")
       (format "%3$s %2$s %1$s" "c" "b" "a"))
 "##,
-        expect_test::expect![[
-            r#""OK (\"42\" \"   42\" \"42   |\" \"00042\" \"+42\" \"100\" \"ff\" \"FF\" \"1010\" \"A\" \"β\" \"1.234568e+04\" \"12345.678900\" \"1e-05\" \"3.14\" \"     3.142\" \"hello\" \"(1 \\\"two\\\" 3)\" \"%\" \"a b c\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx344_floor_ceiling_round_truncate_all_signs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 -3 3 -2 2 4 -2 -4 2 -2 2.0 3.0 2.0 2.0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (floor 2.7) (floor -2.7)
@@ -50,26 +52,30 @@ fn div_cx344_floor_ceiling_round_truncate_all_signs() {
       (ffloor 2.7) (fceiling 2.3)
       (fround 2.5) (ftruncate 2.7))
 "##,
-        expect_test::expect![[r#""OK (2 -3 3 -2 2 4 -2 -4 2 -2 2.0 3.0 2.0 2.0)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx344_mod_remainder_negative_divisor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 -1 1 -1 1 2 -2 -1 1.5 1.5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (% 7 3) (% -7 3) (% 7 -3) (% -7 -3)
       (mod 7 3) (mod -7 3) (mod 7 -3) (mod -7 -3)
       (mod 7.5 3) (mod -7.5 3))
 "##,
-        expect_test::expect![[r#""OK (1 -1 1 -1 1 2 -2 -1 1.5 1.5)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx344_bignum_factorial_and_fibonacci() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (3628800 2432902008176640000 \"265252859812191058636308480000000\" 55 6765 832040)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (letrec ((fact (lambda (n) (if (= n 0) 1 (* n (funcall fact (1- n))))))
@@ -81,15 +87,16 @@ fn div_cx344_bignum_factorial_and_fibonacci() {
         (funcall fib 20)
         (funcall fib 30)))
 "##,
-        expect_test::expect![[
-            r#""OK (3628800 2432902008176640000 \"265252859812191058636308480000000\" 55 6765 832040)""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx344_ash_lsh_logand_logior_logxor_with_bignum() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (1 1024 4294967296 18446744073709551616 340282366920938463463374607431768211456 128 -1 1298074214633706907132624082305024 1237940039285380274899124224 15 255 240 -1 8 0)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((big (expt 2 100)))
@@ -99,15 +106,14 @@ fn div_cx344_ash_lsh_logand_logior_logxor_with_bignum() {
         (logand #xff #x0f) (logior #xf0 #x0f) (logxor #xff #x0f)
         (lognot #x00) (logcount 255) (logcount -1)))
 "##,
-        expect_test::expect![[
-            r#""OK (1 1024 4294967296 18446744073709551616 340282366920938463463374607431768211456 128 -1 1298074214633706907132624082305024 1237940039285380274899124224 15 255 240 -1 8 0)""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx344_expt_log_sqrt_full_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable exp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (expt 2 10) (expt 2 0) (expt 2 -1) (expt 2 0.5) (expt 2 -0.5)
@@ -115,13 +121,14 @@ fn div_cx344_expt_log_sqrt_full_matrix() {
       (log 100) (log 100 10) (log exp) (log 1)
       (sqrt 16) (sqrt 2) (expt 8 1/3))
 "##,
-        expect_test::expect![[r#""ERR (void-variable exp)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx344_number_to_string_string_to_number_all_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable 1/3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (number-to-string 42)
@@ -137,13 +144,14 @@ fn div_cx344_number_to_string_string_to_number_all_types() {
       (string-to-number "42abc")
       (string-to-number ""))
 "##,
-        expect_test::expect![[r#""ERR (void-variable 1/3)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx344_ratio_arithmetic_full_reduction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable 1/2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (+ 1/2 1/3) (- 5/6 1/2) (* 2/3 3/4) (/ 2/3 4/5)
@@ -151,13 +159,14 @@ fn div_cx344_ratio_arithmetic_full_reduction() {
       (denominator 6/4) (numerator 6/4)
       (+ 1/2 0) (* 1/3 0))
 "##,
-        expect_test::expect![[r#""ERR (void-variable 1/2)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx344_nan_inf_predicates_and_arithmetic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((inf (/ 1.0 0.0))
@@ -168,13 +177,14 @@ fn div_cx344_nan_inf_predicates_and_arithmetic() {
         (< neginf inf)
         (numberp nan) (= nan nan) (< nan 0)))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t nil nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx344_number_arith_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (letrec ((fib (lambda (n) (if (< n 2) n (+ (funcall fib (1- n)) (funcall fib (- n 2)))))))
@@ -204,6 +214,6 @@ fn div_cx344_number_arith_with_marker_overlay_undo_narrow_mega() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     )
 }

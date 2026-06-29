@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_print_circle_with_shared_tail() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((shared '(x y z)))\n\
@@ -17,7 +18,7 @@ fn deficiency_print_circle_with_shared_tail() {
          (prin1-to-string (list l1 l2)))))\n\
          (list printed\n\
          (eq (nthcdr 2 l1) (nthcdr 2 l2))))))",
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -25,6 +26,7 @@ fn deficiency_print_circle_with_shared_tail() {
 fn deficiency_make_circular_list_print_circle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((l (list 1 2 3)))\n\
@@ -33,7 +35,7 @@ fn deficiency_make_circular_list_print_circle() {
          (prin1-to-string l))))\n\
          (list (string-match \"#0=\" printed)\n\
          (string-match \"#0#\" printed)))))",
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
@@ -41,6 +43,7 @@ fn deficiency_make_circular_list_print_circle() {
 fn deficiency_nconc_builds_shared_structure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((a b z) (c d z) t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((shared '(z)))\n\
@@ -49,7 +52,7 @@ fn deficiency_nconc_builds_shared_structure() {
          (list l1 l2\n\
          (eq (nthcdr 2 l1) (nthcdr 2 l2))\n\
          (eq (nth 2 l1) (nth 2 l2))))))",
-        expect_test::expect![[r#""OK ((a b z) (c d z) t t)""#]],
+        expect,
     );
 }
 
@@ -57,6 +60,7 @@ fn deficiency_nconc_builds_shared_structure() {
 fn deficiency_reverse_vs_nreverse_on_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((5 4 3 2 1) (5 4 3 2 1) t (1 2 3 4 5) (1))""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((original '(1 2 3 4 5))\n\
@@ -65,7 +69,7 @@ fn deficiency_reverse_vs_nreverse_on_list() {
          (r2 (nreverse copy)))\n\
          (list r1 r2 (equal r1 r2)\n\
          original copy))))",
-        expect_test::expect![[r#""OK ((5 4 3 2 1) (5 4 3 2 1) t (1 2 3 4 5) (1))""#]],
+        expect,
     );
 }
 
@@ -73,6 +77,7 @@ fn deficiency_reverse_vs_nreverse_on_list() {
 fn deficiency_nconc_mutates_last_pair() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((1 2 3 4) (3 4) t 4)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((a (list 1 2))\n\
@@ -81,7 +86,7 @@ fn deficiency_nconc_mutates_last_pair() {
          (list a b\n\
          (eq (nthcdr 2 a) b)\n\
          (length a))))",
-        expect_test::expect![[r#""OK ((1 2 3 4) (3 4) t 4)""#]],
+        expect,
     );
 }
 
@@ -89,6 +94,7 @@ fn deficiency_nconc_mutates_last_pair() {
 fn deficiency_append_does_not_mutate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((1 2 3 4) 4 t (1 2) (3 4))""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((a (list 1 2))\n\
@@ -97,7 +103,7 @@ fn deficiency_append_does_not_mutate() {
          (list c (length c)\n\
          (eq (nthcdr 2 c) b)\n\
          a b))))",
-        expect_test::expect![[r#""OK ((1 2 3 4) 4 t (1 2) (3 4))""#]],
+        expect,
     );
 }
 
@@ -105,6 +111,7 @@ fn deficiency_append_does_not_mutate() {
 fn deficiency_copy_tree_vs_copy_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (((X 2) (3 (4 5)) 6) ((1 2) (3 (4 5)) 6) t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((orig '((1 2) (3 (4 5)) 6)))\n\
@@ -114,7 +121,7 @@ fn deficiency_copy_tree_vs_copy_list() {
          (list shallow deep\n\
          (eq (nth 0 orig) (nth 0 shallow))\n\
          (eq (nth 0 orig) (nth 0 deep))))))",
-        expect_test::expect![[r#""OK (((X 2) (3 (4 5)) 6) ((1 2) (3 (4 5)) 6) t nil)""#]],
+        expect,
     );
 }
 
@@ -122,13 +129,14 @@ fn deficiency_copy_tree_vs_copy_list() {
 fn deficiency_list_length_vs_safe_length() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function list-length)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((l (list 1 2 3 4 5)))\n\
          (list (length l)\n\
          (safe-length l)\n\
          (list-length l))))",
-        expect_test::expect![[r#""ERR (void-function list-length)""#]],
+        expect,
     );
 }
 
@@ -136,13 +144,14 @@ fn deficiency_list_length_vs_safe_length() {
 fn deficiency_plist_put_mutates_in_place() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((a 1 b 99 c 3) 99 3)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((pl (list 'a 1 'b 2 'c 3)))\n\
          (plist-put pl 'b 99)\n\
          (list pl (plist-get pl 'b)\n\
          (plist-get pl 'c))))",
-        expect_test::expect![[r#""OK ((a 1 b 99 c 3) 99 3)""#]],
+        expect,
     );
 }
 
@@ -150,6 +159,7 @@ fn deficiency_plist_put_mutates_in_place() {
 fn deficiency_assoc_set_alist_mutation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (((c . 3) (a . 10) (b . 2)) 10 2 3 3)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((alist '((a . 1) (b . 2))))\n\
@@ -161,6 +171,6 @@ fn deficiency_assoc_set_alist_mutation() {
          (alist-get 'b alist)\n\
          (alist-get 'c alist)\n\
          (length alist)))))",
-        expect_test::expect![[r#""OK (((c . 3) (a . 10) (b . 2)) 10 2 3 3)""#]],
+        expect,
     );
 }

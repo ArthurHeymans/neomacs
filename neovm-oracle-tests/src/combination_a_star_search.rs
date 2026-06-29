@@ -122,10 +122,8 @@ fn oracle_prop_a_star_simple_grid() {
     (fmakunbound 'neovm--as-manhattan)
     (fmakunbound 'neovm--as-neighbors-4)
     (fmakunbound 'neovm--as-search)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (8 9 (0 . 0) (4 . 4))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (8 9 (0 . 0) (4 . 4))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -217,10 +215,8 @@ fn oracle_prop_a_star_with_obstacles() {
     (fmakunbound 'neovm--as2-h)
     (fmakunbound 'neovm--as2-nbr4)
     (fmakunbound 'neovm--as2-run)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t 16 17 (0 . 0) (6 . 0))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t 16 17 (0 . 0) (6 . 0))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -302,7 +298,8 @@ fn oracle_prop_a_star_unreachable() {
     (fmakunbound 'neovm--as3-h)
     (fmakunbound 'neovm--as3-nbr4)
     (fmakunbound 'neovm--as3-run)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t (t 0 1))""#]]);
+    let expect = expect_test::expect![[r#""OK (t (t 0 1))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -393,7 +390,8 @@ fn oracle_prop_a_star_diagonal() {
     (fmakunbound 'neovm--as4-chebyshev)
     (fmakunbound 'neovm--as4-nbr8)
     (fmakunbound 'neovm--as4-run)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (4 5 t)""#]]);
+    let expect = expect_test::expect![[r#""OK (4 5 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -495,10 +493,8 @@ fn oracle_prop_a_star_maze() {
     (fmakunbound 'neovm--as5-h)
     (fmakunbound 'neovm--as5-nbr4)
     (fmakunbound 'neovm--as5-run)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t 14 15 t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t 14 15 t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -602,8 +598,6 @@ fn oracle_prop_a_star_compare_4dir_vs_8dir() {
     (fmakunbound 'neovm--as6-nbr4)
     (fmakunbound 'neovm--as6-nbr8)
     (fmakunbound 'neovm--as6-run)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t 11 8 10 7)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t 11 8 10 7)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

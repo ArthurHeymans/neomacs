@@ -43,12 +43,10 @@ fn oracle_prop_format_ext_float_precision_matrix() {
                     (format "%g" 0.00001)
                     (format "%.2g" 3.14159)
                     (format "%.10g" 3.14159))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"3\" \"3.1\" \"3.142\" \"3.141590\" \"3.1415900000\" \"      3.14\" \"     -3.14\" \"3.14      \" \"0000003.14\" \"     +3.14\" \"     -3.14\" \"1.234568e+04\" \"1.23e+04\" \"1e+04\" \"     1.2300e-04\" \"1.2300e-04     \" \"100\" \"100000\" \"0.0001\" \"1e-05\" \"3.1\" \"3.14159\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"3\" \"3.1\" \"3.142\" \"3.141590\" \"3.1415900000\" \"      3.14\" \"     -3.14\" \"3.14      \" \"0000003.14\" \"     +3.14\" \"     -3.14\" \"1.234568e+04\" \"1.23e+04\" \"1e+04\" \"     1.2300e-04\" \"1.2300e-04     \" \"100\" \"100000\" \"0.0001\" \"1e-05\" \"3.1\" \"3.14159\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -87,12 +85,10 @@ fn oracle_prop_format_ext_hex_octal_variations() {
                     ;; Edge: 0 with prefix
                     (format "%#x" 0)
                     (format "%#o" 0))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"0\" \"f\" \"ff\" \"ffff\" \"FF\" \"BEEF\" \"0\" \"7\" \"10\" \"777\" \"000f\" \"000000ff\" \"000000FF\" \"000010\" \"0xff\" \"0XFF\" \"010\" \"      0xff\" \"ff        \" \"377       \" \"0\" \"0\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"0\" \"f\" \"ff\" \"ffff\" \"FF\" \"BEEF\" \"0\" \"7\" \"10\" \"777\" \"000f\" \"000000ff\" \"000000FF\" \"000010\" \"0xff\" \"0XFF\" \"010\" \"      0xff\" \"ff        \" \"377       \" \"0\" \"0\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -125,12 +121,10 @@ fn oracle_prop_format_ext_char_comprehensive() {
                     ;; Wider char codes
                     (format "%c" 955)
                     (format "%c" 8364))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"A\" \"z\" \"0\" \"9\" \"!\" \"@\" \"~\" \" \" \"\n\" \"Hello\" \"char=A code=65 hex=41\" \"() 2+3=5\" \"λ\" \"€\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"A\" \"z\" \"0\" \"9\" \"!\" \"@\" \"~\" \" \" \"\n\" \"Hello\" \"char=A code=65 hex=41\" \"() 2+3=5\" \"λ\" \"€\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -161,12 +155,10 @@ fn oracle_prop_format_ext_special_chars() {
                     ;; Very long format string
                     (format "%s-%s-%s-%s-%s-%s-%s-%s"
                             "a" "b" "c" "d" "e" "f" "g" "h"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"line1\nline2\nline3\" \"col1\tcol2\tcol3\" \"a\nb\tc\n\" \"path: C:\\\\Users\\\\test\" \"He said \\\"hello\\\"\" \"50% of 80% = 40.00%\" \"[]\" \"[          ]\" \"[          ]\" \"nil/t/symbol\" \"a-b-c-d-e-f-g-h\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"line1\nline2\nline3\" \"col1\tcol2\tcol3\" \"a\nb\tc\n\" \"path: C:\\\\Users\\\\test\" \"He said \\\"hello\\\"\" \"50% of 80% = 40.00%\" \"[]\" \"[          ]\" \"[          ]\" \"nil/t/symbol\" \"a-b-c-d-e-f-g-h\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -211,12 +203,10 @@ fn oracle_prop_format_ext_nested_format() {
                            (format " %d " v)))
                        values
                        ",")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"outer(inner(42))\" \"[<{99}>]\" \"00042\" \"Alice,30,95.5\" \"host=localhost&port=8080&debug=true\" \" 1 ,(2), 3 ,(4), 5 \")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"outer(inner(42))\" \"[<{99}>]\" \"00042\" \"Alice,30,95.5\" \"host=localhost&port=8080&debug=true\" \" 1 ,(2), 3 ,(4), 5 \")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -255,12 +245,10 @@ fn oracle_prop_format_ext_elisp_code_generation() {
                     ;; Generate and read a more complex form
                     (let ((code (format "(list %d %d %d)" 1 2 3)))
                       (eval (car (read-from-string code)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"(setq my-var 42)\" \"(defun my-add (a b)\n  (+ a b))\" \"(let ((x 1) (y 2) (z 3))\n  (+ x y z))\" \"'(\\\"hello\\\" world 42 nil)\" (+ 10 20) (1 2 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"(setq my-var 42)\" \"(defun my-add (a b)\n  (+ a b))\" \"(let ((x 1) (y 2) (z 3))\n  (+ x y z))\" \"'(\\\"hello\\\" world 42 nil)\" (+ 10 20) (1 2 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -309,12 +297,10 @@ fn oracle_prop_format_ext_aligned_table_builder() {
                      (format "%.2f" grand-total)
                      ;; Row count
                      (length rows)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Product         Qty      Price        Total\" \"===========================================\" (\"Widget A        150      24.99      3748.50\" \"Gadget Pro       42     149.95      6297.90\" \"Nano Thing     1000       3.50      3500.00\" \"Mega Device       7     999.99      6999.93\") \"TOTAL          1199                20546.33\" 1199 \"20546.33\" 4)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Product         Qty      Price        Total\" \"===========================================\" (\"Widget A        150      24.99      3748.50\" \"Gadget Pro       42     149.95      6297.90\" \"Nano Thing     1000       3.50      3500.00\" \"Mega Device       7     999.99      6999.93\") \"TOTAL          1199                20546.33\" 1199 \"20546.33\" 4)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -346,10 +332,8 @@ fn oracle_prop_format_ext_many_mixed_specifiers() {
                     (let ((x 7) (y 3))
                       (format "%d + %d = %d, %d * %d = %d, %d / %d = %d"
                               x y (+ x y) x y (* x y) x y (/ x y))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"d=42 x=ff X=FF o=10 f=3.14 e=1.2e+04 g=1e-05 c=A s=hi S=(1 2) %\" \"|   42|42   |00042|  +42|  -42|\" \"|     hello|hello     |hel|       hel|hel       |\" \"0.00 -0.00 1.00 100.00\" \"1000000 -1000000 1.000000e+20 1.000000e-20\" \"7 + 3 = 10, 7 * 3 = 21, 7 / 3 = 2\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"d=42 x=ff X=FF o=10 f=3.14 e=1.2e+04 g=1e-05 c=A s=hi S=(1 2) %\" \"|   42|42   |00042|  +42|  -42|\" \"|     hello|hello     |hel|       hel|hel       |\" \"0.00 -0.00 1.00 100.00\" \"1000000 -1000000 1.000000e+20 1.000000e-20\" \"7 + 3 = 10, 7 * 3 = 21, 7 / 3 = 2\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

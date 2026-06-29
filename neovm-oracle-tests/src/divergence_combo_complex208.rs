@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx208_mega_1_full_subsystem_chaos_coding_eieio_clloop_advice() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -70,13 +71,14 @@ fn div_cx208_mega_1_full_subsystem_chaos_coding_eieio_clloop_advice() {
                       (list state (buffer-live-p buf))))))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx208_mega_2_process_buflocal_undo_textprop_overlay_narrow_timer_env() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
@@ -117,13 +119,14 @@ fn div_cx208_mega_2_process_buflocal_undo_textprop_overlay_narrow_timer_env() {
         (kill-buffer buf))
       (list snapshot (buffer-live-p buf)))))
 "##,
-        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx208_mega_3_pcase_rx_syntax_search_replace_format_time_register_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument characterp nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
@@ -162,13 +165,14 @@ fn div_cx208_mega_3_pcase_rx_syntax_search_replace_format_time_register_window()
                   (overlay-start ov) (overlay-end ov)
                   (text-properties-at 1))))))))
 "##,
-        expect_test::expect![[r#""ERR (wrong-type-argument characterp nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx208_mega_4_keymap_command_loop_eval_macro_closure_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
@@ -203,13 +207,14 @@ fn div_cx208_mega_4_keymap_command_loop_eval_macro_closure_marker_overlay_undo()
                     (overlay-start ov) (overlay-end ov)
                     (text-properties-at 1)))))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx208_mega_5_all_subsystem_final_chaos_stress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable weak-ht)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
@@ -264,6 +269,6 @@ fn div_cx208_mega_5_all_subsystem_final_chaos_stress() {
                     (hash-table-count ht)
                     (aref rec 2)))))))))
 "##,
-        expect_test::expect![[r#""ERR (void-variable weak-ht)""#]],
+        expect,
     );
 }

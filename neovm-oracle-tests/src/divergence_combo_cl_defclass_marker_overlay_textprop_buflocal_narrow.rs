@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_cl_defclass_marker_overlay_textprop_buflocal_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "dcb")))
@@ -46,7 +47,7 @@ fn combo_cl_defclass_marker_overlay_textprop_buflocal_narrow_undo() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
+        expect,
     );
 }
 
@@ -54,6 +55,7 @@ fn combo_cl_defclass_marker_overlay_textprop_buflocal_narrow_undo() {
 fn combo_cl_defclass_clone_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "dcc")))
@@ -95,7 +97,7 @@ fn combo_cl_defclass_clone_overlay_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -103,6 +105,7 @@ fn combo_cl_defclass_clone_overlay_undo() {
 fn combo_cl_defclass_multi_buffer_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "dc1"))
@@ -160,7 +163,7 @@ fn combo_cl_defclass_multi_buffer_undo() {
               (with-current-buffer b2 (buffer-string)))))
     (kill-buffer b1)
     (kill-buffer b2)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -168,6 +171,7 @@ fn combo_cl_defclass_multi_buffer_undo() {
 fn combo_cl_defclass_setf_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "dsr")))
@@ -201,7 +205,7 @@ fn combo_cl_defclass_setf_replace_undo() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
+        expect,
     );
 }
 
@@ -209,6 +213,7 @@ fn combo_cl_defclass_setf_replace_undo() {
 fn combo_cl_defclass_multi_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "dmo")))
@@ -246,6 +251,6 @@ fn combo_cl_defclass_multi_overlay_undo() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
+        expect,
     );
 }

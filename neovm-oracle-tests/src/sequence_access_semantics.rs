@@ -34,12 +34,10 @@ fn oracle_elt_list_and_array_error_payloads() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (a nil nil (wrong-type-argument (integerp bad)) (wrong-type-argument (sequencep 42)) (wrong-type-argument (fixnump bad)) (args-out-of-range ([a b c] -1)) (args-out-of-range (\"abc\" 3)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (a nil nil (wrong-type-argument (integerp bad)) (wrong-type-argument (sequencep 42)) (wrong-type-argument (fixnump bad)) (args-out-of-range ([a b c] -1)) (args-out-of-range (\"abc\" 3)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -51,10 +49,9 @@ fn oracle_elt_lambda_is_not_sequence_like_gnu() {
     // closure is not an `elt` sequence, even though GNU Faref handles
     // closures directly for lower-level closure-slot access.
     let form = r#"(elt (lambda (x) x) 0)"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (wrong-type-argument sequencep (closure (t) (x) x))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""ERR (wrong-type-argument sequencep (closure (t) (x) x))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -87,12 +84,10 @@ fn oracle_elt_arraylike_acceptance_edges() {
        (elt table #x400000)
      (error (list (car err) (cdr err))))))"#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil t letter-a default (wrong-type-argument (sequencep #s(neovm--elt-record 1 2))) (wrong-type-argument (sequencep #[257 \"\\300\\207\" [42] 1])) (args-out-of-range (#&3\"\u{2}\" 3)) (wrong-type-argument (characterp 4194304)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil t letter-a default (wrong-type-argument (sequencep #s(neovm--elt-record 1 2))) (wrong-type-argument (sequencep #[257 \"\\300\\207\" [42] 1])) (args-out-of-range (#&3\"\u{2}\" 3)) (wrong-type-argument (characterp 4194304)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -121,12 +116,10 @@ fn oracle_aref_type_index_and_bounds_errors() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-type-argument (arrayp (a b c))) (wrong-type-argument (fixnump bad)) (args-out-of-range ([a b c] -1)) (args-out-of-range ([a b c] 3)) (args-out-of-range (\"abc\" 3)) (args-out-of-range (#&2\"\\0\" 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-type-argument (arrayp (a b c))) (wrong-type-argument (fixnump bad)) (args-out-of-range ([a b c] -1)) (args-out-of-range ([a b c] 3)) (args-out-of-range (\"abc\" 3)) (args-out-of-range (#&2\"\\0\" 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -157,10 +150,8 @@ fn oracle_aset_vector_bool_and_record_edges() {
      (error (list (car err) (cdr err)))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 22 43)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 22 43)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -190,10 +181,8 @@ fn oracle_aset_string_ascii_and_multibyte_rules() {
      (error (list (car err) (cdr err)))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 21 43)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 21 43)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -221,10 +210,8 @@ fn oracle_char_table_aref_aset_index_rules() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (default alpha alpha default (wrong-type-argument (characterp -1)) (wrong-type-argument (characterp 4194304)) (wrong-type-argument (fixnump bad)) (wrong-type-argument (fixnump bad)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (default alpha alpha default (wrong-type-argument (characterp -1)) (wrong-type-argument (characterp 4194304)) (wrong-type-argument (fixnump bad)) (wrong-type-argument (fixnump bad)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

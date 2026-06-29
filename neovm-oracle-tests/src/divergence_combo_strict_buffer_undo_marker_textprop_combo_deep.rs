@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_s0_undo_restores_markers_and_textprops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 3 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r####"
 (let ((m (make-marker))
@@ -26,13 +27,14 @@ fn div_s0_undo_restores_markers_and_textprops() {
     (undo)
     (append result (list (marker-position m) (get-text-property 3 'face) (buffer-string)))))
 "####,
-        expect_test::expect![[r#""ERR (args-out-of-range 3 3)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_s0_undo_marker_insertion_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 4 \"abXcdef\" (1 1 \"\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r####"
 (let ((m1 (make-marker))
@@ -51,13 +53,14 @@ fn div_s0_undo_marker_insertion_type() {
           (buffer-string)
           (progn (undo) (list (marker-position m1) (marker-position m2) (buffer-string))))))
 "####,
-        expect_test::expect![[r#""OK (3 4 \"abXcdef\" (1 1 \"\"))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_s0_undo_buffer_undo_list_length_and_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (6 2 8 \"a\")""#]];
     crate::common::assert_oracle_parity_expect(
         r####"
 (with-temp-buffer
@@ -72,13 +75,14 @@ fn div_s0_undo_buffer_undo_list_length_and_boundary() {
     (undo)
     (list len boundaries (length buffer-undo-list) (buffer-string))))
 "####,
-        expect_test::expect![[r#""OK (6 2 8 \"a\")""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_s0_undo_redo_with_text_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\" world\" nil \"\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r####"
 (with-temp-buffer
@@ -94,6 +98,6 @@ fn div_s0_undo_redo_with_text_properties() {
           (props-restored (get-text-property 1 'face)))
       (list after-delete props-remain after-undo props-restored))))
 "####,
-        expect_test::expect![[r#""OK (\" world\" nil \"\" nil)""#]],
+        expect,
     );
 }

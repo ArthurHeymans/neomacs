@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_defvar_local_marker_overlay_textprop_clone_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar dvl-test-var 'global-default)
@@ -50,7 +51,7 @@ fn combo_defvar_local_marker_overlay_textprop_clone_narrow_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -58,6 +59,7 @@ fn combo_defvar_local_marker_overlay_textprop_clone_narrow_undo() {
 fn combo_defvar_local_multi_buffer_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar dvl-multi-var 'global)
@@ -115,7 +117,7 @@ fn combo_defvar_local_multi_buffer_overlay_undo() {
               (with-current-buffer b2 (buffer-string)))))
     (kill-buffer b1)
     (kill-buffer b2)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -123,6 +125,7 @@ fn combo_defvar_local_multi_buffer_overlay_undo() {
 fn combo_defvar_local_setf_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar dvl-setf-var 'global)
@@ -158,7 +161,7 @@ fn combo_defvar_local_setf_replace_undo() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
+        expect,
     );
 }
 
@@ -166,6 +169,7 @@ fn combo_defvar_local_setf_replace_undo() {
 fn combo_defvar_local_narrow_clone_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar dvl-nc-var 'global)
@@ -208,7 +212,7 @@ fn combo_defvar_local_narrow_clone_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -216,6 +220,7 @@ fn combo_defvar_local_narrow_clone_undo() {
 fn combo_defvar_local_multi_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar dvl-mo-var 'global)
@@ -255,6 +260,6 @@ fn combo_defvar_local_multi_overlay_undo() {
                 (marker-position m)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ char-after\\))""#]],
+        expect,
     );
 }

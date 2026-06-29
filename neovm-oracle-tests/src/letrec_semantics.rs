@@ -29,12 +29,10 @@ fn oracle_letrec_macroexpansion_rewrite_shapes() {
      (list neovm--lr-a (funcall neovm--lr-b) neovm--lr-c))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((let* ((neovm--lr-a 1) (neovm--lr-b neovm--lr-a)) (+ neovm--lr-a neovm--lr-b)) (let (neovm--lr-a neovm--lr-b) (setq neovm--lr-a (lambda nil (funcall neovm--lr-b))) (setq neovm--lr-b (lambda nil 42)) (funcall neovm--lr-a)) (let* ((neovm--lr-a 1)) (let (neovm--lr-b neovm--lr-c) (setq neovm--lr-b (lambda nil neovm--lr-c)) (setq neovm--lr-c 3) (list neovm--lr-a (funcall neovm--lr-b) neovm--lr-c))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((let* ((neovm--lr-a 1) (neovm--lr-b neovm--lr-a)) (+ neovm--lr-a neovm--lr-b)) (let (neovm--lr-a neovm--lr-b) (setq neovm--lr-a (lambda nil (funcall neovm--lr-b))) (setq neovm--lr-b (lambda nil 42)) (funcall neovm--lr-a)) (let* ((neovm--lr-a 1)) (let (neovm--lr-b neovm--lr-c) (setq neovm--lr-b (lambda nil neovm--lr-c)) (setq neovm--lr-c 3) (list neovm--lr-a (funcall neovm--lr-b) neovm--lr-c))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -58,10 +56,8 @@ fn oracle_letrec_runtime_omitted_initializers_and_scope() {
    (list a (funcall b))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (ok (1 2 ((init-b 1) init-a)) (nil nil))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (ok (1 2 ((init-b 1) init-a)) (nil nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -82,10 +78,8 @@ fn oracle_letrec_nonrecursive_rewrite_edges() {
    (list x y)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((progn 1 2 3) 1 (let* ((neovm--lr-x 1) (neovm--lr-y 2)) neovm--lr-y) 3 1 (1 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((progn 1 2 3) 1 (let* ((neovm--lr-x 1) (neovm--lr-y 2)) neovm--lr-y) 3 1 (1 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

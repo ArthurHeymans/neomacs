@@ -25,5 +25,6 @@ fn oracle_redirect_debugging_output_captures_external_debug_chars() {
     (ignore-errors (delete-file file))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK \"AB\"""#]]);
+    let expect = expect_test::expect![[r#""OK \"AB\"""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

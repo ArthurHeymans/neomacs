@@ -8,6 +8,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx227_char_code_property_general_category_full() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((97 Ll) (65 Lu) (48 Nd) (49 Nd) (32 Zs) (33 Po) (44 Po) (46 Po) (63 Po) (40 Ps) (41 Pe) (45 Pd) (224 Ll) (233 Ll) (252 Ll) (241 Ll) (196 Lu) (231 Ll) (197 Lu) (198 Lu) (338 Lu) (945 Ll) (946 Ll) (947 Ll) (913 Lu) (914 Lu) (915 Lu) (19990 Lo) (30028 Lo) (26085 Lo) (26412 Lo) (35486 Lo) (1488 Lo) (1489 Lo) (1490 Lo) (1575 Lo) (1576 Lo) (1580 Lo) (10 Cc) (9 Cc) (95 Pc) (34 Po) (39 Po) (92 Po) (35 Po) (36 Sc) (37 Po) (38 Po) (42 Po) (43 Sm) (60 Sm) (62 Sm) (64 Po) (47 Po) (124 Sm) (126 Sm) (94 Sk))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (c) (list c (get-char-code-property c 'general-category)))
@@ -18,15 +21,16 @@ fn div_cx227_char_code_property_general_category_full() {
           ?א ?ב ?ג ?ا ?ب ?ج
           ?\n ?\t ?_ ?" ?' ?\\ ?# ?$ ?% ?& ?* ?+ ?< ?> ?@ ?/ ?| ?~ ?^))
 "##,
-        expect_test::expect![[
-            r#""OK ((97 Ll) (65 Lu) (48 Nd) (49 Nd) (32 Zs) (33 Po) (44 Po) (46 Po) (63 Po) (40 Ps) (41 Pe) (45 Pd) (224 Ll) (233 Ll) (252 Ll) (241 Ll) (196 Lu) (231 Ll) (197 Lu) (198 Lu) (338 Lu) (945 Ll) (946 Ll) (947 Ll) (913 Lu) (914 Lu) (915 Lu) (19990 Lo) (30028 Lo) (26085 Lo) (26412 Lo) (35486 Lo) (1488 Lo) (1489 Lo) (1490 Lo) (1575 Lo) (1576 Lo) (1580 Lo) (10 Cc) (9 Cc) (95 Pc) (34 Po) (39 Po) (92 Po) (35 Po) (36 Sc) (37 Po) (38 Po) (42 Po) (43 Sm) (60 Sm) (62 Sm) (64 Po) (47 Po) (124 Sm) (126 Sm) (94 Sk))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx227_char_numeric_value_and_digit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((48 0 0 0) (49 1 1 1) (53 5 5 5) (57 9 9 9) (8551 8 nil nil) (8547 4 nil nil) (8555 12 nil nil) (189 0.5 nil nil) (188 0.25 nil nil) (190 0.75 nil nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (c)
@@ -38,29 +42,31 @@ fn div_cx227_char_numeric_value_and_digit() {
           ?Ⅷ ?Ⅳ ?Ⅻ
           ?½ ?¼ ?¾))
 "##,
-        expect_test::expect![[
-            r#""OK ((48 0 0 0) (49 1 1 1) (53 5 5 5) (57 9 9 9) (8551 8 nil nil) (8547 4 nil nil) (8555 12 nil nil) (189 0.5 nil nil) (188 0.25 nil nil) (190 0.75 nil nil))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx227_char_mirrored_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((40 Y) (41 Y) (91 Y) (93 Y) (123 Y) (125 Y) (60 Y) (62 Y) (171 Y) (187 Y) (8249 Y) (8250 Y) (97 N) (65 N) (48 N) (32 N) (33 N))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (c) (list c (get-char-code-property c 'mirrored)))
         '(?( ?) ?[ ?] ?{ ?} ?< ?> ?« ?» ?‹ ?› ?a ?A ?0 ?  ?!))
 "##,
-        expect_test::expect![[
-            r#""OK ((40 Y) (41 Y) (91 Y) (93 Y) (123 Y) (125 Y) (60 Y) (62 Y) (171 Y) (187 Y) (8249 Y) (8250 Y) (97 N) (65 N) (48 N) (32 N) (33 N))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx227_char_bidi_class_full_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((97 L) (65 L) (48 EN) (49 EN) (32 WS) (33 ON) (45 ES) (40 ON) (41 ON) (1488 R) (1489 R) (1490 R) (1491 R) (1492 R) (1575 AL) (1576 AL) (1580 AL) (1583 AL) (1607 AL) (10 B) (9 S))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (c) (list c (get-char-code-property c 'bidi-class)))
@@ -69,15 +75,16 @@ fn div_cx227_char_bidi_class_full_matrix() {
           ?ا ?ب ?ج ?د ?ه
           ?\n ?\t))
 "##,
-        expect_test::expect![[
-            r#""OK ((97 L) (65 L) (48 EN) (49 EN) (32 WS) (33 ON) (45 ES) (40 ON) (41 ON) (1488 R) (1489 R) (1490 R) (1491 R) (1492 R) (1575 AL) (1576 AL) (1580 AL) (1583 AL) (1607 AL) (10 B) (9 S))""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx227_char_decomposition_compatibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((224 (97 768)) (233 (101 769)) (252 (117 776)) (241 (110 771)) (196 (65 776)) (246 (111 776)) (199 (67 807)) (197 (65 778)) (198 (198)) (338 (338)) (339 (339)) (64257 (compat 102 105)) (64258 (compat 102 108)) (8460 (font 72)) (8451 (compat 176 67)) (12814 (compat 40 4352 4449 41)) (12815 (compat 40 4354 4449 41)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (c)
@@ -86,15 +93,16 @@ fn div_cx227_char_decomposition_compatibility() {
         '(?à ?é ?ü ?ñ ?Ä ?ö ?Ç ?Å ?Æ ?Œ ?œ
           ?ﬁ ?ﬂ ?ℌ ?℃ ?㈎ ?㈏))
 "##,
-        expect_test::expect![[
-            r#""OK ((224 (97 768)) (233 (101 769)) (252 (117 776)) (241 (110 771)) (196 (65 776)) (246 (111 776)) (199 (67 807)) (197 (65 778)) (198 (198)) (338 (338)) (339 (339)) (64257 (compat 102 105)) (64258 (compat 102 108)) (8460 (font 72)) (8451 (compat 176 67)) (12814 (compat 40 4352 4449 41)) (12815 (compat 40 4354 4449 41)))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx227_char_old_name_and_comment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((224 \"LATIN SMALL LETTER A GRAVE\" nil) (233 \"LATIN SMALL LETTER E ACUTE\" nil) (196 \"LATIN CAPITAL LETTER A DIAERESIS\" nil) (199 \"LATIN CAPITAL LETTER C CEDILLA\" nil) (198 \"LATIN CAPITAL LETTER A E\" nil) (338 \"LATIN CAPITAL LETTER O E\" nil) (8460 \"BLACK-LETTER H\" nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -105,15 +113,16 @@ fn div_cx227_char_old_name_and_comment() {
             '(?à ?é ?Ä ?Ç ?Æ ?Œ ?ℌ))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK ((224 \"LATIN SMALL LETTER A GRAVE\" nil) (233 \"LATIN SMALL LETTER E ACUTE\" nil) (196 \"LATIN CAPITAL LETTER A DIAERESIS\" nil) (199 \"LATIN CAPITAL LETTER C CEDILLA\" nil) (198 \"LATIN CAPITAL LETTER A E\" nil) (338 \"LATIN CAPITAL LETTER O E\" nil) (8460 \"BLACK-LETTER H\" nil))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx227_char_name_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"LATIN SMALL LETTER A\" \"LATIN CAPITAL LETTER A\" \"DIGIT ZERO\" \"SPACE\" \"EXCLAMATION MARK\" \"LEFT PARENTHESIS\" \"RIGHT PARENTHESIS\" \"LATIN SMALL LETTER A WITH GRAVE\" \"LATIN SMALL LETTER E WITH ACUTE\" \"GREEK SMALL LETTER ALPHA\" \"GREEK SMALL LETTER BETA\" \"GREEK CAPITAL LETTER ALPHA\" \"GREEK CAPITAL LETTER BETA\" \"CJK IDEOGRAPH-4E16\" \"CJK IDEOGRAPH-754C\" \"CJK IDEOGRAPH-65E5\" \"GRINNING FACE\" \"PARTY POPPER\" \"EARTH GLOBE EUROPE-AFRICA\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (c) (get-char-code-property c 'name))
@@ -122,15 +131,14 @@ fn div_cx227_char_name_query() {
           ?世 ?界 ?日
           ?😀 ?🎉 ?🌍))
 "##,
-        expect_test::expect![[
-            r#""OK (\"LATIN SMALL LETTER A\" \"LATIN CAPITAL LETTER A\" \"DIGIT ZERO\" \"SPACE\" \"EXCLAMATION MARK\" \"LEFT PARENTHESIS\" \"RIGHT PARENTHESIS\" \"LATIN SMALL LETTER A WITH GRAVE\" \"LATIN SMALL LETTER E WITH ACUTE\" \"GREEK SMALL LETTER ALPHA\" \"GREEK SMALL LETTER BETA\" \"GREEK CAPITAL LETTER ALPHA\" \"GREEK CAPITAL LETTER BETA\" \"CJK IDEOGRAPH-4E16\" \"CJK IDEOGRAPH-754C\" \"CJK IDEOGRAPH-65E5\" \"GRINNING FACE\" \"PARTY POPPER\" \"EARTH GLOBE EUROPE-AFRICA\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx227_char_script_full_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function char-script)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (c) (list c (char-script c)))
@@ -141,13 +149,14 @@ fn div_cx227_char_script_full_matrix() {
           ?א ?ב ?ا ?ب
           ?À ?É ?Ñ ?Ø ?Þ ?Ð ?Þ))
 "##,
-        expect_test::expect![[r#""ERR (void-function char-script)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx227_unicode_property_value_aliases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -157,13 +166,14 @@ fn div_cx227_unicode_property_value_aliases() {
           (fboundp 'char-code-property-description))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx227_char_properties_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function char-script)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((cats (mapcar (lambda (c) (get-char-code-property c 'general-category))
@@ -189,6 +199,6 @@ fn div_cx227_char_properties_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""ERR (void-function char-script)""#]],
+        expect,
     );
 }

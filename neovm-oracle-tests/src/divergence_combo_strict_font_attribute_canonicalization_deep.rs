@@ -11,6 +11,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_q5_font_weight_canonicalization_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:weight bold) (:weight light) (:weight black) (:weight extra-bold) (:weight semi-light) (:weight medium))""#
+    ]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK ((:weight bold) (:weight light) (:weight black) (:weight extra-bold) (:weight semi-light) (:weight medium))
     // Neomacs:   OK ((:weight bold) (:weight light) (:weight heavy) (:weight ultra-bold) (:weight semi-light) (:weight medium))
@@ -27,15 +30,16 @@ fn div_q5_font_weight_canonicalization_variants() {
       (font-face-attributes (font-spec :weight 'semi-light))
       (font-face-attributes (font-spec :weight 'medium)))
 "##,
-        expect_test::expect![[
-            r#""OK ((:weight bold) (:weight light) (:weight black) (:weight extra-bold) (:weight semi-light) (:weight medium))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_q5_font_slant_and_width_canonicalization() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:slant italic) (:slant oblique) (:slant normal) (:width condensed) (:width expanded) (:width normal))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (font-face-attributes (font-spec :slant 'italic))
@@ -45,15 +49,15 @@ fn div_q5_font_slant_and_width_canonicalization() {
       (font-face-attributes (font-spec :width 'expanded))
       (font-face-attributes (font-spec :width 'normal)))
 "##,
-        expect_test::expect![[
-            r#""OK ((:slant italic) (:slant oblique) (:slant normal) (:width condensed) (:width expanded) (:width normal))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_q5_font_numeric_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (error \"invalid font property\" (:weight . 100))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (font-face-attributes (font-spec :weight 100))
@@ -63,6 +67,6 @@ fn div_q5_font_numeric_attributes() {
       (font-face-attributes (font-spec :slant 0))
       (font-face-attributes (font-spec :slant 200)))
 "##,
-        expect_test::expect![[r#""ERR (error \"invalid font property\" (:weight . 100))""#]],
+        expect,
     );
 }

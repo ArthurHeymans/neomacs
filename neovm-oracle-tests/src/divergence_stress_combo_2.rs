@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_combo_narrow_undo_overlay_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCXEFGHIJOK (5 3 7 \"ABCXEFGHIJ\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -28,7 +29,7 @@ fn divergence_combo_narrow_undo_overlay_marker() {
           (overlay-start ov)
           (overlay-end ov)
           (buffer-string))))"#,
-        expect_test::expect![[r#""ABCXEFGHIJOK (5 3 7 \"ABCXEFGHIJ\")""#]],
+        expect,
     );
 }
 
@@ -36,6 +37,8 @@ fn divergence_combo_narrow_undo_overlay_marker() {
 fn divergence_combo_insert_delete_loop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""012345678OK (\"0123456789\" \"012345678\" \"012345678\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -48,7 +51,7 @@ fn divergence_combo_insert_delete_loop() {
     (let ((after5 (buffer-string)))
       (dotimes (_ 5) (undo))
       (list full after5 (buffer-string)))))"#,
-        expect_test::expect![[r#""012345678OK (\"0123456789\" \"012345678\" \"012345678\")""#]],
+        expect,
     );
 }
 
@@ -56,6 +59,7 @@ fn divergence_combo_insert_delete_loop() {
 fn divergence_combo_save_excursion_kill_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABXYZFGHIJOK (\"ABXYZFGHIJ\" 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -68,7 +72,7 @@ fn divergence_combo_save_excursion_kill_insert() {
   (insert "XYZ")
   (list (buffer-string)
         (point)))"#,
-        expect_test::expect![[r#""ABXYZFGHIJOK (\"ABXYZFGHIJ\" 6)""#]],
+        expect,
     );
 }
 
@@ -76,6 +80,9 @@ fn divergence_combo_save_excursion_kill_insert() {
 fn divergence_combo_prop_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""CDEFGERR (error \"Changes to be undone are outside visible portion of buffer\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -92,9 +99,7 @@ fn divergence_combo_prop_narrow_undo() {
   (widen)
   (list (get-text-property 4 'face)
         (buffer-string)))"#,
-        expect_test::expect![[
-            r#""CDEFGERR (error \"Changes to be undone are outside visible portion of buffer\")""#
-        ]],
+        expect,
     );
 }
 
@@ -102,6 +107,7 @@ fn divergence_combo_prop_narrow_undo() {
 fn divergence_combo_many_overlays_insert_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""XXXXXYYYXXXXXXXXXXXOK ((2 10 14) (5 11 18) 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 20 ?X))
@@ -116,7 +122,7 @@ fn divergence_combo_many_overlays_insert_delete() {
     (list (mapcar #'overlay-start ovs)
           (mapcar #'overlay-end ovs)
           (length (overlays-in 1 25)))))"#,
-        expect_test::expect![[r#""XXXXXYYYXXXXXXXXXXXOK ((2 10 14) (5 11 18) 3)""#]],
+        expect,
     );
 }
 
@@ -124,6 +130,7 @@ fn divergence_combo_many_overlays_insert_delete() {
 fn divergence_combo_marker_insert_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCDXXEFGHIJERR (wrong-type-argument markerp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -135,7 +142,7 @@ fn divergence_combo_marker_insert_type() {
           (marker-position m2)
           (marker-insertion-type m1)
           (marker-insertion-type m2))))"#,
-        expect_test::expect![[r#""ABCDXXEFGHIJERR (wrong-type-argument markerp t)""#]],
+        expect,
     );
 }
 
@@ -143,6 +150,7 @@ fn divergence_combo_marker_insert_type() {
 fn divergence_combo_hash_table_lambda_closure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable counter)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((ht (make-hash-table :test 'eq))
         (counter 0)
@@ -152,7 +160,7 @@ fn divergence_combo_hash_table_lambda_closure() {
   (funcall (gethash 'fn ht))
   (funcall (gethash 'fn ht))
   (list counter (hash-table-count ht)))"#,
-        expect_test::expect![[r#""ERR (void-variable counter)""#]],
+        expect,
     );
 }
 
@@ -160,13 +168,14 @@ fn divergence_combo_hash_table_lambda_closure() {
 fn divergence_combo_read_eval_print_loop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((a b) 12 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let* ((forms '("(+ 1 2)" "(* 3 4)" "(list 'a 'b)"))
         results)
   (dolist (f forms)
     (push (eval (read f)) results))
   results)"#,
-        expect_test::expect![[r#""OK ((a b) 12 3)""#]],
+        expect,
     );
 }
 
@@ -174,13 +183,14 @@ fn divergence_combo_read_eval_print_loop() {
 fn divergence_combo_setq_multiple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (1 2 3 4 3 4 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let (a b c)
   (setq a 1 b 2 c 3)
   (list a b c
         (setq a (1+ b) b (1+ c) c (1+ a))
         a b c))"#,
-        expect_test::expect![[r#""OK (1 2 3 4 3 4 4)""#]],
+        expect,
     );
 }
 
@@ -188,12 +198,13 @@ fn divergence_combo_setq_multiple() {
 fn divergence_combo_condition_case_nested_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (inner-caught (error \"inner error\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(condition-case outer
   (condition-case inner
       (error "inner error")
     (error (list 'inner-caught inner)))
   (error (list 'outer-caught outer)))"#,
-        expect_test::expect![[r#""OK (inner-caught (error \"inner error\"))""#]],
+        expect,
     );
 }

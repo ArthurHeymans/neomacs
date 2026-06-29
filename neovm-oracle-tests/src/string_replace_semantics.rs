@@ -25,12 +25,10 @@ fn oracle_string_replace_empty_from_errors() {
    cases))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-length-argument (0)) (wrong-length-argument (0)) (wrong-length-argument (0)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-length-argument (0)) (wrong-length-argument (0)) (wrong-length-argument (0)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -48,12 +46,10 @@ fn oracle_string_replace_no_match_returns_same_object() {
           (text-properties-at 6 r))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (#(\"alpha beta\" 0 5 (face bold)) #(\"alpha beta\" 0 5 (face bold)) t (face bold) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (#(\"alpha beta\" 0 5 (face bold)) #(\"alpha beta\" 0 5 (face bold)) t (face bold) nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -74,12 +70,10 @@ fn oracle_string_replace_success_property_shape() {
           (text-properties-at 7 r))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (#(\"A beta A\" 2 6 (help-echo \"mid\")) nil \"A beta A\" nil (help-echo \"mid\") nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (#(\"A beta A\" 2 6 (help-echo \"mid\")) nil \"A beta A\" nil (help-echo \"mid\") nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -95,10 +89,8 @@ fn oracle_string_replace_non_overlapping_matches() {
  (string-replace "a" "aa" "aaa"))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"bb\" \"bba\" \"bXna\" \"Xba\" \"aaaaaa\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"bb\" \"bba\" \"bXna\" \"Xba\" \"aaaaaa\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -119,10 +111,8 @@ fn oracle_string_replace_type_errors() {
    cases))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-type-argument stringp) (wrong-type-argument sequencep) (wrong-type-argument stringp))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-type-argument stringp) (wrong-type-argument sequencep) (wrong-type-argument stringp))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

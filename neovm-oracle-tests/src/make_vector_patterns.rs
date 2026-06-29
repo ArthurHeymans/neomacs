@@ -122,12 +122,10 @@ fn oracle_prop_vector_matrix_operations() {
     (fmakunbound 'neovm--vm-row-sums)
     (fmakunbound 'neovm--vm-col-sums)
     (fmakunbound 'neovm--vm-mat-vec-mult)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 1 2 3) (10 11 12 13) (20 21 22 23) (4 3) (0 10 20) (6 46 86) (30 33 36 39) (20 120 220))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 1 2 3) (10 11 12 13) (20 21 22 23) (4 3) (0 10 20) (6 46 86) (30 33 36 39) (20 120 220))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -218,12 +216,10 @@ fn oracle_prop_vector_slice_reverse_rotate() {
     (fmakunbound 'neovm--vp-rotate-right)
     (fmakunbound 'neovm--vp-slice)
     (fmakunbound 'neovm--vp-concat-vecs)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((80 70 60 50 40 30 20 10) t (40 50 60 70 80 10 20 30) (60 70 80 10 20 30 40 50) t t (30 40 50) (10) (80) t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((80 70 60 50 40 30 20 10) t (40 50 60 70 80 10 20 30) (60 70 80 10 20 30 40 50) t t (30 40 50) (10) (80) t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -337,10 +333,8 @@ fn oracle_prop_vector_stack_queue() {
     (fmakunbound 'neovm--vp-queue-enqueue)
     (fmakunbound 'neovm--vp-queue-dequeue)
     (fmakunbound 'neovm--vp-queue-size)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((4 d c 2) (b a) (5 10 20 3) (30 40 50 60 70))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((4 d c 2) (b a) (5 10 20 3) (30 40 50 60 70))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -425,12 +419,10 @@ fn oracle_prop_vector_comprehension_patterns() {
     (fmakunbound 'neovm--vp-vreduce)
     (fmakunbound 'neovm--vp-vzip)
     (fmakunbound 'neovm--vp-vflatmap)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 4 9 16 25 36 49 64 81 100) (2 4 6 8 10) 55 120 ((a . 1) (b . 2) (c . 3)) ((x . 10) (y . 20)) (1 10 2 20 3 30) 220 \"HELLO\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 4 9 16 25 36 49 64 81 100) (2 4 6 8 10) 55 120 ((a . 1) (b . 2) (c . 3)) ((x . 10) (y . 20)) (1 10 2 20 3 30) 220 \"HELLO\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -509,12 +501,10 @@ fn oracle_prop_vconcat_advanced_patterns() {
     (fmakunbound 'neovm--vp-interleave)
     (fmakunbound 'neovm--vp-partition)
     (fmakunbound 'neovm--vp-flatten)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((a 1 b 2 c 3) (a 1 b 2 3 4 5) ((1 2 3) (4 5 6) (7 8 9) (10)) ((1 2) (3 4) (5 6)) ((a) (b) (c)) t (0 1 4 9 16) (1 2 65 66 3 4))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((a 1 b 2 c 3) (a 1 b 2 3 4 5) ((1 2 3) (4 5 6) (7 8 9) (10)) ((1 2) (3 4) (5 6)) ((a) (b) (c)) t (0 1 4 9 16) (1 2 65 66 3 4))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -606,10 +596,8 @@ fn oracle_prop_vector_ring_buffer() {
     (fmakunbound 'neovm--vp-ring-contents)
     (fmakunbound 'neovm--vp-ring-newest)
     (fmakunbound 'neovm--vp-ring-oldest)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3) 3 1 (1 2 3 4) (4 5 6 7) 7 4 (6 7 8 9))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 2 3) 3 1 (1 2 3 4) (4 5 6 7) 7 4 (6 7 8 9))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -711,8 +699,7 @@ fn oracle_prop_vector_sparse_set() {
     (fmakunbound 'neovm--vp-sset-add)
     (fmakunbound 'neovm--vp-sset-remove)
     (fmakunbound 'neovm--vp-sset-elements)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((3 5 7 12 18) 5 t nil t (3 5 7 18) 4 4 (0 5 7 18 19))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((3 5 7 12 18) 5 t nil t (3 5 7 18) 4 4 (0 5 7 18 19))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

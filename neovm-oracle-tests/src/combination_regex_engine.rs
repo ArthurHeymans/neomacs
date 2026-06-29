@@ -174,12 +174,10 @@ fn oracle_prop_regex_engine_parser() {
     (fmakunbound 'neovm--re-parse-expr)
     (fmakunbound 'neovm--re-parse)
     (makunbound 'neovm--re-tokens)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((cat (cat (lit 97) (lit 98)) (lit 99)) (cat (cat (lit 97) (dot)) (lit 99)) (star (lit 97)) (plus (lit 97)) (cat (cat (lit 97) (opt (lit 98))) (lit 99)) (alt (lit 97) (lit 98)) (star (cat (lit 97) (lit 98))) (cat (star (alt (lit 97) (lit 98))) (plus (lit 99))) (cat (cat (cat (cat (anchor-start) (lit 97)) (lit 98)) (lit 99)) (anchor-end)) (cat (cat (lit 97) (lit 46)) (lit 98)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((cat (cat (lit 97) (lit 98)) (lit 99)) (cat (cat (lit 97) (dot)) (lit 99)) (star (lit 97)) (plus (lit 97)) (cat (cat (lit 97) (opt (lit 98))) (lit 99)) (alt (lit 97) (lit 98)) (star (cat (lit 97) (lit 98))) (cat (star (alt (lit 97) (lit 98))) (plus (lit 99))) (cat (cat (cat (cat (anchor-start) (lit 97)) (lit 98)) (lit 99)) (anchor-end)) (cat (cat (lit 97) (lit 46)) (lit 98)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -407,10 +405,8 @@ fn oracle_prop_regex_engine_nfa_compiler() {
     (fmakunbound 'neovm--re-compile)
     (makunbound 'neovm--re-state-counter)
     (makunbound 'neovm--re-tokens)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((0 1 1) (3) (6) (5) (4) (4) (t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((0 1 1) (3) (6) (5) (4) (4) (t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -664,12 +660,10 @@ fn oracle_prop_regex_engine_nfa_simulator() {
     (fmakunbound 'neovm--re-match-full)
     (makunbound 'neovm--re-state-counter)
     (makunbound 'neovm--re-tokens)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t nil nil t t nil t t t t nil t t nil t t nil t t t t nil t t nil t t nil t t t nil t t t nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t nil nil t t nil t t t t nil t t nil t t nil t t t t nil t t nil t t nil t t t nil t t t nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -927,12 +921,10 @@ fn oracle_prop_regex_engine_search() {
     (fmakunbound 'neovm--re-find-all)
     (makunbound 'neovm--re-state-counter)
     (makunbound 'neovm--re-tokens)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 . 3) nil (1 . 4) (1 . 3) (1 . 5) (2 . 3) (9 . 12) (9 . 12) (\"ab\" \"ab\" \"ab\") (\"aaa\" \"aaa\") (\"cat\" \"dog\" \"cat\") (2 . 4))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 . 3) nil (1 . 4) (1 . 3) (1 . 5) (2 . 3) (9 . 12) (9 . 12) (\"ab\" \"ab\" \"ab\") (\"aaa\" \"aaa\") (\"cat\" \"dog\" \"cat\") (2 . 4))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -1165,12 +1157,10 @@ fn oracle_prop_regex_engine_edge_cases() {
     (fmakunbound 'neovm--re-match-full)
     (makunbound 'neovm--re-state-counter)
     (makunbound 'neovm--re-tokens)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t t t t t t t t t nil t t nil t t t t t t t t t nil t nil t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t t t t t t t t t nil t t nil t t t t t t t t t nil t nil t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -1393,10 +1383,8 @@ fn oracle_prop_regex_engine_practical() {
     (fmakunbound 'neovm--re-batch-test)
     (makunbound 'neovm--re-state-counter)
     (makunbound 'neovm--re-tokens)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"color\" . t) (\"colour\" . t) (\"colur\") (\"colouur\")) ((\"abcdgh\" . t) (\"abefgh\" . t) (\"abgh\") (\"abcdefgh\")) ((\"ggle\" . t) (\"gogle\" . t) (\"google\" . t) (\"gooogle\" . t) (\"goooogle\" . t)) ((\"ha\" . t) (\"haha\" . t) (\"hahaha\" . t) (\"h\") (\"hah\") (\"\")) ((\"\" . t) (\"ab\" . t) (\"abcd\" . t) (\"abcde\") (\"x\")) ((\"a\" . t) (\"b\" . t) (\"c\" . t) (\"d\" . t) (\"e\") (\"ab\")) ((\"\" . t) (\"c\" . t) (\"de\" . t) (\"fg\" . t) (\"defg\" . t) (\"abcde\" . t) (\"aabab\" . t) (\"aabcfgde\" . t) (\"abx\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"color\" . t) (\"colour\" . t) (\"colur\") (\"colouur\")) ((\"abcdgh\" . t) (\"abefgh\" . t) (\"abgh\") (\"abcdefgh\")) ((\"ggle\" . t) (\"gogle\" . t) (\"google\" . t) (\"gooogle\" . t) (\"goooogle\" . t)) ((\"ha\" . t) (\"haha\" . t) (\"hahaha\" . t) (\"h\") (\"hah\") (\"\")) ((\"\" . t) (\"ab\" . t) (\"abcd\" . t) (\"abcde\") (\"x\")) ((\"a\" . t) (\"b\" . t) (\"c\" . t) (\"d\" . t) (\"e\") (\"ab\")) ((\"\" . t) (\"c\" . t) (\"de\" . t) (\"fg\" . t) (\"defg\" . t) (\"abcde\" . t) (\"aabab\" . t) (\"aabcfgde\" . t) (\"abx\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

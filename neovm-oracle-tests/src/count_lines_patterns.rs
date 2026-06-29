@@ -47,10 +47,8 @@ fn oracle_prop_count_lines_patterns_start_end_args() {
     ;; Range ending at a newline character
     (push (count-lines 1 6) results)
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (6 0 0 0 1 1 1 2 3 3 3 3 2 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (6 0 0 0 1 1 1 2 3 3 3 3 2 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -80,10 +78,8 @@ fn oracle_prop_count_lines_patterns_empty_buffer() {
     (erase-buffer)
     (push (count-lines (point-min) (point-max)) results)
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 t 3 0 t 1 0)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 t 3 0 t 1 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -129,12 +125,10 @@ fn oracle_prop_count_lines_patterns_trailing_newline() {
     (insert "a\n\nb\n\nc\n")
     (push (list :empty-between (count-lines (point-min) (point-max))) results))
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:no-trailing 3 5) (:with-trailing 3 6) (:single-no-nl 1) (:single-with-nl 1) (:multi-trailing 4) (:one-nl 1) (:five-nl 5) (:empty-between 5))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:no-trailing 3 5) (:with-trailing 3 6) (:single-no-nl 1) (:single-with-nl 1) (:multi-trailing 4) (:one-nl 1) (:five-nl 5) (:empty-between 5))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -187,12 +181,10 @@ fn oracle_prop_count_lines_patterns_narrowing() {
       (push (list :narrow-empty
                   (count-lines (point-min) (point-max))) results))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:total 15) (:narrow-3-to-7 5 55 190) (:narrow-single-line 1) (:narrow-last-3 3) (:narrow-empty 0))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:total 15) (:narrow-3-to-7 5 55 190) (:narrow-single-line 1) (:narrow-last-3 3) (:narrow-empty 0))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -232,12 +224,10 @@ fn oracle_prop_count_lines_patterns_accuracy_multiline() {
                      (count-lines mid (point-max)))
                   total-lines) results))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:total 5) (:pos-counts ((1 . 0) (2 . 1) (3 . 1) (4 . 2) (5 . 2) (6 . 2) (7 . 3) (8 . 3) (9 . 3) (10 . 3) (11 . 4) (12 . 4) (13 . 4) (14 . 4) (15 . 4) (16 . 5) (17 . 5) (18 . 5) (19 . 5) (20 . 5) (21 . 5))) (:split-at-mid 3 3 6 5))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:total 5) (:pos-counts ((1 . 0) (2 . 1) (3 . 1) (4 . 2) (5 . 2) (6 . 2) (7 . 3) (8 . 3) (9 . 3) (10 . 3) (11 . 4) (12 . 4) (13 . 4) (14 . 4) (15 . 4) (16 . 5) (17 . 5) (18 . 5) (19 . 5) (20 . 5) (21 . 5))) (:split-at-mid 3 3 6 5))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -295,12 +285,10 @@ fn oracle_prop_count_lines_patterns_line_statistics() {
           (push (funcall 'neovm--test-line-stats) results))
         (nreverse results))
     (fmakunbound 'neovm--test-line-stats)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:count 6 :avg 11 :max 33 :min 0 :total 70 :lengths (5 28 1 0 33 3)) (:count 5 :avg 3 :max 3 :min 3 :total 15 :lengths (3 3 3 3 3)) (:count 1 :avg 0 :max 0 :min 0 :total 0 :lengths (0)) (:count 1 :avg 9 :max 9 :min 9 :total 9 :lengths (9)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:count 6 :avg 11 :max 33 :min 0 :total 70 :lengths (5 28 1 0 33 3)) (:count 5 :avg 3 :max 3 :min 3 :total 15 :lengths (3 3 3 3 3)) (:count 1 :avg 0 :max 0 :min 0 :total 0 :lengths (0)) (:count 1 :avg 9 :max 9 :min 9 :total 9 :lengths (9)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -380,12 +368,10 @@ fn oracle_prop_count_lines_patterns_paragraph_counting() {
           (push (funcall 'neovm--test-count-paragraphs) results))
         (nreverse results))
     (fmakunbound 'neovm--test-count-paragraphs)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:total-paragraphs 3 :details ((1 2 \"First paragraph line\") (2 1 \"Second paragraph.\n\") (3 3 \"Third paragraph line\"))) (:total-paragraphs 1 :details ((1 3 \"This is one\ncontinuo\"))) (:total-paragraphs 3 :details ((1 1 \"Para one.\n\") (2 1 \"Para two.\n\") (3 1 \"Para three.\n\"))) (:total-paragraphs 1 :details ((1 2 \"Content here.\nMore c\"))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:total-paragraphs 3 :details ((1 2 \"First paragraph line\") (2 1 \"Second paragraph.\n\") (3 3 \"Third paragraph line\"))) (:total-paragraphs 1 :details ((1 3 \"This is one\ncontinuo\"))) (:total-paragraphs 3 :details ((1 1 \"Para one.\n\") (2 1 \"Para two.\n\") (3 1 \"Para three.\n\"))) (:total-paragraphs 1 :details ((1 2 \"Content here.\nMore c\"))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -442,10 +428,8 @@ fn oracle_prop_count_lines_patterns_cross_validation() {
                   :total total-cl)
             results))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:total-lines 20 :line-checks 20 :all-match t) (:partial-sums (4 4 4 4 4) :sum 20 :total 20))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:total-lines 20 :line-checks 20 :all-match t) (:partial-sums (4 4 4 4 4) :sum 20 :total 20))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

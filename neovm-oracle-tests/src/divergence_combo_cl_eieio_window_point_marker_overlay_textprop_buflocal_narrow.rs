@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_window_point_basic_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass win-state ()
@@ -84,7 +85,7 @@ fn combo_eieio_window_point_basic_restore() {
               (overlay-start ov) (overlay-end ov)
               my-wp-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -92,6 +93,7 @@ fn combo_eieio_window_point_basic_restore() {
 fn combo_eieio_window_point_marker_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass point-tracker ()
@@ -158,7 +160,7 @@ fn combo_eieio_window_point_marker_tracking() {
               results (pt-snap-markers tracker)
               my-pt-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -166,6 +168,7 @@ fn combo_eieio_window_point_marker_tracking() {
 fn combo_eieio_window_point_overlay_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass overlay-manager ()
@@ -238,7 +241,7 @@ fn combo_eieio_window_point_overlay_props() {
               (om-log mgr)
               my-om-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -246,6 +249,7 @@ fn combo_eieio_window_point_overlay_props() {
 fn combo_eieio_window_point_multibuf_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass buf-switcher ()
@@ -318,7 +322,7 @@ fn combo_eieio_window_point_multibuf_switch() {
                       (bs-snap-all switcher)) results))))
     (setq results (reverse results))
     (list results (bs-log switcher))))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -326,6 +330,7 @@ fn combo_eieio_window_point_multibuf_switch() {
 fn combo_eieio_window_point_deep_excursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass excursion-ctx ()
@@ -396,6 +401,6 @@ fn combo_eieio_window_point_deep_excursion() {
               (overlay-start ov) (overlay-end ov)
               my-ec-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }

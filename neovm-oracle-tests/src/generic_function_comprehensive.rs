@@ -54,12 +54,10 @@ fn oracle_prop_generic_function_basic_dispatch() {
        ;; Dispatch on float (falls to default since no float specializer)
        (neovm--gf-describe 3.14))
     (fmakunbound 'neovm--gf-describe)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"int:42\" \"str:hello\" \"sym:world\" \"unknown:(1 2 3)\" \"sym:nil\" \"unknown:3.14\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"int:42\" \"str:hello\" \"sym:world\" \"unknown:(1 2 3)\" \"sym:nil\" \"unknown:3.14\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -100,10 +98,9 @@ fn oracle_prop_generic_function_eql_specializer() {
        ;; eql specializers are checked before type specializers
        (neovm--gf-handle-code 200))
     (fmakunbound 'neovm--gf-handle-code)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (ok not-found server-error (other 301) (other 418) ok)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (ok not-found server-error (other 301) (other 418) ok)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -148,12 +145,10 @@ fn oracle_prop_generic_function_head_specializer() {
        ;; Non-cons falls to default
        (neovm--gf-eval-expr 42))
     (fmakunbound 'neovm--gf-eval-expr)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (7 30 -7 yes no (unknown-expr (sub 10 3)) (unknown-expr 42))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (7 30 -7 yes no (unknown-expr (sub 10 3)) (unknown-expr 42))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -207,12 +202,10 @@ fn oracle_prop_generic_function_before_after_qualifiers() {
                  r2 log2))))))
     (fmakunbound 'neovm--gf-process)
     (makunbound 'neovm--gf-log)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (10 (\"before-int:5\" \"primary-int:5\" \"after-int:5\") \"hi!\" (\"before-str:hi\" \"primary-str:hi\" \"after-str:hi\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (10 (\"before-int:5\" \"primary-int:5\" \"after-int:5\") \"hi!\" (\"before-str:hi\" \"primary-str:hi\" \"after-str:hi\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -260,10 +253,8 @@ fn oracle_prop_generic_function_around_call_next_method() {
        (neovm--gf-compute 0))
     (fmakunbound 'neovm--gf-compute)
     (fmakunbound 'neovm--gf-transform)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (26 10 (around (primary 42)) 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (26 10 (around (primary 42)) 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -311,12 +302,10 @@ fn oracle_prop_generic_function_multiple_dispatch() {
        ;; Fallback: list + list
        (neovm--gf-combine '(1) '(2)))
     (fmakunbound 'neovm--gf-combine)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (7 \"foobar\" \"42:hello\" \"world:99\" (generic a b) (generic (1) (2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (7 \"foobar\" \"42:hello\" \"world:99\" (generic a b) (generic (1) (2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -347,12 +336,10 @@ fn oracle_prop_generic_function_default_method() {
        (neovm--gf-stringify [a b c])
        (neovm--gf-stringify t))
     (fmakunbound 'neovm--gf-stringify)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"42\" \"\\\"hello\\\"\" \"foo\" \"nil\" \"(1 2 3)\" \"[a b c]\" \"t\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"42\" \"\\\"hello\\\"\" \"foo\" \"nil\" \"(1 2 3)\" \"[a b c]\" \"t\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -388,12 +375,10 @@ fn oracle_prop_generic_function_no_applicable_method() {
          (cl-no-applicable-method
           (list 'caught (car err)))))
     (fmakunbound 'neovm--gf-strict)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (50 (caught cl-no-applicable-method) (caught cl-no-applicable-method))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (50 (caught cl-no-applicable-method) (caught cl-no-applicable-method))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -425,10 +410,8 @@ fn oracle_prop_generic_function_method_redefinition() {
            ;; They should differ
            (not (equal r1 r2)))))
     (fmakunbound 'neovm--gf-greet)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"Hello, Alice\" \"Hi there, Alice!\" t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"Hello, Alice\" \"Hi there, Alice!\" t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -475,8 +458,7 @@ fn oracle_prop_generic_function_full_method_combination_order() {
            (nreverse neovm--gf-order-log))))
     (fmakunbound 'neovm--gf-pipeline)
     (makunbound 'neovm--gf-order-log)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (107 (around-start before primary after around-end))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (107 (around-start before primary after around-end))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -11,6 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_g0_user_identity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function user-mail-address)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (stringp (user-login-name))
@@ -20,13 +21,16 @@ fn div_g0_user_identity() {
       (integerp (user-uid))
       (integerp (user-gid)))
 "##,
-        expect_test::expect![[r#""ERR (void-function user-mail-address)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_g0_file_paths_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"~/Projects/github.com/eval-exec/neomacs-main/\" \"/tmp/nix-shell.XcUf3d/\" t t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list default-directory
@@ -35,15 +39,14 @@ fn div_g0_file_paths_state() {
       (stringp exec-directory)
       (stringp invocation-directory))
 "##,
-        expect_test::expect![[
-            r#""OK (\"~/Projects/github.com/eval-exec/neomacs-main/\" \"/tmp/nix-shell.XcUf3d/\" t t t)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_g0_doc_directory() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK t
     // Neomacs:   OK nil
@@ -53,13 +56,16 @@ fn div_g0_doc_directory() {
         r##"
 (stringp doc-directory)
 "##,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_g0_load_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (t (\".so\" \".elc\" \".el\") \"/tmp/nix-shell.XcUf3d/neovm-inline-oracle-sf3ylzib/program-14800-100.el\" t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (> (length load-path) 5)
@@ -67,15 +73,14 @@ fn div_g0_load_state() {
       load-file-name
       (stringp source-directory))
 "##,
-        expect_test::expect![[
-            r#""OK (t (\".so\" \".elc\" \".el\") \"/tmp/nix-shell.XcUf3d/neovm-inline-oracle-sf3ylzib/program-14800-100.el\" t)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_g0_locale_and_coding_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"UTF-8\" utf-8-unix utf-8-unix utf-8-unix)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (locale-info 'codeset)
@@ -83,13 +88,14 @@ fn div_g0_locale_and_coding_default() {
       coding-system-for-write
       locale-coding-system)
 "##,
-        expect_test::expect![[r#""OK (\"UTF-8\" utf-8-unix utf-8-unix utf-8-unix)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_g0_emacs_state_safe() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t gnu/linux nil 7)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (integerp (emacs-pid))
@@ -97,13 +103,14 @@ fn div_g0_emacs_state_safe() {
       (vectorp (memory-use-counts))
       (length (memory-use-counts)))
 "##,
-        expect_test::expect![[r#""OK (t gnu/linux nil 7)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_g0_system_configuration_triple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"x86_64-pc-linux-gnu\"""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK "x86_64-pc-linux-gnu"
     // Neomacs:   OK "x86_64-unknown-linux-gnu"
@@ -113,13 +120,14 @@ fn div_g0_system_configuration_triple() {
         r##"
 system-configuration
 "##,
-        expect_test::expect![[r#""OK \"x86_64-pc-linux-gnu\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_g0_environment_exported_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     // getenv presence checks only (NOT process-environment ordering/content,
     // which trivially differs between the two processes and would dump the
     // whole env).
@@ -130,6 +138,6 @@ fn div_g0_environment_exported_p() {
       (stringp (getenv "TERM"))
       (eq (getenv "NEO_PROBE_UNSET_XYZ") nil))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }

@@ -9,6 +9,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_bufswap_basic_with_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (((\"init\" \"AAAA-BBBB-CCCC-DDDD\" \"XXXX-YYYY-ZZZZ-WWWW\" 10 10 6 15 6 15) (\"swap1\" \"XXXX-YYYY-ZZZZ-WWWW\" \"AAAA-BBBB-CCCC-DDDD\" 1 1) (\"edit-after-swap\" \"XXXX-YYNEWYY-ZZZZ-WWWW\" \"AAAA-BBBB-CCCC-DDDD\" 1 1)) (\"ins-a\") nil 1 1)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass buf-state ()
@@ -72,9 +75,7 @@ fn combo_eieio_bufswap_basic_with_objects() {
       (list results
             (bs-log sa) (bs-log sb)
             (bs-count sa) (bs-count sb)))))"#,
-        expect_test::expect![[
-            r#""OK (((\"init\" \"AAAA-BBBB-CCCC-DDDD\" \"XXXX-YYYY-ZZZZ-WWWW\" 10 10 6 15 6 15) (\"swap1\" \"XXXX-YYYY-ZZZZ-WWWW\" \"AAAA-BBBB-CCCC-DDDD\" 1 1) (\"edit-after-swap\" \"XXXX-YYNEWYY-ZZZZ-WWWW\" \"AAAA-BBBB-CCCC-DDDD\" 1 1)) (\"ins-a\") nil 1 1)""#
-        ]],
+        expect,
     );
 }
 
@@ -82,6 +83,7 @@ fn combo_eieio_bufswap_basic_with_objects() {
 fn combo_eieio_bufswap_with_narrow_and_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (cl-no-applicable-method bs-count nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass swap-ctx ()
@@ -146,7 +148,7 @@ fn combo_eieio_bufswap_with_narrow_and_undo() {
       (list results
             (scx-ops ctx)
             (scx-data ctx)))))"#,
-        expect_test::expect![[r#""ERR (cl-no-applicable-method bs-count nil)""#]],
+        expect,
     );
 }
 
@@ -154,6 +156,9 @@ fn combo_eieio_bufswap_with_narrow_and_undo() {
 fn combo_eieio_bufswap_cross_edit_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (((\"init\" \"AAAA-BBBB-CCCC-DDDD-EEEE-FFFF\" \"1111-2222-3333-4444-5555-6666\" 10 10 6 20 6 20) (\"swap\" \"1111-2222-3333-4444-5555-6666\" \"AAAA-BBBB-CCCC-DDDD-EEEE-FFFF\" (\"swap\")) (\"edits\" \"1111-22XXX22-3333-4444-5555-6666\" \"AAAA-BBBB-CYYYCCC-DDDD-EEEE-FFFF\" (\"ins-a\" \"swap\") (\"ins-b\"))) (\"ins\" \"swap\") (\"ins-a\" \"swap\") (\"ins-b\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass cross-edit ()
@@ -227,9 +232,7 @@ fn combo_eieio_bufswap_cross_edit_objects() {
       (list results
             (with-current-buffer buf-a my-ce-log)
             (ce-edits ea) (ce-edits eb)))))"#,
-        expect_test::expect![[
-            r#""OK (((\"init\" \"AAAA-BBBB-CCCC-DDDD-EEEE-FFFF\" \"1111-2222-3333-4444-5555-6666\" 10 10 6 20 6 20) (\"swap\" \"1111-2222-3333-4444-5555-6666\" \"AAAA-BBBB-CCCC-DDDD-EEEE-FFFF\" (\"swap\")) (\"edits\" \"1111-22XXX22-3333-4444-5555-6666\" \"AAAA-BBBB-CYYYCCC-DDDD-EEEE-FFFF\" (\"ins-a\" \"swap\") (\"ins-b\"))) (\"ins\" \"swap\") (\"ins-a\" \"swap\") (\"ins-b\"))""#
-        ]],
+        expect,
     );
 }
 
@@ -237,6 +240,7 @@ fn combo_eieio_bufswap_cross_edit_objects() {
 fn combo_eieio_bufswap_multi_object_registry() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments mapcar 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass buf-registry ()
@@ -303,7 +307,7 @@ fn combo_eieio_bufswap_multi_object_registry() {
       (push (list "edits" (funcall snap-all)) results)
       (setq results (reverse results))
       (list results (br-log reg)))))"#,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments mapcar 3)""#]],
+        expect,
     );
 }
 
@@ -311,6 +315,7 @@ fn combo_eieio_bufswap_multi_object_registry() {
 fn combo_eieio_bufswap_method_dispatch_cross_buf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass buf-node ()
@@ -389,6 +394,6 @@ fn combo_eieio_bufswap_method_dispatch_cross_buf() {
             (cl-typep snk 'sink-node)
             (cl-typep src 'buf-node)
             (cl-typep snk 'buf-node)))))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }

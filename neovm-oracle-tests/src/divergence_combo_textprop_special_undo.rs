@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_text_prop_keymap_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"tpk\"))\n\
@@ -34,7 +35,7 @@ fn deficiency_text_prop_keymap_undo() {
          (get-text-property 1 'face)\n\
          (get-text-property 7 'face)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -42,6 +43,7 @@ fn deficiency_text_prop_keymap_undo() {
 fn deficiency_category_properties_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"cpu\")))\n\
@@ -68,7 +70,7 @@ fn deficiency_category_properties_undo() {
          (get-text-property 5 'category)\n\
          (get-text-property 8 'category))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -76,6 +78,7 @@ fn deficiency_category_properties_undo() {
 fn deficiency_button_type_props_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 27 33)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"btp\")))\n\
@@ -103,7 +106,7 @@ fn deficiency_button_type_props_undo() {
          (get-text-property 12 'face)\n\
          (get-text-property 27 'button)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (args-out-of-range 27 33)""#]],
+        expect,
     );
 }
 
@@ -111,6 +114,7 @@ fn deficiency_button_type_props_undo() {
 fn deficiency_field_property_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"fpu\")))\n\
@@ -138,7 +142,7 @@ fn deficiency_field_property_undo() {
          (get-text-property 1 'field)\n\
          (get-text-property 15 'field)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -146,6 +150,7 @@ fn deficiency_field_property_undo() {
 fn deficiency_invisible_property_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"ipu\")))\n\
@@ -170,7 +175,7 @@ fn deficiency_invisible_property_undo() {
          (get-text-property 16 'invisible)\n\
          (get-text-property 26 'invisible)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -178,6 +183,7 @@ fn deficiency_invisible_property_undo() {
 fn deficiency_intangible_property_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"itp\")))\n\
@@ -202,7 +208,7 @@ fn deficiency_intangible_property_undo() {
          (get-text-property 7 'intangible)\n\
          (get-text-property 12 'intangible)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -210,6 +216,7 @@ fn deficiency_intangible_property_undo() {
 fn deficiency_mouse_face_property_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mfu\")))\n\
@@ -236,7 +243,7 @@ fn deficiency_mouse_face_property_undo() {
          (get-text-property 7 'mouse-face)\n\
          (get-text-property 1 'help-echo)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -244,6 +251,7 @@ fn deficiency_mouse_face_property_undo() {
 fn deficiency_local_map_property_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 17 25)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"lmu\"))\n\
@@ -271,7 +279,7 @@ fn deficiency_local_map_property_undo() {
          (and (get-text-property 9 'local-map) t)\n\
          (and (get-text-property 17 'local-map) t)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (args-out-of-range 17 25)""#]],
+        expect,
     );
 }
 
@@ -279,6 +287,7 @@ fn deficiency_local_map_property_undo() {
 fn deficiency_multiple_prop_set_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mps\")))\n\
@@ -305,7 +314,7 @@ fn deficiency_multiple_prop_set_undo_chain() {
          (get-text-property 1 'prop-c)\n\
          (get-text-property 7 'prop-d)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -313,6 +322,7 @@ fn deficiency_multiple_prop_set_undo_chain() {
 fn deficiency_rear_nonsticky_insert_gap_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rng\")))\n\
@@ -342,6 +352,6 @@ fn deficiency_rear_nonsticky_insert_gap_undo() {
          (get-text-property 12 'zone)\n\
          (get-text-property 12 'rear-nonsticky)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }

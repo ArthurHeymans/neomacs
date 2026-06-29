@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_sticky_prop_insert_at_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass sticky-snap ()
@@ -77,7 +78,7 @@ fn combo_eieio_sticky_prop_insert_at_boundary() {
               (overlay-start ov) (overlay-end ov)
               my-sk-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -85,6 +86,7 @@ fn combo_eieio_sticky_prop_insert_at_boundary() {
 fn combo_eieio_sticky_front_sticky_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass front-sticky-snap ()
@@ -150,7 +152,7 @@ fn combo_eieio_sticky_front_sticky_prop() {
               (overlay-start ov) (overlay-end ov)
               my-fs-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -158,6 +160,7 @@ fn combo_eieio_sticky_front_sticky_prop() {
 fn combo_eieio_sticky_multiple_boundaries_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 29 29)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass multi-bnd-snap ()
@@ -226,7 +229,7 @@ fn combo_eieio_sticky_multiple_boundaries_edit() {
               (overlay-start ov) (overlay-end ov)
               my-mb-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 29 29)""#]],
+        expect,
     );
 }
 
@@ -234,6 +237,7 @@ fn combo_eieio_sticky_multiple_boundaries_edit() {
 fn combo_eieio_sticky_undo_restore_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass sticky-undo-snap ()
@@ -301,7 +305,7 @@ fn combo_eieio_sticky_undo_restore_props() {
               (overlay-start ov) (overlay-end ov)
               my-su-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -309,6 +313,7 @@ fn combo_eieio_sticky_undo_restore_props() {
 fn combo_eieio_sticky_overlay_insert_in_front_behind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass insert-type-snap ()
@@ -371,6 +376,6 @@ fn combo_eieio_sticky_overlay_insert_in_front_behind() {
               (overlay-start ov2) (overlay-end ov2)
               my-it-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

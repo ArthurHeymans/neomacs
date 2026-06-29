@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx152_dired_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -18,13 +19,14 @@ fn div_cx152_dired_availability() {
             (boundp 'dired-dwim-target)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx152_dired_listing_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"alpha.txt\" \"beta.dat\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((dir (make-temp-file "neo-cx152-dired" t))
@@ -36,13 +38,14 @@ fn div_cx152_dired_listing_format() {
     (delete-directory dir t)
     (sort entries #'string<)))
 "##,
-        expect_test::expect![[r#""OK (\"alpha.txt\" \"beta.dat\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx152_dired_x_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -53,13 +56,14 @@ fn div_cx152_dired_x_availability() {
             (boundp 'dired-guess-shell-alist-user)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx152_directory_files_full_paths() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"a.txt\" \"b.txt\" \"sub\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((dir (make-temp-file "neo-cx152-full" t))
@@ -72,13 +76,14 @@ fn div_cx152_directory_files_full_paths() {
     (delete-directory dir t)
     (sort (mapcar #'file-name-nondirectory entries) #'string<)))
 "##,
-        expect_test::expect![[r#""OK (\"a.txt\" \"b.txt\" \"sub\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx152_dired_recursive_compress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (20 (\"file.txt.gz\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -94,13 +99,14 @@ fn div_cx152_dired_recursive_compress() {
           (list before-size after-files))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (20 (\"file.txt.gz\"))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx152_dired_mode_buffer_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -115,13 +121,16 @@ fn div_cx152_dired_mode_buffer_creation() {
       (delete-directory dir t))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx152_dired_filename_quoting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"file with spaces.txt\") (\"/tmp/nix-shell.XcUf3d/neo-cx152-quoteKTsceP/file with spaces.txt\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((dir (make-temp-file "neo-cx152-quote" t))
@@ -134,15 +143,14 @@ fn div_cx152_dired_filename_quoting() {
     (list (member weird-name entries)
           (member weird-path full-entries))))
 "##,
-        expect_test::expect![[
-            r#""OK ((\"file with spaces.txt\") (\"/tmp/nix-shell.XcUf3d/neo-cx152-quoteKTsceP/file with spaces.txt\"))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx152_dired_sort_by_various() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -152,13 +160,14 @@ fn div_cx152_dired_sort_by_various() {
           (boundp 'dired-use-ls-dired))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx152_dired_create_directory() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((parent (make-temp-file "neo-cx152-mkdir" t))
@@ -168,13 +177,14 @@ fn div_cx152_dired_create_directory() {
     (delete-directory parent t)
     created))
 "##,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx152_dired_writable_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((dir (make-temp-file "neo-cx152-write" t))
@@ -186,13 +196,14 @@ fn div_cx152_dired_writable_check() {
     (delete-directory dir t)
     (list writable (not read-only))))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx152_dired_recursive_find() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 (\"a.txt\" \"b.txt\" \"c.txt\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((root (make-temp-file "neo-cx152-find" t))
@@ -210,13 +221,14 @@ fn div_cx152_dired_recursive_find() {
     (delete-directory root t)
     (list (length all) names)))
 "##,
-        expect_test::expect![[r#""OK (3 (\"a.txt\" \"b.txt\" \"c.txt\"))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx152_dired_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((dir (make-temp-file "neo-cx152-mega" t))
@@ -246,6 +258,6 @@ fn div_cx152_dired_with_marker_overlay_undo_narrow_mega() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }

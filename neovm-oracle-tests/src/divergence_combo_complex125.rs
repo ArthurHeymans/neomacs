@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx125_with_syntax_table_local_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx125-st*")))
@@ -22,13 +23,14 @@ fn div_cx125_with_syntax_table_local_restore() {
                 (eq outer-st (syntax-table))
                 (not (eq outer-st inner-st)))))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx125_syntax_table_per_buffer_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (119 46)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx125-a*"))
@@ -45,13 +47,14 @@ fn div_cx125_syntax_table_per_buffer_local() {
     (kill-buffer buf-b)
     (list at-a at-b)))
 "##,
-        expect_test::expect![[r#""OK (119 46)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx125_category_table_define_and_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -70,13 +73,14 @@ fn div_cx125_category_table_define_and_query() {
             (char-category-set ?\s ct)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx125_category_set_mnemonics_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -92,13 +96,16 @@ fn div_cx125_category_set_mnemonics_string() {
               (category-set-mnemonics cs))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx125_syntax_class_matrix_default_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((97 119) (122 119) (65 119) (90 119) (48 119) (57 119) (95 95) (45 95) (40 40) (41 41) (91 40) (93 41) (123 40) (125 41) (34 34) (39 46) (96 46) (59 46) (44 46) (46 46) (92 92) (63 46) (33 46) (35 46) (36 119) (37 119) (38 95) (42 95) (43 95) (60 95) (62 95) (64 46) (47 95) (124 95) (126 46))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (c) (list c (char-syntax c)))
@@ -107,15 +114,14 @@ fn div_cx125_syntax_class_matrix_default_table() {
           ?\" ?\' ?\` ?\; ?, ?.
           ?\\ ?? ?! ?# ?$ ?% ?& ?* ?+ ?< ?> ?@ ?/ ?| ?~))
 "##,
-        expect_test::expect![[
-            r#""OK ((97 119) (122 119) (65 119) (90 119) (48 119) (57 119) (95 95) (45 95) (40 40) (41 41) (91 40) (93 41) (123 40) (125 41) (34 34) (39 46) (96 46) (59 46) (44 46) (46 46) (92 92) (63 46) (33 46) (35 46) (36 119) (37 119) (38 95) (42 95) (43 95) (60 95) (62 95) (64 46) (47 95) (124 95) (126 46))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx125_modify_syntax_entry_string_form() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (119 95 46 34 60 62)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -134,13 +140,14 @@ fn div_cx125_modify_syntax_entry_string_form() {
           (char-syntax ?\;)
           (char-syntax ?\n))))
 "##,
-        expect_test::expect![[r#""OK (119 95 46 34 60 62)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx125_parse_partial_sexp_full_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 0 nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -153,13 +160,14 @@ fn div_cx125_parse_partial_sexp_full_state() {
           (nth 3 p2) (nth 8 p2)
           (nth 4 p4) (nth 32 p4))))
 "##,
-        expect_test::expect![[r#""OK (1 0 nil nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx125_scan_lists_nested_parens() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (35 8 nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -170,13 +178,14 @@ fn div_cx125_scan_lists_nested_parens() {
         (scan-lists (point) 2 0)
         (scan-lists (point) -1 0)))
 "##,
-        expect_test::expect![[r#""OK (35 8 nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx125_forward_comment_line_and_block_styles() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (8 8 8)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -189,13 +198,16 @@ fn div_cx125_forward_comment_line_and_block_styles() {
       (forward-comment 1)
       (list after-line after-alpha (point)))))
 "##,
-        expect_test::expect![[r#""OK (8 8 8)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx125_syntax_ppss_cached_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((0 nil nil nil nil nil 0 nil nil nil nil) (1 1 12 nil nil nil 0 nil nil (1) nil) (1 1 17 nil nil nil 0 nil nil (1) nil) (2 31 36 nil nil nil 0 nil nil (1 31) nil) (3 58 59 nil nil nil 0 nil nil (1 31 58) nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -206,15 +218,14 @@ fn div_cx125_syntax_ppss_cached_state() {
         (syntax-ppss 45)
         (syntax-ppss 60)))
 "##,
-        expect_test::expect![[
-            r#""OK ((0 nil nil nil nil nil 0 nil nil nil nil) (1 1 12 nil nil nil 0 nil nil (1) nil) (1 1 17 nil nil nil 0 nil nil (1) nil) (2 31 36 nil nil nil 0 nil nil (1 31) nil) (3 58 59 nil nil nil 0 nil nil (1 31 58) nil))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx125_word_motion_with_custom_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (15 31 16 99)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -230,13 +241,14 @@ fn div_cx125_word_motion_with_custom_syntax() {
       (forward-word -1)
       (list p1 p2 (point) (char-after)))))
 "##,
-        expect_test::expect![[r#""OK (15 31 16 99)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx125_syntax_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -267,6 +279,6 @@ fn div_cx125_syntax_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1)))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }

@@ -20,14 +20,16 @@ fn oracle_prop_let_parallel_binding() {
                      (let ((x 20)
                            (y x))
                        (list x y)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (20 10)""#]]);
+    let expect = expect_test::expect![[r#""OK (20 10)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Parallel: x is still 1 when y is computed
     let form2 = r#"(let ((x 1))
                       (let ((x (+ x 100))
                             (y (* x 2)))
                         (list x y)))"#;
-    crate::common::assert_oracle_parity_expect(form2, expect_test::expect![[r#""OK (101 2)""#]]);
+    let expect = expect_test::expect![[r#""OK (101 2)""#]];
+    crate::common::assert_oracle_parity_expect(form2, expect);
 
     // Multiple interdependent bindings—all see outer scope
     let form3 = r#"(let ((a 5) (b 10))
@@ -35,21 +37,16 @@ fn oracle_prop_let_parallel_binding() {
                             (b (- b a))
                             (c (* a b)))
                         (list a b c)))"#;
-    crate::common::assert_oracle_parity_expect(form3, expect_test::expect![[r#""OK (15 5 50)""#]]);
+    let expect = expect_test::expect![[r#""OK (15 5 50)""#]];
+    crate::common::assert_oracle_parity_expect(form3, expect);
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     // Binding to nil by default
-    crate::common::assert_oracle_parity_expect(
-        "(let ((x)) x)",
-        expect_test::expect![[r#""OK nil""#]],
-    );
-    crate::common::assert_oracle_parity_expect(
-        "(let (x) x)",
-        expect_test::expect![[r#""OK nil""#]],
-    );
-    crate::common::assert_oracle_parity_expect(
-        "(let (x y z) (list x y z))",
-        expect_test::expect![[r#""OK (nil nil nil)""#]],
-    );
+    crate::common::assert_oracle_parity_expect("(let ((x)) x)", expect);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    crate::common::assert_oracle_parity_expect("(let (x) x)", expect);
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect("(let (x y z) (list x y z))", expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -65,14 +62,16 @@ fn oracle_prop_let_star_sequential_binding() {
                           (y (* x 2))
                           (z (+ x y)))
                      (list x y z))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (10 20 30)""#]]);
+    let expect = expect_test::expect![[r#""OK (10 20 30)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Contrast with let: same form but sequential
     let form2 = r#"(let ((x 1))
                       (let* ((x (+ x 100))
                              (y (* x 2)))
                         (list x y)))"#;
-    crate::common::assert_oracle_parity_expect(form2, expect_test::expect![[r#""OK (101 202)""#]]);
+    let expect = expect_test::expect![[r#""OK (101 202)""#]];
+    crate::common::assert_oracle_parity_expect(form2, expect);
 
     // Chain of dependent computations
     let form3 = r#"(let* ((a 2)
@@ -81,10 +80,8 @@ fn oracle_prop_let_star_sequential_binding() {
                            (d (* c c))
                            (e (* d d)))
                       (list a b c d e))"#;
-    crate::common::assert_oracle_parity_expect(
-        form3,
-        expect_test::expect![[r#""OK (2 4 16 256 65536)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 4 16 256 65536)""#]];
+    crate::common::assert_oracle_parity_expect(form3, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -101,10 +98,8 @@ fn oracle_prop_let_nested_mixing() {
                        (let ((x z)
                              (w (+ x y)))
                          (list x w y z))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (22 12 11 22)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (22 12 11 22)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Triple nesting with shadowing at each level
     let form2 = r#"(let ((a 1) (b 2))
@@ -114,10 +109,8 @@ fn oracle_prop_let_nested_mixing() {
                               (d (+ a b)))
                           (let* ((e (+ a b c d)))
                             (list a b c d e)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form2,
-        expect_test::expect![[r#""OK (3 9 9 5 26)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 9 9 5 26)""#]];
+    crate::common::assert_oracle_parity_expect(form2, expect);
 
     // let inside let* init form
     let form3 = r#"(let* ((x 5)
@@ -126,7 +119,8 @@ fn oracle_prop_let_nested_mixing() {
                            (w (let* ((p y) (q (* p 2)))
                                 (- q x))))
                       (list x y w))"#;
-    crate::common::assert_oracle_parity_expect(form3, expect_test::expect![[r#""OK (5 16 27)""#]]);
+    let expect = expect_test::expect![[r#""OK (5 16 27)""#]];
+    crate::common::assert_oracle_parity_expect(form3, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -143,10 +137,8 @@ fn oracle_prop_let_shadowing() {
                             (let ((x 'inner))
                               x)))
                        (list x result-inner)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (outer inner)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (outer inner)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Multiple levels of shadowing
     let form2 = r#"(let ((n 1))
@@ -154,7 +146,8 @@ fn oracle_prop_let_shadowing() {
                         (let ((n (+ n 100)))
                           (let ((n (+ n 1000)))
                             n))))"#;
-    crate::common::assert_oracle_parity_expect(form2, expect_test::expect![[r#""OK 1111""#]]);
+    let expect = expect_test::expect![[r#""OK 1111""#]];
+    crate::common::assert_oracle_parity_expect(form2, expect);
 
     // Shadow function-like binding
     let form3 = r#"(progn
@@ -165,7 +158,8 @@ fn oracle_prop_let_shadowing() {
                               (list neovm--let-shadow-test))
                             )
                         (makunbound 'neovm--let-shadow-test)))"#;
-    crate::common::assert_oracle_parity_expect(form3, expect_test::expect![[r#""OK (local-2)""#]]);
+    let expect = expect_test::expect![[r#""OK (local-2)""#]];
+    crate::common::assert_oracle_parity_expect(form3, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -185,15 +179,14 @@ fn oracle_prop_let_complex_expressions() {
                          (d (mapcar '1+ '(1 2 3)))
                          (e (apply '+ '(10 20 30))))
                      (list a b c d e))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 yes 5 (2 3 4) 60)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 yes 5 (2 3 4) 60)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Binding to lambda invocation
     let form2 = r#"(let ((result (funcall (lambda (x y) (* x y)) 6 7)))
                       result)"#;
-    crate::common::assert_oracle_parity_expect(form2, expect_test::expect![[r#""OK 42""#]]);
+    let expect = expect_test::expect![[r#""OK 42""#]];
+    crate::common::assert_oracle_parity_expect(form2, expect);
 
     // Binding to recursive computation via named closure
     let form3 = r#"(progn
@@ -209,10 +202,8 @@ fn oracle_prop_let_complex_expressions() {
                                 (f10 (funcall 'neovm--let-test-fact 10)))
                             (list f5 f10))
                         (fmakunbound 'neovm--let-test-fact)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form3,
-        expect_test::expect![[r#""OK (120 3628800)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (120 3628800)""#]];
+    crate::common::assert_oracle_parity_expect(form3, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -228,14 +219,16 @@ fn oracle_prop_pcase_let_destructuring() {
                      (require 'pcase)
                      (pcase-let ((`(,a ,b ,c) '(1 2 3)))
                        (list a b c)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (1 2 3)""#]]);
+    let expect = expect_test::expect![[r#""OK (1 2 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Nested destructuring
     let form2 = r#"(progn
                       (require 'pcase)
                       (pcase-let ((`(,x (,y ,z)) '(10 (20 30))))
                         (+ x y z)))"#;
-    crate::common::assert_oracle_parity_expect(form2, expect_test::expect![[r#""OK 60""#]]);
+    let expect = expect_test::expect![[r#""OK 60""#]];
+    crate::common::assert_oracle_parity_expect(form2, expect);
 
     // pcase-let* with sequential patterns
     let form3 = r#"(progn
@@ -243,17 +236,16 @@ fn oracle_prop_pcase_let_destructuring() {
                       (pcase-let* ((`(,a . ,rest) '(1 2 3 4))
                                    (`(,b . ,rest2) rest))
                         (list a b rest2)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form3,
-        expect_test::expect![[r#""OK (1 2 (3 4))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 2 (3 4))""#]];
+    crate::common::assert_oracle_parity_expect(form3, expect);
 
     // pcase-let with _ wildcard
     let form4 = r#"(progn
                       (require 'pcase)
                       (pcase-let ((`(,first _ ,third) '(a b c)))
                         (list first third)))"#;
-    crate::common::assert_oracle_parity_expect(form4, expect_test::expect![[r#""OK (a c)""#]]);
+    let expect = expect_test::expect![[r#""OK (a c)""#]];
+    crate::common::assert_oracle_parity_expect(form4, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -268,7 +260,8 @@ fn oracle_prop_let_closure_capture() {
     let form = r#"(let ((x 10))
                      (let ((f (lambda () x)))
                        (funcall f)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 10""#]]);
+    let expect = expect_test::expect![[r#""OK 10""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Multiple closures sharing captured environment
     let form2 = r#"(let ((count 0))
@@ -278,7 +271,8 @@ fn oracle_prop_let_closure_capture() {
                         (funcall inc)
                         (funcall inc)
                         (funcall get)))"#;
-    crate::common::assert_oracle_parity_expect(form2, expect_test::expect![[r#""OK 3""#]]);
+    let expect = expect_test::expect![[r#""OK 3""#]];
+    crate::common::assert_oracle_parity_expect(form2, expect);
 
     // Closure captures different let levels
     let form3 = r#"(let ((a 1))
@@ -286,10 +280,8 @@ fn oracle_prop_let_closure_capture() {
                         (let ((f (lambda () (+ a b))))
                           (let ((a 100) (b 200))
                             (list (funcall f) a b)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form3,
-        expect_test::expect![[r#""OK (3 100 200)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 100 200)""#]];
+    crate::common::assert_oracle_parity_expect(form3, expect);
 
     // Generate list of closures capturing loop variable
     let form4 = r#"(let ((fns nil))
@@ -297,10 +289,8 @@ fn oracle_prop_let_closure_capture() {
                         (let ((captured i))
                           (push (lambda () captured) fns)))
                       (mapcar #'funcall (nreverse fns)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form4,
-        expect_test::expect![[r#""OK (0 1 2 3 4)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 1 2 3 4)""#]];
+    crate::common::assert_oracle_parity_expect(form4, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -324,7 +314,8 @@ fn oracle_prop_let_tail_position() {
                                (funcall 'neovm--let-tail-test 0)
                                (funcall 'neovm--let-tail-test -1))
                        (fmakunbound 'neovm--let-tail-test)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (25 0 0)""#]]);
+    let expect = expect_test::expect![[r#""OK (25 0 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // let in cond clause tail
     let form2 = r#"(let ((x 3))
@@ -333,7 +324,8 @@ fn oracle_prop_let_tail_position() {
                        ((= x 2) (let ((r 'two)) r))
                        ((= x 3) (let ((r 'three)) r))
                        (t (let ((r 'other)) r))))"#;
-    crate::common::assert_oracle_parity_expect(form2, expect_test::expect![[r#""OK three""#]]);
+    let expect = expect_test::expect![[r#""OK three""#]];
+    crate::common::assert_oracle_parity_expect(form2, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -349,10 +341,8 @@ fn oracle_prop_let_alist() {
                      (require 'subr-x)
                      (let-alist '((name . "Alice") (age . 30) (active . t))
                        (list .name .age .active)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"Alice\" 30 t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"Alice\" 30 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Nested let-alist
     let form2 = r#"(progn
@@ -360,14 +350,16 @@ fn oracle_prop_let_alist() {
                       (let-alist '((x . 10) (y . 20))
                         (let-alist '((x . 100) (z . 300))
                           (list .x .z))))"#;
-    crate::common::assert_oracle_parity_expect(form2, expect_test::expect![[r#""OK (100 300)""#]]);
+    let expect = expect_test::expect![[r#""OK (100 300)""#]];
+    crate::common::assert_oracle_parity_expect(form2, expect);
 
     // let-alist with computation on values
     let form3 = r#"(progn
                       (require 'subr-x)
                       (let-alist '((width . 800) (height . 600))
                         (* .width .height)))"#;
-    crate::common::assert_oracle_parity_expect(form3, expect_test::expect![[r#""OK 480000""#]]);
+    let expect = expect_test::expect![[r#""OK 480000""#]];
+    crate::common::assert_oracle_parity_expect(form3, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -400,7 +392,8 @@ fn oracle_prop_let_very_deep_nesting() {
                                     (let ((v (1+ v)))
                                       (let ((v (1+ v)))
                                         v))))))))))))))))))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 19""#]]);
+    let expect = expect_test::expect![[r#""OK 19""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 
     // Deep let* chain building a list incrementally
     let form2 = r#"(let* ((a '(1))
@@ -414,10 +407,8 @@ fn oracle_prop_let_very_deep_nesting() {
                            (i (cons 9 h))
                            (j (cons 10 i)))
                       j)"#;
-    crate::common::assert_oracle_parity_expect(
-        form2,
-        expect_test::expect![[r#""OK (10 9 8 7 6 5 4 3 2 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (10 9 8 7 6 5 4 3 2 1)""#]];
+    crate::common::assert_oracle_parity_expect(form2, expect);
 
     // Alternating let/let* at depth
     let form3 = r#"(let ((x 1))
@@ -428,8 +419,6 @@ fn oracle_prop_let_very_deep_nesting() {
                           (let* ((c (+ a b))
                                  (d (* c 2)))
                             (list x y z a b c d)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form3,
-        expect_test::expect![[r#""OK (1 2 3 4 6 10 20)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 2 3 4 6 10 20)""#]];
+    crate::common::assert_oracle_parity_expect(form3, expect);
 }

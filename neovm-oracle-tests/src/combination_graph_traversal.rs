@@ -63,12 +63,10 @@ fn oracle_prop_graph_traversal_bfs_alist() {
                 (length (car result)))))  ;; should visit all 8 nodes
     (fmakunbound 'neovm--gt-neighbors)
     (fmakunbound 'neovm--gt-bfs)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((a b c d e f g h) ((a . 0) (b . 1) (c . 1) (d . 1) (e . 2) (f . 2) (g . 2) (h . 3)) ((b . a) (c . a) (d . a) (e . b) (f . c) (g . c) (h . e)) 8)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((a b c d e f g h) ((a . 0) (b . 1) (c . 1) (d . 1) (e . 2) (f . 2) (g . 2) (h . 3)) ((b . a) (c . a) (d . a) (e . b) (f . c) (g . c) (h . e)) 8)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -135,12 +133,10 @@ fn oracle_prop_graph_traversal_dfs_iterative_stack() {
                 ;; Verify all nodes finished
                 (= (length (cadr result)) 6))))
     (fmakunbound 'neovm--gt-dfs-iterative)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((a . 1) (b . 2) (d . 3) (e . 5) (f . 6) (c . 10)) ((d . 4) (f . 7) (e . 8) (b . 9) (c . 11) (a . 12)) t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((a . 1) (b . 2) (d . 3) (e . 5) (f . 6) (c . 10)) ((d . 4) (f . 7) (e . 8) (b . 9) (c . 11) (a . 12)) t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -206,12 +202,10 @@ fn oracle_prop_graph_traversal_topological_sort_alist() {
     (fmakunbound 'neovm--gt-topo-sort)
     (fmakunbound 'neovm--gt-topo-visit)
     (fmakunbound 'neovm--gt-verify-topo)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((compile-tests compile-ui compile-core link package run-tests deploy) t 7 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((compile-tests compile-ui compile-core link package run-tests deploy) t 7 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -286,12 +280,10 @@ fn oracle_prop_graph_traversal_cycle_detection() {
         (nreverse results))
     (fmakunbound 'neovm--gt-detect-cycles)
     (fmakunbound 'neovm--gt-cycle-visit)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((dag (nil nil)) (cyclic (t ((c . a) (e . d)))) (self-loop (t ((x . x)))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((dag (nil nil)) (cyclic (t ((c . a) (e . d)))) (self-loop (t ((x . x)))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -376,12 +368,10 @@ fn oracle_prop_graph_traversal_shortest_path_bfs() {
     (fmakunbound 'neovm--gt-build-undirected)
     (fmakunbound 'neovm--gt-bfs-paths)
     (fmakunbound 'neovm--gt-reconstruct)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((a . 0) (b . 1) (c . 1) (d . 2) (e . 2) (f . 2) (g . 3) (h . 3) (i . 4)) (path-a-i (a c f h i) 5) (path-a-h (a c f h) 4) (path-a-g (a b e g) 4) (path-a-a (a)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((a . 0) (b . 1) (c . 1) (d . 2) (e . 2) (f . 2) (g . 3) (h . 3) (i . 4)) (path-a-i (a c f h i) 5) (path-a-h (a c f h) 4) (path-a-g (a b e g) 4) (path-a-a (a)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -461,12 +451,10 @@ fn oracle_prop_graph_traversal_connected_components() {
                 (list 'all-components
                       (mapcar (lambda (c) (cdr c)) components)))))
     (fmakunbound 'neovm--gt-find-cc)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((num-components 4) (sizes (4 3 2 1)) (largest (4 5 6 7)) (smallest (10)) (isolated (10)) (all-components ((1 2 3) (4 5 6 7) (8 9) (10))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((num-components 4) (sizes (4 3 2 1)) (largest (4 5 6 7)) (smallest (10)) (isolated (10)) (all-components ((1 2 3) (4 5 6 7) (8 9) (10))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -580,10 +568,8 @@ fn oracle_prop_graph_traversal_topology_properties() {
     (fmakunbound 'neovm--gt-degree-seq)
     (fmakunbound 'neovm--gt-bfs-max-dist)
     (fmakunbound 'neovm--gt-diameter)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((star (4 1 1 1 1) 2 4) (ring (2 2 2 2 2) 2 5) (complete-k4 (3 3 3 3) 1 6) (binary-tree (3 3 2 1 1 1 1) 4 6 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((star (4 1 1 1 1) 2 4) (ring (2 2 2 2 2) 2 5) (complete-k4 (3 3 3 3) 1 6) (binary-tree (3 3 2 1 1 1 1) 4 6 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

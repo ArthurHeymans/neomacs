@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx83_encode_decode_time_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (30 45 12 15 6 2024 6 t -14400)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((encoded (encode-time 30 45 12 15 6 2024 nil))
@@ -22,13 +23,16 @@ fn div_cx83_encode_decode_time_roundtrip() {
         (decoded-time-dst decoded)
         (decoded-time-zone decoded)))
 "##,
-        expect_test::expect![[r#""OK (30 45 12 15 6 2024 6 t -14400)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx83_format_time_string_various_formats() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"2024-01-01\" \"00:00:00\" \"2024-01-01T00:00:00-0500\" \"Monday, January 01, 2024\" \"001\" \"00\" \"01\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((t0 (encode-time 0 0 0 1 1 2024 nil)))
@@ -40,15 +44,16 @@ fn div_cx83_format_time_string_various_formats() {
         (format-time-string "%U" t0)
         (format-time-string "%W" t0)))
 "##,
-        expect_test::expect![[
-            r#""OK (\"2024-01-01\" \"00:00:00\" \"2024-01-01T00:00:00-0500\" \"Monday, January 01, 2024\" \"001\" \"00\" \"01\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx83_time_arithmetic_add_subtract() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((0 0 13 15 6 2024 6 t -14400) (0 0 11 15 6 2024 6 t -14400) (0 30 12 15 6 2024 6 t -14400) t t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((t0 (encode-time 0 0 12 15 6 2024 nil))
@@ -62,15 +67,16 @@ fn div_cx83_time_arithmetic_add_subtract() {
         (time-less-p t0 plus-1h)
         (time-equal-p t0 (time-subtract plus-1h 3600))))
 "##,
-        expect_test::expect![[
-            r#""OK ((0 0 13 15 6 2024 6 t -14400) (0 0 11 15 6 2024 6 t -14400) (0 30 12 15 6 2024 6 t -14400) t t t)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx83_parse_time_string_formats() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((2024 6 15 nil nil nil) (2024 6 15 12 30 0) (2024 6 15 12 30 45) (2024 6 15 12 30 45) (2024 6 15 nil nil nil) (2024 6 15 nil nil nil) (2024 6 15 nil nil nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (s)
@@ -91,15 +97,14 @@ fn div_cx83_parse_time_string_formats() {
           "15 Jun 2024"
           "Saturday, 15 June 2024"))
 "##,
-        expect_test::expect![[
-            r#""OK ((2024 6 15 nil nil nil) (2024 6 15 12 30 0) (2024 6 15 12 30 45) (2024 6 15 12 30 45) (2024 6 15 nil nil nil) (2024 6 15 nil nil nil) (2024 6 15 nil nil nil))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx83_time_to_days_and_to_seconds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (738886 1704085200.0 1704085200.0 738888)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((t0 (encode-time 0 0 0 1 1 2024 nil)))
@@ -108,13 +113,14 @@ fn div_cx83_time_to_days_and_to_seconds() {
         (float-time t0)
         (1+ (time-to-days (encode-time 0 0 0 2 1 2024 nil)))))
 "##,
-        expect_test::expect![[r#""OK (738886 1704085200.0 1704085200.0 738888)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx83_current_time_structure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((now (current-time)))
@@ -125,13 +131,16 @@ fn div_cx83_current_time_structure() {
         (stringp (current-time-string))
         (floatp (float-time))))
 "##,
-        expect_test::expect![[r#""OK (t t t nil t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx83_format_time_string_with_zone() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"12:00 GMT\" \"12:00 +0000\" \"07:00 -05\" \"13:00 +0100\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((t0 (encode-time 0 0 12 15 6 2024 nil 0)))
@@ -140,15 +149,16 @@ fn div_cx83_format_time_string_with_zone() {
         (format-time-string "%H:%M %Z" t0 -18000)
         (format-time-string "%H:%M %z" t0 3600)))
 "##,
-        expect_test::expect![[
-            r#""OK (\"12:00 GMT\" \"12:00 +0000\" \"07:00 -05\" \"13:00 +0100\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx83_iso8601_parse_and_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((45 30 12 15 6 2024 nil nil 0) \"2024-06-15T12:30:45Z\" 2024 6 15)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -168,15 +178,14 @@ fn div_cx83_iso8601_parse_and_format() {
             (decoded-time-day parsed)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK ((45 30 12 15 6 2024 nil nil 0) \"2024-06-15T12:30:45Z\" 2024 6 15)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx83_time_difference_in_units() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2775600.0 46260.0 771.0 32.125)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((t1 (encode-time 0 0 12 15 6 2024 nil))
@@ -187,13 +196,16 @@ fn div_cx83_time_difference_in_units() {
         (/ diff-seconds 3600)
         (/ diff-seconds 86400)))
 "##,
-        expect_test::expect![[r#""OK (2775600.0 46260.0 771.0 32.125)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx83_time_with_fractional_seconds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((27202 18529 947575 526000) (0 . 1000000) \"00.000\" \"00.000000\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((t0 (encode-time '(30 0 0) 0 12 15 6 2024 nil)))
@@ -202,15 +214,14 @@ fn div_cx83_time_with_fractional_seconds() {
         (format-time-string "%S.%3N" t0)
         (format-time-string "%S.%6N" t0)))
 "##,
-        expect_test::expect![[
-            r#""OK ((27202 18529 947575 526000) (0 . 1000000) \"00.000\" \"00.000000\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx83_format_time_with_padding_and_flags() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"5\" \" 5\" \"05\" \"5\" \" 5\" \"MAY\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((t0 (encode-time 5 5 5 5 5 2024 nil)))
@@ -221,13 +232,16 @@ fn div_cx83_format_time_with_padding_and_flags() {
         (format-time-string "%_m" t0)
         (format-time-string "%^B" t0)))
 "##,
-        expect_test::expect![[r#""OK (\"5\" \" 5\" \"05\" \"5\" \" 5\" \"MAY\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx83_time_loop_arithmetic_with_marker_overlay_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Changes to be undone are outside visible portion of buffer\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((base (encode-time 0 0 0 1 1 2024 nil))
@@ -255,8 +269,6 @@ fn div_cx83_time_loop_arithmetic_with_marker_overlay_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[
-            r#""ERR (error \"Changes to be undone are outside visible portion of buffer\")""#
-        ]],
+        expect,
     );
 }

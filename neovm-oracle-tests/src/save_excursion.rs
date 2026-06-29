@@ -19,8 +19,9 @@ fn oracle_prop_save_excursion_restores_point() {
                     (save-excursion
                       (goto-char (point-max))
                       (point)))"#;
+    let expect = expect_test::expect![[r#""OK 12""#]];
     // save-excursion returns body value but restores point
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 12""#]]);
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -35,7 +36,8 @@ fn oracle_prop_save_excursion_point_restored_after() {
                              (goto-char (point-max))
                              (point))))
                       (list inside (point))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (12 3)""#]]);
+    let expect = expect_test::expect![[r#""OK (12 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -51,8 +53,8 @@ fn oracle_prop_save_excursion_restores_on_error() {
                           (signal 'error '("boom")))
                       (error nil))
                     (point))"#;
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 3""#]]);
+    let expect = expect_test::expect![[r#""OK 3""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("3", &o, &n);
 }
 
@@ -68,7 +70,8 @@ fn oracle_prop_save_excursion_restores_buffer() {
                         (set-buffer (get-buffer-create "neovm--test-buf-B"))
                         (current-buffer))
                       (eq orig (current-buffer))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK t""#]]);
+    let expect = expect_test::expect![[r#""OK t""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -83,8 +86,8 @@ fn oracle_prop_save_excursion_nested() {
                       (save-excursion
                         (goto-char 8)))
                     (point))"#;
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 2""#]]);
+    let expect = expect_test::expect![[r#""OK 2""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("2", &o, &n);
 }
 
@@ -100,10 +103,8 @@ fn oracle_prop_narrow_to_region_basic() {
                     (insert "hello world")
                     (narrow-to-region 1 6)
                     (list (point-min) (point-max) (buffer-string)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 6 \"hello\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 6 \"hello\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -115,7 +116,8 @@ fn oracle_prop_narrow_restricts_movement() {
                     (narrow-to-region 1 6)
                     (goto-char (point-min))
                     (list (point) (point-min) (point-max)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (1 1 6)""#]]);
+    let expect = expect_test::expect![[r#""OK (1 1 6)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -128,7 +130,8 @@ fn oracle_prop_widen_restores() {
                     (let ((narrow-max (point-max)))
                       (widen)
                       (list narrow-max (point-max))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (6 12)""#]]);
+    let expect = expect_test::expect![[r#""OK (6 12)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -142,7 +145,8 @@ fn oracle_prop_save_restriction_restores_narrowing() {
                       (widen)
                       (point-max))
                     (list (point-min) (point-max)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (1 6)""#]]);
+    let expect = expect_test::expect![[r#""OK (1 6)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -158,8 +162,8 @@ fn oracle_prop_save_restriction_restores_on_error() {
                           (signal 'error '("boom")))
                       (error nil))
                     (point-max))"#;
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 6""#]]);
+    let expect = expect_test::expect![[r#""OK 6""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("6", &o, &n);
 }
 
@@ -175,7 +179,8 @@ fn oracle_prop_save_restriction_nested() {
                         (narrow-to-region 2 4)
                         (list (point-min) (point-max)))
                       ))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (2 4)""#]]);
+    let expect = expect_test::expect![[r#""OK (2 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -192,7 +197,8 @@ fn oracle_prop_narrow_search_pattern() {
                         (when (re-search-forward "\\([a-z]+\\)" nil t)
                           (setq found (match-string 1)))
                         found)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK \"bbb\"""#]]);
+    let expect = expect_test::expect![[r#""OK \"bbb\"""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -221,8 +227,6 @@ fn oracle_prop_save_excursion_restriction_combo() {
                                        (point-min) (point-max))))))
                       (list results (point)
                             (point-min) (point-max))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((7 19 \"line2\nline3\n\") 3 1 30)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((7 19 \"line2\nline3\n\") 3 1 30)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

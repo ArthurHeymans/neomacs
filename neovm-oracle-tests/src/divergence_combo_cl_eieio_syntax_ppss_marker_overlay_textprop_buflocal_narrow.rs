@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_parse_partial_sexp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass parse-state ()
@@ -51,7 +52,7 @@ fn combo_eieio_parse_partial_sexp_basic() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -59,6 +60,7 @@ fn combo_eieio_parse_partial_sexp_basic() {
 fn combo_eieio_parse_sexp_edit_reparse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 19 29)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass reparse-snap ()
@@ -116,7 +118,7 @@ fn combo_eieio_parse_sexp_edit_reparse() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 19 29)""#]],
+        expect,
     );
 }
 
@@ -124,6 +126,7 @@ fn combo_eieio_parse_sexp_edit_reparse() {
 fn combo_eieio_parse_narrow_restricted() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass narrow-parse ()
@@ -175,7 +178,7 @@ fn combo_eieio_parse_narrow_restricted() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -183,6 +186,7 @@ fn combo_eieio_parse_narrow_restricted() {
 fn combo_eieio_parse_syntax_table_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass syntax-ov-snap ()
@@ -235,7 +239,7 @@ fn combo_eieio_parse_syntax_table_overlay() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -243,6 +247,7 @@ fn combo_eieio_parse_syntax_table_overlay() {
 fn combo_eieio_parse_forward_sexps_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass sexp-nav-snap ()
@@ -303,6 +308,6 @@ fn combo_eieio_parse_forward_sexps_with_undo() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

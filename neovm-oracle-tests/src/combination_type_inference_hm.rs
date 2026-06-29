@@ -111,12 +111,10 @@ fn oracle_prop_hm_type_representation() {
     (fmakunbound 'neovm--hm-tpair)
     (fmakunbound 'neovm--hm-ftv)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((tcon int) (tvar 1) (tfun (tcon int) (tcon bool)) (tlist (tcon int)) (tpair (tcon int) (tcon bool)) t t t nil nil (1) nil (1 2) (1) (3) (4 5) nil (2))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((tcon int) (tvar 1) (tfun (tcon int) (tcon bool)) (tlist (tcon int)) (tpair (tcon int) (tcon bool)) t t t nil nil (1) nil (1 2) (1) (3) (4 5) nil (2))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -195,12 +193,10 @@ fn oracle_prop_hm_substitution() {
     (fmakunbound 'neovm--hm-s-apply)
     (fmakunbound 'neovm--hm-s-compose)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((tvar 1) (tcon int) (tcon bool) (tfun (tcon int) (tcon bool)) (tcon int) (tlist (tcon string)) (tpair (tcon int) (tcon bool)) ((tcon int) (tcon int)) (tcon bool))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((tvar 1) (tcon int) (tcon bool) (tfun (tcon int) (tcon bool)) (tcon int) (tlist (tcon string)) (tpair (tcon int) (tcon bool)) ((tcon int) (tcon int)) (tcon bool))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -328,12 +324,10 @@ fn oracle_prop_hm_unification() {
     (fmakunbound 'neovm--hm-u-bind)
     (fmakunbound 'neovm--hm-u-unify)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ok (1 tcon int)) (ok) err (ok (tcon int) (tcon bool)) err (ok (tcon int) (tcon int)) (ok (tcon int)) (ok (tcon int) (tcon bool)) (ok (tcon int) (tcon bool)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ok (1 tcon int)) (ok) err (ok (tcon int) (tcon bool)) err (ok (tcon int) (tcon int)) (ok (tcon int)) (ok (tcon int) (tcon bool)) (ok (tcon int) (tcon bool)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -473,12 +467,10 @@ fn oracle_prop_hm_generalization_instantiation() {
     (fmakunbound 'neovm--hm-gi-instantiate)
     (makunbound 'neovm--hm-gi-counter)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((scheme (100) (tfun (tvar 100) (tvar 100))) (scheme (101) (tfun (tvar 100) (tvar 101))) (tfun (tcon int) (tcon bool)) (tfun (tvar 1) (tvar 1)) ((tfun (tvar 11) (tvar 12)) (tfun (tvar 13) (tvar 14))) (tcon int) (2 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((scheme (100) (tfun (tvar 100) (tvar 100))) (scheme (101) (tfun (tvar 100) (tvar 101))) (tfun (tcon int) (tcon bool)) (tfun (tvar 1) (tvar 1)) ((tfun (tvar 11) (tvar 12)) (tfun (tvar 13) (tvar 14))) (tcon int) (2 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -713,12 +705,10 @@ fn oracle_prop_hm_infer_expressions() {
     (fmakunbound 'neovm--hm-w-infer-type)
     (makunbound 'neovm--hm-w-counter)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""ERR (wrong-type-argument listp \"mismatch (tcon bool) (tcon int)\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-type-argument listp \"mismatch (tcon bool) (tcon int)\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -818,10 +808,8 @@ fn oracle_prop_hm_let_polymorphism() {
     (fmakunbound 'neovm--hm-lp-typeof)
     (makunbound 'neovm--hm-lp-counter)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r##""ERR (invalid-read-syntax \"#t\" 59 54)""##]],
-    );
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#t\" 59 54)""##]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -905,10 +893,8 @@ fn oracle_prop_hm_occurs_check_detailed() {
     (fmakunbound 'neovm--hm-oc-occurs)
     (fmakunbound 'neovm--hm-oc-unify)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (err err err ok (ok) err (ok (tcon int) (tcon int) (tcon int)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (err err err ok (ok) err (ok (tcon int) (tcon int) (tcon int)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

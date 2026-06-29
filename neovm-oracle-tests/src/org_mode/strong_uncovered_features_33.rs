@@ -11,6 +11,8 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf33_id() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (error \"‘org-id-get’ expects a file-visiting buffer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -22,7 +24,7 @@ fn uf33_id() {
       (push (org-entry-get nil "ID") r)
       (forward-line))
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (error \"‘org-id-get’ expects a file-visiting buffer\")""#]],
+        expect,
     );
 }
 
@@ -33,6 +35,8 @@ fn uf33_id() {
 #[test]
 fn uf33_id_get() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (\"existing-id\" \"existing-id\" \"existing-id\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -41,7 +45,7 @@ fn uf33_id_get() {
   (list (org-id-get)
         (org-id-get nil 'create)
         (org-entry-get nil "ID")))"##,
-        expect_test::expect![[r#""OK (\"existing-id\" \"existing-id\" \"existing-id\")""#]],
+        expect,
     );
 }
 
@@ -52,6 +56,8 @@ fn uf33_id_get() {
 #[test]
 fn uf33_id_goto() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (error \"‘org-id-get’ expects a file-visiting buffer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -63,7 +69,7 @@ fn uf33_id_goto() {
         (org-id-goto id1)
       (error nil))
     (org-element-property :raw-value (org-element-at-point))))"##,
-        expect_test::expect![[r#""ERR (error \"‘org-id-get’ expects a file-visiting buffer\")""#]],
+        expect,
     );
 }
 
@@ -74,6 +80,7 @@ fn uf33_id_goto() {
 #[test]
 fn uf33_id_find() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -81,7 +88,7 @@ fn uf33_id_find() {
   (condition-case nil
       (org-id-find "test-find-id")
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -92,11 +99,12 @@ fn uf33_id_find() {
 #[test]
 fn uf33_id_find_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-id-find-id-in-file "test-id" "/tmp/test.org")
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -107,11 +115,12 @@ fn uf33_id_find_file() {
 #[test]
 fn uf33_id_update() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK #s(hash-table test equal)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-id-update-id-locations nil)
   (error nil))"##,
-        expect_test::expect![[r#""OK #s(hash-table test equal)""#]],
+        expect,
     );
 }
 
@@ -122,6 +131,7 @@ fn uf33_id_update() {
 #[test]
 fn uf33_id_store() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -131,7 +141,7 @@ fn uf33_id_store() {
       (org-id-store-link nil)
     (error nil))
   (car org-stored-links))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -142,6 +152,7 @@ fn uf33_id_store() {
 #[test]
 fn uf33_id_copy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -150,7 +161,7 @@ fn uf33_id_copy() {
   (condition-case nil
       (org-id-copy)
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -161,11 +172,12 @@ fn uf33_id_copy() {
 #[test]
 fn uf33_bookmark() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-bookmark)
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -176,11 +188,12 @@ fn uf33_bookmark() {
 #[test]
 fn uf33_bookmark_jump() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-bookmark-jump "test-bookmark")
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -191,6 +204,7 @@ fn uf33_bookmark_jump() {
 #[test]
 fn uf33_bookmark_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -199,7 +213,7 @@ fn uf33_bookmark_set() {
   (condition-case nil
       (org-bookmark-set "test-bookmark")
     (error nil)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -210,11 +224,12 @@ fn uf33_bookmark_set() {
 #[test]
 fn uf33_bookmark_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-bookmark-delete "test-bookmark")
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -225,11 +240,12 @@ fn uf33_bookmark_delete() {
 #[test]
 fn uf33_eww() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-eww)
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -240,11 +256,12 @@ fn uf33_eww() {
 #[test]
 fn uf33_eww_copy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-eww-copy)
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -255,11 +272,12 @@ fn uf33_eww_copy() {
 #[test]
 fn uf33_eww_open() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-eww-open-in-emacs "http://example.com")
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -270,11 +288,12 @@ fn uf33_eww_open() {
 #[test]
 fn uf33_eww_browse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-eww-browse-url "http://example.com")
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -285,11 +304,12 @@ fn uf33_eww_browse() {
 #[test]
 fn uf33_eww_store() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-eww-store-link)
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -300,11 +320,12 @@ fn uf33_eww_store() {
 #[test]
 fn uf33_eww_activate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-eww-activate-links)
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -315,11 +336,12 @@ fn uf33_eww_activate() {
 #[test]
 fn uf33_eww_tag() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-eww-tag-link "a" '((href . "http://example.com")))
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -330,11 +352,12 @@ fn uf33_eww_tag() {
 #[test]
 fn uf33_eww_img() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-eww-tag-img "img" '((src . "http://example.com/img.png")))
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -345,11 +368,12 @@ fn uf33_eww_img() {
 #[test]
 fn uf33_eww_form() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-eww-tag-form "form" '((action . "http://example.com/submit")))
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -360,11 +384,12 @@ fn uf33_eww_form() {
 #[test]
 fn uf33_eww_input() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-eww-tag-input "input" '((type . "text") (name . "test")))
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -375,11 +400,12 @@ fn uf33_eww_input() {
 #[test]
 fn uf33_eww_textarea() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-eww-tag-textarea "textarea" '((name . "test")))
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -390,11 +416,12 @@ fn uf33_eww_textarea() {
 #[test]
 fn uf33_eww_button() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-eww-tag-button "button" '((type . "submit")))
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -405,11 +432,12 @@ fn uf33_eww_button() {
 #[test]
 fn uf33_eww_select() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-eww-tag-select "select" '((name . "test")))
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -420,10 +448,11 @@ fn uf33_eww_select() {
 #[test]
 fn uf33_eww_option() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(condition-case nil
     (org-eww-tag-option "option" '((value . "1")))
   (error nil))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

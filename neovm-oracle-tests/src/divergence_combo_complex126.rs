@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx126_add_function_to_place_var() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ quote\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -19,13 +20,14 @@ fn div_cx126_add_function_to_place_var() {
   (let ((result (funcall neo-cx126-fn-var 42)))
     (list result (nreverse calls))))
 "##,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ quote\\))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx126_add_function_override_completely() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ quote\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -35,13 +37,14 @@ fn div_cx126_add_function_override_completely() {
   (let ((r (funcall neo-cx126-orig 5)))
     (list r (nreverse calls))))
 "##,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ quote\\))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx126_add_function_filter_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ quote\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -53,13 +56,14 @@ fn div_cx126_add_function_filter_args() {
   (let ((r (funcall neo-cx126-sum-fn 1 2 3)))
     (list r (nreverse calls))))
 "##,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ quote\\))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx126_add_function_filter_return() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ quote\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -69,13 +73,14 @@ fn div_cx126_add_function_filter_return() {
   (let ((r (funcall neo-cx126-base)))
     (list r (nreverse calls))))
 "##,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ quote\\))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx126_add_function_around_with_call_next() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ quote\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -89,13 +94,14 @@ fn div_cx126_add_function_around_with_call_next() {
   (let ((r (funcall neo-cx126-target 7)))
     (list r (nreverse calls))))
 "##,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ quote\\))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx126_add_function_before_after_combined() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ quote\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -111,13 +117,16 @@ fn div_cx126_add_function_before_after_combined() {
   (let ((r (funcall neo-cx126-multi 99)))
     (list r (nreverse calls))))
 "##,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ quote\\))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx126_advice_member_p_named_advices() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (#[128 \"\\304\\300\u{2}\\\"\\210\\304\\301\u{2}\\\"\\207\" [#[nil (:a) (t)] #[nil (:primary) (t)] :before ((name . my-adv-1)) apply] 4 advice] #[128 \"\\304\\301\u{2}\\\"\\304\\300\u{3}\\\"\\210\\207\" [#[nil (:b) (t)] #[128 \"\\304\\300\u{2}\\\"\\210\\304\\301\u{2}\\\"\\207\" [#[nil (:a) (t)] #[nil (:primary) (t)] :before ((name . my-adv-1)) apply] 4 advice] :after ((name . my-adv-2)) apply] 5 advice] nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (defun neo-cx126-target () :primary)
@@ -127,15 +136,14 @@ fn div_cx126_advice_member_p_named_advices() {
       (advice-member-p 'my-adv-2 'neo-cx126-target)
       (advice-member-p 'missing 'neo-cx126-target))
 "##,
-        expect_test::expect![[
-            r#""OK (#[128 \"\\304\\300\u{2}\\\"\\210\\304\\301\u{2}\\\"\\207\" [#[nil (:a) (t)] #[nil (:primary) (t)] :before ((name . my-adv-1)) apply] 4 advice] #[128 \"\\304\\301\u{2}\\\"\\304\\300\u{3}\\\"\\210\\207\" [#[nil (:b) (t)] #[128 \"\\304\\300\u{2}\\\"\\210\\304\\301\u{2}\\\"\\207\" [#[nil (:a) (t)] #[nil (:primary) (t)] :before ((name . my-adv-1)) apply] 4 advice] :after ((name . my-adv-2)) apply] 5 advice] nil)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx126_advice_mapc_iterate_advices() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((nil) (nil) (nil) (nil))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (defun neo-cx126-target () :primary)
@@ -147,13 +155,14 @@ fn div_cx126_advice_mapc_iterate_advices() {
                'neo-cx126-target)
   (nreverse collected))
 "##,
-        expect_test::expect![[r#""OK ((nil) (nil) (nil) (nil))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx126_place_var_vs_function_cells() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ function\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -163,13 +172,14 @@ fn div_cx126_place_var_vs_function_cells() {
   (let ((r (neo-cx126-fn 42)))
     (list r (nreverse calls))))
 "##,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ function\\))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx126_remove_function_by_identity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ quote\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -184,13 +194,14 @@ fn div_cx126_remove_function_by_identity() {
         (let ((count-2 (length calls)))
           (list with-advice count-1 count-2))))))
 "##,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ quote\\))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx126_add_function_to_named_var_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function \\(setf\\ quote\\))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -224,6 +235,6 @@ fn div_cx126_add_function_to_named_var_with_marker_overlay_undo_narrow_mega() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""ERR (void-function \\(setf\\ quote\\))""#]],
+        expect,
     );
 }

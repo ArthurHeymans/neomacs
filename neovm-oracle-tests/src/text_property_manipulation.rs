@@ -16,10 +16,8 @@ fn oracle_prop_tpm_insert_before_markers_copies_string_properties() {
     (put-text-property 1 2 'help-echo "h" s)
     (insert-before-markers s)
     (buffer-string)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK #(\"xxx\" 0 1 (face foo) 1 2 (help-echo \"h\"))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK #(\"xxx\" 0 1 (face foo) 1 2 (help-echo \"h\"))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -49,12 +47,10 @@ fn oracle_prop_tpm_add_text_properties_overlapping() {
                         (get-text-property i 'category s))
                   result)))
     (nreverse result)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 bold nil nil test-cat) (1 bold nil nil test-cat) (2 bold nil highlight test-cat) (3 bold nil highlight test-cat) (4 bold \"tip\" highlight nil) (5 bold \"tip\" highlight nil) (6 bold \"tip\" highlight nil) (7 bold \"tip\" highlight nil) (8 nil \"tip\" highlight nil) (9 nil \"tip\" highlight nil) (10 nil \"tip\" nil nil) (11 nil \"tip\" nil nil) (12 nil nil nil nil) (13 nil nil nil nil) (14 nil nil nil nil) (15 nil nil nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 bold nil nil test-cat) (1 bold nil nil test-cat) (2 bold nil highlight test-cat) (3 bold nil highlight test-cat) (4 bold \"tip\" highlight nil) (5 bold \"tip\" highlight nil) (6 bold \"tip\" highlight nil) (7 bold \"tip\" highlight nil) (8 nil \"tip\" highlight nil) (9 nil \"tip\" highlight nil) (10 nil \"tip\" nil nil) (11 nil \"tip\" nil nil) (12 nil nil nil nil) (13 nil nil nil nil) (14 nil nil nil nil) (15 nil nil nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -84,12 +80,10 @@ fn oracle_prop_tpm_set_text_properties_edge_cases() {
       (set-text-properties 5 5 '(dummy 1) s)
       (let ((no-op (get-text-property 5 'dummy s)))
         (list after-clear after-replace no-op)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((face bold help-echo \"old\" priority 10) nil nil (face bold help-echo \"old\" priority 10)) (nil 42 yes 42 nil) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((face bold help-echo \"old\" priority 10) nil nil (face bold help-echo \"old\" priority 10)) (nil 42 yes 42 nil) nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -119,10 +113,8 @@ fn oracle_prop_tpm_text_property_not_all() {
     (text-property-not-all 0 10 'help-echo "tip" s)
     ;; All nil face in 8..10? Should return nil (face is nil in 8..10)
     (text-property-not-all 8 10 'face nil s)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil 5 5 nil 8 0 nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil 5 5 nil 8 0 nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -168,12 +160,10 @@ fn oracle_prop_tpm_single_property_change_traversal() {
         (list (nreverse face-changes)
               face-changes-back
               (nreverse echo-changes))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((4 . italic) (8 . bold) (12)) ((4 . italic) (8 . bold) (12)) ((2 . \"tip\") (10)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((4 . italic) (8 . bold) (12)) ((4 . italic) (8 . bold) (12)) ((2 . \"tip\") (10)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -201,12 +191,10 @@ fn oracle_prop_tpm_remove_return_value_and_partial() {
                           (get-text-property i 'help-echo s))
                     survey)))
       (list r1 r2 r3 r4 (nreverse survey)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t nil t nil ((0 nil \"tip\") (1 nil \"tip\") (2 nil \"tip\") (3 nil nil) (4 nil nil) (5 bold nil) (6 bold nil) (7 bold nil) (8 bold \"tip\") (9 bold \"tip\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t nil t nil ((0 nil \"tip\") (1 nil \"tip\") (2 nil \"tip\") (3 nil nil) (4 nil nil) (5 bold nil) (6 bold nil) (7 bold nil) (8 bold \"tip\") (9 bold \"tip\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -229,12 +217,10 @@ fn oracle_prop_tpm_malformed_plist_validation_order() {
    (condition-case err
        (add-text-properties 0 1 '(face . bold) s)
      (error (list (car err) (cdr err))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((error (\"Odd length text property list\")) nil (error (\"Odd length text property list\")) (error (\"Odd length text property list\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((error (\"Odd length text property list\")) nil (error (\"Odd length text property list\")) (error (\"Odd length text property list\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -260,12 +246,10 @@ fn oracle_prop_tpm_string_range_error_payloads() {
    (condition-case err
        (text-properties-at 3 s)
      (error (list (car err) (cdr err))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((args-out-of-range (-1 1)) nil (args-out-of-range (0 4)) (args-out-of-range (-1 -1)) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((args-out-of-range (-1 1)) nil (args-out-of-range (0 4)) (args-out-of-range (-1 -1)) nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -290,12 +274,10 @@ fn oracle_prop_tpm_buffer_range_error_payloads() {
    (condition-case err
        (put-text-property 1 5 'face 'bold)
      (error (list (car err) (cdr err))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (1 4 (args-out-of-range (0 0)) nil (args-out-of-range (0 1)) (args-out-of-range (1 5)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (1 4 (args-out-of-range (0 0)) nil (args-out-of-range (0 1)) (args-out-of-range (1 5)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -333,12 +315,10 @@ fn oracle_prop_tpm_buffer_text_property_operations() {
             (next-from-bold (next-single-property-change 5 'face)))
         (list r1 r2 r3 r4 r5 r6 r7 r8 r9 r10
               next-face next-from-bold)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (bold italic \"animal\" verb 5 nil nil nil \"animal\" italic 5 10)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (bold italic \"animal\" verb 5 nil nil nil \"animal\" italic 5 10)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -392,12 +372,10 @@ fn oracle_prop_tpm_interval_merge_annotator() {
                     (previous-single-property-change 10 'face s)
                     (previous-single-property-change 6 'face s))))))
     (fmakunbound 'neovm--test-collect-intervals)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((0 4 bold) (4 6 italic) (6 10 bold)) ((1 7 \"hover\")) (1 4 6 7) 6 4)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((0 4 bold) (4 6 italic) (6 10 bold)) ((1 7 \"hover\")) (1 4 6 7) 6 4)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -460,10 +438,8 @@ fn oracle_prop_tpm_token_stream_intervals() {
                 (get-text-property 8 'token-type annotated)   ;; number (42)
                 )))
     (fmakunbound 'neovm--test-tokenize-annotate)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((#(\"let\" 0 3 (token-type keyword)) keyword) (#(\"x\" 0 1 (token-type identifier)) identifier) (#(\"=\" 0 1 (token-type operator)) operator) (#(\"42\" 0 2 (token-type number)) number) (#(\"+\" 0 1 (token-type operator)) operator) (#(\"y\" 0 1 (token-type identifier)) identifier)) 1 keyword identifier number)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((#(\"let\" 0 3 (token-type keyword)) keyword) (#(\"x\" 0 1 (token-type identifier)) identifier) (#(\"=\" 0 1 (token-type operator)) operator) (#(\"42\" 0 2 (token-type number)) number) (#(\"+\" 0 1 (token-type operator)) operator) (#(\"y\" 0 1 (token-type identifier)) identifier)) 1 keyword identifier number)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

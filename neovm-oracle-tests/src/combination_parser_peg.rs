@@ -145,12 +145,10 @@ fn oracle_prop_peg_core_operators() {
          (funcall 'neovm--peg-parse '(choice (lit "ab") (lit "a"))
                   "abcdef" grammar)))
     (fmakunbound 'neovm--peg-parse)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"hello\" . \" world\") nil ((\"a\" \"b\" \"c\") . \"def\") nil (\"a\" . \"bcdef\") (\"ab\" . \"cdef\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"hello\" . \" world\") nil ((\"a\" \"b\" \"c\") . \"def\") nil (\"a\" . \"bcdef\") (\"ab\" . \"cdef\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -237,12 +235,10 @@ fn oracle_prop_peg_repetition_operators() {
          ;; not-predicate: fails when sub succeeds
          (funcall 'neovm--peg2-parse '(not-pred (lit "ba")) "bad" g)))
     (fmakunbound 'neovm--peg2-parse)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((nil . \"yyy\") ((\"ab\" \"ab\" \"ab\") . \"-rest\") nil ((\"x\" \"x\" \"x\") . \"y\") ((\"prefix-\") . \"data\") (nil . \"data\") (t . \"good\") nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((nil . \"yyy\") ((\"ab\" \"ab\" \"ab\") . \"-rest\") nil ((\"x\" \"x\" \"x\") . \"y\") ((\"prefix-\") . \"data\") (nil . \"data\") (t . \"good\") nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -339,12 +335,10 @@ fn oracle_prop_peg_named_rules() {
     (fmakunbound 'neovm--peg3-parse)
     (fmakunbound 'neovm--peg3-is-letter)
     (fmakunbound 'neovm--peg3-is-digit)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"h\" (\"e\" \"l\" \"l\" \"o\" \"1\" \"2\" \"3\")) . \" rest\") ((\"x\" (\"9\" \"9\" \"y\")) . \" end\") nil ((\"4\" \"2\") . \"abc\") ((\"0\" \"0\" \"7\") . \"rest\") nil ((\"h\" (\"e\" \"l\" \"l\" \"o\")) . \"\") ((\"4\" \"2\") . \"\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"h\" (\"e\" \"l\" \"l\" \"o\" \"1\" \"2\" \"3\")) . \" rest\") ((\"x\" (\"9\" \"9\" \"y\")) . \" end\") nil ((\"4\" \"2\") . \"abc\") ((\"0\" \"0\" \"7\") . \"rest\") nil ((\"h\" (\"e\" \"l\" \"l\" \"o\")) . \"\") ((\"4\" \"2\") . \"\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -446,12 +440,10 @@ fn oracle_prop_peg_arithmetic_expressions() {
          (funcall 'neovm--peg4-parse '(rule expr) "+3" grammar)))
     (fmakunbound 'neovm--peg4-parse)
     (fmakunbound 'neovm--peg4-is-digit)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t (((\"1\") nil) ((\"+\" ((\"2\") nil)))) (((\"3\") ((\"*\" (\"4\")))) ((\"+\" ((\"5\") nil)))) t \"rest\" t nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t (((\"1\") nil) ((\"+\" ((\"2\") nil)))) (((\"3\") ((\"*\" (\"4\")))) ((\"+\" ((\"5\") nil)))) t \"rest\" t nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -555,12 +547,10 @@ fn oracle_prop_peg_json_like_structures() {
          (car (funcall 'neovm--peg5-parse '(rule word) "hello123" grammar))))
     (fmakunbound 'neovm--peg5-parse)
     (fmakunbound 'neovm--peg5-is-alnum)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t (\"{\" ((\"n\" \"a\" \"m\" \"e\") \":\" (\"a\" \"l\" \"i\" \"c\" \"e\")) ((\",\" ((\"a\" \"g\" \"e\") \":\" (\"3\" \"0\")))) \"}\") t \"extra\" nil nil (\"h\" \"e\" \"l\" \"l\" \"o\" \"1\" \"2\" \"3\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t (\"{\" ((\"n\" \"a\" \"m\" \"e\") \":\" (\"a\" \"l\" \"i\" \"c\" \"e\")) ((\",\" ((\"a\" \"g\" \"e\") \":\" (\"3\" \"0\")))) \"}\") t \"extra\" nil nil (\"h\" \"e\" \"l\" \"l\" \"o\" \"1\" \"2\" \"3\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -657,10 +647,8 @@ fn oracle_prop_peg_not_predicate_and_classes() {
          (funcall 'neovm--peg6-parse '(not-pred (lit "//")) "normal" grammar)))
     (fmakunbound 'neovm--peg6-parse)
     (fmakunbound 'neovm--peg6-is-not-newline)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"//\" (\" \" \"t\" \"h\" \"i\" \"s\" \" \" \"i\" \"s\" \" \" \"a\" \" \" \"c\" \"o\" \"m\" \"m\" \"e\" \"n\" \"t\")) . \"\nnext line\") ((\"//\" nil) . \"\ncode\") nil (((t \"h\") (t \"e\") (t \"l\") (t \"l\") (t \"o\")) . \" world\") nil (t . \"normal\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"//\" (\" \" \"t\" \"h\" \"i\" \"s\" \" \" \"i\" \"s\" \" \" \"a\" \" \" \"c\" \"o\" \"m\" \"m\" \"e\" \"n\" \"t\")) . \"\nnext line\") ((\"//\" nil) . \"\ncode\") nil (((t \"h\") (t \"e\") (t \"l\") (t \"l\") (t \"o\")) . \" world\") nil (t . \"normal\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

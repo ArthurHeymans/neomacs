@@ -16,6 +16,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx401_selective_display_column_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 3 3 17 \"aaa\nbbb\u{c}ccc\u{c}ddd\neee\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -29,7 +30,7 @@ fn div_cx401_selective_display_column_count() {
                  (point))
           (buffer-substring-no-properties (point-min) (point-max)))))
 "##,
-        expect_test::expect![[r#""OK (3 3 3 17 \"aaa\nbbb\u{c}ccc\u{c}ddd\neee\")""#]],
+        expect,
     );
 }
 
@@ -38,6 +39,7 @@ fn div_cx401_selective_display_column_count() {
 #[test]
 fn div_cx401_char_width_table_ignored_pad() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 1 \"   a\" \"  ab\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'char-width-table 2)))
@@ -48,7 +50,7 @@ fn div_cx401_char_width_table_ignored_pad() {
         (format "%4s" "a")
         (format "%4s" "ab")))
 "##,
-        expect_test::expect![[r#""OK (2 1 \"   a\" \"  ab\")""#]],
+        expect,
     );
 }
 
@@ -58,6 +60,9 @@ fn div_cx401_char_width_table_ignored_pad() {
 #[test]
 fn div_cx401_display_eval_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((eval (prog1 (format \"[%d]\" counter) (setq counter (1+ counter)))) 0)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((counter 0))
@@ -67,9 +72,7 @@ fn div_cx401_display_eval_property() {
     (list (get-text-property 2 'display)
           counter)))
 "##,
-        expect_test::expect![[
-            r#""OK ((eval (prog1 (format \"[%d]\" counter) (setq counter (1+ counter)))) 0)""#
-        ]],
+        expect,
     );
 }
 
@@ -78,6 +81,7 @@ fn div_cx401_display_eval_property() {
 #[test]
 fn div_cx401_overlay_category_inherit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (bold highlight nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((my-cat (intern "neo-cx401-cat")))
@@ -90,7 +94,7 @@ fn div_cx401_overlay_category_inherit() {
             (overlay-get ov 'mouse-face)
             (overlay-get ov 'priority)))))
 "##,
-        expect_test::expect![[r#""OK (bold highlight nil)""#]],
+        expect,
     );
 }
 
@@ -99,6 +103,7 @@ fn div_cx401_overlay_category_inherit() {
 #[test]
 fn div_cx401_vertical_motion_display_glyph() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 8 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -110,7 +115,7 @@ fn div_cx401_vertical_motion_display_glyph() {
         (progn (goto-char 1) (vertical-motion 1) (point))
         (progn (goto-char 3) (vertical-motion 0) (current-column))))
 "##,
-        expect_test::expect![[r#""OK (0 8 0)""#]],
+        expect,
     );
 }
 
@@ -119,6 +124,7 @@ fn div_cx401_vertical_motion_display_glyph() {
 #[test]
 fn div_cx401_window_text_pixel_size_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((12 . 1) 12 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -129,7 +135,7 @@ fn div_cx401_window_text_pixel_size_display() {
         (car (window-text-pixel-size))
         (cdr (window-text-pixel-size))))
 "##,
-        expect_test::expect![[r#""OK ((12 . 1) 12 1)""#]],
+        expect,
     );
 }
 
@@ -137,6 +143,7 @@ fn div_cx401_window_text_pixel_size_display() {
 #[test]
 fn div_cx401_buffer_local_vars_overlay_active() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((neo-cx401-local . 42) (buffer-file-name) 21)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -150,7 +157,7 @@ fn div_cx401_buffer_local_vars_overlay_active() {
             (assq 'buffer-file-name locals)
             (length locals)))))
 "##,
-        expect_test::expect![[r#""OK ((neo-cx401-local . 42) (buffer-file-name) 21)""#]],
+        expect,
     );
 }
 
@@ -159,6 +166,9 @@ fn div_cx401_buffer_local_vars_overlay_active() {
 #[test]
 fn div_cx401_substitute_command_keys_map() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK \"\nUses keymap ‘map’, which is not currently defined.\n\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))
@@ -166,9 +176,7 @@ fn div_cx401_substitute_command_keys_map() {
   (define-key map (kbd "C-c C-b") 'backward-word)
   (substitute-command-keys "\\{map}"))
 "##,
-        expect_test::expect![[
-            r#""OK \"\nUses keymap ‘map’, which is not currently defined.\n\"""#
-        ]],
+        expect,
     );
 }
 
@@ -177,6 +185,7 @@ fn div_cx401_substitute_command_keys_map() {
 #[test]
 fn div_cx401_format_message_error_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 f car nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (errors)
@@ -193,7 +202,7 @@ fn div_cx401_format_message_error_deep() {
         errors)
   (nreverse errors))
 "##,
-        expect_test::expect![[r#""OK (1 f car nil)""#]],
+        expect,
     );
 }
 
@@ -202,6 +211,7 @@ fn div_cx401_format_message_error_deep() {
 #[test]
 fn div_cx401_encode_time_float_seconds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1781634630.5 1781634630.0 0.5 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((t1 (encode-time 30.5 30 14 16 6 2026 nil))
@@ -211,7 +221,7 @@ fn div_cx401_encode_time_float_seconds() {
         (- (float-time t1) (float-time t2))
         (time-equal-p t1 t2)))
 "##,
-        expect_test::expect![[r#""OK (1781634630.5 1781634630.0 0.5 nil)""#]],
+        expect,
     );
 }
 
@@ -220,6 +230,7 @@ fn div_cx401_encode_time_float_seconds() {
 #[test]
 fn div_cx401_hash_equal_vector_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 \"xyz\" \"de\" missing)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
@@ -231,7 +242,7 @@ fn div_cx401_hash_equal_vector_keys() {
         (gethash (vector 4 5) ht)
         (gethash [99] ht 'missing)))
 "##,
-        expect_test::expect![[r#""OK (2 \"xyz\" \"de\" missing)""#]],
+        expect,
     );
 }
 
@@ -240,6 +251,8 @@ fn div_cx401_hash_equal_vector_keys() {
 #[test]
 fn div_cx401_decode_char_eight_bit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((4194176 128) (4194208 160) (4194248 200) (4194303 255))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (code)
@@ -247,7 +260,7 @@ fn div_cx401_decode_char_eight_bit() {
                 (encode-char (decode-char 'eight-bit code) 'eight-bit)))
         '(128 160 200 255))
 "##,
-        expect_test::expect![[r#""OK ((4194176 128) (4194208 160) (4194248 200) (4194303 255))""#]],
+        expect,
     );
 }
 
@@ -256,6 +269,7 @@ fn div_cx401_decode_char_eight_bit() {
 #[test]
 fn div_cx401_category_table_char_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments char-category-set 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (copy-category-table)))
@@ -267,7 +281,7 @@ fn div_cx401_category_table_char_set() {
         (category-docstring ?x ct)
         (char-category-set ?b ct)))
 "##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments char-category-set 2)""#]],
+        expect,
     );
 }
 
@@ -276,6 +290,9 @@ fn div_cx401_category_table_char_set() {
 #[test]
 fn div_cx401_parse_partial_sexp_comment_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((0 nil 1 nil nil nil 0 nil nil nil nil) (0 nil 10 nil nil nil 0 nil nil nil nil) (0 nil 18 nil nil nil 0 nil nil nil nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -288,9 +305,7 @@ fn div_cx401_parse_partial_sexp_comment_narrow() {
         (parse-partial-sexp 1 12)
         (parse-partial-sexp 1 20)))
 "##,
-        expect_test::expect![[
-            r#""OK ((0 nil 1 nil nil nil 0 nil nil nil nil) (0 nil 10 nil nil nil 0 nil nil nil nil) (0 nil 18 nil nil nil 0 nil nil nil nil))""#
-        ]],
+        expect,
     );
 }
 
@@ -299,6 +314,9 @@ fn div_cx401_parse_partial_sexp_comment_narrow() {
 #[test]
 fn div_cx401_event_basic_type_modifiers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((nil (meta control) t) (nil (control) t) (nil (meta) t) (mouse-1 (shift click) t) (nil (hyper) t) (nil (alt) t))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (e)
@@ -307,9 +325,7 @@ fn div_cx401_event_basic_type_modifiers() {
                 (eventp e)))
         '(C-M-a C-x M-RET S-mouse-1 H-return A-tab))
 "##,
-        expect_test::expect![[
-            r#""OK ((nil (meta control) t) (nil (control) t) (nil (meta) t) (mouse-1 (shift click) t) (nil (hyper) t) (nil (alt) t))""#
-        ]],
+        expect,
     );
 }
 
@@ -317,6 +333,7 @@ fn div_cx401_event_basic_type_modifiers() {
 #[test]
 fn div_cx401_bool_vector_count_op() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-length-argument 5 5 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((bv1 (bool-vector t nil t nil t))
@@ -330,7 +347,7 @@ fn div_cx401_bool_vector_count_op() {
         (bool-vector-subsetp bv1 bv2)
         (bool-vector-subsetp bv3 bv1)))
 "##,
-        expect_test::expect![[r#""ERR (wrong-length-argument 5 5 6)""#]],
+        expect,
     );
 }
 
@@ -339,6 +356,7 @@ fn div_cx401_bool_vector_count_op() {
 #[test]
 fn div_cx401_buffer_swap_text_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments buffer-swap-text 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((a (get-buffer-create " *neo-cx401-a*"))
@@ -358,7 +376,7 @@ fn div_cx401_buffer_swap_text_marker_overlay() {
             (with-current-buffer a (length (overlays-in 1 10)))
             (with-current-buffer b (length (overlays-in 1 10)))))))
 "##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments buffer-swap-text 2)""#]],
+        expect,
     );
 }
 
@@ -367,6 +385,7 @@ fn div_cx401_buffer_swap_text_marker_overlay() {
 #[test]
 fn div_cx401_replace_match_numeric_subexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"123\" \"456\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -378,7 +397,7 @@ fn div_cx401_replace_match_numeric_subexp() {
       (replace-match (concat (match-string 1) "=" (match-string 2) )))
     (nreverse results)))
 "##,
-        expect_test::expect![[r#""OK (\"123\" \"456\")""#]],
+        expect,
     );
 }
 
@@ -387,6 +406,7 @@ fn div_cx401_replace_match_numeric_subexp() {
 #[test]
 fn div_cx401_looking_at_search_backward_casefold_greek() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil 17 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((case-fold-search t))
@@ -401,7 +421,7 @@ fn div_cx401_looking_at_search_backward_casefold_greek() {
       (push (search-backward "ΤΡΙΤΟΣ" nil t) results)
       (nreverse results))))
 "##,
-        expect_test::expect![[r#""OK (nil nil 17 nil)""#]],
+        expect,
     );
 }
 
@@ -410,6 +430,7 @@ fn div_cx401_looking_at_search_backward_casefold_greek() {
 #[test]
 fn div_cx401_line_number_selective_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 3 3 \"ne1\nline2\u{c}line3\nline4\u{c}lin\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -421,7 +442,7 @@ fn div_cx401_line_number_selective_narrow() {
           (count-lines (point-min) (point-max))
           (buffer-substring-no-properties (point-min) (point-max)))))
 "##,
-        expect_test::expect![[r#""OK (1 3 3 \"ne1\nline2\u{c}line3\nline4\u{c}lin\")""#]],
+        expect,
     );
 }
 
@@ -430,6 +451,7 @@ fn div_cx401_line_number_selective_narrow() {
 #[test]
 fn div_cx401_display_space_spec_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (14 2 4 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -440,7 +462,7 @@ fn div_cx401_display_space_spec_column() {
         (progn (move-to-column 5) (point))
         (progn (move-to-column 15) (point))))
 "##,
-        expect_test::expect![[r#""OK (14 2 4 6)""#]],
+        expect,
     );
 }
 
@@ -449,14 +471,15 @@ fn div_cx401_display_space_spec_column() {
 #[test]
 fn div_cx401_string_collate_sort() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"a\" \"o\" \"u\" \"z\" \"ß\" \"ä\" \"ö\" \"ü\") (\"a\" \"o\" \"u\" \"z\" \"ß\" \"ä\" \"ö\" \"ü\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((words '("ä" "ö" "ü" "a" "o" "u" "z" "ß")))
   (list (sort (copy-sequence words) #'string-collate-lessp)
         (sort (copy-sequence words) #'string<)))
 "##,
-        expect_test::expect![[
-            r#""OK ((\"a\" \"o\" \"u\" \"z\" \"ß\" \"ä\" \"ö\" \"ü\") (\"a\" \"o\" \"u\" \"z\" \"ß\" \"ä\" \"ö\" \"ü\"))""#
-        ]],
+        expect,
     );
 }

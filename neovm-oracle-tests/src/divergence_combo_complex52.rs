@@ -6,6 +6,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx52_dom_serialize_to_xml_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -16,13 +17,14 @@ fn div_cx52_dom_serialize_to_xml_mega() {
           (buffer-string))))
   (error (cons 'errored (car e))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx52_subword_backward_word_then_delete_region_undo_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (errored . args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -44,13 +46,14 @@ fn div_cx52_subword_backward_word_then_delete_region_undo_mega() {
                   (overlay-start ov) (text-properties-at 1))))))
   (error (cons 'errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (errored . args-out-of-range)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx52_process_env_coding_sentinel_exitcode_timer_window_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (timer-fired se)
@@ -80,13 +83,14 @@ fn div_cx52_process_env_coding_sentinel_exitcode_timer_window_narrow_mega() {
           (if se (string-match "code 9" se) nil)
           (if se (string-match "code 1" se) nil))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx52_overlay_priority_face_invisible_display_evaporate_undo_narrow_display_column_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -111,13 +115,14 @@ fn div_cx52_overlay_priority_face_invisible_display_evaporate_undo_narrow_displa
             (get-char-property 3 'face)
             (length (overlays-in (point-min) (point-max))))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx52_json_deeply_nested_with_hashtable_and_multibyte_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -133,13 +138,16 @@ fn div_cx52_json_deeply_nested_with_hashtable_and_multibyte_mega() {
                 (cdr (assoc 'deep (cdr (assoc 'nested dec)))))))
   (error (cons 'errored (car e))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx52_cl_defmethod_around_before_after_primary_static_eql_advice_error_call_next_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Unsupported qualifiers in function neo-cx52-fn: (:static)\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -162,15 +170,14 @@ fn div_cx52_cl_defmethod_around_before_after_primary_static_eql_advice_error_cal
           (neo-cx52-fn :special)
           (nreverse log))))
 "##,
-        expect_test::expect![[
-            r#""ERR (error \"Unsupported qualifiers in function neo-cx52-fn: (:static)\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx52_read_from_string_multiple_forms_backquote_comma_splice_quote_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable x)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t) (x 10) (y 20) (lst '(1 2 3)))
@@ -188,13 +195,14 @@ fn div_cx52_read_from_string_multiple_forms_backquote_comma_splice_quote_mega() 
             (nth 2 parsed)
             (nth 3 parsed)))))
 "##,
-        expect_test::expect![[r#""ERR (void-variable x)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx52_print_circle_gensym_struct_vector_propertized_escape_length_level_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -214,7 +222,7 @@ fn div_cx52_print_circle_gensym_struct_vector_propertized_escape_length_level_me
             (length (prin1-to-string (vector r1 r2 r1 r2)))
             (length (prin1-to-string (list (list 1 2 3) (list 4 5) (list 6)))))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -222,6 +230,8 @@ fn div_cx52_print_circle_gensym_struct_vector_propertized_escape_length_level_me
 fn div_cx52_set_buffer_multibyte_narrow_marker_overlay_textprop_display_evaporate_undo_full_chain_mega()
  {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (error \"Changing multibyteness in a narrowed buffer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -251,13 +261,14 @@ fn div_cx52_set_buffer_multibyte_narrow_marker_overlay_textprop_display_evaporat
                 (text-properties-at 1) (text-properties-at 5)
                 (current-column) (buffer-string)))))))
 "##,
-        expect_test::expect![[r#""ERR (error \"Changing multibyteness in a narrowed buffer\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx52_superword_subword_mode_off_default_word_behavior_restored() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (6 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -273,13 +284,16 @@ fn div_cx52_superword_subword_mode_off_default_word_behavior_restored() {
         (list sub-pos (point))))
   (error (cons 'errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (6 6)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx52_weak_hash_all_weakness_types_eviction_gc_stress_2_rounds_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((key . 0) (value . 0) (key-and-value . 0) (key-or-value . 0))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((results nil))
@@ -291,9 +305,7 @@ fn div_cx52_weak_hash_all_weakness_types_eviction_gc_stress_2_rounds_mega() {
       (push (cons weak (hash-table-count ht)) results)))
   (nreverse results))
 "##,
-        expect_test::expect![[
-            r#""OK ((key . 0) (value . 0) (key-and-value . 0) (key-or-value . 0))""#
-        ]],
+        expect,
     );
 }
 
@@ -301,6 +313,7 @@ fn div_cx52_weak_hash_all_weakness_types_eviction_gc_stress_2_rounds_mega() {
 fn div_cx52_process_send_string_newline_filter_buffer_textprop_overlay_narrow_undo_evaporate_mega()
 {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument processp 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx52-sf*")))
@@ -323,13 +336,14 @@ fn div_cx52_process_send_string_newline_filter_buffer_textprop_overlay_narrow_un
                    (length (overlays-in 1 20)))))
     (kill-buffer buf)))
 "##,
-        expect_test::expect![[r#""ERR (wrong-type-argument processp 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx52_coding_priority_list_utf8_auto_utf16_big5_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (20 0 10 12 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (let ((prio (coding-system-priority-list)))
@@ -339,13 +353,14 @@ fn div_cx52_coding_priority_list_utf8_auto_utf16_big5_position() {
         (cl-position 'utf-16 prio)
         (cl-position 'big5 prio)))
 "#,
-        expect_test::expect![[r#""OK (20 0 10 12 nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx52_window_config_register_split_merge_marker_overlay_dedicated_hscroll_vscroll_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (let ((buf (get-buffer-create " *neo-cx52-wc*")))
@@ -373,13 +388,14 @@ fn div_cx52_window_config_register_split_merge_marker_overlay_dedicated_hscroll_
         (set-window-buffer (selected-window) (get-buffer-create "*scratch*"))
         (kill-buffer buf))))
 "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx52_regex_casefold_replace_then_undo_marker_overlay_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (let ((case-fold-search t))
@@ -399,13 +415,14 @@ fn div_cx52_regex_casefold_replace_then_undo_marker_overlay_narrow_mega() {
         (list state (buffer-string) (marker-position m)
               (overlay-start ov) (text-properties-at 1))))))
 "#,
-        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx52_cl_coerce_list_vector_string_char_multibyte_propertized_hash_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (6 6 6 6 (face bold) nil t 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (let* ((s (propertize "café世界" 'face 'bold))
@@ -420,13 +437,16 @@ fn div_cx52_cl_coerce_list_vector_string_char_multibyte_propertized_hash_mega() 
         (equal s s2)
         (hash-table-count ht)))
 "#,
-        expect_test::expect![[r#""OK (6 6 6 6 (face bold) nil t 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx52_json_xml_dom_chain_with_secure_hash_and_multibyte_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"café\" \"世界\" \"😀\") [\"café\" \"世界\" \"😀\"] nil \"d8ede49ad9c8f687a4a5d20caf364cdd63b0d804838675be9d1f1f4bd093e30f\" nil ((i nil \"café\") (i nil \"世界\") (i nil \"😀\")))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (condition-case e
@@ -444,15 +464,14 @@ fn div_cx52_json_xml_dom_chain_with_secure_hash_and_multibyte_mega() {
               (dom-children (car (dom-by-tag xml-dom 'items))))))
   (error (cons 'errored (car e))))
 "#,
-        expect_test::expect![[
-            r#""OK ((\"café\" \"世界\" \"😀\") [\"café\" \"世界\" \"😀\"] nil \"d8ede49ad9c8f687a4a5d20caf364cdd63b0d804838675be9d1f1f4bd093e30f\" nil ((i nil \"café\") (i nil \"世界\") (i nil \"😀\")))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx52_subword_kill_word_then_capitalize_then_undo_marker_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (errored . args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (condition-case e
@@ -474,6 +493,6 @@ fn div_cx52_subword_kill_word_then_capitalize_then_undo_marker_narrow_mega() {
                   (text-properties-at 1))))))
   (error (cons 'errored (car e))))
 "#,
-        expect_test::expect![[r#""OK (errored . args-out-of-range)""#]],
+        expect,
     );
 }

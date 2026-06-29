@@ -31,10 +31,8 @@ fn oracle_prop_following_char_various_positions() {
         (forward-char 1))
       (setq results (cons (nreverse all-chars) results)))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (65 67 70 (65 66 67 68 69 70))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (65 67 70 (65 66 67 68 69 70))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -59,10 +57,8 @@ fn oracle_prop_following_char_at_eob() {
               (= at-eob 0)
               (= at-pmax 0)
               (= in-empty 0))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 0 0 t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 0 0 t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -88,10 +84,8 @@ fn oracle_prop_char_after_explicit_pos() {
    (let ((p (point)))
      (char-after 1)
      (= (point) p))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (48 52 57 nil nil nil t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (48 52 57 nil nil nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -116,10 +110,8 @@ fn oracle_prop_char_after_nil_uses_point() {
           (progn
             (goto-char 7)
             (list (char-after nil) (char-after) (char-after 7))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (72 72 72 t t (87 87 87))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (72 72 72 t t (87 87 87))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,10 +141,8 @@ fn oracle_prop_char_after_nil_at_eob() {
     (setq results (cons (null (char-after (point-max))) results))  ;; t
     (setq results (cons (= (progn (goto-char (point-max)) (following-char)) 0) results))  ;; t
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil 0 (nil nil 0) t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil 0 (nil nil 0) t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -210,12 +200,10 @@ fn oracle_prop_char_after_classification_loop() {
            (t (setq other-count (+ other-count len))))))
       (list rev-tokens
             (list 'alpha alpha-count 'digit digit-count 'other other-count)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((alpha \"hello\") (digit \"42\") (alpha \"world\") (other \"!\") (digit \"3\") (punct \".\") (digit \"14\") (alpha \"foo_bar\")) (alpha 17 digit 5 other 2))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((alpha \"hello\") (digit \"42\") (alpha \"world\") (other \"!\") (digit \"3\") (punct \".\") (digit \"14\") (alpha \"foo_bar\")) (alpha 17 digit 5 other 2))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -252,10 +240,8 @@ fn oracle_prop_following_char_narrowed() {
           (forward-char 1))
         (setq results (cons (nreverse chars) results)))
       (nreverse results))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (68 68 nil 0 nil (68 69 70 71 72))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (68 68 nil 0 nil (68 69 70 71 72))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -299,10 +285,8 @@ fn oracle_prop_char_after_balanced_parens() {
            (buffer-substring 1 (1+ outer-close))
            (buffer-substring 12 (1+ inner-close))
            (buffer-substring 18 (1+ expr-close))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (37 16 36 \"(defun foo (x y) (+ (* x x) (* y y)))\" \"(x y)\" \"(+ (* x x) (* y y))\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (37 16 36 \"(defun foo (x y) (+ (* x x) (* y y)))\" \"(x y)\" \"(+ (* x x) (* y y))\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

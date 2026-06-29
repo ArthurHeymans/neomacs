@@ -5,6 +5,9 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_link_doi_info_man_export_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((\"<a href=\\\"https://doi.example/10.1000/foo bar\\\">A DOI</a>\" \"\\\\href{https://doi.example/10.1000/foo bar}{A DOI}\" \"[A DOI] (<https://doi.example/10.1000/foo bar>)\" \"@uref{https://doi.example/10.1000/foo bar, A DOI}\" \"https://doi.example/10.1000/foo bar\") (\"<a href=\\\"https://www.gnu.org/software/emacs/manual/html_mono/elisp.html#Non_002dASCII-in-Strings\\\">Strings</a>\" \"@ref{Non-ASCII in Strings,Strings,,elisp,}\" nil) (\"<a target=\\\"_blank\\\" href=\\\"http://man.he.net/?topic=printf(3)::format&section=all\\\">printf</a>\" \"\\\\href{http://man.he.net/?topic=printf(3)::format&section=all}{printf}\" \"@uref{http://man.he.net/?topic=printf(3)::format&section=all,printf}\" \"[printf] (<http://man.he.net/?topic=printf(3)::format&section=all>)\" \"[printf](http://man.he.net/?topic=printf(3)::format&section=all)\" \"http://man.he.net/?topic=printf(3)::format&section=all\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ol-doi)
@@ -22,9 +25,7 @@ fn org_link_doi_info_man_export_combo() {
      (mapcar (lambda (backend)
                (org-man-export "printf(3)::format" "printf" backend))
              '(html latex texinfo ascii md org)))))"##,
-        expect_test::expect![[
-            r#""OK ((\"<a href=\\\"https://doi.example/10.1000/foo bar\\\">A DOI</a>\" \"\\\\href{https://doi.example/10.1000/foo bar}{A DOI}\" \"[A DOI] (<https://doi.example/10.1000/foo bar>)\" \"@uref{https://doi.example/10.1000/foo bar, A DOI}\" \"https://doi.example/10.1000/foo bar\") (\"<a href=\\\"https://www.gnu.org/software/emacs/manual/html_mono/elisp.html#Non_002dASCII-in-Strings\\\">Strings</a>\" \"@ref{Non-ASCII in Strings,Strings,,elisp,}\" nil) (\"<a target=\\\"_blank\\\" href=\\\"http://man.he.net/?topic=printf(3)::format&section=all\\\">printf</a>\" \"\\\\href{http://man.he.net/?topic=printf(3)::format&section=all}{printf}\" \"@uref{http://man.he.net/?topic=printf(3)::format&section=all,printf}\" \"[printf] (<http://man.he.net/?topic=printf(3)::format&section=all>)\" \"[printf](http://man.he.net/?topic=printf(3)::format&section=all)\" \"http://man.he.net/?topic=printf(3)::format&section=all\"))""#
-        ]],
+        expect,
     );
 }
 
@@ -32,6 +33,9 @@ fn org_link_doi_info_man_export_combo() {
 fn org_info_link_file_node_description_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (((\"dir\" . \"Top\") (\"dir\" . \"Top\") (\"emacs\" . \"Top\") (\"elisp\" . \"Non-ASCII in Strings\") (\"org\" . \"Tables\") (\"info\" . \"Special Node\")) (\"Top\" \"Non_002dASCII-in-Strings\" \"g_t1_002e2-Weird_002fNode\" \"spaced\") (\"info \\\"(dir)\\\"\" \"info elisp\" \"info \\\"(elisp) Non-ASCII in Strings\\\"\" \"Desc\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ol-info)
@@ -47,9 +51,7 @@ fn org_info_link_file_node_description_combo() {
              ("info:elisp" . "")
              ("info:elisp#Non-ASCII in Strings" . nil)
              ("https://example.org" . "Desc")))))"##,
-        expect_test::expect![[
-            r#""OK (((\"dir\" . \"Top\") (\"dir\" . \"Top\") (\"emacs\" . \"Top\") (\"elisp\" . \"Non-ASCII in Strings\") (\"org\" . \"Tables\") (\"info\" . \"Special Node\")) (\"Top\" \"Non_002dASCII-in-Strings\" \"g_t1_002e2-Weird_002fNode\" \"spaced\") (\"info \\\"(dir)\\\"\" \"info elisp\" \"info \\\"(elisp) Non-ASCII in Strings\\\"\" \"Desc\"))""#
-        ]],
+        expect,
     );
 }
 
@@ -57,6 +59,7 @@ fn org_info_link_file_node_description_combo() {
 fn org_info_man_store_link_context_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ol)
@@ -79,7 +82,7 @@ fn org_info_man_store_link_context_combo() {
                     man-link
                     org-store-link-plist
                      (org-man-get-page-name))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -87,6 +90,9 @@ fn org_info_man_store_link_context_combo() {
 fn org_link_abbrev_custom_follow_export_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""ERR (error \"No match for fuzzy expression: ticket:ABC-123\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -135,8 +141,6 @@ fn org_link_abbrev_custom_follow_export_deep_state_combo() {
               followed
               has-github
               has-rfc))))))"##,
-        expect_test::expect![[
-            r#""ERR (error \"No match for fuzzy expression: ticket:ABC-123\")""#
-        ]],
+        expect,
     );
 }

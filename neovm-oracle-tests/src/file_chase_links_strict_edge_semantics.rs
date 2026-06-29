@@ -75,8 +75,6 @@ fn oracle_file_chase_links_limit_parent_symlink_and_cycle_edges() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 61 44)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 61 44)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

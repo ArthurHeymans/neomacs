@@ -47,12 +47,10 @@ fn oracle_add_minor_mode_inserts_after_and_replaces_existing_entries() {
                                 (t 'other))))
                   minor-mode-map-alist)
           (get 'neo-mode :minor-mode-function))))"#;
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((neo-mode alpha anchor omega) ((alpha \" A\") (anchor \" Anchor\") (neo-mode \" Neo\") (omega \" O\")) ((alpha . alpha-map) (anchor . anchor-map) (neo-mode . new) (omega . omega-map)) neo-toggle) (neo-mode alpha anchor omega) ((alpha \" A\") (anchor \" Anchor\") (neo-mode \" New\") (omega \" O\")) ((alpha . alpha-map) (anchor . anchor-map) (neo-mode . repl) (omega . omega-map)) neo-toggle)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((neo-mode alpha anchor omega) ((alpha \" A\") (anchor \" Anchor\") (neo-mode \" Neo\") (omega \" O\")) ((alpha . alpha-map) (anchor . anchor-map) (neo-mode . new) (omega . omega-map)) neo-toggle) (neo-mode alpha anchor omega) ((alpha \" A\") (anchor \" Anchor\") (neo-mode \" New\") (omega \" O\")) ((alpha . alpha-map) (anchor . anchor-map) (neo-mode . repl) (omega . omega-map)) neo-toggle)""#
+    ]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq(
         r#"(((neo-mode alpha anchor omega) ((alpha " A") (anchor " Anchor") (neo-mode " Neo") (omega " O")) ((alpha . alpha-map) (anchor . anchor-map) (neo-mode . new) (omega . omega-map)) neo-toggle) (neo-mode alpha anchor omega) ((alpha " A") (anchor " Anchor") (neo-mode " New") (omega " O")) ((alpha . alpha-map) (anchor . anchor-map) (neo-mode . repl) (omega . omega-map)) neo-toggle)"#,
         &oracle,

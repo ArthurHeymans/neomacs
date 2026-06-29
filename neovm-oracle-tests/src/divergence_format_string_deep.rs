@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_number_to_string_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (\"0\" \"0\" \"2305843009213693951\" \"-2305843009213693952\" \"1.5\" \"-15000000000.0\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (number-to-string 0)
@@ -15,9 +18,7 @@ fn divergence_number_to_string_edge() {
   (number-to-string most-negative-fixnum)
   (number-to-string 1.5)
   (number-to-string -1.5e10))"#,
-        expect_test::expect![[
-            r#""OK (\"0\" \"0\" \"2305843009213693951\" \"-2305843009213693952\" \"1.5\" \"-15000000000.0\")""#
-        ]],
+        expect,
     );
 }
 
@@ -25,6 +26,7 @@ fn divergence_number_to_string_edge() {
 fn divergence_string_to_number_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (42 0 100000.0 0 42 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (string-to-number "42")
@@ -33,7 +35,7 @@ fn divergence_string_to_number_edge() {
   (string-to-number "hello")
   (string-to-number "42abc")
   (string-to-number ""))"#,
-        expect_test::expect![[r#""OK (42 0 100000.0 0 42 0)""#]],
+        expect,
     );
 }
 
@@ -41,6 +43,9 @@ fn divergence_string_to_number_edge() {
 fn divergence_format_percent_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (\"0\" \"-1\" \"+42\" \" 42\" \"ff\" \"10\" \"1010\" \"nil\" \"(a b c)\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (format "%d" 0)
@@ -52,9 +57,7 @@ fn divergence_format_percent_edge() {
   (format "%b" 10)
   (format "%s" nil)
   (format "%S" '(a b c)))"#,
-        expect_test::expect![[
-            r#""OK (\"0\" \"-1\" \"+42\" \" 42\" \"ff\" \"10\" \"1010\" \"nil\" \"(a b c)\")""#
-        ]],
+        expect,
     );
 }
 
@@ -62,6 +65,9 @@ fn divergence_format_percent_edge() {
 fn divergence_format_float_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (\"0.000000\" \"-0.000000\" \"4\" \"0.0001\" \"100000\" \"0.000000e+00\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (format "%f" 0.0)
@@ -70,9 +76,7 @@ fn divergence_format_float_edge() {
   (format "%g" 0.0001)
   (format "%g" 100000.0)
   (format "%e" 0.0))"#,
-        expect_test::expect![[
-            r#""OK (\"0.000000\" \"-0.000000\" \"4\" \"0.0001\" \"100000\" \"0.000000e+00\")""#
-        ]],
+        expect,
     );
 }
 
@@ -80,6 +84,9 @@ fn divergence_format_float_edge() {
 fn divergence_format_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (\"        42\" \"42        \" \"0000000042\" \"   hi\" \"hi   \")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (format "%10d" 42)
@@ -87,9 +94,7 @@ fn divergence_format_width() {
   (format "%010d" 42)
   (format "%5s" "hi")
   (format "%-5s" "hi"))"#,
-        expect_test::expect![[
-            r#""OK (\"        42\" \"42        \" \"0000000042\" \"   hi\" \"hi   \")""#
-        ]],
+        expect,
     );
 }
 
@@ -97,13 +102,14 @@ fn divergence_format_width() {
 fn divergence_char_to_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (\"A\" \"中\" 72 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (char-to-string ?A)
   (char-to-string ?中)
   (string-to-char "Hello")
   (string-to-char ""))"#,
-        expect_test::expect![[r#""OK (\"A\" \"中\" 72 0)""#]],
+        expect,
     );
 }
 
@@ -111,13 +117,14 @@ fn divergence_char_to_string() {
 fn divergence_concat_vs_mapconcat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (\"abc\" \"\" \"a-b-c\" \"A B\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (concat "a" "b" "c")
   (concat)
   (mapconcat #'identity '("a" "b" "c") "-")
   (mapconcat (lambda (x) (upcase x)) '("a" "b") " "))"#,
-        expect_test::expect![[r#""OK (\"abc\" \"\" \"a-b-c\" \"A B\")""#]],
+        expect,
     );
 }
 
@@ -125,6 +132,7 @@ fn divergence_concat_vs_mapconcat() {
 fn divergence_string_equals_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function string-version-compare)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (string= "" "")
@@ -134,7 +142,7 @@ fn divergence_string_equals_edge() {
   (string< "" "a")
   (string> "b" "a")
   (string-version-compare "1.2" "1.10"))"#,
-        expect_test::expect![[r#""ERR (void-function string-version-compare)""#]],
+        expect,
     );
 }
 
@@ -142,12 +150,13 @@ fn divergence_string_equals_edge() {
 fn divergence_string_reverse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (\"cba\" \"\" \"a\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (string-reverse "abc")
   (string-reverse "")
   (string-reverse "a"))"#,
-        expect_test::expect![[r#""OK (\"cba\" \"\" \"a\")""#]],
+        expect,
     );
 }
 
@@ -155,6 +164,9 @@ fn divergence_string_reverse() {
 fn divergence_string_fill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (\"xxxxx\" \"hello\" \"hello\" \"hello\" \"hello\" \"hello\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (string-pad "" 5 ?x)
@@ -163,8 +175,6 @@ fn divergence_string_fill() {
   (string-trim "  hello  ")
   (string-trim-left "  hello")
   (string-trim-right "hello  "))"#,
-        expect_test::expect![[
-            r#""OK (\"xxxxx\" \"hello\" \"hello\" \"hello\" \"hello\" \"hello\")""#
-        ]],
+        expect,
     );
 }

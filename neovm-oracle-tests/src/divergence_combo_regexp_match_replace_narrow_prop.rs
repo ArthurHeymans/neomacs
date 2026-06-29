@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_re_search_forward_in_narrowed_with_prop_zones() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rsn\")))\n\
@@ -27,7 +28,7 @@ fn deficiency_re_search_forward_in_narrowed_with_prop_zones() {
          hits))\n\
          (nreverse hits)))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -35,6 +36,7 @@ fn deficiency_re_search_forward_in_narrowed_with_prop_zones() {
 fn deficiency_replace_match_preserves_props_in_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rmp\")))\n\
@@ -51,7 +53,7 @@ fn deficiency_replace_match_preserves_props_in_narrow() {
          (cl-loop for i from (point-min) to (point-max)\n\
          collect (cons i (get-text-property i 'pos)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -59,6 +61,7 @@ fn deficiency_replace_match_preserves_props_in_narrow() {
 fn deficiency_match_data_with_multiple_searches_and_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mdm\")))\n\
@@ -81,7 +84,7 @@ fn deficiency_match_data_with_multiple_searches_and_markers() {
          (get-text-property mb1 'type)\n\
          (get-text-property mb2 'type)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -89,6 +92,7 @@ fn deficiency_match_data_with_multiple_searches_and_markers() {
 fn deficiency_query_replace_regexp_simulation_in_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"qrr\")))\n\
@@ -108,7 +112,7 @@ fn deficiency_query_replace_regexp_simulation_in_narrow() {
          (cl-loop for i from (point-min) to (point-max)\n\
          collect (cons i (get-text-property i 'slot))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -116,6 +120,7 @@ fn deficiency_query_replace_regexp_simulation_in_narrow() {
 fn deficiency_re_search_backward_in_narrowed_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rsb\")))\n\
@@ -135,7 +140,7 @@ fn deficiency_re_search_backward_in_narrowed_region() {
          hits))\n\
          hits))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -143,6 +148,7 @@ fn deficiency_re_search_backward_in_narrowed_region() {
 fn deficiency_replace_with_backreference_in_prop_zone() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rbr\")))\n\
@@ -163,7 +169,7 @@ fn deficiency_replace_with_backreference_in_prop_zone() {
          (get-text-property 1 'bracket)\n\
          (get-text-property 9 'bracket))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -171,6 +177,7 @@ fn deficiency_replace_with_backreference_in_prop_zone() {
 fn deficiency_skip_chars_forward_backward_in_narrow_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"scn\")))\n\
@@ -193,7 +200,7 @@ fn deficiency_skip_chars_forward_backward_in_narrow_with_props() {
          (get-text-property p1 'class)\n\
          (get-text-property p2 'class)))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -201,6 +208,7 @@ fn deficiency_skip_chars_forward_backward_in_narrow_with_props() {
 fn deficiency_looking_at_and_match_data_in_narrowed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"lan\")))\n\
@@ -220,7 +228,7 @@ fn deficiency_looking_at_and_match_data_in_narrowed() {
          (list r1 m1 r2 m2 r3 (match-string 0)\n\
          (buffer-string)))))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -228,6 +236,7 @@ fn deficiency_looking_at_and_match_data_in_narrowed() {
 fn deficiency_re_search_with_save_match_data_restoration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"smr\")))\n\
@@ -246,7 +255,7 @@ fn deficiency_re_search_with_save_match_data_restoration() {
          (list saved-match saved-begin saved-end\n\
          restored-match restored-begin restored-end))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -254,6 +263,7 @@ fn deficiency_re_search_with_save_match_data_restoration() {
 fn deficiency_regexp_whitespace_classes_in_narrowed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rwn\")))\n\
@@ -273,6 +283,6 @@ fn deficiency_regexp_whitespace_classes_in_narrowed() {
          tokens))\n\
          (nreverse tokens)))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

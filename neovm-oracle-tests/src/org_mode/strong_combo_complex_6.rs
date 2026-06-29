@@ -11,6 +11,9 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo6_heading_full() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:level 1) (:todo \"TODO\") (:priority 65) (:tags (\"t1\" \"t2\")) (:raw \"Heading\") (:custom-id nil) (:effort nil) (:planning ((\"S\" nil))) (:inline (\"bold\")) (:after-todo \"DONE\") (:after-tags (\"t1\" \"t2\" \"newtag\")) (:after-effort \"3h\") (:content #(\"* DONE [#A] Heading                                            :t1:t2:newtag:\nSCHEDULED: <2026-01-15>\n:PROPERTIES:\n:EFFORT:   3h\n:END:\nDEADLINE: <2026-01-20>\n:PROPERTIES:\n:CUSTOM_ID: myid\n:EFFORT: 2h\n:END:\nBody *bold* text\" 0 77 (org-todo-head \"TODO\"))))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -48,9 +51,7 @@ fn combo6_heading_full() {
     ;; verify buffer
     (push (list :content (buffer-string)) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:level 1) (:todo \"TODO\") (:priority 65) (:tags (\"t1\" \"t2\")) (:raw \"Heading\") (:custom-id nil) (:effort nil) (:planning ((\"S\" nil))) (:inline (\"bold\")) (:after-todo \"DONE\") (:after-tags (\"t1\" \"t2\" \"newtag\")) (:after-effort \"3h\") (:content #(\"* DONE [#A] Heading                                            :t1:t2:newtag:\nSCHEDULED: <2026-01-15>\n:PROPERTIES:\n:EFFORT:   3h\n:END:\nDEADLINE: <2026-01-20>\n:PROPERTIES:\n:CUSTOM_ID: myid\n:EFFORT: 2h\n:END:\nBody *bold* text\" 0 77 (org-todo-head \"TODO\"))))""#
-        ]],
+        expect,
     );
 }
 
@@ -61,6 +62,7 @@ fn combo6_heading_full() {
 #[test]
 fn combo6_table_full() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -83,7 +85,7 @@ fn combo6_table_full() {
     (push (list :rows (length (org-element-map (org-element-parse-buffer) 'table-row 'identity))) r)
     (push (list :cells (length (org-element-map (org-element-parse-buffer) 'table-cell 'identity))) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
+        expect,
     );
 }
 
@@ -94,6 +96,7 @@ fn combo6_table_full() {
 #[test]
 fn combo6_list_full() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -131,7 +134,7 @@ fn combo6_list_full() {
     (org-update-statistics-cookies t)
     (push (list :stats (buffer-substring-no-properties (line-beginning-position) (line-end-position))) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
+        expect,
     );
 }
 
@@ -142,6 +145,7 @@ fn combo6_list_full() {
 #[test]
 fn combo6_src_full() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -164,7 +168,7 @@ fn combo6_src_full() {
     (org-babel-execute-src-block)
     (push (list :after-exec (buffer-string)) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
+        expect,
     );
 }
 
@@ -175,6 +179,7 @@ fn combo6_src_full() {
 #[test]
 fn combo6_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -204,7 +209,7 @@ fn combo6_navigation() {
                (push (list :next-block (buffer-substring-no-properties (line-beginning-position) (line-end-position))) r))
       (error nil))
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
+        expect,
     );
 }
 
@@ -215,6 +220,7 @@ fn combo6_navigation() {
 #[test]
 fn combo6_visibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -243,7 +249,7 @@ fn combo6_visibility() {
     (org-reveal)
     (push (list :reveal (buffer-substring-no-properties (point-min) (point-max))) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
+        expect,
     );
 }
 
@@ -254,6 +260,7 @@ fn combo6_visibility() {
 #[test]
 fn combo6_export_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (9 167 703 715 1023 1401 367)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((src "#+TITLE: T\n* TODO [#A] H1 :t1:\nBody *bold* /italic/\n** H2\n- [X] a\n- [ ] b\n| x | y |\n| 1 | 2 |\n#+BEGIN_SRC emacs-lisp\n(+ 1)\n#+END_SRC\n* DONE H3\n:PROPERTIES:\n:A: 1\n:END:"))
   (let ((html (org-export-string-as src 'html t)))
@@ -264,7 +271,7 @@ fn combo6_export_all() {
           (string-match-p "<table" html)
           (string-match-p "emacs-lisp" html)
           (string-match-p "DONE" html))))"##,
-        expect_test::expect![[r#""OK (9 167 703 715 1023 1401 367)""#]],
+        expect,
     );
 }
 
@@ -275,6 +282,7 @@ fn combo6_export_all() {
 #[test]
 fn combo6_map_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -295,7 +303,7 @@ fn combo6_map_all() {
     (push (list :tables (length (org-element-map (org-element-parse-buffer) 'table 'identity))) r)
     (push (list :src-blocks (length (org-element-map (org-element-parse-buffer) 'src-block 'identity))) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
+        expect,
     );
 }
 
@@ -306,6 +314,7 @@ fn combo6_map_all() {
 #[test]
 fn combo6_clock_planning() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -331,7 +340,7 @@ fn combo6_clock_planning() {
     ;; clock string
     (push (list :clock-string (org-clock-get-clock-string)) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
+        expect,
     );
 }
 
@@ -342,6 +351,7 @@ fn combo6_clock_planning() {
 #[test]
 fn combo6_footnotes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -360,6 +370,6 @@ fn combo6_footnotes() {
     (push (list :ref-count (length (org-element-map (org-element-parse-buffer) 'footnote-reference 'identity))) r)
     (push (list :def-count (length (org-element-map (org-element-parse-buffer) 'footnote-definition 'identity))) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
+        expect,
     );
 }

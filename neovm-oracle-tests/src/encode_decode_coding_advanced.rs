@@ -31,12 +31,10 @@ fn oracle_prop_encode_decode_coding_many_systems() {
       (error
        (setq results (cons (list cs 'error (car err)) results)))))
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((utf-8 9 t) (utf-8-unix 9 t) (latin-1 7 t) (raw-text 9 nil) (no-conversion 9 nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((utf-8 9 t) (utf-8-unix 9 t) (latin-1 7 t) (raw-text 9 nil) (no-conversion 9 nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -90,12 +88,10 @@ fn oracle_prop_encode_decode_nocopy_comprehensive() {
                                (string= s enc))
                         results)))
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ascii-encode t 10 10) (non-ascii-encode t 6 6) (ascii-decode t 11) (latin1-nocopy t) (raw-nocopy t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ascii-encode t 10 10) (non-ascii-encode t 6 6) (ascii-decode t 11) (latin1-nocopy t) (raw-nocopy t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -131,12 +127,10 @@ fn oracle_prop_decode_coding_buffer_param() {
   (with-temp-buffer
     (let ((result (decode-coding-string "nocopy-buf" 'utf-8 t t)))
       (list result (buffer-string)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"hello\" \"hello\" (\"world\" \"\") (\"éñ\" \"\" 0) (\"suffix\" \"prefix:\") (\"nocopy-buf\" \"\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"hello\" \"hello\" (\"world\" \"\") (\"éñ\" \"\" 0) (\"suffix\" \"prefix:\") (\"nocopy-buf\" \"\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -168,12 +162,10 @@ fn oracle_prop_encode_decode_roundtrip_diverse() {
         (error
          (setq results (cons (list s cs 'encoding-error) results))))))
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"\" utf-8 t) (\"\" latin-1 t) (\"a\" utf-8 t) (\"a\" latin-1 t) (\"Hello, World!\" utf-8 t) (\"Hello, World!\" latin-1 t) (\"0123456789\" utf-8 t) (\"0123456789\" latin-1 t) (\"éèêë\" utf-8 t) (\"éèêë\" latin-1 t) (\"ÀÁÂÃ\" utf-8 t) (\"ÀÁÂÃ\" latin-1 t) (\"世界你好\" utf-8 t) (\"世界你好\" latin-1 nil) (\"αβγδε\" utf-8 t) (\"αβγδε\" latin-1 nil) (\"АБВГ\" utf-8 t) (\"АБВГ\" latin-1 nil) (\"mixedé世test\" utf-8 t) (\"mixedé世test\" latin-1 nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"\" utf-8 t) (\"\" latin-1 t) (\"a\" utf-8 t) (\"a\" latin-1 t) (\"Hello, World!\" utf-8 t) (\"Hello, World!\" latin-1 t) (\"0123456789\" utf-8 t) (\"0123456789\" latin-1 t) (\"éèêë\" utf-8 t) (\"éèêë\" latin-1 t) (\"ÀÁÂÃ\" utf-8 t) (\"ÀÁÂÃ\" latin-1 t) (\"世界你好\" utf-8 t) (\"世界你好\" latin-1 nil) (\"αβγδε\" utf-8 t) (\"αβγδε\" latin-1 nil) (\"АБВГ\" utf-8 t) (\"АБВГ\" latin-1 nil) (\"mixedé世test\" utf-8 t) (\"mixedé世test\" latin-1 nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -210,12 +202,10 @@ fn oracle_prop_encode_byte_length_comparison() {
           (string-bytes (encode-coding-string "\U0001F600" 'utf-8)))
     results))
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"A\" 1 1 t t) (\"é\" 2 1 t t) (\"ü\" 2 1 t t) (\"ÿ\" 2 1 t t) (\"3-byte-cjk\" 3 6) (\"4-byte-emoji\" 4))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"A\" 1 1 t t) (\"é\" 2 1 t t) (\"ü\" 2 1 t t) (\"ÿ\" 2 1 t t) (\"3-byte-cjk\" 3 6) (\"4-byte-emoji\" 4))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -246,10 +236,8 @@ fn oracle_prop_encode_unmappable_characters() {
                    (encode-coding-string s 'latin-1))
           (string= (encode-coding-string s 'utf-8)
                    (encode-coding-string s 'raw-text)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((ok 2) (ok 10) t (t t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((ok 2) (ok 10) t (t t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -293,10 +281,8 @@ fn oracle_prop_encode_decode_pipeline() {
                (expected (apply #'concat parts)))
           (string= result expected)))
     (fmakunbound 'neovm--edca-encode-concat)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((t 12) (t 8 8) (t 3) t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((t 12) (t 8 8) (t 3) t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -335,12 +321,10 @@ fn oracle_prop_encode_decode_batch_categorize() {
                         "\U0001F600\U0001F601")))
         (mapcar (lambda (s) (funcall 'neovm--edca-categorize s)) strings))
     (fmakunbound 'neovm--edca-categorize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((empty 0 0 t) (ascii-only 11 11 t) (mostly-latin 3 6 t) (mostly-cjk 4 12 t) (mostly-latin 5 7 t) (mostly-latin 3 6 t) (mostly-4byte 2 8 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((empty 0 0 t) (ascii-only 11 11 t) (mostly-latin 3 6 t) (mostly-cjk 4 12 t) (mostly-latin 5 7 t) (mostly-latin 3 6 t) (mostly-4byte 2 8 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -372,12 +356,10 @@ fn oracle_prop_encode_decode_cross_system_matrix() {
          (dec (decode-coding-string enc 'utf-8-unix)))
     (setq results (cons (list 'utf8-to-utf8unix (string= s dec)) results)))
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((utf-8 utf-8 t) (utf-8 latin-1 t) (utf-8 raw-text t) (utf-8 no-conversion t) (latin-1 utf-8 t) (latin-1 latin-1 t) (latin-1 raw-text t) (latin-1 no-conversion t) (raw-text utf-8 t) (raw-text latin-1 t) (raw-text raw-text t) (raw-text no-conversion t) (no-conversion utf-8 t) (no-conversion latin-1 t) (no-conversion raw-text t) (no-conversion no-conversion t) (utf8-to-utf8unix t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((utf-8 utf-8 t) (utf-8 latin-1 t) (utf-8 raw-text t) (utf-8 no-conversion t) (latin-1 utf-8 t) (latin-1 latin-1 t) (latin-1 raw-text t) (latin-1 no-conversion t) (raw-text utf-8 t) (raw-text latin-1 t) (raw-text raw-text t) (raw-text no-conversion t) (no-conversion utf-8 t) (no-conversion latin-1 t) (no-conversion raw-text t) (no-conversion no-conversion t) (utf8-to-utf8unix t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -411,8 +393,7 @@ fn oracle_prop_encode_inspect_bytes() {
           (aref enc 1)    ;; 0xC3
           (aref enc 2)))) ;; 0xA9
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (65 (195 169) (228 184 150) 32 10 233 (3 65 195 169))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (65 (195 169) (228 184 150) 32 10 233 (3 65 195 169))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

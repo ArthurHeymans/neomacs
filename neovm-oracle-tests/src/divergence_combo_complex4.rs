@@ -12,18 +12,20 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx4_process_environment_subprocess() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"hello123\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((process-environment (cons "NEO_CX4_ENV=hello123" process-environment)))
   (car (split-string (shell-command-to-string "echo $NEO_CX4_ENV"))))
 "##,
-        expect_test::expect![[r#""OK \"hello123\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_process_coding_subprocess_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"café世界\n\" 12)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((default-process-coding-system '(utf-8-unix . utf-8-unix)))
@@ -31,13 +33,14 @@ fn div_cx4_process_coding_subprocess_output() {
     (call-process "echo" nil t nil "café世界")
     (list (buffer-string) (string-bytes (buffer-string)))))
 "##,
-        expect_test::expect![[r#""OK (\"café世界\n\" 12)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_bool_vector_bitwise() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t 8 1 void-function t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((bv1 (make-bool-vector 8 t)) (bv2 (make-bool-vector 8 nil)))
@@ -48,13 +51,14 @@ fn div_cx4_bool_vector_bitwise() {
         (condition-case e (bool-vector-count-population (bool-vector-and bv1 bv2)) (error (car e)))
         (aref bv1 0) (aref bv2 0) (aref bv2 3)))
 "##,
-        expect_test::expect![[r#""OK (t 8 1 void-function t nil t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_keymap_parent_chain_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (grand mid t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((g (make-sparse-keymap)) (m (make-sparse-keymap)) (l (make-sparse-keymap)))
@@ -66,13 +70,14 @@ fn div_cx4_keymap_parent_chain_lookup() {
         (eq (keymap-parent l) m)
         (eq (keymap-parent (keymap-parent l)) g)))
 "##,
-        expect_test::expect![[r#""OK (grand mid t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_obarray_intern_unintern_lifecycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function obarray)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ob (obarray)))
@@ -80,13 +85,14 @@ fn div_cx4_obarray_intern_unintern_lifecycle() {
   (list (eq (intern-soft "neo-cx4-obs" ob) (intern "neo-cx4-obs" ob))
         (progn (unintern "neo-cx4-obs" ob) (if (intern-soft "neo-cx4-obs" ob) t nil))))
 "##,
-        expect_test::expect![[r#""ERR (void-function obarray)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_syntax_table_switch_forward_word() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 8""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((st (make-syntax-table)))
@@ -98,13 +104,14 @@ fn div_cx4_syntax_table_switch_forward_word() {
       (forward-word 1)
       (point))))
 "##,
-        expect_test::expect![[r#""OK 8""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_print_gensym_notation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((print-gensym t))
@@ -112,13 +119,14 @@ fn div_cx4_print_gensym_notation() {
     (list (string-match "#:" (prin1-to-string gs))
           (eq gs (car (read-from-string (prin1-to-string gs)))))))
 "##,
-        expect_test::expect![[r#""OK (0 nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_cl_rotatef_hash_table_places() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table)))
@@ -127,13 +135,16 @@ fn div_cx4_cl_rotatef_hash_table_places() {
   (cl-rotatef (gethash 'a ht) (gethash 'b ht))
   (list (gethash 'a ht) (gethash 'b ht)))
 "##,
-        expect_test::expect![[r#""OK (2 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_char_table_parent_chain_aref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:parent-val #^[nil nil cx4-test #^^[3 0 nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil :parent-val nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] #^^[1 0 #^^[2 0 #^^[3 0 nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil :parent-val nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-char-table 'cx4-test nil)) (c (make-char-table 'cx4-test nil)))
@@ -141,15 +152,14 @@ fn div_cx4_char_table_parent_chain_aref() {
   (set-char-table-parent c p)
   (list (aref c ?a) (char-table-parent c) (eq (char-table-parent c) p)))
 "##,
-        expect_test::expect![[
-            r#""OK (:parent-val #^[nil nil cx4-test #^^[3 0 nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil :parent-val nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] #^^[1 0 #^^[2 0 #^^[3 0 nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil :parent-val nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] t)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_map_char_table_range_iteration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 1""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'cx4-map nil)) (count 0))
@@ -157,13 +167,14 @@ fn div_cx4_map_char_table_range_iteration() {
   (map-char-table (lambda (k v) (when v (setq count (1+ count)))) ct)
   count)
 "##,
-        expect_test::expect![[r#""OK 1""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_buffer_undo_list_structure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t \"\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -176,13 +187,14 @@ fn div_cx4_buffer_undo_list_structure() {
       (undo)
       (list (> n2 n1) (buffer-string) (> (length buffer-undo-list) n2)))))
 "##,
-        expect_test::expect![[r#""OK (t \"\" t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_overlay_before_string_under_narrowing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 4 1 \"012\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -195,26 +207,28 @@ fn div_cx4_overlay_before_string_under_narrowing() {
         (length (overlays-in (point-min) (point-max)))
         (buffer-string)))
 "##,
-        expect_test::expect![[r#""OK (1 4 1 \"012\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_print_gensym_circular_shared() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"(#1=#:g25 #1#)\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((print-gensym t) (print-circle t))
   (let ((gs (gensym)))
     (prin1-to-string (list gs gs))))
 "##,
-        expect_test::expect![[r#""OK \"(#1=#:g25 #1#)\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_set_char_table_extra_slot() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments make-char-table 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'cx4-extra nil 3)))
@@ -224,13 +238,14 @@ fn div_cx4_set_char_table_extra_slot() {
         (char-table-extra-slot ct 1)
         (char-table-extra-slot ct 2)))
 "##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments make-char-table 3)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_process_plist_put_get() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:cx4-prop :value) :value)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-process :name "neo-cx4-pl" :command '("true"))))
@@ -240,13 +255,14 @@ fn div_cx4_process_plist_put_get() {
                (process-get p :cx4-prop))
     (delete-process p)))
 "##,
-        expect_test::expect![[r#""OK ((:cx4-prop :value) :value)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_with_current_buffer_nested_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"aaa\" \"bbb\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b1 (generate-new-buffer " *cx4-b1*"))
@@ -259,13 +275,14 @@ fn div_cx4_with_current_buffer_nested_switch() {
                (with-current-buffer b2 (buffer-string)))
     (kill-buffer b1) (kill-buffer b2)))
 "##,
-        expect_test::expect![[r#""OK (\"aaa\" \"bbb\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_prefer_coding_system_effect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable prefer-coding-system)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((orig prefer-coding-system))
@@ -274,13 +291,14 @@ fn div_cx4_prefer_coding_system_effect() {
                (memq 'utf-8 (coding-system-priority-list)))
     (when (functionp orig) (funcall interprogram-coding-system))))
 "##,
-        expect_test::expect![[r#""ERR (void-variable prefer-coding-system)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_buffer_locals_set_then_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:local global t neo-cx4-bl global)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -292,13 +310,14 @@ fn div_cx4_buffer_locals_set_then_default() {
           (kill-local-variable 'neo-cx4-bl)
           neo-cx4-bl)))
 "##,
-        expect_test::expect![[r#""OK (:local global t neo-cx4-bl global)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_marker_kill_buffer_cleanup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable last)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (generate-new-buffer " *cx4-mk*")))
@@ -311,13 +330,16 @@ fn div_cx4_marker_kill_buffer_cleanup() {
         (push (marker-buffer m) last)))
     (list (nth 0 last) (nth 1 last))))
 "##,
-        expect_test::expect![[r#""ERR (void-variable last)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx4_format_multibyte_s_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r##""OK (\"\\\"café\\\"\" \"café\" #(\"x\" 0 1 (face bold)) \"#(\\\"x\\\" 0 1 (face bold))\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%S" "café")
@@ -325,8 +347,6 @@ fn div_cx4_format_multibyte_s_string() {
       (format "%s" (propertize "x" 'face 'bold))
       (format "%S" (propertize "x" 'face 'bold)))
 "##,
-        expect_test::expect![[
-            r##""OK (\"\\\"café\\\"\" \"café\" #(\"x\" 0 1 (face bold)) \"#(\\\"x\\\" 0 1 (face bold))\")""##
-        ]],
+        expect,
     );
 }

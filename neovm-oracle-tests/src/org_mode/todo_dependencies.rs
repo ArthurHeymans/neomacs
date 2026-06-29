@@ -5,6 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_todo_dependency_blockers_and_noblocking_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -49,7 +50,7 @@ fn org_todo_dependency_blockers_and_noblocking_combo() {
                   second-done-unblocked
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -57,6 +58,7 @@ fn org_todo_dependency_blockers_and_noblocking_combo() {
 fn org_checkbox_dependency_statistics_cookie_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -96,7 +98,7 @@ fn org_checkbox_dependency_statistics_cookie_combo() {
                 after-attempt
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -104,6 +106,7 @@ fn org_checkbox_dependency_statistics_cookie_combo() {
 fn org_todo_state_tag_triggers_statistics_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -146,7 +149,7 @@ fn org_todo_state_tag_triggers_statistics_combo() {
                           (org-element-property :tags h))))
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -154,6 +157,9 @@ fn org_todo_state_tag_triggers_statistics_combo() {
 fn org_todo_planning_tags_fold_cookie_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""ERR (user-error \"Before first headline at position 1 in buffer  *temp*\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'cl-lib)
@@ -317,9 +323,7 @@ fn org_todo_planning_tags_fold_cookie_combo() {
                         faces
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[
-            r#""ERR (user-error \"Before first headline at position 1 in buffer  *temp*\")""#
-        ]],
+        expect,
     );
 }
 
@@ -327,6 +331,7 @@ fn org_todo_planning_tags_fold_cookie_combo() {
 fn org_ordered_region_statistics_hook_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable events)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -464,7 +469,7 @@ fn org_ordered_region_statistics_hook_combo() {
                 after-first
                 region-summary
                  final-summary))))))"##,
-        expect_test::expect![[r#""ERR (void-variable events)""#]],
+        expect,
     );
 }
 
@@ -472,6 +477,9 @@ fn org_ordered_region_statistics_hook_combo() {
 fn org_todo_state_transition_log_drawer_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((\"* TODO Alpha\n** NEXT Sub A\n** WAIT Sub B\n* DONE Beta\n\" ((headline \"Alpha\" \"TODO\") (headline \"Sub A\" \"NEXT\") (headline \"Sub B\" \"WAIT\") (headline \"Beta\" \"DONE\"))) (\"* TODO Alpha\n** WAIT Sub A\n** WAIT Sub B\n* DONE Beta\n\" ((headline \"Alpha\" \"TODO\") (headline \"Sub A\" \"WAIT\") (headline \"Sub B\" \"WAIT\") (headline \"Beta\" \"DONE\"))) (\"* TODO Alpha\n** WAIT Sub A\n** DONE Sub B\nCLOSED: [2026-06-29 Mon 06:35]\n* DONE Beta\n\" ((headline \"Alpha\" \"TODO\") (headline \"Sub A\" \"WAIT\") (headline \"Sub B\" \"DONE\") (planning nil nil) (headline \"Beta\" \"DONE\"))) (\"* CANCELED Alpha\nCLOSED: [2026-06-29 Mon 06:35]\n** WAIT Sub A\n** DONE Sub B\nCLOSED: [2026-06-29 Mon 06:35]\n* DONE Beta\n\" ((headline \"Alpha\" \"CANCELED\") (planning nil nil) (headline \"Sub A\" \"WAIT\") (headline \"Sub B\" \"DONE\") (planning nil nil) (headline \"Beta\" \"DONE\"))) nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -526,8 +534,6 @@ fn org_todo_state_transition_log_drawer_deep_state_combo() {
                         after-b
                         after-alpha
                         (nreverse log-entries)))))))))))"##,
-        expect_test::expect![[
-            r#""OK ((\"* TODO Alpha\n** NEXT Sub A\n** WAIT Sub B\n* DONE Beta\n\" ((headline \"Alpha\" \"TODO\") (headline \"Sub A\" \"NEXT\") (headline \"Sub B\" \"WAIT\") (headline \"Beta\" \"DONE\"))) (\"* TODO Alpha\n** WAIT Sub A\n** WAIT Sub B\n* DONE Beta\n\" ((headline \"Alpha\" \"TODO\") (headline \"Sub A\" \"WAIT\") (headline \"Sub B\" \"WAIT\") (headline \"Beta\" \"DONE\"))) (\"* TODO Alpha\n** WAIT Sub A\n** DONE Sub B\nCLOSED: [2026-06-29 Mon 06:35]\n* DONE Beta\n\" ((headline \"Alpha\" \"TODO\") (headline \"Sub A\" \"WAIT\") (headline \"Sub B\" \"DONE\") (planning nil nil) (headline \"Beta\" \"DONE\"))) (\"* CANCELED Alpha\nCLOSED: [2026-06-29 Mon 06:35]\n** WAIT Sub A\n** DONE Sub B\nCLOSED: [2026-06-29 Mon 06:35]\n* DONE Beta\n\" ((headline \"Alpha\" \"CANCELED\") (planning nil nil) (headline \"Sub A\" \"WAIT\") (headline \"Sub B\" \"DONE\") (planning nil nil) (headline \"Beta\" \"DONE\"))) nil)""#
-        ]],
+        expect,
     );
 }

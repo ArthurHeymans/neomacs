@@ -14,8 +14,8 @@ fn oracle_prop_dotimes_basic() {
                   (dotimes (i 5)
                     (setq sum (+ sum i)))
                   sum)";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 10""#]]);
+    let expect = expect_test::expect![[r#""OK 10""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("10", &o, &n);
 }
 
@@ -27,8 +27,8 @@ fn oracle_prop_dotimes_zero() {
                   (dotimes (i 0)
                     (setq count (1+ count)))
                   count)";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 0""#]]);
+    let expect = expect_test::expect![[r#""OK 0""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("0", &o, &n);
 }
 
@@ -40,8 +40,8 @@ fn oracle_prop_dotimes_with_result() {
     let form = "(let ((sum 0))
                   (dotimes (i 5 sum)
                     (setq sum (+ sum i))))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 10""#]]);
+    let expect = expect_test::expect![[r#""OK 10""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("10", &o, &n);
 }
 
@@ -54,10 +54,8 @@ fn oracle_prop_dotimes_collect() {
                   (dotimes (i 5)
                     (setq result (cons (* i i) result)))
                   (nreverse result))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (0 1 4 9 16)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 1 4 9 16)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(0 1 4 9 16)", &o, &n);
 }
 
@@ -71,8 +69,8 @@ fn oracle_prop_dotimes_nested() {
                     (dotimes (j 4)
                       (setq sum (1+ sum))))
                   sum)";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 12""#]]);
+    let expect = expect_test::expect![[r#""OK 12""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("12", &o, &n);
 }
 
@@ -80,10 +78,8 @@ fn oracle_prop_dotimes_nested() {
 fn oracle_prop_dotimes_returns_nil_by_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        "(dotimes (i 3))",
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect("(dotimes (i 3))", expect);
     assert_ok_eq("nil", &o, &n);
 }
 

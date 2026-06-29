@@ -11,8 +11,8 @@ fn oracle_prop_closure_captures_variable() {
     let form = "(let ((x 10))
                   (let ((f (lambda () x)))
                     (funcall f)))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 10""#]]);
+    let expect = expect_test::expect![[r#""OK 10""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("10", &o, &n);
 }
 
@@ -28,8 +28,8 @@ fn oracle_prop_closure_mutation_through_closure() {
                     (funcall inc)
                     (funcall inc)
                     (funcall get)))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 3""#]]);
+    let expect = expect_test::expect![[r#""OK 3""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("3", &o, &n);
 }
 
@@ -44,8 +44,8 @@ fn oracle_prop_closure_shared_state() {
                     (funcall add 5)
                     (funcall add 3)
                     (funcall get)))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 8""#]]);
+    let expect = expect_test::expect![[r#""OK 8""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("8", &o, &n);
 }
 
@@ -61,7 +61,8 @@ fn oracle_prop_closure_independent_captures() {
                         (setq fns (cons (lambda () captured) fns)))
                       (setq i (1+ i))))
                   (mapcar 'funcall (reverse fns)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (0 1 2)""#]);
+    let expect = expect_test::expect![r#""OK (0 1 2)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -72,8 +73,8 @@ fn oracle_prop_closure_over_function_arg() {
                   (let ((add5 (funcall make-adder 5))
                         (add10 (funcall make-adder 10)))
                     (list (funcall add5 3) (funcall add10 3))))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK (8 13)""#]]);
+    let expect = expect_test::expect![[r#""OK (8 13)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(8 13)", &o, &n);
 }
 
@@ -86,8 +87,8 @@ fn oracle_prop_closure_nested_lets() {
                     (let ((c 3))
                       (let ((f (lambda () (+ a b c))))
                         (funcall f)))))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 6""#]]);
+    let expect = expect_test::expect![[r#""OK 6""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("6", &o, &n);
 }
 
@@ -103,10 +104,8 @@ fn oracle_prop_closure_with_condition_case() {
                   (list (funcall safe-div 10 2)
                         (funcall safe-div 10 0)
                         (funcall safe-div 15 3)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (5 division-by-zero 5)""#],
-    );
+    let expect = expect_test::expect![r#""OK (5 division-by-zero 5)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -116,8 +115,8 @@ fn oracle_prop_closure_as_callback() {
     // Pass a closure as a callback
     let form = "(let ((apply-twice (lambda (f x) (funcall f (funcall f x)))))
                   (funcall apply-twice (lambda (x) (* x 2)) 3))";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 12""#]]);
+    let expect = expect_test::expect![[r#""OK 12""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("12", &o, &n);
 }
 
@@ -133,10 +132,8 @@ fn oracle_prop_closure_accumulator_pattern() {
                     (funcall push 'b)
                     (funcall push 'c)
                     (funcall result)))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (a b c)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (a b c)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(a b c)", &o, &n);
 }
 
@@ -150,10 +147,8 @@ fn oracle_prop_closure_compose() {
                     (list (funcall double-then-add1 3)
                           (funcall double-then-add1 5)
                           (funcall double-then-add1 0))))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (7 11 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (7 11 1)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(7 11 1)", &o, &n);
 }
 
@@ -171,10 +166,8 @@ fn oracle_prop_closure_memoize_pattern() {
                           (funcall memoized-square 4)
                           (funcall memoized-square 3)
                           (hash-table-count cache))))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (9 16 9 2)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (9 16 9 2)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(9 16 9 2)", &o, &n);
 }
 
@@ -191,10 +184,8 @@ fn oracle_prop_closure_with_rest_args() {
                   (list (funcall sum-all 1 2 3)
                         (funcall sum-all 10 20)
                         (funcall sum-all)))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (6 30 0)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (6 30 0)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(6 30 0)", &o, &n);
 }
 
@@ -206,8 +197,6 @@ fn oracle_prop_closure_with_optional_args() {
                                (concat (or greeting \"Hello\") \", \" name \"!\"))))
                   (list (funcall greet \"World\")
                         (funcall greet \"World\" \"Hi\")))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"Hello, World!\" \"Hi, World!\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"Hello, World!\" \"Hi, World!\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_print_circle_shared_structure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((shared (list 1 2 3)))\n\
@@ -16,7 +17,7 @@ fn deficiency_print_circle_shared_structure() {
          (list printed\n\
          (equal read-back cell)\n\
          (= (length read-back) 2))))))",
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -24,6 +25,7 @@ fn deficiency_print_circle_shared_structure() {
 fn deficiency_format_multibyte_buffer_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"fmb\")))\n\
@@ -40,7 +42,7 @@ fn deficiency_format_multibyte_buffer_combo() {
          (string-bytes s)\n\
          (get-text-property 1 'section))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -48,6 +50,7 @@ fn deficiency_format_multibyte_buffer_combo() {
 fn deficiency_prin1_read_roundtrip_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"prr\")))\n\
@@ -65,7 +68,7 @@ fn deficiency_prin1_read_roundtrip_markers() {
          (nth 4 read-back)\n\
          (nth 6 read-back)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -73,6 +76,7 @@ fn deficiency_prin1_read_roundtrip_markers() {
 fn deficiency_format_propertize_buffer_insert_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"fpu\")))\n\
@@ -96,7 +100,7 @@ fn deficiency_format_propertize_buffer_insert_undo() {
          (get-text-property 1 'row)\n\
          (get-text-property 20 'row)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -104,6 +108,7 @@ fn deficiency_format_propertize_buffer_insert_undo() {
 fn deficiency_hash_table_eq_vs_equal_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((h-eq (make-hash-table :test 'eq))\n\
@@ -119,7 +124,7 @@ fn deficiency_hash_table_eq_vs_equal_keys() {
          (gethash \"hello\" h-equal)\n\
          (= (hash-table-count h-eq) 2)\n\
          (= (hash-table-count h-equal) 1))))",
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -127,6 +132,7 @@ fn deficiency_hash_table_eq_vs_equal_keys() {
 fn deficiency_object_identity_eq_after_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((sym1 'test-sym)\n\
@@ -142,7 +148,7 @@ fn deficiency_object_identity_eq_after_operations() {
          (equal lst1 lst2)\n\
          (eql 42 42)\n\
          (eql 42 42.0)))",
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -150,6 +156,7 @@ fn deficiency_object_identity_eq_after_operations() {
 fn deficiency_read_from_buffer_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 28 35)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rfb\")))\n\
@@ -171,7 +178,7 @@ fn deficiency_read_from_buffer_with_props() {
          (get-text-property 16 'group)\n\
          (get-text-property 28 'group))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (args-out-of-range 28 35)""#]],
+        expect,
     );
 }
 
@@ -179,6 +186,7 @@ fn deficiency_read_from_buffer_with_props() {
 fn deficiency_buffer_string_props_format_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"bsf\")))\n\
@@ -203,7 +211,7 @@ fn deficiency_buffer_string_props_format_output() {
          (get-text-property 6 'field)\n\
          (length parsed))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -211,6 +219,7 @@ fn deficiency_buffer_string_props_format_output() {
 fn deficiency_obarray_intern_consistency() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((new-ob (make-vector 127 0)))\n\
@@ -224,7 +233,7 @@ fn deficiency_obarray_intern_consistency() {
          (intern-soft \"delta\" new-ob)\n\
          (eq (intern \"alpha\" new-ob) (intern \"alpha\" new-ob))\n\
          (= count 3))))",
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -232,6 +241,7 @@ fn deficiency_obarray_intern_consistency() {
 fn deficiency_cl_defstruct_print_read_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (cl-defstruct (test-record\n\
@@ -247,6 +257,6 @@ fn deficiency_cl_defstruct_print_read_roundtrip() {
          (test-record-age read-back)\n\
          (test-record-score read-back)\n\
          (test-record-name rec)))))",
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

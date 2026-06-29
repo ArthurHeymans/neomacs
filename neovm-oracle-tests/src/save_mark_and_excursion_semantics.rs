@@ -29,10 +29,8 @@ fn oracle_save_mark_and_excursion_restores_point_mark_and_active_state() {
     (list before during (point) (mark t) mark-active)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((2 5 nil) (4 3 t) 2 5 nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((2 5 nil) (4 3 t) 2 5 nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -57,12 +55,10 @@ fn oracle_save_mark_and_excursion_restores_marker_through_buffer_edits() {
     (list before during (point) (mark t) mark-active (buffer-string))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((6 8 t) (6 4 nil \"01XXX23456789\") 9 11 t \"01XXX23456789\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((6 8 t) (6 4 nil \"01XXX23456789\") 9 11 t \"01XXX23456789\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -104,10 +100,8 @@ fn oracle_save_mark_and_excursion_mark_hook_transitions() {
                (nreverse deactivate-log)))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((2 5 nil nil ((deactivate 5 nil))) (2 5 t ((activate 5 t)) nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((2 5 nil nil ((deactivate 5 nil))) (2 5 t ((activate 5 t)) nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

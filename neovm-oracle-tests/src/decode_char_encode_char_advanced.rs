@@ -35,12 +35,10 @@ fn oracle_prop_decode_encode_char_encode_basic() {
       (setq results (cons (list :ascii-reject ch encoded (null encoded))
                           results))))
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:ascii 0 0 t) (:ascii 65 65 t) (:ascii 90 90 t) (:ascii 97 97 t) (:ascii 122 122 t) (:ascii 48 48 t) (:ascii 57 57 t) (:ascii 32 32 t) (:ascii 127 127 t) (:unicode 65 65 t) (:unicode 192 192 t) (:unicode 945 945 t) (:unicode 20013 20013 t) (:unicode 128512 128512 t) (:ascii-reject 128 nil t) (:ascii-reject 255 nil t) (:ascii-reject 256 nil t) (:ascii-reject 20013 nil t) (:ascii-reject 128512 nil t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:ascii 0 0 t) (:ascii 65 65 t) (:ascii 90 90 t) (:ascii 97 97 t) (:ascii 122 122 t) (:ascii 48 48 t) (:ascii 57 57 t) (:ascii 32 32 t) (:ascii 127 127 t) (:unicode 65 65 t) (:unicode 192 192 t) (:unicode 945 945 t) (:unicode 20013 20013 t) (:unicode 128512 128512 t) (:ascii-reject 128 nil t) (:ascii-reject 255 nil t) (:ascii-reject 256 nil t) (:ascii-reject 20013 nil t) (:ascii-reject 128512 nil t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -71,12 +69,10 @@ fn oracle_prop_decode_encode_char_decode_basic() {
                                 (and decoded (= code decoded)))
                           results))))
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""ERR (error \"Not an in-range integer, integral float, or cons of integers\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Not an in-range integer, integral float, or cons of integers\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -115,12 +111,10 @@ fn oracle_prop_decode_encode_char_roundtrip() {
            (ok (and decoded (= ch decoded))))
       (setq results (cons (list :rt-latin1 ch ok) results))))
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:rt-ascii 65 t) (:rt-ascii 90 t) (:rt-ascii 97 t) (:rt-ascii 122 t) (:rt-ascii 48 t) (:rt-ascii 57 t) (:rt-ascii 32 t) (:rt-ascii 0 t) (:rt-ascii 127 t) (:rt-unicode-bmp 65 t) (:rt-unicode-bmp 192 t) (:rt-unicode-bmp 233 t) (:rt-unicode-bmp 945 t) (:rt-unicode-bmp 1044 t) (:rt-unicode-bmp 19968 t) (:rt-unicode-bmp 44032 t) (:rt-unicode-bmp 65533 t) (:rt-unicode-sup 65536 t) (:rt-unicode-sup 128512 t) (:rt-unicode-sup 128169 t) (:rt-unicode-sup 1114111 t) (:rt-latin1 65 t) (:rt-latin1 192 t) (:rt-latin1 233 t) (:rt-latin1 255 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:rt-ascii 65 t) (:rt-ascii 90 t) (:rt-ascii 97 t) (:rt-ascii 122 t) (:rt-ascii 48 t) (:rt-ascii 57 t) (:rt-ascii 32 t) (:rt-ascii 0 t) (:rt-ascii 127 t) (:rt-unicode-bmp 65 t) (:rt-unicode-bmp 192 t) (:rt-unicode-bmp 233 t) (:rt-unicode-bmp 945 t) (:rt-unicode-bmp 1044 t) (:rt-unicode-bmp 19968 t) (:rt-unicode-bmp 44032 t) (:rt-unicode-bmp 65533 t) (:rt-unicode-sup 65536 t) (:rt-unicode-sup 128512 t) (:rt-unicode-sup 128169 t) (:rt-unicode-sup 1114111 t) (:rt-latin1 65 t) (:rt-latin1 192 t) (:rt-latin1 233 t) (:rt-latin1 255 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -163,12 +157,10 @@ fn oracle_prop_decode_encode_char_cross_charset() {
                        (and (null latin1-enc) (not (null unicode-enc)))))
                     results)))))
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:ch 65 :ascii 65 :unicode 65 :latin1 65 :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 90 :ascii 90 :unicode 90 :latin1 90 :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 48 :ascii 48 :unicode 48 :latin1 48 :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 57 :ascii 57 :unicode 57 :latin1 57 :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 32 :ascii 32 :unicode 32 :latin1 32 :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 192 :ascii nil :unicode 192 :latin1 192 :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 233 :ascii nil :unicode 233 :latin1 233 :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 255 :ascii nil :unicode 255 :latin1 255 :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 256 :ascii nil :unicode 256 :latin1 nil :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 19968 :ascii nil :unicode 19968 :latin1 nil :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 128512 :ascii nil :unicode 128512 :latin1 nil :ascii-unicode-agree t :latin1-unicode-agree t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:ch 65 :ascii 65 :unicode 65 :latin1 65 :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 90 :ascii 90 :unicode 90 :latin1 90 :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 48 :ascii 48 :unicode 48 :latin1 48 :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 57 :ascii 57 :unicode 57 :latin1 57 :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 32 :ascii 32 :unicode 32 :latin1 32 :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 192 :ascii nil :unicode 192 :latin1 192 :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 233 :ascii nil :unicode 233 :latin1 233 :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 255 :ascii nil :unicode 255 :latin1 255 :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 256 :ascii nil :unicode 256 :latin1 nil :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 19968 :ascii nil :unicode 19968 :latin1 nil :ascii-unicode-agree t :latin1-unicode-agree t) (:ch 128512 :ascii nil :unicode 128512 :latin1 nil :ascii-unicode-agree t :latin1-unicode-agree t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -207,12 +199,10 @@ fn oracle_prop_decode_encode_char_boundaries() {
   (char-charset 128)
   (char-charset #xFF)
   (char-charset #x100))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (127 nil 255 nil t 0 0 0 0 0 0 nil nil ascii ascii unicode-bmp unicode-bmp unicode-bmp)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (127 nil 255 nil t 0 0 0 0 0 0 nil nil ascii ascii unicode-bmp unicode-bmp unicode-bmp)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -319,12 +309,10 @@ fn oracle_prop_decode_encode_char_classification_engine() {
     (fmakunbound 'neovm--deca-classify)
     (fmakunbound 'neovm--deca-build-report)
     (makunbound 'neovm--deca-charset-map)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:total 21 :category-counts ((control . 2) (digit . 3) (latin-extended . 3) (lower-alpha . 3) (punctuation . 2) (space . 1) (unicode-beyond-latin . 4) (upper-alpha . 3)) :all-in-unicode t :ascii-implies-latin1 t :latin1-implies-unicode t :char-A upper-alpha :char-e-acute latin-extended :char-cjk unicode-beyond-latin :char-emoji unicode-beyond-latin)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:total 21 :category-counts ((control . 2) (digit . 3) (latin-extended . 3) (lower-alpha . 3) (punctuation . 2) (space . 1) (unicode-beyond-latin . 4) (upper-alpha . 3)) :all-in-unicode t :ascii-implies-latin1 t :latin1-implies-unicode t :char-A upper-alpha :char-e-acute latin-extended :char-cjk unicode-beyond-latin :char-emoji unicode-beyond-latin)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -390,10 +378,8 @@ fn oracle_prop_decode_encode_char_consistency_matrix() {
            ok)))
     (fmakunbound 'neovm--deca-matrix)
     (fmakunbound 'neovm--deca-analyze-matrix)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:matrix ((65 (ascii . 65) (unicode . 65) (iso-8859-1 . 65)) (122 (ascii . 122) (unicode . 122) (iso-8859-1 . 122)) (48 (ascii . 48) (unicode . 48) (iso-8859-1 . 48)) (128 (ascii) (unicode . 128) (iso-8859-1 . 128)) (192 (ascii) (unicode . 192) (iso-8859-1 . 192)) (255 (ascii) (unicode . 255) (iso-8859-1 . 255)) (256 (ascii) (unicode . 256) (iso-8859-1)) (945 (ascii) (unicode . 945) (iso-8859-1)) (20013 (ascii) (unicode . 20013) (iso-8859-1)) (128512 (ascii) (unicode . 128512) (iso-8859-1))) :analysis (:total 30 :nil-count 11 :identity-count 19 :coverage-pct 63) :unicode-complete t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:matrix ((65 (ascii . 65) (unicode . 65) (iso-8859-1 . 65)) (122 (ascii . 122) (unicode . 122) (iso-8859-1 . 122)) (48 (ascii . 48) (unicode . 48) (iso-8859-1 . 48)) (128 (ascii) (unicode . 128) (iso-8859-1 . 128)) (192 (ascii) (unicode . 192) (iso-8859-1 . 192)) (255 (ascii) (unicode . 255) (iso-8859-1 . 255)) (256 (ascii) (unicode . 256) (iso-8859-1)) (945 (ascii) (unicode . 945) (iso-8859-1)) (20013 (ascii) (unicode . 20013) (iso-8859-1)) (128512 (ascii) (unicode . 128512) (iso-8859-1))) :analysis (:total 30 :nil-count 11 :identity-count 19 :coverage-pct 63) :unicode-complete t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

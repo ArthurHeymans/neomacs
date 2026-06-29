@@ -28,10 +28,8 @@ fn oracle_prop_max_char_basic_value() {
   (unwind-protect
       (funcall 'neovm--test-analyze-max-char)
     (fmakunbound 'neovm--test-analyze-max-char)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (4194303 integer t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (4194303 integer t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -57,10 +55,8 @@ fn oracle_prop_max_char_unicode_argument() {
   (unwind-protect
       (funcall 'neovm--test-max-char-unicode)
     (fmakunbound 'neovm--test-max-char-unicode)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (4194303 1114111 4194303 t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (4194303 1114111 4194303 t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -99,10 +95,8 @@ fn oracle_prop_max_char_characterp_boundary() {
   (unwind-protect
       (funcall 'neovm--test-char-boundary)
     (fmakunbound 'neovm--test-char-boundary)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t nil nil nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t t nil nil nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -155,10 +149,8 @@ fn oracle_prop_max_char_loop_bounds() {
       (funcall 'neovm--test-boundary-analysis)
     (fmakunbound 'neovm--test-count-chars-in-range)
     (fmakunbound 'neovm--test-boundary-analysis)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (10 0 5 (t t t nil nil))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (10 0 5 (t t t nil nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -228,12 +220,10 @@ fn oracle_prop_max_char_unicode_range_classification() {
     (fmakunbound 'neovm--test-classify-char)
     (fmakunbound 'neovm--test-build-classification-table)
     (fmakunbound 'neovm--test-run-classification)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((0 . ascii) (65 . ascii) (122 . ascii) (127 . ascii) (128 . latin-supplement) (255 . latin-supplement) (256 . bmp) (65535 . bmp) (65536 . supplementary) (1114111 . supplementary) (4194303 . emacs-internal)) t not-a-char not-a-char)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((0 . ascii) (65 . ascii) (122 . ascii) (127 . ascii) (128 . latin-supplement) (255 . latin-supplement) (256 . bmp) (65535 . bmp) (65536 . supplementary) (1114111 . supplementary) (4194303 . emacs-internal)) t not-a-char not-a-char)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -272,10 +262,9 @@ fn oracle_prop_max_char_arithmetic_comparisons() {
   (unwind-protect
       (funcall 'neovm--test-max-char-math)
     (fmakunbound 'neovm--test-max-char-math)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (8388606 2097151 3080192 t 100 4194303 255 65535 255 63)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (8388606 2097151 3080192 t 100 4194303 255 65535 255 63)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -314,10 +303,8 @@ fn oracle_prop_max_char_char_table_integration() {
   (unwind-protect
       (funcall 'neovm--test-char-table-full-range)
     (fmakunbound 'neovm--test-char-table-full-range)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (ascii-range ascii-range latin-range latin-range default at-max-unicode default)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (ascii-range ascii-range latin-range latin-range default at-max-unicode default)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

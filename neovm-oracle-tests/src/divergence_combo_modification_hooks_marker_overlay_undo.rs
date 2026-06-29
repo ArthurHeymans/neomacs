@@ -14,6 +14,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_combine_after_change_marker_overlay_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-cac"))
@@ -61,7 +62,7 @@ fn combo_combine_after_change_marker_overlay_textprop_undo() {
                                 (get-text-property 16 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -69,6 +70,7 @@ fn combo_combine_after_change_marker_overlay_textprop_undo() {
 fn combo_inhibit_modification_hooks_marker_overlay_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-imh"))
@@ -113,7 +115,7 @@ fn combo_inhibit_modification_hooks_marker_overlay_textprop_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after-inhibit restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -121,6 +123,7 @@ fn combo_inhibit_modification_hooks_marker_overlay_textprop_undo() {
 fn combo_before_after_change_hooks_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-bac"))
@@ -172,7 +175,7 @@ fn combo_before_after_change_hooks_narrow_marker_overlay_undo() {
                                 (get-text-property 21 'sect))))
             (kill-buffer buf)
             (list after restored)))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -180,6 +183,7 @@ fn combo_before_after_change_hooks_narrow_marker_overlay_undo() {
 fn combo_combine_after_change_narrow_buflocal_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-cacn"))
@@ -232,7 +236,7 @@ fn combo_combine_after_change_narrow_buflocal_marker_overlay_undo() {
                                 (get-text-property 21 'sect))))
             (kill-buffer buf)
             (list after restored)))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -240,6 +244,7 @@ fn combo_combine_after_change_narrow_buflocal_marker_overlay_undo() {
 fn combo_inhibit_hooks_buffer_local_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-ihbl"))
@@ -291,6 +296,6 @@ fn combo_inhibit_hooks_buffer_local_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored)))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

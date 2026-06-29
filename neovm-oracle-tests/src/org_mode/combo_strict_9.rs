@@ -16,6 +16,9 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn strict_parent_chain_in_caption_title_tag() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-type-argument listp #(\"bold-title\" 0 10 (:parent (bold (:standard-properties [3 nil 4 14 16 1 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (headline (:standard-properties [1 1 37 92 92 0 (:title) first-section nil nil nil 39 90 1 #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 92 92 0 nil org-data nil nil nil 3 92 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #6)] :pre-blank 0 :raw-value \"*bold-title* Heading :*tag-bold*:\" :title (#3 #(\"Heading :*tag-bold*:\" 0 20 (:parent #6))) :level 1 :priority nil :tags nil :todo-keyword nil :todo-type nil :footnote-section-p nil :archivedp nil :commentedp nil) (section (:standard-properties [37 37 37 92 92 0 nil section nil nil nil 37 92 nil #<killed buffer> nil nil #6]) (table (:standard-properties [37 72 72 92 92 0 nil planning nil nil nil nil nil nil #<killed buffer> nil nil #7] :type org :tblfm nil :value nil :caption (((#(\"Table \" 0 6 (:parent #12)) (italic (:standard-properties [54 nil 55 69 70 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #12]) #(\"caption-italic\" 0 14 (:parent #13))) #(\".\" 0 1 (:parent #12)))))) (table-row (:standard-properties [72 72 73 81 82 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil #8] :type standard) (table-cell (:standard-properties [73 nil 74 75 77 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #9]) #(\"a\" 0 1 (:parent #10))) (table-cell (:standard-properties [77 nil 78 79 81 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #9]) #(\"b\" 0 1 (:parent #10)))) (table-row (:standard-properties [82 82 83 91 92 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil #8] :type standard) (table-cell (:standard-properties [83 nil 84 85 87 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #9]) #(\"1\" 0 1 (:parent #10))) (table-cell (:standard-properties [87 nil 88 89 91 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #9]) #(\"2\" 0 1 (:parent #10)))))))]) #(\"bold-title\" 0 10 (:parent #3))))))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -50,9 +53,7 @@ fn strict_parent_chain_in_caption_title_tag() {
                         (org-element-type (org-element-property :parent cap-italic))) r)
             (push (list :caption-italic-secondary (org-element-secondary-p cap-italic)) r)))
         (nreverse r))))))"##,
-        expect_test::expect![[
-            r#""ERR (wrong-type-argument listp #(\"bold-title\" 0 10 (:parent (bold (:standard-properties [3 nil 4 14 16 1 nil nil nil nil nil nil nil nil #<killed buffer> nil nil (headline (:standard-properties [1 1 37 92 92 0 (:title) first-section nil nil nil 39 90 1 #<killed buffer> nil nil (org-data (:standard-properties [1 1 1 92 92 0 nil org-data nil nil nil 3 92 nil #<killed buffer> nil nil nil] :pre-blank 0 :path nil :CATEGORY nil) #6)] :pre-blank 0 :raw-value \"*bold-title* Heading :*tag-bold*:\" :title (#3 #(\"Heading :*tag-bold*:\" 0 20 (:parent #6))) :level 1 :priority nil :tags nil :todo-keyword nil :todo-type nil :footnote-section-p nil :archivedp nil :commentedp nil) (section (:standard-properties [37 37 37 92 92 0 nil section nil nil nil 37 92 nil #<killed buffer> nil nil #6]) (table (:standard-properties [37 72 72 92 92 0 nil planning nil nil nil nil nil nil #<killed buffer> nil nil #7] :type org :tblfm nil :value nil :caption (((#(\"Table \" 0 6 (:parent #12)) (italic (:standard-properties [54 nil 55 69 70 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #12]) #(\"caption-italic\" 0 14 (:parent #13))) #(\".\" 0 1 (:parent #12)))))) (table-row (:standard-properties [72 72 73 81 82 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil #8] :type standard) (table-cell (:standard-properties [73 nil 74 75 77 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #9]) #(\"a\" 0 1 (:parent #10))) (table-cell (:standard-properties [77 nil 78 79 81 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #9]) #(\"b\" 0 1 (:parent #10)))) (table-row (:standard-properties [82 82 83 91 92 0 nil table-row nil nil nil nil nil nil #<killed buffer> nil nil #8] :type standard) (table-cell (:standard-properties [83 nil 84 85 87 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #9]) #(\"1\" 0 1 (:parent #10))) (table-cell (:standard-properties [87 nil 88 89 91 0 nil nil nil nil nil nil nil nil #<killed buffer> nil nil #9]) #(\"2\" 0 1 (:parent #10)))))))]) #(\"bold-title\" 0 10 (:parent #3))))))""#
-        ]],
+        expect,
     );
 }
 
@@ -63,6 +64,7 @@ fn strict_parent_chain_in_caption_title_tag() {
 #[test]
 fn strict_whitespace_only_content() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 31 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -95,7 +97,7 @@ fn strict_whitespace_only_content() {
               (push (list :first-section-is-whitespace
                           (string-match-p "\\`[ \t\n]*\\'" first-sec-contents)) r))))
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 31 25)""#]],
+        expect,
     );
 }
 
@@ -106,6 +108,7 @@ fn strict_whitespace_only_content() {
 #[test]
 fn strict_deeply_nested_markup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 19 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -126,7 +129,7 @@ fn strict_deeply_nested_markup() {
             (let ((lineage (org-element-lineage b3)))
               (push (list :b3-lineage (mapcar #'org-element-type lineage)) r))))
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 19 25)""#]],
+        expect,
     );
 }
 
@@ -137,6 +140,7 @@ fn strict_deeply_nested_markup() {
 #[test]
 fn strict_mixed_unicode_ascii_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 25 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -163,7 +167,7 @@ fn strict_mixed_unicode_ascii_parsing() {
           (push (list :interpreted-contains-greek (string-match-p "αβγ" interpreted)) r)
           (push (list :interpreted-contains-emoji (string-match-p "🎉" interpreted)) r))
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 25 25)""#]],
+        expect,
     );
 }
 
@@ -174,6 +178,7 @@ fn strict_mixed_unicode_ascii_parsing() {
 #[test]
 fn strict_element_property_completeness() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -217,7 +222,7 @@ fn strict_element_property_completeness() {
             (push (list :tbl-has-tblfm (org-element-property :tblfm tbl)) r)
             (push (list :tbl-has-type (org-element-property :type tbl)) r)))
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 25)""#]],
+        expect,
     );
 }
 
@@ -228,6 +233,7 @@ fn strict_element_property_completeness() {
 #[test]
 fn strict_duration_conversion_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 25 51)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -254,7 +260,7 @@ fn strict_duration_conversion_roundtrip() {
    ;; p flag
    (list :is-duration-p (org-duration-p "1:23"))
    (list :not-duration-p (org-duration-p "abc")))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 25 51)""#]],
+        expect,
     );
 }
 
@@ -265,6 +271,9 @@ fn strict_duration_conversion_roundtrip() {
 #[test]
 fn strict_time_string_seconds_2ft() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:to-seconds 1718461800.0) (:to-absolute 739052) (:one-day-diff 86400.0) (:org-2ft 0) (:four-hours-diff 14400.0))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -287,9 +296,7 @@ fn strict_time_string_seconds_2ft() {
      (let ((t1 (org-time-string-to-seconds "<2024-06-15 Sat 14:00>"))
            (t2 (org-time-string-to-seconds "<2024-06-15 Sat 10:00>")))
        (list :four-hours-diff (- t1 t2))))))"##,
-        expect_test::expect![[
-            r#""OK ((:to-seconds 1718461800.0) (:to-absolute 739052) (:one-day-diff 86400.0) (:org-2ft 0) (:four-hours-diff 14400.0))""#
-        ]],
+        expect,
     );
 }
 
@@ -300,6 +307,7 @@ fn strict_time_string_seconds_2ft() {
 #[test]
 fn strict_export_info_environment_completeness() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 27 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -328,7 +336,7 @@ fn strict_export_info_environment_completeness() {
         (push (list :date-is-string (stringp (plist-get info :date))) r)
         (push (list :language-is-string (stringp (plist-get info :language))) r)
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 27 25)""#]],
+        expect,
     );
 }
 
@@ -339,6 +347,9 @@ fn strict_export_info_environment_completeness() {
 #[test]
 fn strict_normalize_contents_more_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((paragraph nil \"First line.\n\" \"  More indented.\n\" \"    Even more.\n\" \"  Back to two.\") (paragraph nil \"Single line.\") (paragraph nil \"Line one.\n\n\nLine two.\n\nLine three.\") (paragraph nil (bold nil \"bold\") \" no indent\n   three spaces\n   three spaces\") (verse-block nil \"line 1\n line 2\n\nline 3\") (paragraph nil \"Start\n\" \"     Nested\n\" \"   End.\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -369,9 +380,7 @@ fn strict_normalize_contents_more_edges() {
       "   Start\n"
       "     Nested\n"
       "   End."))))"##,
-        expect_test::expect![[
-            r#""OK ((paragraph nil \"First line.\n\" \"  More indented.\n\" \"    Even more.\n\" \"  Back to two.\") (paragraph nil \"Single line.\") (paragraph nil \"Line one.\n\n\nLine two.\n\nLine three.\") (paragraph nil (bold nil \"bold\") \" no indent\n   three spaces\n   three spaces\") (verse-block nil \"line 1\n line 2\n\nline 3\") (paragraph nil \"Start\n\" \"     Nested\n\" \"   End.\"))""#
-        ]],
+        expect,
     );
 }
 
@@ -382,6 +391,7 @@ fn strict_normalize_contents_more_edges() {
 #[test]
 fn strict_user_defined_entities() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 23 64)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -406,7 +416,7 @@ fn strict_user_defined_entities() {
      ;; Greek letter entities
      (let ((greek '("Alpha" "Beta" "Gamma" "Delta" "alpha" "beta" "gamma" "delta")))
        (mapcar (lambda (name) (org-entity-get name)) greek))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 23 64)""#]],
+        expect,
     );
 }
 
@@ -417,6 +427,7 @@ fn strict_user_defined_entities() {
 #[test]
 fn strict_lineage_object_in_table_cell() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 24 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -442,7 +453,7 @@ fn strict_lineage_object_in_table_cell() {
         (when (car bolds)
           (push (list :bold-parent-type (org-element-type (org-element-property :parent (car bolds)))) r))
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 24 25)""#]],
+        expect,
     );
 }
 
@@ -453,6 +464,7 @@ fn strict_lineage_object_in_table_cell() {
 #[test]
 fn strict_interpret_reparse_header_with_all_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 47 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -501,6 +513,6 @@ fn strict_interpret_reparse_header_with_all_props() {
           (push (list :re-custom-id (cdr (assoc "CUSTOM_ID" props))) r)
           (push (list :re-effort (cdr (assoc "EFFORT" props))) r))
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 47 25)""#]],
+        expect,
     );
 }

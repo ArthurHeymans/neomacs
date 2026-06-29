@@ -13,6 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_fontlock_insert_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     // Insert into fontified buffer; markers/overlays track.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -41,7 +42,7 @@ fn combo_fontlock_insert_marker_overlay_undo() {
                                 (syntax-ppss 7))))
             (kill-buffer buf)
             (list after restored)))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -49,6 +50,7 @@ fn combo_fontlock_insert_marker_overlay_undo() {
 fn combo_fontlock_replace_keyword_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     // Replace keyword; font-lock must re-fontify.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -75,7 +77,7 @@ fn combo_fontlock_replace_keyword_marker_overlay_undo() {
                                 (overlay-start ov) (overlay-end ov))))
             (kill-buffer buf)
             (list after restored)))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -83,6 +85,7 @@ fn combo_fontlock_replace_keyword_marker_overlay_undo() {
 fn combo_fontlock_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     // Narrow, edit, undo; font-lock state must survive.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -110,7 +113,7 @@ fn combo_fontlock_narrow_marker_overlay_undo() {
                                 (overlay-start ov) (overlay-end ov))))
             (kill-buffer buf)
             (list after restored)))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -118,6 +121,7 @@ fn combo_fontlock_narrow_marker_overlay_undo() {
 fn combo_fontlock_buffer_local_major_mode_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     // Buffer-local major mode affects fontification.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -146,7 +150,7 @@ fn combo_fontlock_buffer_local_major_mode_marker_overlay() {
                                 (syntax-ppss 4))))
             (kill-buffer buf)
             (list after restored)))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -154,6 +158,7 @@ fn combo_fontlock_buffer_local_major_mode_marker_overlay() {
 fn combo_fontlock_delete_region_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     // Delete region in fontified buffer; undo restores.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -180,6 +185,6 @@ fn combo_fontlock_delete_region_marker_overlay_undo() {
                                 (syntax-ppss 15))))
             (kill-buffer buf)
             (list after restored)))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

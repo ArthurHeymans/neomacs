@@ -95,12 +95,10 @@ fn oracle_prop_frp_signals_as_closures() {
     (fmakunbound 'neovm--frp-sig-set)
     (fmakunbound 'neovm--frp-sig-watch)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (99 \"Carol\" ((counter 0 1) (counter 1 2) (name \"Alice\" \"Bob\") (counter 2 3) (name \"Bob\" \"Carol\")) 1)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (99 \"Carol\" ((counter 0 1) (counter 1 2) (name \"Alice\" \"Bob\") (counter 2 3) (name \"Bob\" \"Carol\")) 1)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -205,10 +203,8 @@ fn oracle_prop_frp_derived_signals() {
     (fmakunbound 'neovm--frp-d-derive)
     (makunbound 'neovm--frp-d-signals)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((5000 300 200) (10000 500 400) 20000 600 200)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((5000 300 200) (10000 500 400) 20000 600 200)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -317,12 +313,10 @@ fn oracle_prop_frp_signal_combinators() {
     (fmakunbound 'neovm--frp-sig-distinct)
     (fmakunbound 'neovm--frp-sig-window)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((2 4 6 8 10 12 14 16 18 20) (2 4 6 8 10) (1 3 6 10 15 21 28 36 45 55) (1 2 3 4 5 6 7 8 9 10) ((1 . click) (2 . move) (3 . click) (4 . move) (5 . click) (6 . move)) (1 2 3 1 4) ((1 2 3) (2 3 4) (3 4 5) (4 5 6) (5 6 7) (6 7 8) (7 8 9) (8 9 10)) (4 20 56 120 220) (1 2 0 1 2 0 1 2 0 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((2 4 6 8 10 12 14 16 18 20) (2 4 6 8 10) (1 3 6 10 15 21 28 36 45 55) (1 2 3 4 5 6 7 8 9 10) ((1 . click) (2 . move) (3 . click) (4 . move) (5 . click) (6 . move)) (1 2 3 1 4) ((1 2 3) (2 3 4) (3 4 5) (4 5 6) (5 6 7) (6 7 8) (7 8 9) (8 9 10)) (4 20 56 120 220) (1 2 0 1 2 0 1 2 0 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -419,12 +413,10 @@ fn oracle_prop_frp_event_streams() {
     (makunbound 'neovm--frp-es-channels)
     (makunbound 'neovm--frp-es-log)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (3 ((:value 5 :squared 25) (:value 10 :squared 100) (:value 7 :squared 49)) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (3 ((:value 5 :squared 25) (:value 10 :squared 100) (:value 7 :squared 49)) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -549,12 +541,10 @@ fn oracle_prop_frp_reactive_counter() {
     (makunbound 'neovm--frp-rc-history)
     (makunbound 'neovm--frp-rc-derived)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((13 150 0 (:total 163 :min 0 :max 150 :count 3 :avg 54)) 0 150 0 150 6 (init . 0) (reset . 0))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((13 150 0 (:total 163 :min 0 :max 150 :count 3 :avg 54)) 0 150 0 150 6 (init . 0) (reset . 0))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -708,5 +698,6 @@ fn oracle_prop_frp_reactive_form_validation() {
     (makunbound 'neovm--frp-fv-valid)
     (makunbound 'neovm--frp-fv-change-log)))
 "#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

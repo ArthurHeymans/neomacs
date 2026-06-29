@@ -120,12 +120,10 @@ fn oracle_prop_rope_ops_concat_and_properties() {
     (fmakunbound 'neovm--rop-to-string)
     (fmakunbound 'neovm--rop-depth)
     (fmakunbound 'neovm--rop-leaf-count)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (5 6 12 0 0 \"Hello World!\" \"Hello \" \"Hello\" \"Hello\" \"Hello\" \"abcd\" 1 2 3 3 4 4 t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (5 6 12 0 0 \"Hello World!\" \"Hello \" \"Hello\" \"Hello\" \"Hello\" \"abcd\" 1 2 3 3 4 4 t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -215,10 +213,9 @@ fn oracle_prop_rope_ops_index() {
     (fmakunbound 'neovm--rop-concat)
     (fmakunbound 'neovm--rop-char-at)
     (fmakunbound 'neovm--rop-to-string)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (97 99 100 101 102 104 105 106 nil nil \"abcdefghij\" t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (97 99 100 101 102 104 105 106 nil nil \"abcdefghij\" t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -319,12 +316,10 @@ fn oracle_prop_rope_ops_split() {
     (fmakunbound 'neovm--rop-concat)
     (fmakunbound 'neovm--rop-to-string)
     (fmakunbound 'neovm--rop-split)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Hello Beautiful World\" \"\" \"Hello Beautiful World\" \"Hello\" \" Beautiful World\" \"Hello Beau\" \"tiful World\" \"Hello Beautiful\" \" World\" \"Hello Beautiful World\" \"\" \"Hello Beautiful World\" \"\" t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Hello Beautiful World\" \"\" \"Hello Beautiful World\" \"Hello\" \" Beautiful World\" \"Hello Beau\" \"tiful World\" \"Hello Beautiful\" \" World\" \"Hello Beautiful World\" \"\" \"Hello Beautiful World\" \"\" t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -426,10 +421,9 @@ fn oracle_prop_rope_ops_rebalance() {
     (fmakunbound 'neovm--rop-leaves)
     (fmakunbound 'neovm--rop-from-leaves)
     (fmakunbound 'neovm--rop-rebalance)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"jihgfedcba\" 10 10 \"jihgfedcba\" 5 10 t t t t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (\"jihgfedcba\" 10 10 \"jihgfedcba\" 5 10 t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -525,12 +519,10 @@ fn oracle_prop_rope_ops_insert_at_position() {
     (fmakunbound 'neovm--rop-to-string)
     (fmakunbound 'neovm--rop-split)
     (fmakunbound 'neovm--rop-insert)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\">>> Hello World\" \"Hello World <<<\" \"Hello Beautiful World\" \"[Hello World\" \"[Hello World]\" \"[Hello... World]\" \"fresh\" 15 21 \"Hello World\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\">>> Hello World\" \"Hello World <<<\" \"Hello Beautiful World\" \"[Hello World\" \"[Hello World]\" \"[Hello... World]\" \"fresh\" 15 21 \"Hello World\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -640,7 +632,8 @@ fn oracle_prop_rope_ops_delete_range() {
     (fmakunbound 'neovm--rop-split)
     (fmakunbound 'neovm--rop-delete)
     (fmakunbound 'neovm--rop-replace)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -764,10 +757,8 @@ fn oracle_prop_rope_ops_find_and_replace() {
     (fmakunbound 'neovm--rop-find)
     (fmakunbound 'neovm--rop-replace-first)
     (fmakunbound 'neovm--rop-replace-all)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""ERR (wrong-number-of-arguments (closure (t) (a b) (cond ((null a) b) ((null b) a) (t (list 'node (+ (funcall 'neovm--rop-weight a) (funcall 'neovm--rop-weight b)) a b)))) 1)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-number-of-arguments (closure (t) (a b) (cond ((null a) b) ((null b) a) (t (list 'node (+ (funcall 'neovm--rop-weight a) (funcall 'neovm--rop-weight b)) a b)))) 1)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

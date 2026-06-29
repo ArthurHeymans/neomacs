@@ -109,12 +109,10 @@ fn oracle_prop_graph_sp_dijkstra() {
     (fmakunbound 'neovm--dj-add-edge)
     (fmakunbound 'neovm--dj-run)
     (fmakunbound 'neovm--dj-path)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((A . 0) (B . 1) (C . 4) (D . 3) (E . 2)) (A B D) (A B E) 3 2)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((A . 0) (B . 1) (C . 4) (D . 3) (E . 2)) (A B D) (A B E) 3 2)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -173,12 +171,10 @@ fn oracle_prop_graph_sp_bfs_unweighted() {
               ;; Path length = distance + 1 (includes start)
               (= (length (funcall reconstruct 10))
                  (1+ (gethash 10 dist))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 . 0) (2 . 1) (3 . 1) (4 . 2) (5 . 2) (6 . 2) (7 . 3) (8 . 3) (9 . 4) (10 . 4)) (1 3 6 8 9) (1 3 6 8 10) 4 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 . 0) (2 . 1) (3 . 1) (4 . 2) (5 . 2) (6 . 2) (7 . 3) (8 . 3) (9 . 4) (10 . 4)) (1 3 6 8 9) (1 3 6 8 10) 4 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -258,10 +254,9 @@ fn oracle_prop_graph_sp_bellman_ford() {
               neg2))))
     (fmakunbound 'neovm--bf-run)
     (fmakunbound 'neovm--bf-path)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil ((A . 0) (B . 4) (C . 2) (D . 7) (E . 4)) (A C E) t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (nil ((A . 0) (B . 4) (C . 2) (D . 7) (E . 4)) (A C E) t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -381,12 +376,10 @@ fn oracle_prop_graph_sp_floyd_warshall() {
     (fmakunbound 'neovm--fw-run)
     (fmakunbound 'neovm--fw-path)
     (makunbound 'neovm--fw-inf)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((0 0 0) (0 1 3) (0 2 6) (0 3 4) (0 4 10) (1 0 3) (1 1 0) (1 2 3) (1 3 1) (1 4 7) (2 0 7) (2 1 4) (2 2 0) (2 3 5) (2 4 11) (3 0 2) (3 1 5) (3 2 2) (3 3 0) (3 4 12) (4 0 3) (4 1 6) (4 2 3) (4 3 1) (4 4 0)) (0 1 4) 10 (4 3 2) 3 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((0 0 0) (0 1 3) (0 2 6) (0 3 4) (0 4 10) (1 0 3) (1 1 0) (1 2 3) (1 3 1) (1 4 7) (2 0 7) (2 1 4) (2 2 0) (2 3 5) (2 4 11) (3 0 2) (3 1 5) (3 2 2) (3 3 0) (3 4 12) (4 0 3) (4 1 6) (4 2 3) (4 3 1) (4 4 0)) (0 1 4) 10 (4 3 2) 3 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -494,12 +487,10 @@ fn oracle_prop_graph_sp_path_reconstruction() {
     (fmakunbound 'neovm--pr-add)
     (fmakunbound 'neovm--pr-dijkstra)
     (fmakunbound 'neovm--pr-path)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((A . 0) (B . 1) (C . 3) (D . 4) (E . 6) (F . 6) (G . 9) (H . 10)) (A B C D F H) 10 (A B C D F G) 9 (A B C D F) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((A . 0) (B . 1) (C . 3) (D . 4) (E . 6) (F . 6) (G . 9) (H . 10)) (A B C D F H) 10 (A B C D F G) 9 (A B C D F) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -582,7 +573,8 @@ fn oracle_prop_graph_sp_cycle_detection() {
             (length (cadr r3)))))
     (fmakunbound 'neovm--cd-detect)
     (fmakunbound 'neovm--cd-visit)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (nil t t 2)""#]]);
+    let expect = expect_test::expect![[r#""OK (nil t t 2)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -659,8 +651,6 @@ fn oracle_prop_graph_sp_dijkstra_disconnected() {
               (= (gethash 'D dist) 999999)))))
     (fmakunbound 'neovm--dd-add)
     (fmakunbound 'neovm--dd-dijkstra)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (((A . 0) (B . 2) (C . 5)) (D E F) 0 2 5 t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (((A . 0) (B . 2) (C . 5)) (D E F) 0 2 5 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

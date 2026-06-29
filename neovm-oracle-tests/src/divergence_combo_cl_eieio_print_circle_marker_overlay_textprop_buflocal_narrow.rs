@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_shared_object_identity_print() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 19 26)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass linked-node ()
@@ -70,7 +71,7 @@ fn combo_eieio_shared_object_identity_print() {
                 (buffer-string)
                 n1-obj n2-obj n3-obj)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 19 26)""#]],
+        expect,
     );
 }
 
@@ -78,6 +79,7 @@ fn combo_eieio_shared_object_identity_print() {
 fn combo_eieio_shared_list_object_print() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 12 26)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ref-holder ()
@@ -133,7 +135,7 @@ fn combo_eieio_shared_list_object_print() {
                 (buffer-string)
                 holders)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 12 26)""#]],
+        expect,
     );
 }
 
@@ -141,6 +143,7 @@ fn combo_eieio_shared_list_object_print() {
 fn combo_eieio_print_gensym_object_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass keyed-item ()
@@ -204,7 +207,7 @@ fn combo_eieio_print_gensym_object_keys() {
                 (buffer-string)
                 items)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -212,6 +215,7 @@ fn combo_eieio_print_gensym_object_keys() {
 fn combo_eieio_tree_structure_print_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 11 31)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tree-node ()
@@ -291,7 +295,7 @@ fn combo_eieio_tree_structure_print_buffer() {
                 (buffer-string)
                 root-node)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 11 31)""#]],
+        expect,
     );
 }
 
@@ -299,6 +303,7 @@ fn combo_eieio_tree_structure_print_buffer() {
 fn combo_eieio_doubly_linked_with_print() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 21 24)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass dlink ()
@@ -363,6 +368,6 @@ fn combo_eieio_doubly_linked_with_print() {
                 (buffer-string)
                 dlist)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 21 24)""#]],
+        expect,
     );
 }

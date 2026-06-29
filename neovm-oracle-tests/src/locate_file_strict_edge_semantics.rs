@@ -67,10 +67,8 @@ fn oracle_locate_file_suffix_path_predicate_and_arity_edges() {
     (delete-directory root t)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"d1/plain\" \"d2/tool.elc\" \"d2/tool.txt\" \"d1/plain\" nil \"d1/plain\" nil nil \"d1/adir\" (wrong-number-of-arguments ((2 . 4) 0)) (wrong-type-argument (stringp 42)) nil (wrong-type-argument (stringp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"d1/plain\" \"d2/tool.elc\" \"d2/tool.txt\" \"d1/plain\" nil \"d1/plain\" nil nil \"d1/adir\" (wrong-number-of-arguments ((2 . 4) 0)) (wrong-type-argument (stringp 42)) nil (wrong-type-argument (stringp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

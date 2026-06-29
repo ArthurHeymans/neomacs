@@ -29,12 +29,10 @@ fn oracle_prop_help_split_and_add_fundoc_usage() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"(neomacs-oracle-help-fn ARG &optional B)\" . \"Doc body.\") \"(neomacs-oracle-help-fn ARG &optional B)\" \"Doc body.\" nil (nil . \"No usage here\") \"Doc.\n\n(fn ARG &optional OPT &rest REST)\" \"Doc.\n\n(fn OLD)\" \"\n\n(fn X Y)\" (error \"Unrecognized usage format\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"(neomacs-oracle-help-fn ARG &optional B)\" . \"Doc body.\") \"(neomacs-oracle-help-fn ARG &optional B)\" \"Doc body.\" nil (nil . \"No usage here\") \"Doc.\n\n(fn ARG &optional OPT &rest REST)\" \"Doc.\n\n(fn OLD)\" \"\n\n(fn X Y)\" (error \"Unrecognized usage format\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -64,12 +62,10 @@ fn oracle_prop_help_function_arglist_symbols_functions_and_autoloads() {
    (help-function-arglist 'apply t)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((alpha &optional beta &rest gamma) (alpha &optional beta &rest gamma) (x &optional y) \"[Arg list not available until function definition is loaded.]\" (arg1) (list) (arg1 &rest rest) (function &rest arguments))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((alpha &optional beta &rest gamma) (alpha &optional beta &rest gamma) (x &optional y) \"[Arg list not available until function definition is loaded.]\" (arg1) (list) (arg1 &rest rest) (function &rest arguments))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -98,12 +94,10 @@ fn oracle_prop_documentation_property_eval_raw_and_substitution() {
      (documentation 'neomacs-oracle-doc nil))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Doc for \\\\[neomacs-oracle-doc-command] and `quoted'.\" #(\"Doc for C-c d and `quoted'.\" 8 13 (font-lock-face help-key-binding face help-key-binding)) \"Dynamic doc\" \"Dynamic doc\" \"Doc for \\\\[neomacs-oracle-doc-command] and `quoted'.\" #(\"Doc for C-c d and `quoted'.\" 8 13 (font-lock-face help-key-binding face help-key-binding)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Doc for \\\\[neomacs-oracle-doc-command] and `quoted'.\" #(\"Doc for C-c d and `quoted'.\" 8 13 (font-lock-face help-key-binding face help-key-binding)) \"Dynamic doc\" \"Dynamic doc\" \"Doc for \\\\[neomacs-oracle-doc-command] and `quoted'.\" #(\"Doc for C-c d and `quoted'.\" 8 13 (font-lock-face help-key-binding face help-key-binding)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -145,12 +139,10 @@ fn oracle_prop_documentation_property_value_evaluation_edges() {
                            (cons 'neomacs-oracle-doc-key nil) t)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Static doc\" \"Dynamic doc\" [\"vector-value\"] nil (void-variable (neomacs-oracle-doc-unbound-value)) (void-function (neomacs-oracle-doc-missing-fn)) \"Non-symbol prop doc\" nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Static doc\" \"Dynamic doc\" [\"vector-value\"] nil (void-variable (neomacs-oracle-doc-unbound-value)) (void-function (neomacs-oracle-doc-missing-fn)) \"Non-symbol prop doc\" nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -190,10 +182,9 @@ fn oracle_prop_documentation_property_variable_alias_fallback_edges() {
       (makunbound sym))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"Base variable doc\" nil \"Direct alias doc\" nil)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (\"Base variable doc\" nil \"Direct alias doc\" nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -221,10 +212,8 @@ fn oracle_prop_substitute_command_keys_keymap_quote_and_faces() {
          (eq plain (substitute-command-keys plain t)))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Run C-c x, missing M-x neomacs-oracle-missing-command, key `C-c x', quote `a' and =M-x literal.\" #(\"`C-c x' C-c x\" 8 13 (font-lock-face help-key-binding face help-key-binding)) nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Run C-c x, missing M-x neomacs-oracle-missing-command, key `C-c x', quote `a' and =M-x literal.\" #(\"`C-c x' C-c x\" 8 13 (font-lock-face help-key-binding face help-key-binding)) nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -8,6 +8,8 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx23_encode_region_utf16_vs_string_consistency() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((0 99 0 97 0 102 0 233) (0 99 0 97 0 102 0 4194281))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "café"))
@@ -17,13 +19,14 @@ fn div_cx23_encode_region_utf16_vs_string_consistency() {
           (encode-coding-region (point-min) (point-max) 'utf-16be)
           (append (buffer-string) nil))))
 "##,
-        expect_test::expect![[r#""OK ((0 99 0 97 0 102 0 233) (0 99 0 97 0 102 0 4194281))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_process_exit_via_sigterm() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (signal 15)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-process :name "neo-cx23-st" :command '("sleep" "30"))))
@@ -32,13 +35,14 @@ fn div_cx23_process_exit_via_sigterm() {
   (accept-process-output p 1)
   (list (process-status p) (process-exit-status p)))
 "##,
-        expect_test::expect![[r#""OK (signal 15)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_front_nonsticky_text_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (bold nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -51,25 +55,27 @@ fn div_cx23_front_nonsticky_text_property() {
         (get-text-property 5 'face)
         (get-text-property 6 'face)))
 "##,
-        expect_test::expect![[r#""OK (bold nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_cyrillic_case_fold_replace_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"XXXX test\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((case-fold-search t))
   (replace-regexp-in-string "[фг]" "X" "ФГфг test"))
 "##,
-        expect_test::expect![[r#""OK \"XXXX test\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_set_multibyte_3_raw_bytes_ascii() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 6 4194176 4194177 65 66 4194248)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -79,52 +85,57 @@ fn div_cx23_set_multibyte_3_raw_bytes_ascii() {
   (list (length (buffer-string)) (point-max)
         (char-after 1) (char-after 2) (char-after 3) (char-after 4) (char-after 5)))
 "##,
-        expect_test::expect![[r#""OK (5 6 4194176 4194177 65 66 4194248)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_split_string_trim_arg() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument sequencep t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (split-string "  a, b ,c  " "," t)
       (split-string "x..y..z" "\\.+" nil t)
       (split-string "  trim me  " "\\s-+" nil t))
 "##,
-        expect_test::expect![[r#""ERR (wrong-type-argument sequencep t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_string_trim_with_regex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"hello world\" \"abc\" \"abc\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-trim "xxxhello worldxxx" "x+" "x+")
       (string-trim-left "000abc" "0+")
       (string-trim-right "abc999" "[0-9]+"))
 "##,
-        expect_test::expect![[r#""OK (\"hello world\" \"abc\" \"abc\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_assoc_delete_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (((\"b\" . 2) (\"c\" . 4) (\"b\" . 5)) ((a . 1) (a . 3)))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((al '(("a" . 1) ("b" . 2) ("a" . 3) ("c" . 4) ("b" . 5))))
   (list (assoc-delete-all "a" al)
         (assq-delete-all 'b '((a . 1) (b . 2) (a . 3)))))
 "##,
-        expect_test::expect![[r#""OK (((\"b\" . 2) (\"c\" . 4) (\"b\" . 5)) ((a . 1) (a . 3)))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_format_spec_make_expand() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (errored . void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -133,13 +144,16 @@ fn div_cx23_format_spec_make_expand() {
             (format-spec "%b-%a" spec)))
   (error (cons 'errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (errored . void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_seq_partition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (((1 2 3) (4 5 6) (7)) ([a b] [c d] [e]) (\"ab\" \"cd\" \"ef\" \"g\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'seq)
@@ -147,15 +161,14 @@ fn div_cx23_seq_partition() {
         (seq-partition [a b c d e] 2)
         (seq-partition "abcdefg" 2)))
 "##,
-        expect_test::expect![[
-            r#""OK (((1 2 3) (4 5 6) (7)) ([a b] [c d] [e]) (\"ab\" \"cd\" \"ef\" \"g\"))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_map_pairs_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:not-available)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -165,13 +178,15 @@ fn div_cx23_map_pairs_basic() {
   (void-function (list :not-available))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:not-available)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_encode_region_big5_vs_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((164 164 164 229) (4194212 4194212 4194212 4194277))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "中文"))
@@ -181,13 +196,14 @@ fn div_cx23_encode_region_big5_vs_string() {
           (encode-coding-region (point-min) (point-max) 'big5)
           (append (buffer-string) nil))))
 "##,
-        expect_test::expect![[r#""OK ((164 164 164 229) (4194212 4194212 4194212 4194277))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_process_exit_sigint() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (signal 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-process :name "neo-cx23-si" :command '("sleep" "30"))))
@@ -196,28 +212,32 @@ fn div_cx23_process_exit_sigint() {
   (accept-process-output p 1)
   (list (process-status p) (process-exit-status p)))
 "##,
-        expect_test::expect![[r#""OK (signal 2)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_error_predicate_across_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (wrong-type-argument wrong-type-argument wrong-type-argument)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (aref "ab" t) (wrong-type-argument (car e)) (error :other))
       (condition-case e (aset "ab" t 65) (wrong-type-argument (car e)) (error :other))
       (condition-case e (substring "ab" t) (wrong-type-argument (car e)) (error :other)))
 "##,
-        expect_test::expect![[
-            r#""OK (wrong-type-argument wrong-type-argument wrong-type-argument)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_decode_encode_latin1_roundtrip_with_charset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((99 97 102 233) (99 97 102 233) t (ascii ascii ascii unicode-bmp))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s "café")
@@ -227,15 +247,14 @@ fn div_cx23_decode_encode_latin1_roundtrip_with_charset() {
         (equal s dec)
         (mapcar #'char-charset (append dec nil))))
 "##,
-        expect_test::expect![[
-            r#""OK ((99 97 102 233) (99 97 102 233) t (ascii ascii ascii unicode-bmp))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_char_fold_exclude_include() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -245,13 +264,14 @@ fn div_cx23_char_fold_exclude_include() {
   (void-variable (list :not-available))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored error)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_window_resize_no_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (errored . error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -262,13 +282,14 @@ fn div_cx23_window_resize_no_error() {
         (list orig-h new-h (window-total-height))))
   (error (cons 'errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (errored . error)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_cl_struct_slot_value_by_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (10 20 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -278,13 +299,14 @@ fn div_cx23_cl_struct_slot_value_by_name() {
           (cl-struct-slot-value 'neo-cx23-point 'y p)
           (cl-struct-slot-offset 'neo-cx23-point 'x))))
 "##,
-        expect_test::expect![[r#""OK (10 20 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_undo_limit_boundary_behavior() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (4 \"\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -297,13 +319,14 @@ fn div_cx23_undo_limit_boundary_behavior() {
       (undo)
       (list entries (buffer-string) (> (length buffer-undo-list) 0)))))
 "##,
-        expect_test::expect![[r#""OK (4 \"\" t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx23_process_send_string_then_receive_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"c82e742b82df662d1b8e8784c41f78ed\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (received)
@@ -316,6 +339,6 @@ fn div_cx23_process_send_string_then_receive_hash() {
     (accept-process-output p 1)
     (secure-hash 'md5 (apply #'concat (nreverse received)))))
 "##,
-        expect_test::expect![[r#""OK \"c82e742b82df662d1b8e8784c41f78ed\"""#]],
+        expect,
     );
 }

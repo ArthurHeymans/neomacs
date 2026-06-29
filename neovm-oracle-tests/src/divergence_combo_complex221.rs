@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx221_align_region_columns_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"a\t= 1\nbb\t= 22\nccc\t= 333\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -17,7 +18,7 @@ fn div_cx221_align_region_columns_basic() {
       (buffer-string))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK \"a\t= 1\nbb\t= 22\nccc\t= 333\n\"""#]],
+        expect,
     );
 }
 
@@ -56,6 +57,7 @@ fn div_cx221_comment_or_uncomment_region_toggle() {
 #[test]
 fn div_cx221_sort_lines_numeric_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"1\n2\n3\n10\n20\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -63,13 +65,14 @@ fn div_cx221_sort_lines_numeric_basic() {
   (sort-numeric-fields 1 (point-min) (point-max))
   (buffer-string))
 "##,
-        expect_test::expect![[r#""OK \"1\n2\n3\n10\n20\n\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx221_sort_lines_alpha() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"apple\nbanana\ncherry\ndate\nelderberry\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -77,13 +80,14 @@ fn div_cx221_sort_lines_alpha() {
   (sort-lines nil (point-min) (point-max))
   (buffer-string))
 "##,
-        expect_test::expect![[r#""OK \"apple\nbanana\ncherry\ndate\nelderberry\n\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx221_sort_fields_by_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"b 1 y\nc 2 z\na 3 x\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -93,13 +97,14 @@ fn div_cx221_sort_fields_by_column() {
       (buffer-string))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK \"b 1 y\nc 2 z\na 3 x\n\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx221_sort_columns_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"bravo charlie delta\nzebra alpha mike\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -109,13 +114,14 @@ fn div_cx221_sort_columns_basic() {
       (buffer-string))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK \"bravo charlie delta\nzebra alpha mike\n\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx221_delete_duplicate_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"alpha\nbeta\ngamma\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -125,7 +131,7 @@ fn div_cx221_delete_duplicate_lines() {
       (buffer-string))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK \"alpha\nbeta\ngamma\n\"""#]],
+        expect,
     );
 }
 
@@ -147,6 +153,7 @@ fn div_cx221_comment_box_wrap_text() {
 #[test]
 fn div_cx221_align_sort_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -171,6 +178,6 @@ fn div_cx221_align_sort_with_marker_overlay_undo_narrow_mega() {
                 (text-properties-at 1)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored error)""#]],
+        expect,
     );
 }

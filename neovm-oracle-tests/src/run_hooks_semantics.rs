@@ -12,10 +12,8 @@ use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
 fn oracle_run_hooks_no_args_returns_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(run-hooks)",
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect("(run-hooks)", expect);
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
@@ -23,11 +21,12 @@ fn oracle_run_hooks_no_args_returns_nil() {
 fn oracle_run_hooks_nil_hook_variable_no_op() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (defvar neovm--test-nil-hook nil)
   (run-hooks 'neovm--test-nil-hook))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
     assert_ok_eq("nil", &oracle, &neovm);
 }
@@ -36,6 +35,7 @@ fn oracle_run_hooks_nil_hook_variable_no_op() {
 fn oracle_run_hooks_calls_function_value_hook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK 1""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (defvar neovm--test-fn-hook nil)
@@ -44,7 +44,7 @@ fn oracle_run_hooks_calls_function_value_hook() {
         (lambda () (setq neovm--test-hook-called (1+ neovm--test-hook-called))))
   (run-hooks 'neovm--test-fn-hook)
   neovm--test-hook-called)"#,
-        expect_test::expect![[r#""OK 1""#]],
+        expect,
     );
     assert_ok_eq("1", &oracle, &neovm);
 }
@@ -53,6 +53,7 @@ fn oracle_run_hooks_calls_function_value_hook() {
 fn oracle_run_hooks_calls_list_of_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (42 99)""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (defvar neovm--test-list-hook nil)
@@ -64,7 +65,7 @@ fn oracle_run_hooks_calls_list_of_functions() {
          (lambda () (setq neovm--test-count2 99))))
   (run-hooks 'neovm--test-list-hook)
   (list neovm--test-count1 neovm--test-count2))"#,
-        expect_test::expect![[r#""OK (42 99)""#]],
+        expect,
     );
     assert_ok_eq("(42 99)", &oracle, &neovm);
 }
@@ -73,6 +74,7 @@ fn oracle_run_hooks_calls_list_of_functions() {
 fn oracle_run_hooks_multiple_hooks_in_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (a b)""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (defvar neovm--test-multi-a nil)
@@ -84,7 +86,7 @@ fn oracle_run_hooks_multiple_hooks_in_order() {
         (lambda () (setq neovm--test-order (cons 'b neovm--test-order))))
   (run-hooks 'neovm--test-multi-a 'neovm--test-multi-b)
   (nreverse neovm--test-order))"#,
-        expect_test::expect![[r#""OK (a b)""#]],
+        expect,
     );
     assert_ok_eq("(a b)", &oracle, &neovm);
 }
@@ -93,12 +95,13 @@ fn oracle_run_hooks_multiple_hooks_in_order() {
 fn oracle_run_hooks_returns_nil_even_when_hook_returns_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (defvar neovm--test-ret-hook
     (lambda () 'some-return-value))
   (run-hooks 'neovm--test-ret-hook))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
     assert_ok_eq("nil", &oracle, &neovm);
 }
@@ -107,9 +110,7 @@ fn oracle_run_hooks_returns_nil_even_when_hook_returns_value() {
 fn oracle_run_hooks_symbolp_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(run-hooks 42)",
-        expect_test::expect![[r#""ERR (wrong-type-argument symbolp 42)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument symbolp 42)""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect("(run-hooks 42)", expect);
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }

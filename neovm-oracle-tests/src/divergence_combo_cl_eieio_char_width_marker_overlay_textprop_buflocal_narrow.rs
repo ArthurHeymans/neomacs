@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_char_width_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass width-snap ()
@@ -57,7 +58,7 @@ fn combo_eieio_char_width_basic() {
                 (overlay-start ov) (overlay-end ov)
                 tab-width))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -65,6 +66,7 @@ fn combo_eieio_char_width_basic() {
 fn combo_eieio_string_width_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass str-width-snap ()
@@ -117,7 +119,7 @@ fn combo_eieio_string_width_edit() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -125,6 +127,7 @@ fn combo_eieio_string_width_edit() {
 fn combo_eieio_char_width_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass narrow-width-snap ()
@@ -178,7 +181,7 @@ fn combo_eieio_char_width_narrow() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -186,6 +189,7 @@ fn combo_eieio_char_width_narrow() {
 fn combo_eieio_char_width_overlay_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass display-width-snap ()
@@ -246,7 +250,7 @@ fn combo_eieio_char_width_overlay_display() {
                 (overlay-start ov) (overlay-end ov)
                 (overlay-get ov 'display)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -254,6 +258,7 @@ fn combo_eieio_char_width_overlay_display() {
 fn combo_eieio_char_width_undo_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass width-undo-snap ()
@@ -310,6 +315,6 @@ fn combo_eieio_char_width_undo_restore() {
               (overlay-start ov) (overlay-end ov)
               tab-width)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

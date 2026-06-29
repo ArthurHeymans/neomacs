@@ -44,10 +44,8 @@ fn oracle_prop_string_comparison_equal_variants() {
   (string= (make-string 1000 ?a) (make-string 1000 ?a))
   ;; Very long differing strings
   (string= (make-string 1000 ?a) (make-string 1000 ?b)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil t nil nil t nil t t t nil t t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil t nil nil t nil t t t nil t t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -71,12 +69,10 @@ fn oracle_prop_string_equal_ignore_case_semantics() {
   (condition-case err
       (string-equal-ignore-case "abc" 'abc)
     (error (list (car err) (cadr err)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t nil t t t t (wrong-type-argument stringp) (wrong-type-argument stringp))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t nil t t t t (wrong-type-argument stringp) (wrong-type-argument stringp))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -111,10 +107,8 @@ fn oracle_prop_string_comparison_lessp_ordering() {
   (string< 'abc 'abd)
   ;; Mixed symbol and string
   (string< 'abc "abd"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil nil t nil t nil t nil t nil t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil nil t nil t nil t nil t nil t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -146,10 +140,8 @@ fn oracle_prop_string_comparison_greaterp_ordering() {
           (string> a b)))
   ;; Symbols
   (string> 'zebra 'alpha))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil nil t nil t nil t (t nil nil) t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil nil t nil t nil t (t nil nil) t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -171,12 +163,10 @@ fn oracle_string_greaterp_symbol_and_error_contract() {
  (condition-case e
      (string-greaterp "a")
    (error (list (car e) (cadr e)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t nil nil t nil (wrong-type-argument stringp) (wrong-number-of-arguments (2 . 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t nil nil t nil (wrong-type-argument stringp) (wrong-number-of-arguments (2 . 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -214,10 +204,8 @@ fn oracle_prop_string_comparison_compare_strings_all_params() {
   (compare-strings "hello" nil 5 "hello" nil 5)
   ;; Case-insensitive with mixed ASCII
   (compare-strings "FoO bAr" nil nil "foo bar" nil nil t))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t -3 3 t t t t t -1 -4 -3 t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t -3 3 t t t t t -1 -4 -3 t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -250,10 +238,8 @@ fn oracle_prop_string_comparison_version_lessp() {
   ;; Real-world versions
   (string-version-lessp "emacs-27.1" "emacs-28.2")
   (string-version-lessp "v2.0.0" "v10.0.0"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t nil t nil t nil nil t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t nil t nil t nil nil t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -293,10 +279,8 @@ fn oracle_prop_string_comparison_prefix_suffix_ignore_case() {
   ;; Case insensitive
   (string-suffix-p "LLO" "hello" t)
   (string-suffix-p ".TXT" "readme.txt" t))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil t t nil nil t t t nil t t nil nil t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil t t nil nil t t t nil t t nil nil t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -326,12 +310,10 @@ fn oracle_string_prefix_suffix_strict_edge_semantics() {
    (funcall capture '(string-prefix-p "x"))
    (funcall capture '(string-suffix-p "x" "x" nil 'extra))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil nil (wrong-type-argument stringp [\"a\" \"b\"]) (wrong-type-argument stringp [\"a\" \"b\"]) (wrong-type-argument sequencep 42) (wrong-type-argument sequencep 42) (wrong-type-argument stringp nil) (wrong-type-argument stringp nil) t t (wrong-number-of-arguments (2 . 3) 1) (wrong-number-of-arguments (2 . 3) 4))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil nil (wrong-type-argument stringp [\"a\" \"b\"]) (wrong-type-argument stringp [\"a\" \"b\"]) (wrong-type-argument sequencep 42) (wrong-type-argument sequencep 42) (wrong-type-argument stringp nil) (wrong-type-argument stringp nil) t t (wrong-number-of-arguments (2 . 3) 1) (wrong-number-of-arguments (2 . 3) 4))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -366,12 +348,10 @@ fn oracle_prop_string_comparison_mixed_case_locale() {
           (string< a c)))  ;; all should be t
   ;; Unicode strings ordering
   (string< "café" "caff"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t (\"apple\" \"Banana\" \"Cherry\" \"date\") (\"Alpha\" \"Beta\" \"DELTA\" \"gamma\") (5 t 1) (t t t) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t (\"apple\" \"Banana\" \"Cherry\" \"date\") (\"Alpha\" \"Beta\" \"DELTA\" \"gamma\") (5 t 1) (t t t) nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -399,10 +379,8 @@ fn oracle_prop_string_comparison_collate_functions() {
   ;; IGNORE-CASE parameter
   (string-collate-equalp "Hello" "hello" nil t)
   (string-collate-lessp "A" "b" nil t))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil nil t nil t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil nil t nil t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -420,12 +398,10 @@ fn oracle_prop_string_collate_argument_semantics() {
   (condition-case err
       (string-collate-equalp "a" "a" 'not-a-locale)
     (error (list (car err) (cadr err)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t (wrong-type-argument stringp) (wrong-type-argument stringp))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t (wrong-type-argument stringp) (wrong-type-argument stringp))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -441,10 +417,8 @@ fn oracle_prop_string_collate_invalid_locale_semantics() {
   (condition-case err
       (string-collate-equalp "a" "a" "neomacs-invalid-locale")
     (error (car err))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (error error)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (error error)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -485,10 +459,9 @@ fn oracle_prop_string_comparison_edge_cases() {
           (not (string> a b))
           (not (string= a b))
           (< (compare-strings a nil nil b nil nil) 0))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t nil t nil t t t t t (t t nil nil) (t t t t))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (t t t nil t nil t t t t t (t t nil nil) (t t t t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -520,10 +493,8 @@ fn oracle_prop_string_comparison_sort_predicates() {
    ;; Check stability: equal elements preserve relative order
    ;; (using case-insensitive compare where "Apple" == "apple" never occurs here)
    (sort (list "a" "b" "a" "c" "b") #'string<)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"Apple\" \"ELDERBERRY\" \"banana\" \"cherry\" \"date\" \"fig\") (\"Apple\" \"banana\" \"cherry\" \"date\" \"ELDERBERRY\" \"fig\") (\"fig\" \"date\" \"Apple\" \"banana\" \"cherry\" \"ELDERBERRY\") (\"v1.1\" \"v1.2\" \"v1.10\" \"v2.0\" \"v10.0\") (\"fig\" \"date\" \"cherry\" \"banana\" \"ELDERBERRY\" \"Apple\") (\"a\" \"a\" \"b\" \"b\" \"c\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"Apple\" \"ELDERBERRY\" \"banana\" \"cherry\" \"date\" \"fig\") (\"Apple\" \"banana\" \"cherry\" \"date\" \"ELDERBERRY\" \"fig\") (\"fig\" \"date\" \"Apple\" \"banana\" \"cherry\" \"ELDERBERRY\") (\"v1.1\" \"v1.2\" \"v1.10\" \"v2.0\" \"v10.0\") (\"fig\" \"date\" \"cherry\" \"banana\" \"ELDERBERRY\" \"Apple\") (\"a\" \"a\" \"b\" \"b\" \"c\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

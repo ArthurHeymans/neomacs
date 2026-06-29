@@ -27,10 +27,8 @@ fn oracle_plistp_matches_gnu_proper_even_length_contract() {
    (plistp circle)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t nil nil nil t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t nil nil nil t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -49,10 +47,8 @@ fn oracle_plist_get_tolerates_malformed_plists() {
          (plist-get x 'missing))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil nil nil (2 nil))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil (2 nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -75,12 +71,10 @@ fn oracle_plist_member_and_put_validate_malformed_tails() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-type-argument (plistp (a 1 b . bad-tail))) nil (wrong-type-argument (plistp (a 1 b . bad-tail))) (wrong-type-argument (plistp not-a-list)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-type-argument (plistp (a 1 b . bad-tail))) nil (wrong-type-argument (plistp (a 1 b . bad-tail))) (wrong-type-argument (plistp not-a-list)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -109,12 +103,10 @@ fn oracle_plist_member_matches_key_before_tail_validation() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil (b) (wrong-type-argument plistp (a 1 b)) nil (b . bad-tail) (wrong-type-argument plistp (a 1 b . bad-tail)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil (b) (wrong-type-argument plistp (a 1 b)) nil (b . bad-tail) (wrong-type-argument plistp (a 1 b . bad-tail)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -134,10 +126,9 @@ fn oracle_plist_put_preserves_tail_and_mutates_existing_pair() {
    (plist-member extended 'b)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t (a 1 b 22 c 3) (a 1 b 22 c 3) (c 3) (b 22 c 3))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (t t (a 1 b 22 c 3) (a 1 b 22 c 3) (c 3) (b 22 c 3))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -155,10 +146,8 @@ fn oracle_plist_predicate_argument_uses_call_result() {
    plist))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil 1 1 (\"name\" 9 \"NAME\" 2) (\"name\" 9 \"NAME\" 2) (\"name\" 9 \"NAME\" 2))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil 1 1 (\"name\" 9 \"NAME\" 2) (\"name\" 9 \"NAME\" 2) (\"name\" 9 \"NAME\" 2))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

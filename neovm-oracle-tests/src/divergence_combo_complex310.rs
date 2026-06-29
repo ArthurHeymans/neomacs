@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx310_string_replace_all_occurrences() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-length-argument 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-replace "o" "0" "hello world foo")
@@ -16,13 +17,16 @@ fn div_cx310_string_replace_all_occurrences() {
       (string-replace "a" "" "banana")
       (string-replace " " "-" "a b c d e"))
 "##,
-        expect_test::expect![[r#""ERR (wrong-length-argument 0)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx310_string_trim_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"hello\" \"hello\" \"hello\" \"hello\" \"hello\" \"hello\" \"hello\" \"hello\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-trim "   hello   ")
@@ -34,15 +38,16 @@ fn div_cx310_string_trim_variants() {
       (string-trim-left "-----hello" "-+")
       (string-trim-right "hello-----" "-+"))
 "##,
-        expect_test::expect![[
-            r#""OK (\"hello\" \"hello\" \"hello\" \"hello\" \"hello\" \"hello\" \"hello\" \"hello\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx310_split_string_with_trim_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"hello\" \"world\") (\"a\" \"b\" \"c\") (\"\" \"hello\" \"world\" \"\") (\"alpha\" \"beta\" \"gamma\") (\"a\" \"b\" \"c\") (\"\") (\"no delimiters here\") (\"alpha\" \"beta\" \"gamma\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (split-string "  hello  world  " "[ \t]+" t)
@@ -54,15 +59,16 @@ fn div_cx310_split_string_with_trim_variants() {
       (split-string "no delimiters here" ",")
       (split-string "alpha beta gamma"))
 "##,
-        expect_test::expect![[
-            r#""OK ((\"hello\" \"world\") (\"a\" \"b\" \"c\") (\"\" \"hello\" \"world\" \"\") (\"alpha\" \"beta\" \"gamma\") (\"a\" \"b\" \"c\") (\"\") (\"no delimiters here\") (\"alpha\" \"beta\" \"gamma\"))""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx310_string_pad_and_limit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"hello     \" \"hello-----\" \"hello\" \"hello\" \"hello\" \"hello\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -74,15 +80,16 @@ fn div_cx310_string_pad_and_limit() {
           (when (fboundp 'string-limit) (string-limit "hello world" 5)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (\"hello     \" \"hello-----\" \"hello\" \"hello\" \"hello\" \"hello\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx310_string_lines_and_join() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"line1\" \"line2\" \"line3\") 4 \"alpha,beta,gamma\" \"alpha -> beta -> gamma\" \"single\" \"\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -94,15 +101,14 @@ fn div_cx310_string_lines_and_join() {
           (string-join '()))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK ((\"line1\" \"line2\" \"line3\") 4 \"alpha,beta,gamma\" \"alpha -> beta -> gamma\" \"single\" \"\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx310_string_distance_levenshtein_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 2 0 0 1 1 3 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-distance "kitten" "sitting")
@@ -114,13 +120,14 @@ fn div_cx310_string_distance_levenshtein_matrix() {
       (string-distance "abc" "xyz")
       (string-distance "café" "cafe"))
 "##,
-        expect_test::expect![[r#""OK (3 2 0 0 1 1 3 1)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx310_string_version_lessp_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil t nil t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-version-lessp "file2.txt" "file10.txt")
@@ -132,13 +139,14 @@ fn div_cx310_string_version_lessp_matrix() {
       (string-version-lessp "v1.0.0" "v1.0.1")
       (string-version-lessp "v1.0.9" "v1.0.10"))
 "##,
-        expect_test::expect![[r#""OK (t nil t nil t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx310_string_prefix_suffix_predicates_full() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil t nil t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-prefix-p "hello" "hello world")
@@ -149,13 +157,14 @@ fn div_cx310_string_prefix_suffix_predicates_full() {
       (string-suffix-p "hello" "hello world")
       (string-suffix-p "WORLD" "hello world" t))
 "##,
-        expect_test::expect![[r#""OK (t nil t nil t nil t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx310_compare_strings_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t -3 -4 3 t 1 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (compare-strings "abc" nil nil "abc" nil nil)
@@ -167,13 +176,14 @@ fn div_cx310_compare_strings_edge_cases() {
       (compare-strings "abc" 0 3 "xabc" 1 4)
       (compare-strings "abc" 0 2 "abx" 0 2))
 "##,
-        expect_test::expect![[r#""OK (t -3 -4 3 t 1 t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx310_string_ops_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s1 "  hello world  ")
@@ -202,6 +212,6 @@ fn div_cx310_string_ops_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     )
 }

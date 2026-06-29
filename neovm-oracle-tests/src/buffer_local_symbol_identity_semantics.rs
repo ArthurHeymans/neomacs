@@ -37,10 +37,8 @@ fn oracle_make_local_variable_keeps_uninterned_symbol_identity() {
     (makunbound interned)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (nil t t t nil 3 4 3 4)""#],
-    );
+    let expect = expect_test::expect![r#""OK (nil t t t nil 3 4 3 4)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -78,12 +76,10 @@ fn oracle_buffer_local_value_uses_uninterned_symbol_identity() {
     (makunbound interned)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (uninterned-local-a interned-default uninterned-default interned-local-b (t nil) (nil t))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (uninterned-local-a interned-default uninterned-default interned-local-b (t nil) (nil t))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -122,10 +118,8 @@ fn oracle_make_variable_buffer_local_keeps_uninterned_symbol_identity() {
     (makunbound interned)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (uninterned-default interned-global-from-b uninterned-default uninterned-local-b interned-global-from-b interned-global-from-b (nil nil) (t nil))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (uninterned-default interned-global-from-b uninterned-default uninterned-local-b interned-global-from-b interned-global-from-b (nil nil) (t nil))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

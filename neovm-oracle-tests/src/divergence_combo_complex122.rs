@@ -8,32 +8,35 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx122_string_width_ascii() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 0 11)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-width "hello")
       (string-width "")
       (string-width "hello world"))
 "##,
-        expect_test::expect![[r#""OK (5 0 11)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx122_string_width_multibyte_2_byte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (4 5 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-width "café")
       (string-width "α β γ")
       (string-width "naïve"))
 "##,
-        expect_test::expect![[r#""OK (4 5 5)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx122_string_width_cjk_double_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (4 4 6 10)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-width "世界")
@@ -41,13 +44,16 @@ fn div_cx122_string_width_cjk_double_width() {
       (string-width "日本語")
       (string-width "hello 世界"))
 "##,
-        expect_test::expect![[r#""OK (4 4 6 10)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx122_char_width_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((97 1) (65 1) (48 1) (32 1) (45 1) (95 1) (945 1) (937 1) (224 1) (233 1) (252 1) (241 1) (223 1) (19990 2) (30028 2) (26085 2) (26412 2) (35486 2) (128512 2) (10 0) (9 8))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (c) (list c (char-width c)))
@@ -56,15 +62,14 @@ fn div_cx122_char_width_matrix() {
           ?世 ?界 ?日 ?本 ?語
           ?😀 ?\n ?\t))
 "##,
-        expect_test::expect![[
-            r#""OK ((97 1) (65 1) (48 1) (32 1) (45 1) (95 1) (945 1) (937 1) (224 1) (233 1) (252 1) (241 1) (223 1) (19990 2) (30028 2) (26085 2) (26412 2) (35486 2) (128512 2) (10 0) (9 8))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx122_truncate_string_to_width_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"hello\" \"hello world\" \"hello...\" \"llo\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (truncate-string-to-width "hello world" 5)
@@ -72,13 +77,14 @@ fn div_cx122_truncate_string_to_width_basic() {
       (truncate-string-to-width "hello world" 8 nil t "...")
       (truncate-string-to-width "hello world" 5 2 nil))
 "##,
-        expect_test::expect![[r#""OK (\"hello\" \"hello world\" \"hello...\" \"llo\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx122_truncate_string_with_multibyte_widths() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"hello\" \"hello\" \"hello世\" \"café 世\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (truncate-string-to-width "hello世界" 5)
@@ -86,13 +92,14 @@ fn div_cx122_truncate_string_with_multibyte_widths() {
       (truncate-string-to-width "hello世界" 7)
       (truncate-string-to-width "café 世界" 8))
 "##,
-        expect_test::expect![[r#""OK (\"hello\" \"hello\" \"hello世\" \"café 世\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx122_window_text_pixel_width_consistency() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function window-text-pixel-width)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
@@ -101,13 +108,14 @@ fn div_cx122_window_text_pixel_width_consistency() {
         (integerp (window-body-width win))
         (integerp (window-body-height win))))
 "##,
-        expect_test::expect![[r#""ERR (void-function window-text-pixel-width)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx122_current_column_with_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (4 5 9)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -121,13 +129,14 @@ fn div_cx122_current_column_with_multibyte() {
       (let ((c3 (current-column)))
         (list c1 c2 c3)))))
 "##,
-        expect_test::expect![[r#""OK (4 5 9)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx122_move_to_column_with_cjk() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 7 9 12)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -140,13 +149,14 @@ fn div_cx122_move_to_column_with_cjk() {
       (move-to-column 12)
       (list p1 p2 (point) (current-column)))))
 "##,
-        expect_test::expect![[r#""OK (3 7 9 12)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx122_indent_to_with_tabs_and_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"x         \" \"x\t\t  \" 10)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -162,13 +172,16 @@ fn div_cx122_indent_to_with_tabs_and_multibyte() {
       (let ((s2 (buffer-string)))
         (list s1 s2 (current-column))))))
 "##,
-        expect_test::expect![[r#""OK (\"x         \" \"x\t\t  \" 10)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx122_string_pixel_width_via_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"               hello|\" \"hello               |\" \"                世界|\" \"café 世界           |\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%20s|" "hello")
@@ -176,28 +189,28 @@ fn div_cx122_string_pixel_width_via_format() {
       (format "%20s|" "世界")
       (format "%-20s|" "café 世界"))
 "##,
-        expect_test::expect![[
-            r#""OK (\"               hello|\" \"hello               |\" \"                世界|\" \"café 世界           |\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx122_window_max_chars_per_line_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (list (integerp (window-max-chars-per-line))
         (> (window-max-chars-per-line) 0)))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx122_string_width_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -222,6 +235,6 @@ fn div_cx122_string_width_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1)))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }

@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_invisible_overlay_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass visibility-zone ()
@@ -60,7 +61,7 @@ fn combo_eieio_invisible_overlay_navigation() {
                 (buffer-string)
                 my-vzs))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -68,6 +69,7 @@ fn combo_eieio_invisible_overlay_navigation() {
 fn combo_eieio_invisible_multiple_layers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass hide-layer ()
@@ -117,7 +119,7 @@ fn combo_eieio_invisible_multiple_layers() {
                 (buffer-string)
                 my-layers))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -125,6 +127,7 @@ fn combo_eieio_invisible_multiple_layers() {
 fn combo_eieio_invisible_narrow_visible() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass narrow-vis ()
@@ -175,7 +178,7 @@ fn combo_eieio_invisible_narrow_visible() {
                 (buffer-string)
                 my-nvs))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -183,6 +186,7 @@ fn combo_eieio_invisible_narrow_visible() {
 fn combo_eieio_intangible_forward_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass skip-zone ()
@@ -229,7 +233,7 @@ fn combo_eieio_intangible_forward_char() {
                 (buffer-string)
                 my-sz))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -237,6 +241,7 @@ fn combo_eieio_intangible_forward_char() {
 fn combo_eieio_invisible_undo_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass invisible-snap ()
@@ -281,6 +286,6 @@ fn combo_eieio_invisible_undo_restore() {
                 (buffer-string)
                 my-snaps))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

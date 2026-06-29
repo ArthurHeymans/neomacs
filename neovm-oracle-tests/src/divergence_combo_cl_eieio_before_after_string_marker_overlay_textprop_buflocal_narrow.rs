@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_ov_before_after_string_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ba-snap ()
@@ -85,7 +86,7 @@ fn combo_eieio_ov_before_after_string_basic() {
               (overlay-start ov1) (overlay-end ov1)
               (overlay-start ov2) (overlay-end ov2))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -93,6 +94,7 @@ fn combo_eieio_ov_before_after_string_basic() {
 fn combo_eieio_ov_before_after_with_face_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ba-face-snap ()
@@ -165,7 +167,7 @@ fn combo_eieio_ov_before_after_with_face_props() {
               (overlay-start ov) (overlay-end ov)
               my-bf-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -173,6 +175,7 @@ fn combo_eieio_ov_before_after_with_face_props() {
 fn combo_eieio_ov_before_after_narrow_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ba-narrow-snap ()
@@ -238,7 +241,7 @@ fn combo_eieio_ov_before_after_narrow_interaction() {
               (overlay-start ov) (overlay-end ov)
               my-bn-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -246,6 +249,7 @@ fn combo_eieio_ov_before_after_narrow_interaction() {
 fn combo_eieio_ov_before_after_evaporate_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ba-evap-snap ()
@@ -310,7 +314,7 @@ fn combo_eieio_ov_before_after_evaporate_undo() {
               (if (overlay-live-p ov) (overlay-end ov) -1)
               my-evap-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]],
+        expect,
     );
 }
 
@@ -318,6 +322,7 @@ fn combo_eieio_ov_before_after_evaporate_undo() {
 fn combo_eieio_ov_before_after_multiple_overlays_stacked() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ba-stack-snap ()
@@ -404,6 +409,6 @@ fn combo_eieio_ov_before_after_multiple_overlays_stacked() {
               (overlay-start ov2) (overlay-end ov2)
               my-stack-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

@@ -40,12 +40,10 @@ fn oracle_prop_define_derived_mode_metadata_and_hooks() {
                             (documentation 'neomacs-oracle-child-mode))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (neomacs-oracle-child-mode \"OracleChild\" (child-after child-hook base-hook child-body base-body) neomacs-oracle-group neomacs-oracle-base-mode neomacs-oracle-base-mode neomacs-oracle-base-mode 128)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (neomacs-oracle-child-mode \"OracleChild\" (child-after child-hook base-hook child-body base-body) neomacs-oracle-group neomacs-oracle-base-mode neomacs-oracle-base-mode neomacs-oracle-base-mode 128)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -75,12 +73,10 @@ fn oracle_prop_derived_mode_maps_syntax_and_abbrev_tables() {
        (get 'neomacs-oracle-table-mode-abbrev-table 'variable-documentation)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t ignore (keymap (3 keymap (111 . ignore))) \"Keymap for `neomacs-oracle-table-mode'.\" nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t ignore (keymap (3 keymap (111 . ignore))) \"Keymap for `neomacs-oracle-table-mode'.\" nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -105,12 +101,10 @@ fn oracle_prop_derived_mode_all_parents_aliases_and_extra_parents() {
    (get 'text-mode 'derived-mode--followers)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((neomacs-oracle-leaf-mode neomacs-oracle-mid-mode neomacs-oracle-root-mode text-mode prog-mode) neomacs-oracle-root-mode text-mode prog-mode neomacs-oracle-root-mode (neomacs-oracle-mid-mode) (neomacs-oracle-leaf-mode))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((neomacs-oracle-leaf-mode neomacs-oracle-mid-mode neomacs-oracle-root-mode text-mode prog-mode) neomacs-oracle-root-mode text-mode prog-mode neomacs-oracle-root-mode (neomacs-oracle-mid-mode) (neomacs-oracle-leaf-mode))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -137,10 +131,8 @@ fn oracle_prop_derived_mode_no_parent_and_noninteractive() {
        (string-match-p "Uses keymap" (documentation 'neomacs-oracle-plain-mode))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (neomacs-oracle-plain-mode \"OraclePlain\" nil 17 t nil nil 12)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (neomacs-oracle-plain-mode \"OraclePlain\" nil 17 t nil nil 12)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

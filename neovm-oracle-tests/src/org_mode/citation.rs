@@ -5,6 +5,9 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_cite_processor_declaration_and_plist_parse_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((:style \"author-year\" :notes \"t\" :foo \"bar\") (basic \"author-year\" nil) (biblatex \"bibstyle=authoryear\" \"citestyle=authoryear\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'oc)
@@ -12,9 +15,7 @@ fn org_cite_processor_declaration_and_plist_parse_combo() {
         (org-cite-read-processor-declaration "basic author-year")
         (org-cite-read-processor-declaration
          "biblatex bibstyle=authoryear citestyle=authoryear")))"#,
-        expect_test::expect![[
-            r#""OK ((:style \"author-year\" :notes \"t\" :foo \"bar\") (basic \"author-year\" nil) (biblatex \"bibstyle=authoryear\" \"citestyle=authoryear\"))""#
-        ]],
+        expect,
     );
 }
 
@@ -22,6 +23,9 @@ fn org_cite_processor_declaration_and_plist_parse_combo() {
 fn org_cite_bibliography_and_reference_boundaries_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((\"refs.bib more.json\") ((\"t\" (\"doe2020\" \"roe2021\") (40 . 76) (nil)) (nil (\"solo\") (81 . 93) (nil))))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -42,9 +46,7 @@ fn org_cite_bibliography_and_reference_boundaries_combo() {
                       (org-cite-main-affixes citation))))))
       (list (org-cite-list-bibliography-files)
             citations))))"##,
-        expect_test::expect![[
-            r#""OK ((\"refs.bib more.json\") ((\"t\" (\"doe2020\" \"roe2021\") (40 . 76) (nil)) (nil (\"solo\") (81 . 93) (nil))))""#
-        ]],
+        expect,
     );
 }
 
@@ -52,6 +54,7 @@ fn org_cite_bibliography_and_reference_boundaries_combo() {
 fn org_cite_basic_bibtex_json_parse_export_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 58 34)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -111,7 +114,7 @@ fn org_cite_basic_bibtex_json_parse_export_combo() {
                     parsed
                     out)))))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 58 34)""#]],
+        expect,
     );
 }
 
@@ -119,6 +122,7 @@ fn org_cite_basic_bibtex_json_parse_export_combo() {
 fn org_cite_basic_note_numeric_bibliography_export_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 34)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -172,7 +176,7 @@ fn org_cite_basic_note_numeric_bibliography_export_combo() {
                    (output (org-export-as 'ascii nil nil t nil)))
               (list keys citations output)))))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 34)""#]],
+        expect,
     );
 }
 
@@ -180,6 +184,7 @@ fn org_cite_basic_note_numeric_bibliography_export_combo() {
 fn org_cite_delete_reference_and_citation_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function org-cite-delete-reference)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -217,7 +222,7 @@ fn org_cite_delete_reference_and_citation_combo() {
               objects
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
-        expect_test::expect![[r#""ERR (void-function org-cite-delete-reference)""#]],
+        expect,
     );
 }
 
@@ -225,6 +230,7 @@ fn org_cite_delete_reference_and_citation_combo() {
 fn org_cite_custom_processor_note_adjust_wrap_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument consp nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -334,7 +340,7 @@ fn org_cite_custom_processor_note_adjust_wrap_combo() {
                     (buffer-substring-no-properties
                      (point-min) (point-max))))))
       (setq org-cite--processors original-processors))))"##,
-        expect_test::expect![[r#""ERR (wrong-type-argument consp nil)""#]],
+        expect,
     );
 }
 
@@ -342,6 +348,7 @@ fn org_cite_custom_processor_note_adjust_wrap_combo() {
 fn org_cite_insert_processor_affix_boundaries_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 104 56)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -447,7 +454,7 @@ fn org_cite_insert_processor_affix_boundaries_combo() {
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))
       (setq org-cite--processors original-processors))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 104 56)""#]],
+        expect,
     );
 }
 
@@ -455,6 +462,9 @@ fn org_cite_insert_processor_affix_boundaries_combo() {
 fn org_cite_basic_activation_follow_completion_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK ((\"<root>/refs.bib\") (\"alpha2020\" \"beta2021\") nil (\"alpha2020\") ((\"alpha2020\" \"Alpha, Ann\" #(\"2020\" 0 4 (:parent nil)) #(\"Known Alpha\" 0 11 (:parent nil))) (\"beta2021\" \"Beta, Bob\" #(\"2021\" 0 4 (:parent nil)) #(\"Known Beta\" 0 10 (:parent nil)))) (((\"alpha2020\" \"beta2021\") (nil) (78 . 115)) ((\"alpah2020\" \"missing\") (nil) (124 . 151))) ((\"alpha2020\" (org-cite-key org-cite) highlight #(\"Alpha. Known Alpha, J, 2020.\" 0 5 (:parent nil) 5 7 (:parent nil) 7 18 (:parent nil) 18 20 (:parent nil) 20 21 (:parent nil) 21 23 (:parent nil) 23 27 (:parent nil) 27 28 (:parent nil)) t) (\"alpah2020\" (error org-cite) highlight \"Suggestions (mouse-1 to substitute): alpha2020\" t) (\"missing\" (error org-cite) highlight nil t)) (\"refs.bib\" \"@article{alpha2020,\") (user-error \"Cannot find citation key: \\\"alpah2020\\\"\") \"#+bibliography: <root>/refs.bib\nKnown [cite:see @alpha2020 p. 4; @beta2021] Missing [cite:@alpah2020; @missing].\n\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -552,9 +562,7 @@ fn org_cite_basic_activation_follow_completion_combo() {
       (dolist (buf (list (get-file-buffer bib)))
         (when buf (kill-buffer buf)))
       (delete-directory root t))))"##,
-        expect_test::expect![[
-            r##""OK ((\"<root>/refs.bib\") (\"alpha2020\" \"beta2021\") nil (\"alpha2020\") ((\"alpha2020\" \"Alpha, Ann\" #(\"2020\" 0 4 (:parent nil)) #(\"Known Alpha\" 0 11 (:parent nil))) (\"beta2021\" \"Beta, Bob\" #(\"2021\" 0 4 (:parent nil)) #(\"Known Beta\" 0 10 (:parent nil)))) (((\"alpha2020\" \"beta2021\") (nil) (78 . 115)) ((\"alpah2020\" \"missing\") (nil) (124 . 151))) ((\"alpha2020\" (org-cite-key org-cite) highlight #(\"Alpha. Known Alpha, J, 2020.\" 0 5 (:parent nil) 5 7 (:parent nil) 7 18 (:parent nil) 18 20 (:parent nil) 20 21 (:parent nil) 21 23 (:parent nil) 23 27 (:parent nil) 27 28 (:parent nil)) t) (\"alpah2020\" (error org-cite) highlight \"Suggestions (mouse-1 to substitute): alpha2020\" t) (\"missing\" (error org-cite) highlight nil t)) (\"refs.bib\" \"@article{alpha2020,\") (user-error \"Cannot find citation key: \\\"alpah2020\\\"\") \"#+bibliography: <root>/refs.bib\nKnown [cite:see @alpha2020 p. 4; @beta2021] Missing [cite:@alpah2020; @missing].\n\")""##
-        ]],
+        expect,
     );
 }
 
@@ -562,6 +570,7 @@ fn org_cite_basic_activation_follow_completion_combo() {
 fn org_cite_basic_disambiguation_multibackend_export_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 100 34)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -663,7 +672,7 @@ fn org_cite_basic_disambiguation_multibackend_export_combo() {
                     ascii
                     latex)))))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 100 34)""#]],
+        expect,
     );
 }
 
@@ -671,6 +680,9 @@ fn org_cite_basic_disambiguation_multibackend_export_combo() {
 fn org_citation_parse_reference_style_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK (((nil nil (\"doe2020\")) (\"t\" nil (\"roe2021\" \"smith2022\")) (nil nil (\"solo\"))) ((\"doe2020\") (\"roe2021\") (\"smith2022\") (\"solo\")) (org-data section keyword keyword headline plain-text section paragraph plain-text citation citation-reference plain-text citation citation-reference citation-reference plain-text plain-text plain-text citation citation-reference plain-text) \"#+cite_export: basic author-year\n#+bibliography: refs.bib\n\n* Section\nText [cite:@doe2020] and [cite/t:@roe2021; see @smith2022 p. 10].\nPlain [cite:@solo].\n\n\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -699,8 +711,6 @@ fn org_citation_parse_reference_style_deep_state_combo() {
       (list citations refs all-types
             (buffer-substring-no-properties
              (point-min) (point-max))))))"##,
-        expect_test::expect![[
-            r##""OK (((nil nil (\"doe2020\")) (\"t\" nil (\"roe2021\" \"smith2022\")) (nil nil (\"solo\"))) ((\"doe2020\") (\"roe2021\") (\"smith2022\") (\"solo\")) (org-data section keyword keyword headline plain-text section paragraph plain-text citation citation-reference plain-text citation citation-reference citation-reference plain-text plain-text plain-text citation citation-reference plain-text) \"#+cite_export: basic author-year\n#+bibliography: refs.bib\n\n* Section\nText [cite:@doe2020] and [cite/t:@roe2021; see @smith2022 p. 10].\nPlain [cite:@solo].\n\n\")""##
-        ]],
+        expect,
     );
 }

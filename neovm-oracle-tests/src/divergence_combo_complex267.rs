@@ -8,6 +8,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx267_font_lock_keywords_anchored_matcher() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (t (\"\\\\bdef\\\\b\" (0 font-lock-keyword-face) (\"\\\\b\\\\(\\\\w+\\\\)\\\\b\" (1 font-lock-function-name-face))) \"\\\\bdef\\\\b\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -20,15 +23,14 @@ fn div_cx267_font_lock_keywords_anchored_matcher() {
             (caar kw)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (t (\"\\\\bdef\\\\b\" (0 font-lock-keyword-face) (\"\\\\b\\\\(\\\\w+\\\\)\\\\b\" (1 font-lock-function-name-face))) \"\\\\bdef\\\\b\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx267_font_lock_keywords_eval_form() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -39,13 +41,16 @@ fn div_cx267_font_lock_keywords_eval_form() {
       (list (consp kw)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx267_font_lock_keywords_override_modes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"pattern\" 0 'face prepend) (\"pattern\" 0 'face append) (\"pattern\" 0 'face keep) (\"pattern\" 0 'face override))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -59,15 +64,14 @@ fn div_cx267_font_lock_keywords_override_modes() {
             (car kw-override)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK ((\"pattern\" 0 'face prepend) (\"pattern\" 0 'face append) (\"pattern\" 0 'face keep) (\"pattern\" 0 'face override))""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx267_font_lock_multiline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -79,13 +83,14 @@ fn div_cx267_font_lock_multiline() {
             (get-text-property 26 'font-lock-multiline)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx267_jit_lock_contextually() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -98,13 +103,14 @@ fn div_cx267_jit_lock_contextually() {
             (boundp 'jit-lock-stealth-time)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx267_syntax_propertize_with_rules() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -114,13 +120,14 @@ fn div_cx267_syntax_propertize_with_rules() {
           (fboundp 'syntax-propertize-rules))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t nil t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx267_font_lock_default_keywords() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (consp font-lock-keywords)
@@ -128,13 +135,14 @@ fn div_cx267_font_lock_default_keywords() {
       (boundp 'font-lock-maximum-decoration)
       (boundp 'font-lock-verbose))
 "##,
-        expect_test::expect![[r#""OK (nil t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx267_font_lock_add_keywords_dynamic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored invalid-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -149,13 +157,14 @@ fn div_cx267_font_lock_add_keywords_dynamic() {
             (consp font-lock-keywords)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored invalid-function)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx267_font_lock_remove_keywords() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -166,13 +175,14 @@ fn div_cx267_font_lock_remove_keywords() {
       (list (consp font-lock-keywords)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx267_font_lock_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -201,6 +211,6 @@ fn div_cx267_font_lock_with_marker_overlay_undo_narrow_mega() {
                 (text-properties-at 1)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     )
 }

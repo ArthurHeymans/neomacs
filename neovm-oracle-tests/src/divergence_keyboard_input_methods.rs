@@ -7,13 +7,14 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_key_translation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'keyboard-translate)
   (fboundp 'local-set-key)
   (fboundp 'global-set-key)
   (fboundp 'define-key))"#,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -21,6 +22,7 @@ fn divergence_key_translation() {
 fn divergence_input_methods() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'activate-input-method)
@@ -28,7 +30,7 @@ fn divergence_input_methods() {
   (fboundp 'current-input-method)
   (boundp 'current-input-method)
   (featurep 'leim))"#,
-        expect_test::expect![[r#""OK (t t nil t nil)""#]],
+        expect,
     );
 }
 
@@ -36,12 +38,13 @@ fn divergence_input_methods() {
 fn divergence_quail() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'quail-select-package)
   (fboundp 'quail-set-keyboard-layout)
   (featurep 'quail))"#,
-        expect_test::expect![[r#""OK (nil t nil)""#]],
+        expect,
     );
 }
 
@@ -49,13 +52,14 @@ fn divergence_quail() {
 fn divergence_input_decode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'input-decode-map)
   (fboundp 'local-function-key-map)
   (fboundp 'function-key-map)
   (boundp 'input-decode-map))"#,
-        expect_test::expect![[r#""OK (nil nil nil t)""#]],
+        expect,
     );
 }
 
@@ -63,6 +67,7 @@ fn divergence_input_decode() {
 fn divergence_key_maps_parent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t ((97 . foo) keymap) (keymap))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((map (make-sparse-keymap)))
   (define-key map "a" 'foo)
@@ -70,7 +75,7 @@ fn divergence_key_maps_parent() {
   (list (keymapp map)
         (cdr map)
         (keymap-parent map))) "#,
-        expect_test::expect![[r#""OK (t ((97 . foo) keymap) (keymap))""#]],
+        expect,
     );
 }
 
@@ -78,6 +83,7 @@ fn divergence_key_maps_parent() {
 fn divergence_event_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'eventp)
@@ -87,7 +93,7 @@ fn divergence_event_types() {
   (fboundp 'event-modifiers)
   (fboundp 'read-event)
   (fboundp 'read-key))"#,
-        expect_test::expect![[r#""OK (t t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -95,13 +101,14 @@ fn divergence_event_types() {
 fn divergence_recent_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'recent-keys)
   (fboundp 'this-command-keys)
   (fboundp 'this-command-keys-vector)
   (fboundp 'clear-this-command-keys))"#,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -109,13 +116,14 @@ fn divergence_recent_keys() {
 fn divergence_key_description() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'key-description)
   (fboundp 'describe-buffer-bindings)
   (fboundp 'where-is-internal)
   (stringp (key-description [?a ?b]))) "#,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -123,12 +131,13 @@ fn divergence_key_description() {
 fn divergence_parse_modifiers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'event-convert-list)
   (fboundp 'event-apply-modifier)
   (fboundp 'event-apply-hyper-modifier))"#,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
@@ -136,11 +145,12 @@ fn divergence_parse_modifiers() {
 fn divergence_keyboard_coding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'set-keyboard-coding-system)
   (fboundp 'keyboard-coding-system)
   (boundp 'keyboard-coding-system))"#,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }

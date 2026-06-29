@@ -20,10 +20,9 @@ fn oracle_prop_flatten_tree_basic_nil_and_dotted_leaves() {
  (flatten-tree '(nil . tail)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3 4 5 6 7) (a b c d) (a b c) nil (42) (tail))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((1 2 3 4 5 6 7) (a b c d) (a b c) nil (42) (tail))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -39,12 +38,10 @@ fn oracle_prop_flatten_list_alias_and_ordering() {
    (equal (flatten-tree tree) (flatten-list tree))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil (alpha beta gamma delta epsilon) (alpha beta gamma delta epsilon) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil (alpha beta gamma delta epsilon) (alpha beta gamma delta epsilon) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -67,10 +64,8 @@ fn oracle_prop_ensure_list_wraps_atoms_and_preserves_lists() {
    (ensure-list 17)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t ([a b]) \"abc\" t (17))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t ([a b]) \"abc\" t (17))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -84,10 +79,8 @@ fn oracle_prop_flatten_tree_after_mutating_dotted_structure() {
   (list tree (flatten-tree tree)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (((a . b) (c (d . f))) (a b c d f))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (((a . b) (c (d . f))) (a b c d f))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -117,10 +110,8 @@ fn oracle_prop_flatten_tree_ensure_list_alias_arity_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil t (t t nil) (a b c d e) (wrong-number-of-arguments ((1 . 1) 0)) (wrong-number-of-arguments ((1 . 1) 2)) (wrong-number-of-arguments ((1 . 1) 0)) (wrong-number-of-arguments ((1 . 1) 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil t (t t nil) (a b c d e) (wrong-number-of-arguments ((1 . 1) 0)) (wrong-number-of-arguments ((1 . 1) 2)) (wrong-number-of-arguments ((1 . 1) 0)) (wrong-number-of-arguments ((1 . 1) 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_thread_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'make-thread)
@@ -17,7 +18,7 @@ fn divergence_thread_functions() {
   (fboundp 'current-thread)
   (fboundp 'main-thread)
   (featurep 'threads)) "#,
-        expect_test::expect![[r#""OK (t t t t t t nil t)""#]],
+        expect,
     );
 }
 
@@ -25,13 +26,14 @@ fn divergence_thread_functions() {
 fn divergence_mutex_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'make-mutex)
   (fboundp 'mutex-lock)
   (fboundp 'mutex-unlock)
   (fboundp 'mutex-owner)) "#,
-        expect_test::expect![[r#""OK (t t t nil)""#]],
+        expect,
     );
 }
 
@@ -39,13 +41,14 @@ fn divergence_mutex_functions() {
 fn divergence_condition_variable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'make-condition-variable)
   (fboundp 'condition-wait)
   (fboundp 'condition-notify)
   (fboundp 'condition-broadcast)) "#,
-        expect_test::expect![[r#""OK (t t t nil)""#]],
+        expect,
     );
 }
 
@@ -53,13 +56,14 @@ fn divergence_condition_variable() {
 fn divergence_async_processes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'make-process)
   (fboundp 'async-shell-command)
   (boundp 'async-shell-command-buffer)
   (stringp async-shell-command-buffer)) "#,
-        expect_test::expect![[r#""OK (t t t nil)""#]],
+        expect,
     );
 }
 
@@ -67,6 +71,7 @@ fn divergence_async_processes() {
 fn divergence_idle_timers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'run-with-idle-timer)
@@ -78,7 +83,7 @@ fn divergence_idle_timers() {
   (listp timer-idle-list)
   (boundp 'timer-list)
   (listp timer-list)) "#,
-        expect_test::expect![[r#""OK (t t t t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -86,6 +91,7 @@ fn divergence_idle_timers() {
 fn divergence_process_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'processp)
@@ -93,7 +99,7 @@ fn divergence_process_types() {
   (fboundp 'process-status)
   (fboundp 'process-exit-status)
   (fboundp 'process-id)) "#,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
@@ -101,13 +107,14 @@ fn divergence_process_types() {
 fn divergence_process_connection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'process-send-string)
   (fboundp 'process-send-region)
   (fboundp 'process-send-eof)
   (fboundp 'process-send-signal)) "#,
-        expect_test::expect![[r#""OK (t t t nil)""#]],
+        expect,
     );
 }
 
@@ -115,13 +122,14 @@ fn divergence_process_connection() {
 fn divergence_network_options() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable network-security-level)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'network-security-level)
   (stringp network-security-level)
   (boundp 'network-security-protocol-checks)
   (listp network-security-protocol-checks)) "#,
-        expect_test::expect![[r#""ERR (void-variable network-security-level)""#]],
+        expect,
     );
 }
 
@@ -129,13 +137,14 @@ fn divergence_network_options() {
 fn divergence_connection_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'connection-local-set-profile-variables)
   (fboundp 'connection-local-set-profiles)
   (fboundp 'connection-local-value)
   (featurep 'connection)) "#,
-        expect_test::expect![[r#""OK (t t t nil)""#]],
+        expect,
     );
 }
 
@@ -143,6 +152,7 @@ fn divergence_connection_local() {
 fn divergence_concurrency_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (boundp 'inhibit-changing-match-data)
@@ -152,6 +162,6 @@ fn divergence_concurrency_vars() {
   (integerp message-log-max)
   (boundp 'messages-buffer-name)
   (stringp messages-buffer-name)) "#,
-        expect_test::expect![[r#""OK (t t t t t t t)""#]],
+        expect,
     );
 }

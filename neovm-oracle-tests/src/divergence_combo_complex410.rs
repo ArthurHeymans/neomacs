@@ -13,6 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx410_display_warning() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'warnings)
@@ -21,7 +22,7 @@ fn div_cx410_display_warning() {
     (list (warning-numeric-level :warning)
           (warning-suppress-p 'neo-cx410))))
 "##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 1)""#]],
+        expect,
     );
 }
 
@@ -29,6 +30,7 @@ fn div_cx410_display_warning() {
 #[test]
 fn div_cx410_scroll_up_down_batch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (end-of-buffer beginning-of-buffer)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -36,7 +38,7 @@ fn div_cx410_scroll_up_down_batch() {
   (list (condition-case e (scroll-up 1) (error (car e)))
         (condition-case e (scroll-down 1) (error (car e)))))
 "##,
-        expect_test::expect![[r#""OK (end-of-buffer beginning-of-buffer)""#]],
+        expect,
     );
 }
 
@@ -44,6 +46,7 @@ fn div_cx410_scroll_up_down_batch() {
 #[test]
 fn div_cx410_window_size_fixed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function window-size-fixed)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((w (selected-window)))
@@ -51,7 +54,7 @@ fn div_cx410_window_size_fixed() {
         (window-size-fixed w t)
         (window-size-fixed w nil)))
 "##,
-        expect_test::expect![[r#""ERR (void-function window-size-fixed)""#]],
+        expect,
     );
 }
 
@@ -59,6 +62,7 @@ fn div_cx410_window_size_fixed() {
 #[test]
 fn div_cx410_fit_window_to_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -67,7 +71,7 @@ fn div_cx410_fit_window_to_buffer() {
       (fit-window-to-buffer (selected-window))
     (error (car e))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -75,13 +79,14 @@ fn div_cx410_fit_window_to_buffer() {
 #[test]
 fn div_cx410_balance_windows_area() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (balance-windows-area)
   (error (car e)))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -89,13 +94,14 @@ fn div_cx410_balance_windows_area() {
 #[test]
 fn div_cx410_window_full_height_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((w (selected-window)))
   (list (window-full-height-p w)
         (window-full-width-p w)))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
@@ -104,6 +110,7 @@ fn div_cx410_window_full_height_width() {
 #[test]
 fn div_cx410_window_parameter_store() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (test-val nil (neo-cx410-param . test-val))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((w (selected-window)))
@@ -112,7 +119,7 @@ fn div_cx410_window_parameter_store() {
         (window-parameter w 'nonexistent)
         (assq 'neo-cx410-param (window-parameters w))))
 "##,
-        expect_test::expect![[r#""OK (test-val nil (neo-cx410-param . test-val))""#]],
+        expect,
     );
 }
 
@@ -120,6 +127,7 @@ fn div_cx410_window_parameter_store() {
 #[test]
 fn div_cx410_window_margins() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((2 . 3) 2 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((w (selected-window)))
@@ -128,7 +136,7 @@ fn div_cx410_window_margins() {
         (car (window-margins w))
         (cdr (window-margins w))))
 "##,
-        expect_test::expect![[r#""OK ((2 . 3) 2 3)""#]],
+        expect,
     );
 }
 
@@ -136,13 +144,14 @@ fn div_cx410_window_margins() {
 #[test]
 fn div_cx410_window_fringes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((0 0 nil nil))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((w (selected-window)))
   (set-window-fringes w 5 10 nil)
   (list (window-fringes w)))
 "##,
-        expect_test::expect![[r#""OK ((0 0 nil nil))""#]],
+        expect,
     );
 }
 
@@ -150,6 +159,7 @@ fn div_cx410_window_fringes() {
 #[test]
 fn div_cx410_display_pop_to_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create "*neo-cx410-display*")))
@@ -158,7 +168,7 @@ fn div_cx410_display_pop_to_buffer() {
         (windowp (pop-to-buffer buf))
         (eq (window-buffer (selected-window)) buf)))
 "##,
-        expect_test::expect![[r#""OK (t nil t)""#]],
+        expect,
     );
 }
 
@@ -167,6 +177,7 @@ fn div_cx410_display_pop_to_buffer() {
 #[test]
 fn div_cx410_replace_buffer_contents() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((src (get-buffer-create "*neo-cx410-src*"))
@@ -180,7 +191,7 @@ fn div_cx410_replace_buffer_contents() {
     (kill-buffer src)
     (kill-buffer dst)))
 "##,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -188,6 +199,7 @@ fn div_cx410_replace_buffer_contents() {
 #[test]
 fn div_cx410_replace_string_in_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"X bar X baz X qux\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -196,7 +208,7 @@ fn div_cx410_replace_string_in_buffer() {
   (replace-string "foo" "X" nil (point-min) (point-max))
   (buffer-string))
 "##,
-        expect_test::expect![[r#""OK \"X bar X baz X qux\"""#]],
+        expect,
     );
 }
 
@@ -204,13 +216,14 @@ fn div_cx410_replace_string_in_buffer() {
 #[test]
 fn div_cx410_read_char_by_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (void-function void-function \"SNOWMAN\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (char-with-name "SNOWMAN") (error (car e)))
       (condition-case e (char-with-name "LATIN CAPITAL LETTER A") (error (car e)))
       (get-char-code-property ?☃ 'name))
 "##,
-        expect_test::expect![[r#""OK (void-function void-function \"SNOWMAN\")""#]],
+        expect,
     );
 }
 
@@ -244,6 +257,7 @@ fn div_cx410_y_or_n_p_batch() {
 #[test]
 fn div_cx410_momentary_string_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"original content\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -253,7 +267,7 @@ fn div_cx410_momentary_string_display() {
     (error (car e)))
   (buffer-string))
 "##,
-        expect_test::expect![[r#""OK \"original content\"""#]],
+        expect,
     );
 }
 
@@ -261,6 +275,7 @@ fn div_cx410_momentary_string_display() {
 #[test]
 fn div_cx410_mode_line_format_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -270,7 +285,7 @@ fn div_cx410_mode_line_format_position() {
     (list (stringp fmt)
           (> (length fmt) 0))))
 "##,
-        expect_test::expect![[r#""OK (t nil)""#]],
+        expect,
     );
 }
 
@@ -279,6 +294,7 @@ fn div_cx410_mode_line_format_position() {
 #[test]
 fn div_cx410_column_line_number_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -290,7 +306,7 @@ fn div_cx410_column_line_number_mode() {
     (list (stringp fmt)
           (string-match-p ":" fmt))))
 "##,
-        expect_test::expect![[r#""OK (t nil)""#]],
+        expect,
     );
 }
 
@@ -298,12 +314,13 @@ fn div_cx410_column_line_number_mode() {
 #[test]
 fn div_cx410_frame_title_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"\" \"\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (format-mode-line frame-title-format)
       (format-mode-line icon-title-format))
 "##,
-        expect_test::expect![[r#""OK (\"\" \"\")""#]],
+        expect,
     );
 }
 
@@ -311,6 +328,7 @@ fn div_cx410_frame_title_format() {
 #[test]
 fn div_cx410_with_help_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (buffer-read-only #<killed buffer>)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'help-mode)
@@ -322,6 +340,6 @@ fn div_cx410_with_help_window() {
       (error (car e)))
     (buffer-string)))
 "##,
-        expect_test::expect![[r#""ERR (buffer-read-only #<killed buffer>)""#]],
+        expect,
     );
 }

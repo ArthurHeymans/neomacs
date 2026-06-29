@@ -19,12 +19,10 @@ fn oracle_prop_regexp_gnu_mid_pattern_anchors_are_literals() {
        (funcall probe "a$b" "a$b")
        (funcall probe "a$b" "ab")
        (funcall probe "\\(a\\|b^c\\)" "b^c")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"a^b\" \"a^b\" 0 \"a^b\") (\"a^b\" \"ab\" nil nil) (\"a$b\" \"a$b\" 0 \"a$b\") (\"a$b\" \"ab\" nil nil) (\"\\\\(a\\\\|b^c\\\\)\" \"b^c\" 0 \"b^c\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"a^b\" \"a^b\" 0 \"a^b\") (\"a^b\" \"ab\" nil nil) (\"a$b\" \"a$b\" 0 \"a$b\") (\"a$b\" \"ab\" nil nil) (\"\\\\(a\\\\|b^c\\\\)\" \"b^c\" 0 \"b^c\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -42,12 +40,10 @@ fn oracle_prop_regexp_gnu_backslash_d_is_literal() {
        (funcall probe "\\D" "D")
        (funcall probe "a\\db" "adb")
        (funcall probe "a\\db" "a5b")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"\\\\d\" \"5\" nil nil) (\"\\\\d\" \"d\" 0 \"d\") (\"\\\\D\" \"x\" nil nil) (\"\\\\D\" \"D\" 0 \"D\") (\"a\\\\db\" \"adb\" 0 \"adb\") (\"a\\\\db\" \"a5b\" nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"\\\\d\" \"5\" nil nil) (\"\\\\d\" \"d\" 0 \"d\") (\"\\\\D\" \"x\" nil nil) (\"\\\\D\" \"D\" 0 \"D\") (\"a\\\\db\" \"adb\" 0 \"adb\") (\"a\\\\db\" \"a5b\" nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -71,12 +67,10 @@ fn oracle_prop_regexp_gnu_escaped_control_letters_are_literals() {
        (funcall probe "\\a" (string 7))
        (funcall probe "\\e" "e")
        (funcall probe "\\e" (string 27))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"\\\\t\" \"t\" 0 \"t\") (\"\\\\t\" \"\t\" nil nil) (\"\\\\n\" \"n\" 0 \"n\") (\"\\\\n\" \"\n\" nil nil) (\"\\\\r\" \"r\" 0 \"r\") (\"\\\\r\" \"\\r\" nil nil) (\"\\\\f\" \"f\" 0 \"f\") (\"\\\\f\" \"\u{c}\" nil nil) (\"\\\\a\" \"a\" 0 \"a\") (\"\\\\a\" \"\u{7}\" nil nil) (\"\\\\e\" \"e\" 0 \"e\") (\"\\\\e\" \"\u{1b}\" nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"\\\\t\" \"t\" 0 \"t\") (\"\\\\t\" \"\t\" nil nil) (\"\\\\n\" \"n\" 0 \"n\") (\"\\\\n\" \"\n\" nil nil) (\"\\\\r\" \"r\" 0 \"r\") (\"\\\\r\" \"\\r\" nil nil) (\"\\\\f\" \"f\" 0 \"f\") (\"\\\\f\" \"\u{c}\" nil nil) (\"\\\\a\" \"a\" 0 \"a\") (\"\\\\a\" \"\u{7}\" nil nil) (\"\\\\e\" \"e\" 0 \"e\") (\"\\\\e\" \"\u{1b}\" nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -92,12 +86,10 @@ fn oracle_prop_regexp_gnu_at_point_anchor_is_not_for_string_match() {
        (funcall probe "\\=" "abc")
        (funcall probe "a\\=b" "ab")
        (funcall probe "\\=b" "ab" 1)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"\\\\=\" \"\" nil nil nil) (\"\\\\=\" \"abc\" nil nil nil) (\"a\\\\=b\" \"ab\" nil nil nil) (\"\\\\=b\" \"ab\" 1 nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"\\\\=\" \"\" nil nil nil) (\"\\\\=\" \"abc\" nil nil nil) (\"a\\\\=b\" \"ab\" nil nil nil) (\"\\\\=b\" \"ab\" 1 nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -112,12 +104,10 @@ fn oracle_prop_regexp_gnu_bare_intervals_are_literals() {
        (funcall probe "\\{1\\}" "{1}")
        (funcall probe "\\{1,2\\}" "{1,2}")
        (funcall probe "\\{,2\\}" "{,2}")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"\\\\{1\\\\}\" \"{1}\" 0 \"{1}\") (\"\\\\{1,2\\\\}\" \"{1,2}\" 0 \"{1,2}\") (\"\\\\{,2\\\\}\" \"{,2}\" 0 \"{,2}\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"\\\\{1\\\\}\" \"{1}\" 0 \"{1}\") (\"\\\\{1,2\\\\}\" \"{1,2}\" 0 \"{1,2}\") (\"\\\\{,2\\\\}\" \"{,2}\" 0 \"{,2}\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -131,12 +121,10 @@ fn oracle_prop_regexp_gnu_malformed_symbol_boundary_errors() {
       (condition-case err
           (string-match "\\_" "_")
         (error (list :error (car err) (cadr err)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:error invalid-regexp \"Invalid regular expression\") (:error invalid-regexp \"Premature end of regular expression\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:error invalid-regexp \"Invalid regular expression\") (:error invalid-regexp \"Premature end of regular expression\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -156,12 +144,10 @@ fn oracle_prop_regexp_gnu_invalid_syntax_class_designators() {
        (funcall probe "\\s0" "0")
        (funcall probe "\\S0" "0")
        (funcall probe "\\S0" "a")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"\\\\sz\" \"z\" nil nil) (\"\\\\sq\" \"q\" nil nil) (\"\\\\s0\" \"0\" nil nil) (\"\\\\S0\" \"0\" 0 \"0\") (\"\\\\S0\" \"a\" 0 \"a\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"\\\\sz\" \"z\" nil nil) (\"\\\\sq\" \"q\" nil nil) (\"\\\\s0\" \"0\" nil nil) (\"\\\\S0\" \"0\" 0 \"0\") (\"\\\\S0\" \"a\" 0 \"a\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -178,12 +164,10 @@ fn oracle_prop_regexp_gnu_unknown_group_extension_errors() {
       (condition-case err
           (string-match "\\(?-1:a\\)" "(?-1:a)")
         (error (list :error (car err) (cadr err)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:error invalid-regexp \"Invalid regular expression\") (:error invalid-regexp \"Invalid regular expression\") (:error invalid-regexp \"Invalid regular expression\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:error invalid-regexp \"Invalid regular expression\") (:error invalid-regexp \"Invalid regular expression\") (:error invalid-regexp \"Invalid regular expression\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -200,12 +184,10 @@ fn oracle_prop_regexp_gnu_category_tables() {
        (funcall probe "\\ca" "A")
        (funcall probe "\\c|" (string #x4e2d))
        (funcall probe "\\c6" (string #x0664))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"\\\\ca\" \"\n\" nil nil) (\"\\\\ca\" \"\t\" nil nil) (\"\\\\ca\" \"A\" 0 \"A\") (\"\\\\c|\" \"中\" 0 \"中\") (\"\\\\c6\" \"٤\" 0 \"٤\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"\\\\ca\" \"\n\" nil nil) (\"\\\\ca\" \"\t\" nil nil) (\"\\\\ca\" \"A\" 0 \"A\") (\"\\\\c|\" \"中\" 0 \"中\") (\"\\\\c6\" \"٤\" 0 \"٤\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -223,12 +205,10 @@ fn oracle_prop_regexp_gnu_unicode_case_folding() {
    (funcall probe (string #x00e9) (string #x00c9))
    (funcall probe "[[:upper:]]+" "abc")
    (funcall probe "[[:lower:]]+" "ABC")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"Ω\" \"ω\" 0 \"ω\") (\"Д\" \"д\" 0 \"д\") (\"é\" \"É\" 0 \"É\") (\"[[:upper:]]+\" \"abc\" 0 \"abc\") (\"[[:lower:]]+\" \"ABC\" 0 \"ABC\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"Ω\" \"ω\" 0 \"ω\") (\"Д\" \"д\" 0 \"д\") (\"é\" \"É\" 0 \"É\") (\"[[:upper:]]+\" \"abc\" 0 \"abc\") (\"[[:lower:]]+\" \"ABC\" 0 \"ABC\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -251,8 +231,6 @@ fn oracle_prop_regexp_gnu_custom_case_table_folding() {
      (string-match-p "X" "q"))
    (let ((case-fold-search t))
      (posix-string-match "X" "q"))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (113 t 113 nil nil 88 0 0 0)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (113 t 113 nil nil 88 0 0 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

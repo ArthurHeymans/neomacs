@@ -23,10 +23,8 @@ fn oracle_keymap_canonicalize_resolves_parent_and_nil_shadowing() {
      (lookup-key canon [?b])
      (lookup-key canon [?c])
      (lookup-key canon [?d]))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil nil nil child-b child-c parent-d)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil nil nil child-b child-c parent-d)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -49,12 +47,10 @@ fn oracle_keymap_canonicalize_merges_duplicate_prefix_keymaps() {
      (lookup-key child [?x ?a])
      (lookup-key child [?x ?b])
      (lookup-key child [?x ?c]))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t parent-x-a child-x-b child-x-c parent-x-a child-x-b child-x-c)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t parent-x-a child-x-b child-x-c parent-x-a child-x-b child-x-c)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -76,8 +72,6 @@ fn oracle_keymap_canonicalize_preserves_prompt_and_collapses_redefinitions() {
      (length (delq nil (mapcar (lambda (entry)
                                   (and (eq (car entry) ?a) entry))
                                 seen))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"Menu\" second-a first-b 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"Menu\" second-a first-b 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

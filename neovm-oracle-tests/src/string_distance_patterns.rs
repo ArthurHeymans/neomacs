@@ -54,12 +54,10 @@ fn oracle_prop_string_distance_single_operations() {
 
   (nreverse results))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ident \"\" 0) (ident \"a\" 0) (ident \"hello\" 0) (ident \"abracadabra\" 0) (ident \"the quick brown fox\" 0) (insert \"\" \"x\" 1) (insert \"abc\" \"abcd\" 1) (insert \"abc\" \"xabc\" 1) (insert \"abc\" \"abxc\" 1) (insert \"hello\" \"helloo\" 1) (delete \"x\" \"\" 1) (delete \"abcd\" \"abc\" 1) (delete \"xabc\" \"abc\" 1) (delete \"abxc\" \"abc\" 1) (subst \"a\" \"b\" 1) (subst \"cat\" \"bat\" 1) (subst \"cat\" \"cot\" 1) (subst \"cat\" \"cas\" 1) (subst \"hello\" \"hallo\" 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ident \"\" 0) (ident \"a\" 0) (ident \"hello\" 0) (ident \"abracadabra\" 0) (ident \"the quick brown fox\" 0) (insert \"\" \"x\" 1) (insert \"abc\" \"abcd\" 1) (insert \"abc\" \"xabc\" 1) (insert \"abc\" \"abxc\" 1) (insert \"hello\" \"helloo\" 1) (delete \"x\" \"\" 1) (delete \"abcd\" \"abc\" 1) (delete \"xabc\" \"abc\" 1) (delete \"abxc\" \"abc\" 1) (subst \"a\" \"b\" 1) (subst \"cat\" \"bat\" 1) (subst \"cat\" \"cot\" 1) (subst \"cat\" \"cas\" 1) (subst \"hello\" \"hallo\" 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -98,10 +96,9 @@ fn oracle_prop_string_distance_symmetry_exhaustive() {
         'pairs-checked checked
         'counterexamples counterexamples))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (symmetric t pairs-checked 136 counterexamples nil)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (symmetric t pairs-checked 136 counterexamples nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -137,10 +134,9 @@ fn oracle_prop_string_distance_triangle_inequality_broad() {
         'all-valid (= violations 0)
         'max-slack max-slack))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (violations 0 total 2197 all-valid t max-slack 14)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (violations 0 total 2197 all-valid t max-slack 14)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -182,12 +178,10 @@ fn oracle_prop_string_distance_sort_by_distance() {
           (funcall 'neovm--sdp-sort-by-distance "" words)))
     (fmakunbound 'neovm--sdp-sort-by-distance)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((0 . \"apple\") (1 . \"ample\") (1 . \"applet\") (1 . \"apply\") (2 . \"ape\") (2 . \"maple\") (3 . \"appeal\") (4 . \"grape\") (4 . \"pineapple\") (5 . \"apricot\") (5 . \"banana\") (5 . \"mango\") (7 . \"application\")) ((0 . \"banana\") (4 . \"mango\") (5 . \"ample\") (5 . \"ape\") (5 . \"appeal\") (5 . \"apple\") (5 . \"apply\") (5 . \"grape\") (5 . \"maple\") (6 . \"applet\") (7 . \"apricot\") (7 . \"pineapple\") (10 . \"application\")) ((1 . \"ape\") (2 . \"apple\") (2 . \"apply\") (3 . \"ample\") (3 . \"appeal\") (3 . \"applet\") (3 . \"grape\") (3 . \"maple\") (4 . \"mango\") (5 . \"apricot\") (5 . \"banana\") (6 . \"pineapple\") (8 . \"application\")) ((3 . \"ape\") (5 . \"ample\") (5 . \"apple\") (5 . \"apply\") (5 . \"grape\") (5 . \"mango\") (5 . \"maple\") (6 . \"appeal\") (6 . \"applet\") (6 . \"banana\") (7 . \"apricot\") (9 . \"pineapple\") (11 . \"application\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((0 . \"apple\") (1 . \"ample\") (1 . \"applet\") (1 . \"apply\") (2 . \"ape\") (2 . \"maple\") (3 . \"appeal\") (4 . \"grape\") (4 . \"pineapple\") (5 . \"apricot\") (5 . \"banana\") (5 . \"mango\") (7 . \"application\")) ((0 . \"banana\") (4 . \"mango\") (5 . \"ample\") (5 . \"ape\") (5 . \"appeal\") (5 . \"apple\") (5 . \"apply\") (5 . \"grape\") (5 . \"maple\") (6 . \"applet\") (7 . \"apricot\") (7 . \"pineapple\") (10 . \"application\")) ((1 . \"ape\") (2 . \"apple\") (2 . \"apply\") (3 . \"ample\") (3 . \"appeal\") (3 . \"applet\") (3 . \"grape\") (3 . \"maple\") (4 . \"mango\") (5 . \"apricot\") (5 . \"banana\") (6 . \"pineapple\") (8 . \"application\")) ((3 . \"ape\") (5 . \"ample\") (5 . \"apple\") (5 . \"apply\") (5 . \"grape\") (5 . \"mango\") (5 . \"maple\") (6 . \"appeal\") (6 . \"applet\") (6 . \"banana\") (7 . \"apricot\") (9 . \"pineapple\") (11 . \"application\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -271,12 +265,10 @@ fn oracle_prop_string_distance_fuzzy_match_scoring() {
     (fmakunbound 'neovm--sdp-fuzzy-score)
     (fmakunbound 'neovm--sdp-fuzzy-top-n)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((780 . \"find-tag\") (720 . \"find-file\") (436 . \"find-file-read-only\") (392 . \"find-file-other-window\") (210 . \"forward-line\")) ((629 . \"fill-region\") (536 . \"fill-paragraph\") (309 . \"find-file\") (230 . \"find-tag\") (136 . \"find-file-read-only\")) ((505 . \"forward-char\") (505 . \"forward-word\") (505 . \"forward-line\") (142 . \"fill-region\") (122 . \"flymake-mode\")) ((505 . \"flymake-mode\") (481 . \"flycheck-mode\") (193 . \"find-file\")) ((390 . \"find-tag\") (372 . \"find-file\") (341 . \"fill-region\") (329 . \"forward-char\") (329 . \"forward-word\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((780 . \"find-tag\") (720 . \"find-file\") (436 . \"find-file-read-only\") (392 . \"find-file-other-window\") (210 . \"forward-line\")) ((629 . \"fill-region\") (536 . \"fill-paragraph\") (309 . \"find-file\") (230 . \"find-tag\") (136 . \"find-file-read-only\")) ((505 . \"forward-char\") (505 . \"forward-word\") (505 . \"forward-line\") (142 . \"fill-region\") (122 . \"flymake-mode\")) ((505 . \"flymake-mode\") (481 . \"flycheck-mode\") (193 . \"find-file\")) ((390 . \"find-tag\") (372 . \"find-file\") (341 . \"fill-region\") (329 . \"forward-char\") (329 . \"forward-word\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -357,12 +349,10 @@ fn oracle_prop_string_distance_spell_checker() {
     (fmakunbound 'neovm--sdp-spell-suggest)
     (fmakunbound 'neovm--sdp-spell-check)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"the\" correct) (\"and\" correct) (\"for\" correct) (\"have\" correct)) ((\"teh\" misspelled (\"be\" \"get\" \"the\")) (\"adn\" misspelled (\"all\" \"and\" \"any\")) (\"fro\" misspelled (\"from\" \"are\" \"do\")) (\"hav\" misspelled (\"had\" \"has\" \"have\"))) ((\"xyz\" misspelled (\"by\")) (\"qqq\" unknown) (\"zzz\" unknown)) ((\"the\" correct) (\"thn\" misspelled (\"than\" \"the\" \"then\")) (\"and\" correct) (\"anf\" misspelled (\"and\" \"any\" \"all\")) (\"cat\" correct) (\"cta\" misspelled (\"can\" \"car\" \"cat\"))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"the\" correct) (\"and\" correct) (\"for\" correct) (\"have\" correct)) ((\"teh\" misspelled (\"be\" \"get\" \"the\")) (\"adn\" misspelled (\"all\" \"and\" \"any\")) (\"fro\" misspelled (\"from\" \"are\" \"do\")) (\"hav\" misspelled (\"had\" \"has\" \"have\"))) ((\"xyz\" misspelled (\"by\")) (\"qqq\" unknown) (\"zzz\" unknown)) ((\"the\" correct) (\"thn\" misspelled (\"than\" \"the\" \"then\")) (\"and\" correct) (\"anf\" misspelled (\"and\" \"any\" \"all\")) (\"cat\" correct) (\"cta\" misspelled (\"can\" \"car\" \"cat\"))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -415,10 +405,8 @@ fn oracle_prop_string_distance_byte_vs_char_mode() {
           'max-pair (list max-dist max-pair)
           'min-pair (list min-dist min-pair))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (ascii-byte-eq-char t matrix ((\"cat\" 0 1 1 1 2 1) (\"bat\" 1 0 1 2 1 2) (\"hat\" 1 1 0 2 2 2) (\"car\" 1 2 2 0 1 1) (\"bar\" 2 1 2 1 0 2) (\"cab\" 1 2 2 1 2 0)) max-pair (2 (\"cat\" \"bar\")) min-pair (1 (\"cat\" \"bat\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (ascii-byte-eq-char t matrix ((\"cat\" 0 1 1 1 2 1) (\"bat\" 1 0 1 2 1 2) (\"hat\" 1 1 0 2 2 2) (\"car\" 1 2 2 0 1 1) (\"bar\" 2 1 2 1 0 2) (\"cab\" 1 2 2 1 2 0)) max-pair (2 (\"cat\" \"bar\")) min-pair (1 (\"cat\" \"bat\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

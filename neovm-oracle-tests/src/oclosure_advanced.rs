@@ -43,12 +43,10 @@ fn oracle_prop_oclosure_adv_capture_rest_args() {
           (funcall app-logger)
           ;; Single arg
           (funcall db-logger "ping"))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"[app:v2:1] started successfully\" \"[app:v2:1] error 404\" \"[db:postgres] connected to host\" \"[app:v2:1] \" \"[db:postgres] ping\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"[app:v2:1] started successfully\" \"[app:v2:1] error 404\" \"[db:postgres] connected to host\" \"[app:v2:1] \" \"[db:postgres] ping\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -79,12 +77,10 @@ fn oracle_prop_oclosure_adv_optional_params_defaults() {
         (funcall make-range 0 20 5)
         (funcall make-range 10 10)
         (funcall make-range 0 3 1)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 1 2 3 4 5 6 7 8 9) (5 6 7 8 9) (1 2 3 4 5) (0 5 10 15) nil (0 1 2))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 1 2 3 4 5 6 7 8 9) (5 6 7 8 9) (1 2 3 4 5) (0 5 10 15) nil (0 1 2))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -122,10 +118,8 @@ fn oracle_prop_oclosure_adv_first_class_storage() {
                      (setq val (funcall (cdr pair) val)))
                    val)))
             (list from-list from-table pipeline-result)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((14 49 -7 8) (14 49 -7 8) -35)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((14 49 -7 8) (14 49 -7 8) -35)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -154,10 +148,8 @@ fn oracle_prop_oclosure_adv_closure_equality() {
               (all-funcp (list (functionp a1) (functionp a2) (functionp a3))))
           (list same-factory-eq diff-arg-eq self-eq
                 results-equal results-diff all-funcp))))"#;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil t t t (t t t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil t t t (t t t))""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(nil nil t t t (t t t))", &o, &n);
 }
 
@@ -193,10 +185,8 @@ fn oracle_prop_oclosure_adv_interactive_spec() {
         ;; Non-functions
         (commandp 42)
         (commandp "string")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil t t t t 36 42 t nil t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil t t t t 36 42 t nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -237,10 +227,8 @@ fn oracle_prop_oclosure_adv_lambda_docstring() {
         (functionp undocumented)
         (functionp docstring-only)
         (functionp multi-body-doc)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (7 7 nil (8 15 -7) t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (7 7 nil (8 15 -7) t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -324,10 +312,8 @@ fn oracle_prop_oclosure_adv_module_system() {
                   (funcall m2-cc)   ;; 1 call in m2
                   ;; Independence check
                   (= (funcall m1-cc) (funcall m2-cc)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (120 3628800 21 120 4 3 5040 1 nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (120 3628800 21 120 4 3 5040 1 nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -392,10 +378,8 @@ fn oracle_prop_oclosure_adv_method_resolution_chain() {
               (funcall square-class 'perimeter 5 5)
               ;; Method not found in any class
               (funcall shape-class 'color))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (shape \"shape:base\" 0 rectangle \"rect:box\" 12 14 square \"rect:unit\" 25 20 (no-method shape color))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (shape \"shape:base\" 0 rectangle \"rect:box\" 12 14 square \"rect:unit\" 25 20 (no-method shape color))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

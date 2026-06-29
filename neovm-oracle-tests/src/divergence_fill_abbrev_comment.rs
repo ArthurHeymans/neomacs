@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_abbrev_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'abbrev-mode)
@@ -14,7 +15,7 @@ fn divergence_abbrev_functions() {
   (fboundp 'expand-abbrev)
   (boundp 'abbrevs-changed)
   (boundp 'local-abbrev-table))"#,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
@@ -22,13 +23,14 @@ fn divergence_abbrev_functions() {
 fn divergence_define_abbrev_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (define-abbrev-table 'my-test-abbrev-table
     '(("tst" "test" nil :case-fixed t)))
   (list (abbrev-symbol "tst" 'my-test-abbrev-table)
         (abbrev-expansion "tst" 'my-test-abbrev-table)))"#,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
@@ -36,15 +38,16 @@ fn divergence_define_abbrev_table() {
 fn divergence_fill_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""This is a long line\nthat should be\nfilled at some point\nin the text.OK \"This is a long line\nthat should be\nfilled at some point\nin the text.\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "This is a long line that should be filled at some point in the text.")
   (let ((fill-column 20))
     (fill-region (point-min) (point-max))
     (buffer-string)))"#,
-        expect_test::expect![[
-            r#""This is a long line\nthat should be\nfilled at some point\nin the text.OK \"This is a long line\nthat should be\nfilled at some point\nin the text.\"""#
-        ]],
+        expect,
     );
 }
 
@@ -52,15 +55,16 @@ fn divergence_fill_region() {
 fn divergence_fill_paragraph() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""This is a very long paragraph\nthat spans multiple\nsentences. It should be filled\naccording to the fill column\nsetting.OK 5""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "This is a very long paragraph that spans multiple sentences. It should be filled according to the fill column setting.")
   (let ((fill-column 30))
     (fill-paragraph nil)
     (length (split-string (buffer-string) "\n"))))"#,
-        expect_test::expect![[
-            r#""This is a very long paragraph\nthat spans multiple\nsentences. It should be filled\naccording to the fill column\nsetting.OK 5""#
-        ]],
+        expect,
     );
 }
 
@@ -68,12 +72,13 @@ fn divergence_fill_paragraph() {
 fn divergence_auto_fill_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'auto-fill-mode)
   (boundp 'auto-fill-function)
   (booleanp (boundp 'auto-fill-function)))"#,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
@@ -81,6 +86,7 @@ fn divergence_auto_fill_mode() {
 fn divergence_paragraph_commands() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""Para one.\n\nPara two.\n\nPara three.OK (11 22 11)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Para one.\n\nPara two.\n\nPara three.")
@@ -91,7 +97,7 @@ fn divergence_paragraph_commands() {
     (let ((p2 (point)))
       (backward-paragraph 1)
       (list p1 p2 (point)))))"#,
-        expect_test::expect![[r#""Para one.\n\nPara two.\n\nPara three.OK (11 22 11)""#]],
+        expect,
     );
 }
 
@@ -99,13 +105,14 @@ fn divergence_paragraph_commands() {
 fn divergence_sentence_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (stringp sentence-end)
   (fboundp 'sentence-end)
   (boundp 'sentence-end-double-space)
   (booleanp sentence-end-double-space))"#,
-        expect_test::expect![[r#""OK (nil t t t)""#]],
+        expect,
     );
 }
 
@@ -113,6 +120,7 @@ fn divergence_sentence_end() {
 fn divergence_comment_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#"";; hello worldOK (\";; hello world\" \";; \" \"\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq comment-start ";; ")
@@ -122,7 +130,7 @@ fn divergence_comment_functions() {
   (list (buffer-string)
         comment-start
         comment-end))"#,
-        expect_test::expect![[r#"";; hello worldOK (\";; hello world\" \";; \" \"\")""#]],
+        expect,
     );
 }
 
@@ -130,6 +138,8 @@ fn divergence_comment_functions() {
 fn divergence_uncomment_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r##""hello worldERR (invalid-read-syntax \"#\\\"\" 7 51)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq comment-start ";; ")
@@ -151,6 +161,6 @@ fn divergence_indent_functions() {
   (fboundp 'indent-region)
   (fboundp 'indent-relative)
   (fboundp 'indent-to))"#,
-        expect_test::expect![[r##""hello worldERR (invalid-read-syntax \"#\\\"\" 7 51)""##]],
+        expect,
     );
 }

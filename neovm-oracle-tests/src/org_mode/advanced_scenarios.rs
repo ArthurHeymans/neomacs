@@ -10,6 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn advanced_table_with_formulas_and_alignment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -43,7 +44,7 @@ fn advanced_table_with_formulas_and_alignment() {
          ;; TBLFM lines.
          (length (org-element-map tree 'keyword
                    (lambda (k) (when (equal (org-element-property :key k) "TBLFM") k))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -54,6 +55,7 @@ fn advanced_table_with_formulas_and_alignment() {
 #[test]
 fn advanced_complex_list_nesting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -95,7 +97,7 @@ fn advanced_complex_list_nesting() {
                      (substring-no-properties
                       (org-element-interpret-data (org-element-property :tag i)))))
                  (org-element-map tree 'item #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -106,6 +108,7 @@ fn advanced_complex_list_nesting() {
 #[test]
 fn advanced_complex_link_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -133,7 +136,7 @@ mailto:user@example.org
          ;; Link paths (first 5).
          (mapcar (lambda (l) (org-element-property :path l))
                  (take 5 links))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -144,6 +147,7 @@ mailto:user@example.org
 #[test]
 fn advanced_complex_citation_formats() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -170,7 +174,7 @@ Nested [cite:@outer; inner @ref].")
          ;; Keys.
          (mapcar (lambda (r) (org-element-property :key r))
                  (org-element-map tree 'citation-reference #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -181,6 +185,7 @@ Nested [cite:@outer; inner @ref].")
 #[test]
 fn advanced_complex_footnote_nesting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -214,7 +219,7 @@ Body[fn:4:nested[fn:5]].
          ;; Numbers.
          (mapcar (lambda (ref) (org-export-get-footnote-number ref info))
                  (org-element-map tree 'footnote-reference #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -225,6 +230,9 @@ Body[fn:4:nested[fn:5]].
 #[test]
 fn advanced_complex_timestamp_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (7 (active inactive inactive active-range active-range inactive diary) (nil nil nil timerange daterange nil nil) ((nil nil nil) (nil nil nil) (nil nil nil) (nil nil nil) (nil nil nil) (nil nil nil) (nil nil nil)) ((all 3 day) (nil nil nil) (nil nil nil) (nil nil nil) (nil nil nil) (nil nil nil) (nil nil nil)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -272,9 +280,7 @@ DEADLINE: <2024-01-22 Mon>
                               (org-element-property :warning-value ts)
                               (org-element-property :warning-unit ts)))
                  timestamps))))))"##,
-        expect_test::expect![[
-            r#""OK (7 (active inactive inactive active-range active-range inactive diary) (nil nil nil timerange daterange nil nil) ((nil nil nil) (nil nil nil) (nil nil nil) (nil nil nil) (nil nil nil) (nil nil nil) (nil nil nil)) ((all 3 day) (nil nil nil) (nil nil nil) (nil nil nil) (nil nil nil) (nil nil nil) (nil nil nil)))""#
-        ]],
+        expect,
     );
 }
 
@@ -285,6 +291,7 @@ DEADLINE: <2024-01-22 Mon>
 #[test]
 fn advanced_complex_block_nesting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -327,7 +334,7 @@ Comment block
          (let ((src (car (org-element-map tree 'src-block #'identity))))
            (mapcar #'org-element-type
                    (org-element-lineage src nil t)))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -338,6 +345,9 @@ Comment block
 #[test]
 fn advanced_complex_property_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (4 3 (1 2 3 4) (\"p\") (\"c\") (\"gc\") (\"ggc\") (1 \"p\" 2 3))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -364,9 +374,7 @@ fn advanced_complex_property_inheritance() {
      ;; PROPERTY as list.
      (org-element-property-inherited
       '(:shared :own-p) great-grandchild nil 'accumulate))))"##,
-        expect_test::expect![[
-            r#""OK (4 3 (1 2 3 4) (\"p\") (\"c\") (\"gc\") (\"ggc\") (1 \"p\" 2 3))""#
-        ]],
+        expect,
     );
 }
 
@@ -377,6 +385,7 @@ fn advanced_complex_property_inheritance() {
 #[test]
 fn advanced_complex_export_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -424,7 +433,7 @@ Content with [fn:1].
          ;; Tags.
          (mapcar (lambda (h) (org-export-get-tags h info))
                  (org-element-map tree 'headline #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -435,6 +444,9 @@ Content with [fn:1].
 #[test]
 fn advanced_complex_agenda_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"TODO\" \"DONE\" nil \"TODO\" nil \"TODO\") (65 66 67 65 nil 66) (((timestamp (:standard-properties [36 nil nil nil 52 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2024-01-15 Mon>\" :year-start 2024 :month-start 1 :day-start 15 :hour-start nil :minute-start nil :year-end 2024 :month-end 1 :day-end 15 :hour-end nil :minute-end nil)) nil) (nil nil) ((timestamp (:standard-properties [170 nil nil nil 186 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2024-01-20 Sat>\" :year-start 2024 :month-start 1 :day-start 20 :hour-start nil :minute-start nil :year-end 2024 :month-end 1 :day-end 20 :hour-end nil :minute-end nil)) nil) (nil (timestamp (:standard-properties [225 nil nil nil 241 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2024-01-22 Mon>\" :year-start 2024 :month-start 1 :day-start 22 :hour-start nil :minute-start nil :year-end 2024 :month-end 1 :day-end 22 :hour-end nil :minute-end nil))) nil nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-agenda)
@@ -470,9 +482,7 @@ DEADLINE: <2024-01-22 Mon>
                        (list (org-element-property :scheduled planning)
                              (org-element-property :deadline planning)))))
                  headlines))))))"##,
-        expect_test::expect![[
-            r#""OK ((\"TODO\" \"DONE\" nil \"TODO\" nil \"TODO\") (65 66 67 65 nil 66) (((timestamp (:standard-properties [36 nil nil nil 52 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2024-01-15 Mon>\" :year-start 2024 :month-start 1 :day-start 15 :hour-start nil :minute-start nil :year-end 2024 :month-end 1 :day-end 15 :hour-end nil :minute-end nil)) nil) (nil nil) ((timestamp (:standard-properties [170 nil nil nil 186 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2024-01-20 Sat>\" :year-start 2024 :month-start 1 :day-start 20 :hour-start nil :minute-start nil :year-end 2024 :month-end 1 :day-end 20 :hour-end nil :minute-end nil)) nil) (nil (timestamp (:standard-properties [225 nil nil nil 241 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2024-01-22 Mon>\" :year-start 2024 :month-start 1 :day-start 22 :hour-start nil :minute-start nil :year-end 2024 :month-end 1 :day-end 22 :hour-end nil :minute-end nil))) nil nil))""#
-        ]],
+        expect,
     );
 }
 
@@ -483,6 +493,9 @@ DEADLINE: <2024-01-22 Mon>
 #[test]
 fn advanced_complex_clock_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (5 (closed closed closed closed running) (\"1:30\" \"1:00\" \"2:00\" \"1:30\" nil) ((2024 1 15 9 0) (2024 1 15 11 0) (2024 1 14 14 0) (2024 1 13 10 0) (2024 1 15 13 0)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -521,9 +534,7 @@ CLOCK: [2024-01-15 Mon 13:00]")
                            (org-element-property :hour-start ts)
                            (org-element-property :minute-start ts))))
                  clocks))))))"##,
-        expect_test::expect![[
-            r#""OK (5 (closed closed closed closed running) (\"1:30\" \"1:00\" \"2:00\" \"1:30\" nil) ((2024 1 15 9 0) (2024 1 15 11 0) (2024 1 14 14 0) (2024 1 13 10 0) (2024 1 15 13 0)))""#
-        ]],
+        expect,
     );
 }
 
@@ -534,6 +545,7 @@ CLOCK: [2024-01-15 Mon 13:00]")
 #[test]
 fn advanced_complex_drawer_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -566,7 +578,7 @@ Body text.")
                  (org-element-map tree 'drawer #'identity))
          ;; Clocks inside drawers.
          (length (org-element-map tree 'clock #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -577,6 +589,7 @@ Body text.")
 #[test]
 fn advanced_complex_dynamic_block_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -603,7 +616,7 @@ Content
                  (org-element-map tree 'dynamic-block #'identity))
          ;; Clocks.
          (length (org-element-map tree 'clock #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -614,6 +627,7 @@ Content
 #[test]
 fn advanced_complex_latex_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -648,7 +662,7 @@ y &= 2
          (length (org-element-map tree 'latex-fragment #'identity))
          ;; LaTeX environments.
          (length (org-element-map tree 'latex-environment #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -659,6 +673,7 @@ y &= 2
 #[test]
 fn advanced_complex_macro_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -679,7 +694,7 @@ fn advanced_complex_macro_scenarios() {
          ;; Macro values.
          (mapcar (lambda (m) (org-element-property :value m))
                  (org-element-map tree 'macro #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -690,6 +705,7 @@ fn advanced_complex_macro_scenarios() {
 #[test]
 fn advanced_complex_entity_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -710,7 +726,7 @@ fn advanced_complex_entity_scenarios() {
          ;; First 5 names.
          (mapcar (lambda (e) (org-element-property :name e))
                  (take 5 (org-element-map tree 'entity #'identity)))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -721,6 +737,7 @@ fn advanced_complex_entity_scenarios() {
 #[test]
 fn advanced_complex_radio_target_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -739,7 +756,7 @@ See radio1, radio2, radio3.")
          ;; Types.
          (mapcar #'org-element-type
                  (org-element-map tree 'radio-target #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -750,6 +767,7 @@ See radio1, radio2, radio3.")
 #[test]
 fn advanced_complex_statistics_cookie_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -777,7 +795,7 @@ fn advanced_complex_statistics_cookie_scenarios() {
          ;; Cookie values.
          (mapcar (lambda (c) (org-element-property :value c))
                  (org-element-map tree 'statistics-cookie #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -788,6 +806,7 @@ fn advanced_complex_statistics_cookie_scenarios() {
 #[test]
 fn advanced_complex_inlinetask_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -820,7 +839,7 @@ Body
                    (list (org-element-property :todo-keyword task)
                          (org-element-property :tags task)))
                  (org-element-map tree 'inlinetask #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -831,6 +850,7 @@ Body
 #[test]
 fn advanced_complex_export_snippet_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -851,7 +871,7 @@ Custom: @@mybackend:custom content@@.")
          ;; Values.
          (mapcar (lambda (s) (org-element-property :value s))
                  (org-element-map tree 'export-snippet #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -862,6 +882,7 @@ Custom: @@mybackend:custom content@@.")
 #[test]
 fn advanced_complex_diary_sexp_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -879,7 +900,7 @@ fn advanced_complex_diary_sexp_scenarios() {
          ;; Types.
          (mapcar #'org-element-type
                  (org-element-map tree 'diary-sexp #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -890,6 +911,7 @@ fn advanced_complex_diary_sexp_scenarios() {
 #[test]
 fn advanced_complex_horizontal_rule_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -916,7 +938,7 @@ End")
          ;; Types.
          (mapcar #'org-element-type
                  (org-element-map tree 'horizontal-rule #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -927,6 +949,7 @@ End")
 #[test]
 fn advanced_complex_line_break_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -950,6 +973,6 @@ Line 7")
          ;; Types.
          (mapcar #'org-element-type
                  (org-element-map tree 'line-break #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

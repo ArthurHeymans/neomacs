@@ -106,12 +106,10 @@ fn oracle_prop_gp_tree_representation_and_eval() {
     (fmakunbound 'neovm--gp-depth)
     (fmakunbound 'neovm--gp-node-count)
     (fmakunbound 'neovm--gp-to-string)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (6 49 17 9 0 42 42 1 2 0 0 3 7 1 \"(+ x 1)\" \"(+ (* x x) (- x 3))\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (6 49 17 9 0 42 42 1 2 0 0 3 7 1 \"(+ x 1)\" \"(+ (* x x) (- x 3))\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -182,10 +180,8 @@ fn oracle_prop_gp_fitness_evaluation() {
                  (>= f-linear f-const)))))
     (fmakunbound 'neovm--gp2-eval)
     (fmakunbound 'neovm--gp2-fitness)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 0 -25 -35 -28 -35 (t t t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 0 -25 -35 -28 -35 (t t t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -283,12 +279,10 @@ fn oracle_prop_gp_crossover() {
     (fmakunbound 'neovm--gp3-replace-subtree)
     (fmakunbound 'neovm--gp3-node-count)
     (fmakunbound 'neovm--gp3-crossover)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((+ (* x x) (- x 1)) (* x x) x (- x 1) (+ (+ x 3) (- x 1)) (+ (* 5 x) (- x 1)) (* (+ x 3) (- x 2)) 7 7 (+ (* x x) (- x 1)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((+ (* x x) (- x 1)) (* x x) x (- x 1) (+ (+ x 3) (- x 1)) (+ (* 5 x) (- x 1)) (* (+ x 3) (- x 2)) 7 7 (+ (* x x) (- x 1)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -391,12 +385,10 @@ fn oracle_prop_gp_mutation() {
     (fmakunbound 'neovm--gp4-replace-subtree)
     (fmakunbound 'neovm--gp4-random-tree)
     (fmakunbound 'neovm--gp4-mutate)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (1 (+ 1 1) 2 x (+ (* x x) (- x 1)) (+ (* x x) (- x 1)) (+ (* x x) (- x 1)) (+ (* x x) (- x 1)) 7 (+ (* x x) (- x 1)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (1 (+ 1 1) 2 x (+ (* x x) (- x 1)) (+ (* x x) (- x 1)) (+ (* x x) (- x 1)) (+ (* x x) (- x 1)) 7 (+ (* x x) (- x 1)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -493,10 +485,8 @@ fn oracle_prop_gp_tournament_selection() {
     (fmakunbound 'neovm--gp5-eval)
     (fmakunbound 'neovm--gp5-fitness)
     (fmakunbound 'neovm--gp5-tournament)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((0 -12 -9 -5 -6) (3 -5) (2 -9) 3 1 (4 1 1 2 2))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((0 -12 -9 -5 -6) (3 -5) (2 -9) 3 1 (4 1 1 2 2))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -565,12 +555,10 @@ fn oracle_prop_gp_symbolic_regression_polynomial() {
             (funcall 'neovm--gp6-eval perfect '((x . 0)))))))
     (fmakunbound 'neovm--gp6-eval)
     (fmakunbound 'neovm--gp6-fitness)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((-5 . 66) (-4 . 45) (-3 . 28) (-2 . 15) (-1 . 6) (0 . 1) (1 . 0) (2 . 3) (3 . 10) (4 . 21) (5 . 36)) 0 0 -91 -236 -231 (171 231 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((-5 . 66) (-4 . 45) (-3 . 28) (-2 . 15) (-1 . 6) (0 . 1) (1 . 0) (2 . 3) (3 . 10) (4 . 21) (5 . 36)) 0 0 -91 -236 -231 (171 231 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -738,8 +726,6 @@ fn oracle_prop_gp_population_evolution() {
     (fmakunbound 'neovm--gp7-simple-mutate)
     (fmakunbound 'neovm--gp7-select)
     (fmakunbound 'neovm--gp7-evolve-gen)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 (0 0 0 0 0) t 6 t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 (0 0 0 0 0) t 6 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

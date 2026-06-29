@@ -21,7 +21,8 @@ fn oracle_prop_marker_basic() {
                       (list (markerp m)
                             (marker-position m)
                             (eq (marker-buffer m) (current-buffer)))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t 6 t)""#]]);
+    let expect = expect_test::expect![[r#""OK (t 6 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -42,7 +43,8 @@ fn oracle_prop_copy_marker() {
                               (eq m1 m2)
                               (= (marker-position m1)
                                  (marker-position m2))))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (6 6 nil t)""#]]);
+    let expect = expect_test::expect![[r#""OK (6 6 nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -64,7 +66,8 @@ fn oracle_prop_set_marker() {
                           (set-marker m nil)
                           (list pos1 pos2
                                 (marker-position m))))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (5 8 nil)""#]]);
+    let expect = expect_test::expect![[r#""OK (5 8 nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -89,10 +92,8 @@ fn oracle_prop_marker_moves_with_insert() {
                                 after-insert
                                 (marker-position m)
                                 (buffer-string))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 5 3 \"xBCDE\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 5 3 \"xBCDE\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -116,7 +117,8 @@ fn oracle_prop_marker_insertion_type() {
                         (list t1 t2
                               (marker-position m1)
                               (marker-position m2)))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (nil t 3 5)""#]]);
+    let expect = expect_test::expect![[r#""OK (nil t 3 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -148,10 +150,8 @@ fn oracle_prop_marker_bracket_tracking() {
                                 (setq stack (cdr stack)))))))
                         (forward-char 1))
                       (nreverse pairs)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((4 8) (13 15) (10 18) (1 21))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((4 8) (13 15) (10 18) (1 21))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -181,10 +181,8 @@ fn oracle_prop_marker_survive_edits() {
                         (let ((after (mapcar #'marker-position markers)))
                           (list before after
                                 (buffer-string))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 7 13 19) (1 14 20 26) \"HEADER\nline1\nline2\nline3\nline4\n\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 7 13 19) (1 14 20 26) \"HEADER\nline1\nline2\nline3\nline4\n\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

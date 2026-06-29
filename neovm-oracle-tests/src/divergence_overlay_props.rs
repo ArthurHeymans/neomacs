@@ -14,27 +14,33 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_prop_propertize_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK #(\"hello\" 0 5 (face bold font-lock-face keyword))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(propertize "hello" 'face 'bold 'font-lock-face 'keyword)"#,
-        expect_test::expect![[r#""OK #(\"hello\" 0 5 (face bold font-lock-face keyword))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_prop_propertize_text_properties_at() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (#(\"x\" 0 1 (a 1 b 2)) (a 1 b 2) 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (let ((s (propertize "x" 'a 1 'b 2)))
   (list s (text-properties-at 0 s) (length s)))
 "#,
-        expect_test::expect![[r#""OK (#(\"x\" 0 1 (a 1 b 2)) (a 1 b 2) 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_prop_set_text_properties_add_remove() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((face bold) (font-lock-face keyword) nil nil (font-lock-face keyword))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
@@ -47,15 +53,14 @@ fn div_prop_set_text_properties_add_remove() {
     (remove-text-properties 1 6 '(face))
     (list p1 p3 p5 (text-properties-at 1) (text-properties-at 3))))
 "#,
-        expect_test::expect![[
-            r#""OK ((face bold) (font-lock-face keyword) nil nil (font-lock-face keyword))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_prop_next_previous_property_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 2 4 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
@@ -66,13 +71,14 @@ fn div_prop_next_previous_property_change() {
         (previous-property-change 6)
         (previous-single-property-change 6 'p)))
 "#,
-        expect_test::expect![[r#""OK (2 2 4 4)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_prop_property_search_bounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 1 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
@@ -82,13 +88,14 @@ fn div_prop_property_search_bounds() {
         (text-property-not-all 1 8 'face 'bold)
         (text-property-any 1 3 'face 'bold)))
 "#,
-        expect_test::expect![[r#""OK (3 1 nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_prop_stickiness_explicit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t (front-sticky t rear-sticky nil))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
@@ -99,13 +106,14 @@ fn div_prop_stickiness_explicit() {
         (get-text-property 2 'front-sticky)
         (text-properties-at 2)))
 "#,
-        expect_test::expect![[r#""OK (nil t (front-sticky t rear-sticky nil))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_prop_insert_inherits_text_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil bold)""#]];
     // Inserting at a boundary inherits neighboring rear/front-sticky props.
     crate::common::assert_oracle_parity_expect(
         r#"
@@ -116,7 +124,7 @@ fn div_prop_insert_inherits_text_properties() {
   (insert "X")
   (list (get-text-property 3 'face) (get-text-property 4 'face)))
 "#,
-        expect_test::expect![[r#""OK (nil bold)""#]],
+        expect,
     );
 }
 
@@ -125,6 +133,7 @@ fn div_prop_insert_inherits_text_properties() {
 #[test]
 fn div_ov_make_put_get() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t 2 5 bold 5 #<killed buffer>)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
@@ -138,13 +147,14 @@ fn div_ov_make_put_get() {
           (overlay-get ov 'priority)
           (overlay-buffer ov))))
 "#,
-        expect_test::expect![[r#""OK (t 2 5 bold 5 #<killed buffer>)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_ov_move_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (6 9 nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
@@ -155,13 +165,14 @@ fn div_ov_move_delete() {
       (delete-overlay ov)
       (list s1 e1 (overlays-at 3) (overlays-at 7)))))
 "#,
-        expect_test::expect![[r#""OK (6 9 nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_ov_priority_ordering_at() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 3 (1 3 2))""#]];
     // overlays-at returns overlays sorted by priority (highest first).
     crate::common::assert_oracle_parity_expect(
         r#"
@@ -175,13 +186,14 @@ fn div_ov_priority_ordering_at() {
           (length (overlays-in 2 6))
           (mapcar (lambda (o) (overlay-get o 'priority)) (overlays-at 4)))))
 "#,
-        expect_test::expect![[r#""OK (3 3 (1 3 2))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_ov_before_after_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\">>\" \"<<\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
@@ -192,13 +204,14 @@ fn div_ov_before_after_string() {
     (list (overlay-get ov 'after-string)
           (overlay-get ov 'before-string))))
 "#,
-        expect_test::expect![[r#""OK (\">>\" \"<<\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_ov_lists_and_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 0 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
@@ -209,13 +222,16 @@ fn div_ov_lists_and_count() {
     (list (length (car ls)) (length (cdr ls))
           (length (overlays-in 1 20)))))
 "#,
-        expect_test::expect![[r#""OK (2 0 2)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_ov_overlay_at_endpoints() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((#<overlay in no buffer>) (#<overlay in no buffer>) nil nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
@@ -226,15 +242,14 @@ fn div_ov_overlay_at_endpoints() {
           (member ov (overlays-at 6))
           (overlays-in 6 9))))
 "#,
-        expect_test::expect![[
-            r#""OK ((#<overlay in no buffer>) (#<overlay in no buffer>) nil nil)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_ov_evaporate_on_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil t nil)""#]];
     // An overlay with evaporate=t and zero length should be deleted.
     crate::common::assert_oracle_parity_expect(
         r#"
@@ -245,13 +260,14 @@ fn div_ov_evaporate_on_empty() {
     (list (overlay-start ov) (overlay-end ov) (overlayp ov)
           (progn (delete-region 3 4) (overlay-start ov)))))
 "#,
-        expect_test::expect![[r#""OK (nil nil t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_ov_priority_default_and_neg() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 -5)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"
 (with-temp-buffer
@@ -261,6 +277,6 @@ fn div_ov_priority_default_and_neg() {
     (overlay-put o2 'priority 0)
     (mapcar (lambda (o) (overlay-get o 'priority)) (overlays-at 3))))
 "#,
-        expect_test::expect![[r#""OK (0 -5)""#]],
+        expect,
     );
 }

@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_text_prop_insert_in_middle_splits() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""AABBAAOK (bold nil bold bold)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (propertize "AAAA" 'face 'bold))
@@ -16,7 +17,7 @@ fn divergence_text_prop_insert_in_middle_splits() {
         (get-text-property 3 'face (current-buffer))
         (get-text-property 5 'face (current-buffer))
         (get-text-property 6 'face (current-buffer))))"#,
-        expect_test::expect![[r#""AABBAAOK (bold nil bold bold)""#]],
+        expect,
     );
 }
 
@@ -24,6 +25,7 @@ fn divergence_text_prop_insert_in_middle_splits() {
 fn divergence_text_prop_rear_nonsticky() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCDEFOK (bold nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (propertize "ABC" 'rear-nonsticky t 'face 'bold))
@@ -31,7 +33,7 @@ fn divergence_text_prop_rear_nonsticky() {
   (insert "DEF")
   (list (get-text-property 3 'face (current-buffer))
         (get-text-property 4 'face (current-buffer))))"#,
-        expect_test::expect![[r#""ABCDEFOK (bold nil)""#]],
+        expect,
     );
 }
 
@@ -39,6 +41,7 @@ fn divergence_text_prop_rear_nonsticky() {
 fn divergence_text_prop_front_sticky() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""YYXXOK (italic italic nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "XX")
@@ -47,7 +50,7 @@ fn divergence_text_prop_front_sticky() {
   (list (get-text-property 1 'face (current-buffer))
         (get-text-property 2 'face (current-buffer))
         (get-text-property 3 'face (current-buffer))))"#,
-        expect_test::expect![[r#""YYXXOK (italic italic nil)""#]],
+        expect,
     );
 }
 
@@ -55,6 +58,7 @@ fn divergence_text_prop_front_sticky() {
 fn divergence_text_prop_remove_text_property_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""AAAAAAOK (bold nil nil italic italic)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAAAA")
@@ -66,7 +70,7 @@ fn divergence_text_prop_remove_text_property_merge() {
         (get-text-property 4 'face (current-buffer))
         (get-text-property 5 'face (current-buffer))
         (get-text-property 6 'face (current-buffer))))"#,
-        expect_test::expect![[r#""AAAAAAOK (bold nil nil italic italic)""#]],
+        expect,
     );
 }
 
@@ -74,6 +78,7 @@ fn divergence_text_prop_remove_text_property_merge() {
 fn divergence_next_property_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCDEFGHIJOK (4 7 4 7)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -84,7 +89,7 @@ fn divergence_next_property_change() {
         (next-property-change 4 (current-buffer))
         (next-single-property-change 1 'face (current-buffer))
         (next-single-property-change 4 'face (current-buffer))))"#,
-        expect_test::expect![[r#""ABCDEFGHIJOK (4 7 4 7)""#]],
+        expect,
     );
 }
 
@@ -92,6 +97,7 @@ fn divergence_next_property_change() {
 fn divergence_previous_property_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCDEFGHIJOK (4 7 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -100,7 +106,7 @@ fn divergence_previous_property_change() {
   (list (previous-property-change 7 (current-buffer))
         (previous-property-change 10 (current-buffer))
         (previous-single-property-change 7 'face (current-buffer))))"#,
-        expect_test::expect![[r#""ABCDEFGHIJOK (4 7 4)""#]],
+        expect,
     );
 }
 
@@ -108,6 +114,7 @@ fn divergence_previous_property_change() {
 fn divergence_text_prop_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""Hello WorldOK (bold nil 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -116,7 +123,7 @@ fn divergence_text_prop_inheritance() {
     (list (get-text-property 0 'face sub)
           (get-text-property 3 'face sub)
           (length sub))))"#,
-        expect_test::expect![[r#""Hello WorldOK (bold nil 6)""#]],
+        expect,
     );
 }
 
@@ -124,6 +131,7 @@ fn divergence_text_prop_inheritance() {
 fn divergence_add_text_properties_appends() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCDEFGHOK (bold italic highlight highlight)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGH")
@@ -133,7 +141,7 @@ fn divergence_add_text_properties_appends() {
         (get-text-property 4 'face (current-buffer))
         (get-text-property 5 'mouse-face (current-buffer))
         (get-text-property 6 'mouse-face (current-buffer))))"#,
-        expect_test::expect![[r#""ABCDEFGHOK (bold italic highlight highlight)""#]],
+        expect,
     );
 }
 
@@ -141,6 +149,7 @@ fn divergence_add_text_properties_appends() {
 fn divergence_erase_buffer_keeps_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""WorldOK (nil 1 6 \"World\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello")
@@ -151,7 +160,7 @@ fn divergence_erase_buffer_keeps_props() {
         (point-min)
         (point-max)
         (buffer-string)))"#,
-        expect_test::expect![[r#""WorldOK (nil 1 6 \"World\")""#]],
+        expect,
     );
 }
 
@@ -159,6 +168,7 @@ fn divergence_erase_buffer_keeps_props() {
 fn divergence_set_text_properties_overwrite() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCDEFGHOK (bold highlight italic nil highlight)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGH")
@@ -170,6 +180,6 @@ fn divergence_set_text_properties_overwrite() {
         (get-text-property 4 'face (current-buffer))
         (get-text-property 4 'mouse-face (current-buffer))
         (get-text-property 7 'mouse-face (current-buffer))))"#,
-        expect_test::expect![[r#""ABCDEFGHOK (bold highlight italic nil highlight)""#]],
+        expect,
     );
 }

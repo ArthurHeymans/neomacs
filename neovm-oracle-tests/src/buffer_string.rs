@@ -10,9 +10,10 @@ use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_buffer_string_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""abcOK \"abc\"""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (erase-buffer) (insert "abc") (buffer-string))"#,
-        expect_test::expect![[r#""abcOK \"abc\"""#]],
+        expect,
     );
     assert_ok_eq("\"abc\"", &oracle, &neovm);
 }
@@ -21,10 +22,9 @@ fn oracle_prop_buffer_string_basics() {
 fn oracle_prop_buffer_string_wrong_arity_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(buffer-string nil)",
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments buffer-string 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments buffer-string 1)""#]];
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect("(buffer-string nil)", expect);
     assert_err_kind(&oracle, &neovm, "wrong-number-of-arguments");
 }
 

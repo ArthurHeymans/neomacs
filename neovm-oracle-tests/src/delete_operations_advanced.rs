@@ -28,10 +28,8 @@ fn oracle_prop_delete_char_positive_counts() {
           (goto-char 3)
           (delete-char 2)
           (list after-1 after-4 (buffer-string) (point) (buffer-size)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"bcdefghij\" \"efghij\" \"efij\" 3 4)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"bcdefghij\" \"efghij\" \"efij\" 3 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -56,10 +54,8 @@ fn oracle_prop_delete_char_negative_counts() {
                 after-neg3
                 (point)
                 (buffer-size)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"01234567\" \"04567\" 2 5)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"01234567\" \"04567\" 2 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -93,12 +89,10 @@ fn oracle_prop_delete_char_boundary_errors() {
           (list err-forward buf-after-fwd-err
                 err-backward buf-after-bwd-err
                 (buffer-string) (buffer-size)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((caught end-of-buffer) \"abc\" (caught beginning-of-buffer) \"abc\" \"\" 0)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((caught end-of-buffer) \"abc\" (caught beginning-of-buffer) \"abc\" \"\" 0)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -125,12 +119,10 @@ fn oracle_prop_delete_list_equal() {
                       from-nil
                       ;; verify original is unchanged
                       original)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"bar\" \"baz\" \"quux\") ((3 4) (5 6)) (\"foo\" \"bar\" \"baz\" \"foo\" \"quux\") nil (\"foo\" \"bar\" \"baz\" \"foo\" \"quux\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"bar\" \"baz\" \"quux\") ((3 4) (5 6)) (\"foo\" \"bar\" \"baz\" \"foo\" \"quux\") nil (\"foo\" \"bar\" \"baz\" \"foo\" \"quux\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -149,10 +141,8 @@ fn oracle_delete_mutates_before_improper_tail_error() {
     (error (list (car err) x))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (wrong-type-argument ((needle) . tail))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (wrong-type-argument ((needle) . tail))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -187,12 +177,10 @@ fn oracle_prop_delq_vs_delete_semantics() {
                         delq-result delete-result
                         delq-sym delete-sym
                         delq-int delete-int))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t nil (\"world\" \"hello\" \"foo\") (\"world\" \"foo\") (b c d) (b c d) (2 3 4) (2 3 4))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t nil (\"world\" \"hello\" \"foo\") (\"world\" \"foo\") (b c d) (b c d) (2 3 4) (2 3 4))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -228,12 +216,10 @@ fn oracle_prop_delete_and_extract_region_advanced() {
         (list (nreverse kill-ring)
               (buffer-string)
               (buffer-size))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"line-one\n\" \"line-three\n\" \"two\") \"line-\nline-four\nline-five\n\" 26)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"line-one\n\" \"line-three\n\" \"two\") \"line-\nline-four\nline-five\n\" 26)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -297,12 +283,10 @@ fn oracle_prop_delete_matching_lines() {
            (list count (buffer-string)))))
     (fmakunbound 'neovm--test-del-flush-lines)
     (fmakunbound 'neovm--test-del-keep-lines)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((3 \"code line 1\ncode line 2\ncode line 3\n\") (2 \"item 42\nitem 99\n\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((3 \"code line 1\ncode line 2\ncode line 3\n\") (2 \"item 42\nitem 99\n\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -371,12 +355,10 @@ fn oracle_prop_delete_editor_pipeline() {
     (fmakunbound 'neovm--test-del-word-backward)
     (fmakunbound 'neovm--test-del-to-eol)
     (fmakunbound 'neovm--test-del-whole-line)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"the \" \"fox\" \" brown \" \"jumps over the lazy dog\n\") \"quick brown fox\njumps over the lazy dog\nend of text\n\" \"quick brown \njumps over the lazy dog\nend of text\n\" \"quick\njumps over the lazy dog\nend of text\n\" \"quick\nend of text\n\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"the \" \"fox\" \" brown \" \"jumps over the lazy dog\n\") \"quick brown fox\njumps over the lazy dog\nend of text\n\" \"quick brown \njumps over the lazy dog\nend of text\n\" \"quick\njumps over the lazy dog\nend of text\n\" \"quick\nend of text\n\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -420,8 +402,6 @@ fn oracle_prop_delete_duplicate_lines() {
         (let ((count (funcall 'neovm--test-del-dedup-lines)))
           (list count (buffer-string))))
     (fmakunbound 'neovm--test-del-dedup-lines)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (4 \"apple\nbanana\ncherry\ndate\n\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (4 \"apple\nbanana\ncherry\ndate\n\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

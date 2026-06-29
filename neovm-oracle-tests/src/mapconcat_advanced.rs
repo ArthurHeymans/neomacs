@@ -24,12 +24,10 @@ fn oracle_prop_mapconcat_separators() {
   (mapconcat #'symbol-name '(foo bar baz) " AND ")
   (mapconcat #'number-to-string '(1 2 3 4 5) " + ")
   (mapconcat #'number-to-string '(10 20 30) "---"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"foo, bar, baz\" \"foo | bar | baz\" \"foo -> bar -> baz\" \"foo\nbar\nbaz\" \"foo AND bar AND baz\" \"1 + 2 + 3 + 4 + 5\" \"10---20---30\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"foo, bar, baz\" \"foo | bar | baz\" \"foo -> bar -> baz\" \"foo\nbar\nbaz\" \"foo AND bar AND baz\" \"1 + 2 + 3 + 4 + 5\" \"10---20---30\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -49,12 +47,10 @@ fn oracle_prop_mapconcat_identity() {
   (mapconcat #'identity '("solo") "|||")
   ;; Multi-char strings
   (mapconcat #'identity '("the" "quick" "brown" "fox") " "))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"hello world\" \"abcd\" \"one\" \"alpha::beta::gamma::delta\" \"solo\" \"the quick brown fox\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"hello world\" \"abcd\" \"one\" \"alpha::beta::gamma::delta\" \"solo\" \"the quick brown fox\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -83,12 +79,10 @@ fn oracle_prop_mapconcat_complex_lambda() {
              ", ")
   ;; Repeat each character
   (mapconcat (lambda (s) (concat s s)) '("ha" "ho" "he") "-"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"[a], [b], [c]\" \"000A 00FF 1000 FFFF\" \"HWT\" \"1, 2, Fizz, 4, Buzz, Fizz, 7, 8, Fizz, Buzz, 11, Fizz, 13, 14, FizzBuzz\" \"haha-hoho-hehe\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"[a], [b], [c]\" \"000A 00FF 1000 FFFF\" \"HWT\" \"1, 2, Fizz, 4, Buzz, Fizz, 7, 8, Fizz, Buzz, 11, Fizz, 13, 14, FizzBuzz\" \"haha-hoho-hehe\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -112,10 +106,8 @@ fn oracle_prop_mapconcat_vectors() {
   (mapconcat #'identity [] ", ")
   ;; Single-element vector
   (mapconcat #'number-to-string [42] "---"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (wrong-type-argument symbolp 'alpha)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument symbolp 'alpha)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -143,12 +135,10 @@ fn oracle_prop_mapconcat_empty_separator() {
                  (if (= (% idx 2) 0) (upcase s) (downcase s)))
                '("a" "B" "c" "D" "e")
                "")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"abc\" \"hello world\" \"Hello\" \"12345\" \"FOOBARBAZ\" \"AbCdE\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"abc\" \"hello world\" \"Hello\" \"12345\" \"FOOBARBAZ\" \"AbCdE\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -168,10 +158,8 @@ fn oracle_prop_mapconcat_empty_list() {
   ;; Empty result should be empty string
   (string= (mapconcat #'identity nil ", ") "")
   (length (mapconcat #'identity nil "LONG-SEP")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"\" \"\" \"\" \"\" \"\" t 0)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"\" \"\" \"\" \"\" \"\" t 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -262,12 +250,10 @@ fn oracle_prop_mapconcat_sql_builder() {
                  nil nil nil))
     (fmakunbound 'neovm--sql-select)
     (fmakunbound 'neovm--sql-insert)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"SELECT name, age, email FROM users\" \"SELECT * FROM products WHERE price > 100 AND category = 'electronics'\" \"SELECT id, name, score FROM students WHERE score >= 90 AND active = 1 ORDER BY score DESC, name ASC LIMIT 10\" \"INSERT INTO users (name, age, city) VALUES ('Alice', 30, 'NYC')\" \"SELECT count(*) FROM logs\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"SELECT name, age, email FROM users\" \"SELECT * FROM products WHERE price > 100 AND category = 'electronics'\" \"SELECT id, name, score FROM students WHERE score >= 90 AND active = 1 ORDER BY score DESC, name ASC LIMIT 10\" \"INSERT INTO users (name, age, city) VALUES ('Alice', 30, 'NYC')\" \"SELECT count(*) FROM logs\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -362,12 +348,10 @@ fn oracle_prop_mapconcat_html_builder() {
     (fmakunbound 'neovm--html-tag)
     (fmakunbound 'neovm--html-table)
     (fmakunbound 'neovm--html-list)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"<p>Hello World</p>\" \"<a href=\\\"https://example.com\\\" class=\\\"link\\\">Click here</a>\" \"<ul><li>Apple</li><li>Banana</li><li>Cherry</li></ul>\" \"<ol><li>First</li><li>Second</li><li>Third</li></ol>\" \"<table class=\\\"data-table\\\"><tr><th>Name</th><th>Age</th><th>City</th></tr><tr><td>Alice</td><td>30</td><td>NYC</td></tr><tr><td>Bob</td><td>25</td><td>LA</td></tr><tr><td>Charlie</td><td>35</td><td>Chicago</td></tr></table>\" \"<div id=\\\"content\\\"><h1>Title</h1><ul><li>Item A</li><li>Item B</li></ul></div>\" \"<nav><a href=\\\"/\\\">Home</a> | <a href=\\\"/about\\\">About</a> | <a href=\\\"/contact\\\">Contact</a></nav>\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"<p>Hello World</p>\" \"<a href=\\\"https://example.com\\\" class=\\\"link\\\">Click here</a>\" \"<ul><li>Apple</li><li>Banana</li><li>Cherry</li></ul>\" \"<ol><li>First</li><li>Second</li><li>Third</li></ol>\" \"<table class=\\\"data-table\\\"><tr><th>Name</th><th>Age</th><th>City</th></tr><tr><td>Alice</td><td>30</td><td>NYC</td></tr><tr><td>Bob</td><td>25</td><td>LA</td></tr><tr><td>Charlie</td><td>35</td><td>Chicago</td></tr></table>\" \"<div id=\\\"content\\\"><h1>Title</h1><ul><li>Item A</li><li>Item B</li></ul></div>\" \"<nav><a href=\\\"/\\\">Home</a> | <a href=\\\"/about\\\">About</a> | <a href=\\\"/contact\\\">Contact</a></nav>\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -420,10 +404,8 @@ fn oracle_prop_mapconcat_path_builder() {
     (fmakunbound 'neovm--build-path)
     (fmakunbound 'neovm--build-query)
     (fmakunbound 'neovm--build-csv-row)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"home/user/documents/file.txt\" \"\" \"root\" \"name=alice&age=30&city=nyc\" \"q=hello world\" \"Alice,30,\\\"New York, NY\\\",active\" \"simple,row,here\" \"Name,Age,City\nAlice,30,NYC\nBob,25,\\\"LA, CA\\\"\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"home/user/documents/file.txt\" \"\" \"root\" \"name=alice&age=30&city=nyc\" \"q=hello world\" \"Alice,30,\\\"New York, NY\\\",active\" \"simple,row,here\" \"Name,Age,City\nAlice,30,NYC\nBob,25,\\\"LA, CA\\\"\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

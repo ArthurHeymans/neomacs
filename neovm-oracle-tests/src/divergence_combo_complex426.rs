@@ -14,12 +14,13 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx426_string_replace_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-length-argument 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-replace "foo" "bar" "foo foo foo")
       (string-replace "" "x" "abc"))
 "##,
-        expect_test::expect![[r#""ERR (wrong-length-argument 0)""#]],
+        expect,
     );
 }
 
@@ -27,6 +28,7 @@ fn div_cx426_string_replace_edit() {
 #[test]
 fn div_cx426_string_remove_prefix_suffix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function string-remove-prefix)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-remove-prefix "caf" "café")
@@ -34,7 +36,7 @@ fn div_cx426_string_remove_prefix_suffix() {
       (string-remove-prefix "αβ" "αβγ")
       (string-remove-prefix "xxx" "hello"))
 "##,
-        expect_test::expect![[r#""ERR (void-function string-remove-prefix)""#]],
+        expect,
     );
 }
 
@@ -42,12 +44,13 @@ fn div_cx426_string_remove_prefix_suffix() {
 #[test]
 fn div_cx426_string_truncate_left() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument sequencep 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-truncate-left 5 "café世界")
       (string-truncate-left 3 "abcdef"))
 "##,
-        expect_test::expect![[r#""ERR (wrong-type-argument sequencep 5)""#]],
+        expect,
     );
 }
 
@@ -55,13 +58,14 @@ fn div_cx426_string_truncate_left() {
 #[test]
 fn div_cx426_window_min_max_delta() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((w (selected-window)))
   (list (window-min-delta w)
         (window-max-delta w)))
 "##,
-        expect_test::expect![[r#""OK (0 0)""#]],
+        expect,
     );
 }
 
@@ -69,13 +73,14 @@ fn div_cx426_window_min_max_delta() {
 #[test]
 fn div_cx426_window_pixel_dimensions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (80 23)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((w (selected-window)))
   (list (window-pixel-width w)
         (window-pixel-height w)))
 "##,
-        expect_test::expect![[r#""OK (80 23)""#]],
+        expect,
     );
 }
 
@@ -83,12 +88,13 @@ fn div_cx426_window_pixel_dimensions() {
 #[test]
 fn div_cx426_window_absolute_pixel_edges() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((w (selected-window)))
   (window-absolute-pixel-edges w))
 "##,
-        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
+        expect,
     );
 }
 
@@ -96,13 +102,14 @@ fn div_cx426_window_absolute_pixel_edges() {
 #[test]
 fn div_cx426_window_mode_header_height() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((w (selected-window)))
   (list (window-mode-line-height w)
         (window-header-line-height w)))
 "##,
-        expect_test::expect![[r#""OK (1 0)""#]],
+        expect,
     );
 }
 
@@ -110,6 +117,7 @@ fn div_cx426_window_mode_header_height() {
 #[test]
 fn div_cx426_line_number_at_pos_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 3""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -117,7 +125,7 @@ fn div_cx426_line_number_at_pos_display() {
   (put-text-property 3 4 'display "XXXX")
   (line-number-at-pos (point-max)))
 "##,
-        expect_test::expect![[r#""OK 3""#]],
+        expect,
     );
 }
 
@@ -125,6 +133,7 @@ fn div_cx426_line_number_at_pos_display() {
 #[test]
 fn div_cx426_bolp_eolp_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -133,7 +142,7 @@ fn div_cx426_bolp_eolp_display() {
   (list (bolp) (eolp)
         (progn (goto-char 4) (bolp) (eolp))))
 "##,
-        expect_test::expect![[r#""OK (nil t t)""#]],
+        expect,
     );
 }
 
@@ -141,6 +150,7 @@ fn div_cx426_bolp_eolp_display() {
 #[test]
 fn div_cx426_current_indentation_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -148,7 +158,7 @@ fn div_cx426_current_indentation_column() {
   (list (current-indentation)
         (progn (indent-line-to 5) (current-indentation))))
 "##,
-        expect_test::expect![[r#""OK (3 5)""#]],
+        expect,
     );
 }
 
@@ -156,6 +166,7 @@ fn div_cx426_current_indentation_column() {
 #[test]
 fn div_cx426_char_equal_greek_full() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((case-fold-search t))
@@ -166,7 +177,7 @@ fn div_cx426_char_equal_greek_full() {
         (char-equal ?σ ?Σ) (char-equal ?Σ ?σ)
         (char-equal ?ω ?Ω) (char-equal ?Ω ?ω)))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -174,6 +185,7 @@ fn div_cx426_char_equal_greek_full() {
 #[test]
 fn div_cx426_compare_strings_multibyte_fold() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t 5 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((case-fold-search t))
@@ -181,7 +193,7 @@ fn div_cx426_compare_strings_multibyte_fold() {
         (compare-strings "straße" nil nil "STRASSE" nil nil t)
         (compare-strings "αβγ" nil nil "ΑΒΓ" nil nil t)))
 "##,
-        expect_test::expect![[r#""OK (t 5 t)""#]],
+        expect,
     );
 }
 
@@ -189,12 +201,13 @@ fn div_cx426_compare_strings_multibyte_fold() {
 #[test]
 fn div_cx426_format_mixed_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable 1.0/3.0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%s %d %f %c" "hello" 42 3.14 65)
       (format "%.10f" 1.0/3.0))
 "##,
-        expect_test::expect![[r#""ERR (void-variable 1.0/3.0)""#]],
+        expect,
     );
 }
 
@@ -202,6 +215,7 @@ fn div_cx426_format_mixed_types() {
 #[test]
 fn div_cx426_string_to_number_various() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3735928559 511 42 -42 31400000000.0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-to-number "deadbeef" 16)
@@ -210,7 +224,7 @@ fn div_cx426_string_to_number_various() {
       (string-to-number "  -42  ")
       (string-to-number "3.14e10"))
 "##,
-        expect_test::expect![[r#""OK (3735928559 511 42 -42 31400000000.0)""#]],
+        expect,
     );
 }
 
@@ -218,6 +232,9 @@ fn div_cx426_string_to_number_various() {
 #[test]
 fn div_cx426_truncate_string_to_width_ellipsis() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"ab…\" #(\"abcdef\" 2 4 (display \"XXXX\")) #(\"abcde\" 2 4 (display \"XXXX\")))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "abcdef"))
@@ -226,9 +243,7 @@ fn div_cx426_truncate_string_to_width_ellipsis() {
         (truncate-string-to-width s 6 nil nil t)
         (truncate-string-to-width s 5)))
 "##,
-        expect_test::expect![[
-            r#""OK (\"ab…\" #(\"abcdef\" 2 4 (display \"XXXX\")) #(\"abcde\" 2 4 (display \"XXXX\")))""#
-        ]],
+        expect,
     );
 }
 
@@ -236,14 +251,15 @@ fn div_cx426_truncate_string_to_width_ellipsis() {
 #[test]
 fn div_cx426_format_prompt_message() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"Open file (default /tmp/test): \" \"Visit ‘the manual’ for details\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (format-prompt "Open file" "/tmp/test")
       (format-message "Visit `%s' for details" "the manual"))
 "##,
-        expect_test::expect![[
-            r#""OK (\"Open file (default /tmp/test): \" \"Visit ‘the manual’ for details\")""#
-        ]],
+        expect,
     );
 }
 
@@ -251,6 +267,7 @@ fn div_cx426_format_prompt_message() {
 #[test]
 fn div_cx426_bool_vector_count_consecutive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 2 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((bv (bool-vector t t nil nil t t t nil)))
@@ -258,7 +275,7 @@ fn div_cx426_bool_vector_count_consecutive() {
         (bool-vector-count-consecutive bv nil 2)
         (bool-vector-count-consecutive bv t 4)))
 "##,
-        expect_test::expect![[r#""OK (2 2 3)""#]],
+        expect,
     );
 }
 
@@ -266,6 +283,7 @@ fn div_cx426_bool_vector_count_consecutive() {
 #[test]
 fn div_cx426_process_id_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"neo-cx426-pi\" t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "neo-cx426-pi"
@@ -280,6 +298,6 @@ fn div_cx426_process_id_name() {
                (> (process-id proc) 0))
     (delete-process proc)))
 "##,
-        expect_test::expect![[r#""OK (\"neo-cx426-pi\" t t)""#]],
+        expect,
     );
 }

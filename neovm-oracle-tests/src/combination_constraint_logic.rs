@@ -94,10 +94,8 @@ fn oracle_prop_constraint_logic_finite_domains() {
     (fmakunbound 'neovm--cl-fd-constrain)
     (fmakunbound 'neovm--cl-fd-intersect)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((2 4 6) (6 7 8 9 10) nil nil (2 4) nil t 4)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((2 4 6) (6 7 8 9 10) nil nil (2 4) nil t 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -201,7 +199,8 @@ fn oracle_prop_constraint_logic_arithmetic_constraints() {
     (fmakunbound 'neovm--cl-arith-bt)
     (fmakunbound 'neovm--cl-arith-get)))
 "#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (nil nil)""#]]);
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -307,10 +306,8 @@ fn oracle_prop_constraint_logic_all_different() {
     (fmakunbound 'neovm--cl-ad-bt2)
     (fmakunbound 'neovm--cl-ad-count-perms)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t (t t) t (1 4 3 2) 24)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t (t t) t (1 4 3 2) 24)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -427,12 +424,10 @@ fn oracle_prop_constraint_logic_arc_consistency() {
     (fmakunbound 'neovm--cl-ac3-revise)
     (fmakunbound 'neovm--cl-ac3-propagate)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t (1 2 3 4 5) (1 2 3 4 5) (1 2 3 4 5) ((1 2 3) (2 3 4) (3 4 5)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t (1 2 3 4 5) (1 2 3 4 5) (1 2 3 4 5) ((1 2 3) (2 3 4) (3 4 5)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -524,12 +519,10 @@ fn oracle_prop_constraint_logic_send_more_money() {
            (list min-ef max-ef))))
     (fmakunbound 'neovm--cl-money-solve)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (476 t t ((12 35 47) (12 36 48) (12 37 49) (12 38 50) (12 46 58)) (39 98))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (476 t t ((12 35 47) (12 36 48) (12 37 49) (12 38 50) (12 46 58)) (39 98))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -668,10 +661,8 @@ fn oracle_prop_constraint_logic_zebra_puzzle() {
     (fmakunbound 'neovm--cl-zebra-solve)
     (fmakunbound 'neovm--cl-zebra-perms)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -759,8 +750,6 @@ fn oracle_prop_constraint_logic_magic_square() {
     (fmakunbound 'neovm--cl-magic-solve)
     (fmakunbound 'neovm--cl-magic-bt)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (8 (t t t t t t t t t) t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (8 (t t t t t t t t t) t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_text_prop_empty_range_noop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdef")
@@ -17,7 +18,7 @@ fn divergence_text_prop_empty_range_noop() {
   (list (get-text-property 3 'face)
         (get-text-property 2 'face)
         (get-text-property 4 'face)))"#,
-        expect_test::expect![[r#""OK (nil nil nil)""#]],
+        expect,
     );
 }
 
@@ -25,6 +26,7 @@ fn divergence_text_prop_empty_range_noop() {
 fn divergence_text_prop_at_buffer_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 0 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abc")
@@ -33,7 +35,7 @@ fn divergence_text_prop_at_buffer_boundaries() {
         (get-text-property 1 'face)
         (get-text-property 2 'face)
         (get-text-property 3 'face)))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 0 0)""#]],
+        expect,
     );
 }
 
@@ -41,6 +43,7 @@ fn divergence_text_prop_at_buffer_boundaries() {
 fn divergence_next_property_change_at_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (4 4 7 nil nil 4 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdefgh")
@@ -53,7 +56,7 @@ fn divergence_next_property_change_at_boundary() {
         (previous-property-change 4)
         (previous-property-change 7)
         (previous-property-change 1)))"#,
-        expect_test::expect![[r#""OK (4 4 7 nil nil 4 nil)""#]],
+        expect,
     );
 }
 
@@ -61,6 +64,7 @@ fn divergence_next_property_change_at_boundary() {
 fn divergence_next_single_property_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (4 5 8)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdefgh")
@@ -69,7 +73,7 @@ fn divergence_next_single_property_change() {
   (list (next-single-property-change 1 'face)
         (next-single-property-change 4 'face)
         (next-single-property-change 5 'face)))"#,
-        expect_test::expect![[r#""OK (4 5 8)""#]],
+        expect,
     );
 }
 
@@ -77,6 +81,7 @@ fn divergence_next_single_property_change() {
 fn divergence_remove_text_properties_middle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (bold nil bold)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdefgh")
@@ -85,7 +90,7 @@ fn divergence_remove_text_properties_middle() {
   (list (get-text-property 2 'face)
         (get-text-property 4 'face)
         (get-text-property 7 'face)))"#,
-        expect_test::expect![[r#""OK (bold nil bold)""#]],
+        expect,
     );
 }
 
@@ -93,6 +98,7 @@ fn divergence_remove_text_properties_middle() {
 fn divergence_set_text_properties_replace_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (bold italic italic nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdefgh")
@@ -102,7 +108,7 @@ fn divergence_set_text_properties_replace_all() {
         (get-text-property 4 'face)
         (get-text-property 6 'face)
         (get-text-property 8 'face)))"#,
-        expect_test::expect![[r#""OK (bold italic italic nil)""#]],
+        expect,
     );
 }
 
@@ -110,6 +116,7 @@ fn divergence_set_text_properties_replace_all() {
 fn divergence_overlay_evaporate_on_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdefgh")
@@ -119,7 +126,7 @@ fn divergence_overlay_evaporate_on_delete() {
     (delete-region 3 6)
     (list (overlay-buffer ov)
           (length (overlays-in 1 8)))))"#,
-        expect_test::expect![[r#""OK (nil 0)""#]],
+        expect,
     );
 }
 
@@ -127,6 +134,7 @@ fn divergence_overlay_evaporate_on_delete() {
 fn divergence_overlay_evaporate_after_move() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdefgh")
@@ -135,7 +143,7 @@ fn divergence_overlay_evaporate_after_move() {
     (move-overlay ov 4 4)
     (list (overlay-buffer ov)
           (length (overlays-in 1 8)))))"#,
-        expect_test::expect![[r#""OK (nil 0)""#]],
+        expect,
     );
 }
 
@@ -143,6 +151,7 @@ fn divergence_overlay_evaporate_after_move() {
 fn divergence_overlay_front_advance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (6 9)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdefgh")
@@ -150,7 +159,7 @@ fn divergence_overlay_front_advance() {
     (goto-char 3)
     (insert "XXX")
     (list (overlay-start ov) (overlay-end ov))))"#,
-        expect_test::expect![[r#""OK (6 9)""#]],
+        expect,
     );
 }
 
@@ -158,6 +167,7 @@ fn divergence_overlay_front_advance() {
 fn divergence_overlay_rear_advance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (3 9)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdefgh")
@@ -165,7 +175,7 @@ fn divergence_overlay_rear_advance() {
     (goto-char 6)
     (insert "XXX")
     (list (overlay-start ov) (overlay-end ov))))"#,
-        expect_test::expect![[r#""OK (3 9)""#]],
+        expect,
     );
 }
 
@@ -173,6 +183,7 @@ fn divergence_overlay_rear_advance() {
 fn divergence_get_char_property_overlay_vs_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (text-face overlay-face text-face text-face)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdefgh")
@@ -183,7 +194,7 @@ fn divergence_get_char_property_overlay_vs_textprop() {
           (get-char-property 4 'face)
           (get-char-property 2 'face)
           (get-char-property 7 'face))))"#,
-        expect_test::expect![[r#""OK (text-face overlay-face text-face text-face)""#]],
+        expect,
     );
 }
 
@@ -191,6 +202,7 @@ fn divergence_get_char_property_overlay_vs_textprop() {
 fn divergence_overlay_priority_with_same_start() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK italic""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdefgh")
@@ -201,7 +213,7 @@ fn divergence_overlay_priority_with_same_start() {
     (overlay-put b 'face 'italic)
     (overlay-put b 'priority 10)
     (get-char-property 3 'face)))"#,
-        expect_test::expect![[r#""OK italic""#]],
+        expect,
     );
 }
 
@@ -209,6 +221,7 @@ fn divergence_overlay_priority_with_same_start() {
 fn divergence_overlay_cross_buffer_move() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (1 3 \" *test-ov-b*\" 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((buf-a (get-buffer-create " *test-ov-a*"))
         (buf-b (get-buffer-create " *test-ov-b*")))
@@ -225,7 +238,7 @@ fn divergence_overlay_cross_buffer_move() {
                   (length (overlays-in 1 6))))))
     (kill-buffer buf-a)
     (kill-buffer buf-b)))"#,
-        expect_test::expect![[r#""OK (1 3 \" *test-ov-b*\" 0)""#]],
+        expect,
     );
 }
 
@@ -233,11 +246,13 @@ fn divergence_overlay_cross_buffer_move() {
 fn divergence_object_intervals_shape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""OK ((0 3 (face bold)) (3 6 (face italic)) (6 8 nil))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((s (copy-sequence "abcdefgh")))
   (put-text-property 0 3 'face 'bold s)
   (put-text-property 3 6 'face 'italic s)
   (object-intervals s))"#,
-        expect_test::expect![[r#""OK ((0 3 (face bold)) (3 6 (face italic)) (6 8 nil))""#]],
+        expect,
     );
 }

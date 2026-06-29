@@ -53,12 +53,10 @@ fn oracle_prop_string_to_char_ascii_comprehensive() {
   (= (string-to-char " ") ?\s)
   (= (string-to-char "\n") ?\n)
   (= (string-to-char "\t") ?\t))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (97 109 122 65 77 90 48 53 57 33 64 35 36 37 94 38 42 40 41 32 126 96 9 10 t t t t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (97 109 122 65 77 90 48 53 57 33 64 35 36 37 94 38 42 40 41 32 126 96 9 10 t t t t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -94,12 +92,10 @@ fn oracle_prop_string_to_char_multibyte() {
   ;; Type check: always returns integer
   (integerp (string-to-char "\u00e9"))
   (integerp (string-to-char "\u4e16")))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (233 252 241 945 969 1044 1071 19990 30028 t t t t t t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (233 252 241 945 969 1044 1071 19990 30028 t t t t t t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -134,10 +130,8 @@ fn oracle_prop_string_to_char_multi_char_strings() {
   (= (string-to-char "\nhello") ?\n)
   ;; String with leading tab
   (= (string-to-char "\thello") ?\t))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (104 119 65 49 t t t t t t 84 t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (104 119 65 49 t t t t t t 84 t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -174,10 +168,9 @@ fn oracle_prop_string_to_char_empty_and_edges() {
   ;; Substring result
   (string-to-char (substring "Hello" 1 2))
   (= (string-to-char (substring "Hello" 1 2)) ?e))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 t t 120 32 46 47 92 34 t t 90 t 81 t 72 t 101 t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (0 t t 120 32 46 47 92 34 t t 90 t 81 t 72 t 101 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -218,10 +211,8 @@ fn oracle_prop_string_to_char_roundtrip_comprehensive() {
   ;; Multibyte roundtrips
   (= (string-to-char (char-to-string 233)) 233)
   (string= (char-to-string (string-to-char "\u00e9")) "\u00e9"))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t t t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -271,12 +262,10 @@ fn oracle_prop_string_to_char_classification_pipeline() {
        (concat (mapcar (lambda (s) (string-to-char s))
                        '("H" "e" "l" "l" "o"))))
     (fmakunbound 'neovm--test-classify-first-char)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (lowercase uppercase digit space newline tab empty punctuation multibyte (uppercase lowercase digit space empty multibyte punctuation newline) (97 98 99) \"Hello\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (lowercase uppercase digit space newline tab empty punctuation multibyte (uppercase lowercase digit space empty multibyte punctuation newline) (97 98 99) \"Hello\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -315,8 +304,7 @@ fn oracle_prop_string_to_char_dynamic_construction() {
   (= (string-to-char (concat "" "test")) ?t)
   ;; String with interior multibyte but ASCII first
   (= (string-to-char (concat "a" "\u03b1")) ?a))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (52 t 65 t 48 t 57 t 45 t 72 t 104 t 104 t 110 t 116 t t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (52 t 65 t 48 t 57 t 45 t 72 t 104 t 104 t 110 t 116 t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

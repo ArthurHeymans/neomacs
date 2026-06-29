@@ -26,8 +26,6 @@ fn oracle_tty_frame_at_non_fixnum_coordinates_return_nil() {
    (error (cons (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

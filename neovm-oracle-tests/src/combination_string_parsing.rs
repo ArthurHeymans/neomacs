@@ -126,10 +126,8 @@ fn oracle_prop_strparse_arithmetic_precedence() {
     (fmakunbound 'neovm--test-arith-eval)
     (makunbound 'neovm--test-arith-pos)
     (makunbound 'neovm--test-arith-input)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (42 7 11 14 45 5 25 1 -2 -14 23)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (42 7 11 14 45 5 25 1 -2 -14 23)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -204,12 +202,10 @@ fn oracle_prop_strparse_balanced_parens_validator() {
         (funcall 'neovm--test-balance-check
                  "func(arr[i], map{key: val}, <type>)"))
     (fmakunbound 'neovm--test-balance-check)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (ok ok ok ok ok (mismatch 1 \"[\" 2 \")\") (unclosed 1 ((\"(\" 0))) (unexpected-close 0 \")\" \")\") (unclosed 1 ((\"(\" 5))) ok ok)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (ok ok ok ok ok (mismatch 1 \"[\" 2 \")\") (unclosed 1 ((\"(\" 0))) (unexpected-close 0 \")\" \")\") (unclosed 1 ((\"(\" 5))) ok ok)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -317,12 +313,10 @@ fn oracle_prop_strparse_ini_config_parser() {
     (fmakunbound 'neovm--test-ini-split-lines)
     (fmakunbound 'neovm--test-ini-trim)
     (fmakunbound 'neovm--test-ini-parse)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (4 (\"database\" \"credentials\" \"server\" \"logging\") ((\"host\" . \"localhost\") (\"port\" . \"5432\") (\"name\" . \"mydb\")) \"secret123\" \"4\" \"/var/log/app.log\" 12)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (4 (\"database\" \"credentials\" \"server\" \"logging\") ((\"host\" . \"localhost\") (\"port\" . \"5432\") (\"name\" . \"mydb\")) \"secret123\" \"4\" \"/var/log/app.log\" 12)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -427,12 +421,10 @@ fn oracle_prop_strparse_url_parser() {
         (funcall 'neovm--test-url-parse
                  "https://api.service.com/v2/data?format=json&key=abc123&verbose=true&offset=0"))
     (fmakunbound 'neovm--test-url-parse)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((scheme . \"https\") (host . \"example.com\") (port . 8080) (path . \"/api/users\") (query (\"page\" . \"1\") (\"limit\" . \"10\")) (fragment . \"results\")) ((scheme . \"http\") (host . \"localhost\") (port) (path . \"/index.html\") (query) (fragment)) ((scheme . \"http\") (host . \"db.local\") (port . 5432) (path) (query) (fragment)) ((scheme . \"https\") (host . \"search.engine\") (port) (path . \"/find\") (query (\"q\" . \"elisp\") (\"lang\" . \"en\")) (fragment)) ((scheme . \"https\") (host . \"docs.site\") (port) (path . \"/guide\") (query) (fragment . \"chapter-3\")) ((scheme . \"https\") (host . \"api.service.com\") (port) (path . \"/v2/data\") (query (\"format\" . \"json\") (\"key\" . \"abc123\") (\"verbose\" . \"true\") (\"offset\" . \"0\")) (fragment)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((scheme . \"https\") (host . \"example.com\") (port . 8080) (path . \"/api/users\") (query (\"page\" . \"1\") (\"limit\" . \"10\")) (fragment . \"results\")) ((scheme . \"http\") (host . \"localhost\") (port) (path . \"/index.html\") (query) (fragment)) ((scheme . \"http\") (host . \"db.local\") (port . 5432) (path) (query) (fragment)) ((scheme . \"https\") (host . \"search.engine\") (port) (path . \"/find\") (query (\"q\" . \"elisp\") (\"lang\" . \"en\")) (fragment)) ((scheme . \"https\") (host . \"docs.site\") (port) (path . \"/guide\") (query) (fragment . \"chapter-3\")) ((scheme . \"https\") (host . \"api.service.com\") (port) (path . \"/v2/data\") (query (\"format\" . \"json\") (\"key\" . \"abc123\") (\"verbose\" . \"true\") (\"offset\" . \"0\")) (fragment)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -539,12 +531,10 @@ fn oracle_prop_strparse_csv_parser() {
                 (mapcar 'length rows))))
     (fmakunbound 'neovm--test-csv-parse-row)
     (fmakunbound 'neovm--test-csv-parse)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"Alice\" \"30\" \"Boston\") (\"Smith, John\" \"42\" \"New York, NY\") (\"He said \\\"hello\\\"\" \"test\") (\"a\" \"\" \"b\" \"\" \"c\") ((\"name\" \"age\" \"city\") (\"Alice\" \"30\" \"Boston\") (\"Bob\" \"25\" \"LA\")) ((\"id\" \"name\" \"address\") (\"1\" \"Alice\" \"123 Main St, Apt 4\") (\"2\" \"Bob\" \"456 Oak Ave\")) (3 (3 3 3)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"Alice\" \"30\" \"Boston\") (\"Smith, John\" \"42\" \"New York, NY\") (\"He said \\\"hello\\\"\" \"test\") (\"a\" \"\" \"b\" \"\" \"c\") ((\"name\" \"age\" \"city\") (\"Alice\" \"30\" \"Boston\") (\"Bob\" \"25\" \"LA\")) ((\"id\" \"name\" \"address\") (\"1\" \"Alice\" \"123 Main St, Apt 4\") (\"2\" \"Bob\" \"456 Oak Ave\")) (3 (3 3 3)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -739,12 +729,10 @@ fn oracle_prop_strparse_json_parser() {
     (fmakunbound 'neovm--test-jp-parse)
     (makunbound 'neovm--test-jp-pos)
     (makunbound 'neovm--test-jp-input)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (42 -7 \"hello world\" t nil null (1 2 3) nil (\"a\" \"b\" \"c\") ((\"name\" . \"Alice\") (\"age\" . 30)) nil ((\"users\" ((\"id\" . 1) (\"name\" . \"Alice\")) ((\"id\" . 2) (\"name\" . \"Bob\")))) ((\"config\" (\"debug\" . t) (\"ports\" 80 443)) (\"version\" . 2)) \"line1\nline2\ttab\" (t nil null 0 \"\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (42 -7 \"hello world\" t nil null (1 2 3) nil (\"a\" \"b\" \"c\") ((\"name\" . \"Alice\") (\"age\" . 30)) nil ((\"users\" ((\"id\" . 1) (\"name\" . \"Alice\")) ((\"id\" . 2) (\"name\" . \"Bob\")))) ((\"config\" (\"debug\" . t) (\"ports\" 80 443)) (\"version\" . 2)) \"line1\nline2\ttab\" (t nil null 0 \"\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -852,10 +840,8 @@ fn oracle_prop_strparse_c_like_tokenizer() {
                 (length (seq-filter (lambda (t) (eq (car t) 'ident)) tokens)))))
     (fmakunbound 'neovm--test-tokenize-c)
     (makunbound 'neovm--test-tok-keywords)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((keyword \"int\") (ident \"x\") (op \"=\") (number 42) (delim \";\")) ((keyword \"if\") (delim \"(\") (ident \"x\") (op \">=\") (number 10) (delim \")\") (delim \"{\") (keyword \"return\") (ident \"x\") (delim \";\") (delim \"}\")) ((keyword \"while\") (delim \"(\") (ident \"i\") (op \"<\") (ident \"n\") (op \"&&\") (ident \"arr\") (op \"!=\") (number 0) (delim \")\") (delim \"{\") (ident \"i\") (op \"++\") (delim \";\") (delim \"}\")) ((keyword \"void\") (ident \"foo\") (delim \"(\") (keyword \"int\") (ident \"a\") (delim \",\") (keyword \"int\") (ident \"b\") (delim \")\") (delim \"{\") (keyword \"return\") (ident \"a\") (op \"+\") (ident \"b\") (delim \";\") (delim \"}\")) ((ident \"printf\") (delim \"(\") (string \"hello world\") (delim \")\") (delim \";\")) (22 2 6))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((keyword \"int\") (ident \"x\") (op \"=\") (number 42) (delim \";\")) ((keyword \"if\") (delim \"(\") (ident \"x\") (op \">=\") (number 10) (delim \")\") (delim \"{\") (keyword \"return\") (ident \"x\") (delim \";\") (delim \"}\")) ((keyword \"while\") (delim \"(\") (ident \"i\") (op \"<\") (ident \"n\") (op \"&&\") (ident \"arr\") (op \"!=\") (number 0) (delim \")\") (delim \"{\") (ident \"i\") (op \"++\") (delim \";\") (delim \"}\")) ((keyword \"void\") (ident \"foo\") (delim \"(\") (keyword \"int\") (ident \"a\") (delim \",\") (keyword \"int\") (ident \"b\") (delim \")\") (delim \"{\") (keyword \"return\") (ident \"a\") (op \"+\") (ident \"b\") (delim \";\") (delim \"}\")) ((ident \"printf\") (delim \"(\") (string \"hello world\") (delim \")\") (delim \";\")) (22 2 6))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

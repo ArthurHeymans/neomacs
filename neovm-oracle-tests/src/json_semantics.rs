@@ -30,12 +30,10 @@ fn oracle_json_duplicate_keyword_options_use_first_value_like_gnu() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"null\" (wrong-type-argument (json-value-p :b)) (first-null first-false))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"null\" (wrong-type-argument (json-value-p :b)) (first-null first-false))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -58,10 +56,8 @@ fn oracle_json_serialize_default_null_and_false_sentinels_like_gnu() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"{}\" \"null\" \"false\" (wrong-type-argument (json-value-p :json-false)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"{}\" \"null\" \"false\" (wrong-type-argument (json-value-p :json-false)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

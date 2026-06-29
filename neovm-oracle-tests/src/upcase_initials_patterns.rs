@@ -67,12 +67,10 @@ fn oracle_prop_upcase_initials_patterns_comprehensive() {
   ;; Punctuation-heavy
   (upcase-initials "hello, world!")
   (upcase-initials "one.two.three"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Hello World\" \"Foo Bar Baz\" \"A B C D E F\" \"Hello World\" \"FOO BAR\" \"HELLO WORLD\" \"THIS IS A TEST\" \"Hello-World\" \"Hello_World\" \"Hello.World\" \"Hello/World\" \"Hello---World\" \"Hello   World\" \"A--B--C--D\" \" Hello World \" \"---Hello---\" \"  Leading\" \"Trailing  \" \"Hello123world\" \"123hello\" \"1st 2nd 3rd\" \"Abc 123 Def\" \"\" \"X\" \"X\" \" \" \"Hello, World!\" \"One.Two.Three\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Hello World\" \"Foo Bar Baz\" \"A B C D E F\" \"Hello World\" \"FOO BAR\" \"HELLO WORLD\" \"THIS IS A TEST\" \"Hello-World\" \"Hello_World\" \"Hello.World\" \"Hello/World\" \"Hello---World\" \"Hello   World\" \"A--B--C--D\" \" Hello World \" \"---Hello---\" \"  Leading\" \"Trailing  \" \"Hello123world\" \"123hello\" \"1st 2nd 3rd\" \"Abc 123 Def\" \"\" \"X\" \"X\" \" \" \"Hello, World!\" \"One.Two.Three\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -123,12 +121,10 @@ fn oracle_prop_upcase_initials_patterns_vs_capitalize() {
               (setq count (1+ count))))
           count))
     (fmakunbound 'neovm--uip-compare)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"hello world\" \"Hello World\" \"Hello World\" t) (\"HELLO WORLD\" \"Hello World\" \"HELLO WORLD\" nil) (\"hELLO wORLD\" \"Hello World\" \"HELLO WORLD\" nil) (\"already Capitalized\" \"Already Capitalized\" \"Already Capitalized\" t) (\"camelCase test\" \"Camelcase Test\" \"CamelCase Test\" nil) (\"the HTTP protocol\" \"The Http Protocol\" \"The HTTP Protocol\" nil) (\"use TCP/IP stack\" \"Use Tcp/Ip Stack\" \"Use TCP/IP Stack\" nil) (\"SCREAMING\" \"Screaming\" \"SCREAMING\" nil) (\"whisper\" \"Whisper\" \"Whisper\" t) (\"snake_CASE_test\" \"Snake_Case_Test\" \"Snake_CASE_Test\" nil) (\"kebab-CASE-test\" \"Kebab-Case-Test\" \"Kebab-CASE-Test\" nil) (\"\" \"\" \"\" t) 6)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"hello world\" \"Hello World\" \"Hello World\" t) (\"HELLO WORLD\" \"Hello World\" \"HELLO WORLD\" nil) (\"hELLO wORLD\" \"Hello World\" \"HELLO WORLD\" nil) (\"already Capitalized\" \"Already Capitalized\" \"Already Capitalized\" t) (\"camelCase test\" \"Camelcase Test\" \"CamelCase Test\" nil) (\"the HTTP protocol\" \"The Http Protocol\" \"The HTTP Protocol\" nil) (\"use TCP/IP stack\" \"Use Tcp/Ip Stack\" \"Use TCP/IP Stack\" nil) (\"SCREAMING\" \"Screaming\" \"SCREAMING\" nil) (\"whisper\" \"Whisper\" \"Whisper\" t) (\"snake_CASE_test\" \"Snake_Case_Test\" \"Snake_CASE_Test\" nil) (\"kebab-CASE-test\" \"Kebab-Case-Test\" \"Kebab-CASE-Test\" nil) (\"\" \"\" \"\" t) 6)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -186,12 +182,10 @@ fn oracle_prop_upcase_initials_patterns_char_vs_string() {
           (setq all-ok nil))
         (setq ch (1+ ch))))
     all-ok))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (65 90 65 90 48 33 32 10 97 122 97 122 48 33 32 t t t 65 90 65 \"A\" \"A\" \"Z\" \"0\" \"!\" t t t t t t t t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (65 90 65 90 48 33 32 10 97 122 97 122 48 33 32 t t t 65 90 65 \"A\" \"A\" \"Z\" \"0\" \"!\" t t t t t t t t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -238,12 +232,10 @@ fn oracle_prop_upcase_initials_patterns_non_ascii() {
   ;; Newline as separator
   (capitalize "hello\nworld")
   (upcase-initials "hello\nworld"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"HELLO\" \"hello\" \"Hello World\" \"Hello World\" \"ABC123DEF!@#\" \"abc123def!@#\" \"PRICE: $100\" \"price: $100\" \"The Quick Brown Fox\" \"The Quick Brown Fox\" t t \"123 Hello 456 World\" \"!!! Hello ??? World\" \"The QUICK Brown FOX\" \"Hello\tWorld\" \"Hello\tWorld\" \"Hello\nWorld\" \"Hello\nWorld\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"HELLO\" \"hello\" \"Hello World\" \"Hello World\" \"ABC123DEF!@#\" \"abc123def!@#\" \"PRICE: $100\" \"price: $100\" \"The Quick Brown Fox\" \"The Quick Brown Fox\" t t \"123 Hello 456 World\" \"!!! Hello ??? World\" \"The QUICK Brown FOX\" \"Hello\tWorld\" \"Hello\tWorld\" \"Hello\nWorld\" \"Hello\nWorld\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -315,12 +307,10 @@ fn oracle_prop_upcase_initials_patterns_title_case() {
     (fmakunbound 'neovm--uip-title-case)
     (fmakunbound 'neovm--uip-simple-title)
     (makunbound 'neovm--uip-small-words)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"The Lord Of The Rings\" \"The Lord of the Rings\" \"A Tale of Two Cities\" \"War Peace\" \"The an of in on at to For\" \"Hello\" \"The Great Gatsby\" \"The Great Gatsby\" ((\"The Art Of War\" \"The Art of War\" nil) (\"Gone With The Wind\" \"Gone With the Wind\" nil) (\"Pride And Prejudice\" \"Pride and Prejudice\" nil) (\"To Kill A Mockingbird\" \"To Kill a Mockingbird\" nil)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"The Lord Of The Rings\" \"The Lord of the Rings\" \"A Tale of Two Cities\" \"War Peace\" \"The an of in on at to For\" \"Hello\" \"The Great Gatsby\" \"The Great Gatsby\" ((\"The Art Of War\" \"The Art of War\" nil) (\"Gone With The Wind\" \"Gone With the Wind\" nil) (\"Pride And Prejudice\" \"Pride and Prejudice\" nil) (\"To Kill A Mockingbird\" \"To Kill a Mockingbird\" nil)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -425,12 +415,10 @@ fn oracle_prop_upcase_initials_patterns_case_conversion() {
     (fmakunbound 'neovm--uip-to-snake)
     (fmakunbound 'neovm--uip-to-screaming)
     (fmakunbound 'neovm--uip-to-kebab)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"hello\" \"World\") (\"Hello\" \"World\") (\"hello\" \"world\") (\"HELLO\" \"WORLD\") (\"hello\" \"world\") (\"my\" \"URLParser\") (\"get\" \"HTTPResponse\") (\"simple\")) (\"helloWorld\" \"helloWorld\" \"helloWorld\" \"helloWorld\" \"helloWorld\" \"myUrlparser\" \"getHttpresponse\" \"simple\") (\"HelloWorld\" \"HelloWorld\" \"HelloWorld\" \"HelloWorld\" \"HelloWorld\" \"MyUrlparser\" \"GetHttpresponse\" \"Simple\") (\"hello_world\" \"hello_world\" \"hello_world\" \"hello_world\" \"hello_world\" \"my_urlparser\" \"get_httpresponse\" \"simple\") (\"HELLO_WORLD\" \"HELLO_WORLD\" \"HELLO_WORLD\" \"HELLO_WORLD\" \"HELLO_WORLD\" \"MY_URLPARSER\" \"GET_HTTPRESPONSE\" \"SIMPLE\") (\"hello-world\" \"hello-world\" \"hello-world\" \"hello-world\" \"hello-world\" \"my-urlparser\" \"get-httpresponse\" \"simple\") t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"hello\" \"World\") (\"Hello\" \"World\") (\"hello\" \"world\") (\"HELLO\" \"WORLD\") (\"hello\" \"world\") (\"my\" \"URLParser\") (\"get\" \"HTTPResponse\") (\"simple\")) (\"helloWorld\" \"helloWorld\" \"helloWorld\" \"helloWorld\" \"helloWorld\" \"myUrlparser\" \"getHttpresponse\" \"simple\") (\"HelloWorld\" \"HelloWorld\" \"HelloWorld\" \"HelloWorld\" \"HelloWorld\" \"MyUrlparser\" \"GetHttpresponse\" \"Simple\") (\"hello_world\" \"hello_world\" \"hello_world\" \"hello_world\" \"hello_world\" \"my_urlparser\" \"get_httpresponse\" \"simple\") (\"HELLO_WORLD\" \"HELLO_WORLD\" \"HELLO_WORLD\" \"HELLO_WORLD\" \"HELLO_WORLD\" \"MY_URLPARSER\" \"GET_HTTPRESPONSE\" \"SIMPLE\") (\"hello-world\" \"hello-world\" \"hello-world\" \"hello-world\" \"hello-world\" \"my-urlparser\" \"get-httpresponse\" \"simple\") t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -495,10 +483,8 @@ fn oracle_prop_upcase_initials_patterns_cross_comparison() {
                 (setq invariants-ok nil)))
             invariants-ok)))
     (fmakunbound 'neovm--uip-all-conversions)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"hello\" \"HELLO\" \"hello\" \"Hello\" \"Hello\" nil nil nil nil nil t) (\"HELLO\" \"HELLO\" \"hello\" \"Hello\" \"HELLO\" nil nil t nil nil nil) (\"Hello\" \"HELLO\" \"hello\" \"Hello\" \"Hello\" nil nil nil nil nil t) (\"hELLO\" \"HELLO\" \"hello\" \"Hello\" \"HELLO\" nil nil t nil nil nil) (\"\" \"\" \"\" \"\" \"\" t t t t t t) (\"hello world\" \"HELLO WORLD\" \"hello world\" \"Hello World\" \"Hello World\" nil nil nil nil nil t) (\"HELLO WORLD\" \"HELLO WORLD\" \"hello world\" \"Hello World\" \"HELLO WORLD\" nil nil t nil nil nil) (\"Hello World\" \"HELLO WORLD\" \"hello world\" \"Hello World\" \"Hello World\" nil nil nil nil nil t) (\"a\" \"A\" \"a\" \"A\" \"A\" nil t t nil nil t) (\"A\" \"A\" \"a\" \"A\" \"A\" nil t t nil nil t) (\"123\" \"123\" \"123\" \"123\" \"123\" t t t t t t) (\"hello123\" \"HELLO123\" \"hello123\" \"Hello123\" \"Hello123\" nil nil nil nil nil t) (\"one two three\" \"ONE TWO THREE\" \"one two three\" \"One Two Three\" \"One Two Three\" nil nil nil nil nil t) (\"ONE TWO THREE\" \"ONE TWO THREE\" \"one two three\" \"One Two Three\" \"ONE TWO THREE\" nil nil t nil nil nil) (\"hello-world\" \"HELLO-WORLD\" \"hello-world\" \"Hello-World\" \"Hello-World\" nil nil nil nil nil t) (\"HELLO-WORLD\" \"HELLO-WORLD\" \"hello-world\" \"Hello-World\" \"HELLO-WORLD\" nil nil t nil nil nil) (\"mixedCASE\" \"MIXEDCASE\" \"mixedcase\" \"Mixedcase\" \"MixedCASE\" nil nil nil nil nil nil) (\"ALL UPPER case MIXED\" \"ALL UPPER CASE MIXED\" \"all upper case mixed\" \"All Upper Case Mixed\" \"ALL UPPER Case MIXED\" nil nil nil nil nil nil)) 2 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"hello\" \"HELLO\" \"hello\" \"Hello\" \"Hello\" nil nil nil nil nil t) (\"HELLO\" \"HELLO\" \"hello\" \"Hello\" \"HELLO\" nil nil t nil nil nil) (\"Hello\" \"HELLO\" \"hello\" \"Hello\" \"Hello\" nil nil nil nil nil t) (\"hELLO\" \"HELLO\" \"hello\" \"Hello\" \"HELLO\" nil nil t nil nil nil) (\"\" \"\" \"\" \"\" \"\" t t t t t t) (\"hello world\" \"HELLO WORLD\" \"hello world\" \"Hello World\" \"Hello World\" nil nil nil nil nil t) (\"HELLO WORLD\" \"HELLO WORLD\" \"hello world\" \"Hello World\" \"HELLO WORLD\" nil nil t nil nil nil) (\"Hello World\" \"HELLO WORLD\" \"hello world\" \"Hello World\" \"Hello World\" nil nil nil nil nil t) (\"a\" \"A\" \"a\" \"A\" \"A\" nil t t nil nil t) (\"A\" \"A\" \"a\" \"A\" \"A\" nil t t nil nil t) (\"123\" \"123\" \"123\" \"123\" \"123\" t t t t t t) (\"hello123\" \"HELLO123\" \"hello123\" \"Hello123\" \"Hello123\" nil nil nil nil nil t) (\"one two three\" \"ONE TWO THREE\" \"one two three\" \"One Two Three\" \"One Two Three\" nil nil nil nil nil t) (\"ONE TWO THREE\" \"ONE TWO THREE\" \"one two three\" \"One Two Three\" \"ONE TWO THREE\" nil nil t nil nil nil) (\"hello-world\" \"HELLO-WORLD\" \"hello-world\" \"Hello-World\" \"Hello-World\" nil nil nil nil nil t) (\"HELLO-WORLD\" \"HELLO-WORLD\" \"hello-world\" \"Hello-World\" \"HELLO-WORLD\" nil nil t nil nil nil) (\"mixedCASE\" \"MIXEDCASE\" \"mixedcase\" \"Mixedcase\" \"MixedCASE\" nil nil nil nil nil nil) (\"ALL UPPER case MIXED\" \"ALL UPPER CASE MIXED\" \"all upper case mixed\" \"All Upper Case Mixed\" \"ALL UPPER Case MIXED\" nil nil nil nil nil nil)) 2 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

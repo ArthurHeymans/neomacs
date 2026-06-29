@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_cl_flet_labels() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 10 45)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-labels ((test-fact-xxx (n)
@@ -18,7 +19,7 @@ fn divergence_cl_flet_labels() {
           (= (test-fact-xxx 5) 120)
           (test-fact-xxx 10)
           (= (test-fact-xxx 10) 3628800)))) #"#,
-        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 10 45)""##]],
+        expect,
     );
 }
 
@@ -26,6 +27,7 @@ fn divergence_cl_flet_labels() {
 fn divergence_cl_flet_temporary_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 11 34)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-fo-xxx (x) (* x 2))
@@ -38,7 +40,7 @@ fn divergence_cl_flet_temporary_override() {
            50)
         (test-fo-xxx 5)
         (= (test-fo-xxx 5) 10))) #"#,
-        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 11 34)""##]],
+        expect,
     );
 }
 
@@ -46,6 +48,7 @@ fn divergence_cl_flet_temporary_override() {
 fn divergence_cl_macrolet_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 6 30)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-macrolet ((test-swap-xxx (a b)
@@ -53,7 +56,7 @@ fn divergence_cl_macrolet_expansion() {
                         (list 'list a b))))
     (let ((x 1) (y 2))
       (test-swap-xxx x y)))) #"#,
-        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 6 30)""##]],
+        expect,
     );
 }
 
@@ -61,6 +64,7 @@ fn divergence_cl_macrolet_expansion() {
 fn divergence_cl_symbol_macrolet() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 8 42)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-symbol-macrolet ((test-pi-xxx 31415))
@@ -70,7 +74,7 @@ fn divergence_cl_symbol_macrolet() {
           (= (+ test-pi-xxx 1) 31416)
           (* test-pi-xxx 2)
           (= (* test-pi-xxx 2) 62830)))) #"#,
-        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 8 42)""##]],
+        expect,
     );
 }
 
@@ -78,6 +82,7 @@ fn divergence_cl_symbol_macrolet() {
 fn divergence_cl_the_and_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 9 41)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (cl-the integer (+ 1 2))
@@ -88,7 +93,7 @@ fn divergence_cl_the_and_check() {
         (equal (cl-the cons '(1 2)) '(1 2))
         (cl-the number 3.14)
         (= (cl-the number 3.14) 3.14))) #"#,
-        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 9 41)""##]],
+        expect,
     );
 }
 
@@ -96,6 +101,7 @@ fn divergence_cl_the_and_check() {
 fn divergence_cl_eval_when() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function eval-when)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-ew-xxx nil)
@@ -106,7 +112,7 @@ fn divergence_cl_eval_when() {
         (eval-when (eval) (+ 1 2))
         (= (eval-when (eval) (+ 1 2)) 3)
         (eval-when (compile) 'skipped))) #"#,
-        expect_test::expect![[r#""ERR (void-function eval-when)""#]],
+        expect,
     );
 }
 
@@ -114,6 +120,7 @@ fn divergence_cl_eval_when() {
 fn divergence_cl_locally_declarations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 10 44)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-locally
@@ -125,7 +132,7 @@ fn divergence_cl_locally_declarations() {
           (= (* 10 10) 100)
           (list 1 2 3)
           (equal (list 1 2 3) '(1 2 3))))) #"#,
-        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 10 44)""##]],
+        expect,
     );
 }
 
@@ -133,6 +140,7 @@ fn divergence_cl_locally_declarations() {
 fn divergence_cl_assoc_rassoc_extended() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 13 35)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((alist '(("a" . 1) ("b" . 2) ("c" . 3)
@@ -147,7 +155,7 @@ fn divergence_cl_assoc_rassoc_extended() {
           (equal (rassoc 5 alist) '(b . 5))
           (length alist)
           (= (length alist) 5)))) #"#,
-        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 13 35)""##]],
+        expect,
     );
 }
 
@@ -155,6 +163,7 @@ fn divergence_cl_assoc_rassoc_extended() {
 fn divergence_cl_subseq_substitute() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 11 59)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (cl-subseq '(1 2 3 4 5) 1 4)
@@ -167,7 +176,7 @@ fn divergence_cl_subseq_substitute() {
         (equal (cl-substitute 99 3 '(1 2 3 4 3 5) :count 1) '(1 2 99 4 3 5))
         (cl-remove 3 '(1 2 3 4 3 5))
         (equal (cl-remove 3 '(1 2 3 4 3 5)) '(1 2 4 5)))) #"#,
-        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 11 59)""##]],
+        expect,
     );
 }
 
@@ -175,6 +184,7 @@ fn divergence_cl_subseq_substitute() {
 fn divergence_cl_merge_sort_stable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function copy-list)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((a (copy-list '(1 3 5 7)))
@@ -189,6 +199,6 @@ fn divergence_cl_merge_sort_stable() {
           (= (length (cl-stable-sort (copy-list '((a . 1) (b . 1) (c . 2)))
                                      (lambda (x y) (< (cdr x) (cdr y)))))
              3)))) #"#,
-        expect_test::expect![[r#""ERR (void-function copy-list)""#]],
+        expect,
     );
 }

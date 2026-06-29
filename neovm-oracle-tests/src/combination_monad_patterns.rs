@@ -84,10 +84,8 @@ fn oracle_prop_monad_maybe_bind_chain() {
     (fmakunbound 'neovm--maybe-return)
     (fmakunbound 'neovm--maybe-bind)
     (fmakunbound 'neovm--maybe-chain)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (10 nil nil nil t (\"a@b.c\" nil nil))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (10 nil nil nil t (\"a@b.c\" nil nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -166,12 +164,10 @@ fn oracle_prop_monad_result_bind_chain() {
     (fmakunbound 'neovm--unwrap)
     (fmakunbound 'neovm--result-bind)
     (fmakunbound 'neovm--result-map)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ok . 84) (err . \"not a number: abc\") (err . \"not positive: -5\") (err . \"not even: 7\") (ok . 100) (err . \"oops\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ok . 84) (err . \"not a number: abc\") (err . \"not positive: -5\") (err . \"not even: 7\") (ok . 100) (err . \"oops\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -235,12 +231,10 @@ fn oracle_prop_monad_validation_pipeline() {
             (funcall 'neovm--validate validators
                      '((name . "") (age . 0) (email . "x@y"))))))
     (fmakunbound 'neovm--validate)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ok (name . \"Alice\") (age . 30) (email . \"a@b.c\")) (errors \"name is required\") (errors \"name too short\" \"age must be non-negative\" \"email must contain @\") (errors \"name is required\" \"age is required\" \"email is required\") (errors \"name too short\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ok (name . \"Alice\") (age . 30) (email . \"a@b.c\")) (errors \"name is required\") (errors \"name too short\" \"age must be non-negative\" \"email must contain @\") (errors \"name is required\" \"age is required\" \"email is required\") (errors \"name too short\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -313,12 +307,10 @@ fn oracle_prop_monad_list_flatmap_cartesian() {
     (fmakunbound 'neovm--list-return)
     (fmakunbound 'neovm--list-bind)
     (fmakunbound 'neovm--guard)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 2 4 3 6) ((a 1) (a 2) (b 1) (b 2) (c 1) (c 2)) ((3 4 5) (5 12 13) (6 8 10) (8 15 17) (9 12 15) (12 16 20)) (4 16 36 64 100) ((x 1 +) (x 1 -) (x 2 +) (x 2 -) (y 1 +) (y 1 -) (y 2 +) (y 2 -)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 2 4 3 6) ((a 1) (a 2) (b 1) (b 2) (c 1) (c 2)) ((3 4 5) (5 12 13) (6 8 10) (8 15 17) (9 12 15) (12 16 20)) (4 16 36 64 100) ((x 1 +) (x 1 -) (x 2 +) (x 2 -) (y 1 +) (y 1 -) (y 2 +) (y 2 -)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -455,12 +447,10 @@ fn oracle_prop_monad_state_closures() {
     (fmakunbound 'neovm--state-put)
     (fmakunbound 'neovm--state-modify)
     (fmakunbound 'neovm--run-state)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((3 . 3) (150 . 150) ((popped 30 remaining (20 10)) 20 10) ((27 64 53 6 35) . 908095735))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((3 . 3) (150 . 150) ((popped 30 remaining (20 10)) 20 10) ((27 64 53 6 35) . 908095735))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -542,12 +532,10 @@ fn oracle_prop_monad_writer_logging() {
     (fmakunbound 'neovm--writer-bind)
     (fmakunbound 'neovm--writer-tell)
     (fmakunbound 'neovm--writer-logged)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((25 \"start with 10\" \"doubled to 20\" \"added 5 to get 25\") (5 \"100 / 5 = 20\" \"20 / 4 = 5\") (120 \"1 * 1 = 1\" \"1 * 2 = 2\" \"2 * 3 = 6\" \"6 * 4 = 24\" \"24 * 5 = 120\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((25 \"start with 10\" \"doubled to 20\" \"added 5 to get 25\") (5 \"100 / 5 = 20\" \"20 / 4 = 5\") (120 \"1 * 1 = 1\" \"1 * 2 = 2\" \"2 * 3 = 6\" \"6 * 4 = 24\" \"24 * 5 = 120\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -624,12 +612,10 @@ fn oracle_prop_monad_combined_maybe_writer() {
     (fmakunbound 'neovm--mw-ok)
     (fmakunbound 'neovm--mw-nothing)
     (fmakunbound 'neovm--mw-bind)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ok 5 (((\"start=100\" \"100/5=20\") \"20 is positive\") \"20/4=5\")) (nothing nil ((\"start=100\" \"100/5=20\") \"div by zero: 20/0\")) (nothing nil ((\"start=100\" \"100/200=0\") \"0 is not positive\")) (nothing nil \"no input\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ok 5 (((\"start=100\" \"100/5=20\") \"20 is positive\") \"20/4=5\")) (nothing nil ((\"start=100\" \"100/5=20\") \"div by zero: 20/0\")) (nothing nil ((\"start=100\" \"100/200=0\") \"0 is not positive\")) (nothing nil \"no input\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -718,10 +704,8 @@ fn oracle_prop_monad_reader_environment() {
     (fmakunbound 'neovm--reader-ask)
     (fmakunbound 'neovm--reader-local)
     (fmakunbound 'neovm--run-reader)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"localhost\" 5432) \"localhost:5432/api/users\" (outer-debug nil inner-debug nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"localhost\" 5432) \"localhost:5432/api/users\" (outer-debug nil inner-debug nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

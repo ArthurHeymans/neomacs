@@ -13,6 +13,7 @@ fn _u() {}
 fn div_comp_mode_parse_error_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     _u();
+    let expect = expect_test::expect![[r#""OK 3""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'compile)
@@ -25,13 +26,14 @@ fn div_comp_mode_parse_error_lines() {
         (when (get-text-property pt 'compilation-message) (setq count (1+ count))))
       count)))
 "##,
-        expect_test::expect![[r#""OK 3""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_comp_message_type_at_first_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK :none""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'compile)
@@ -43,13 +45,14 @@ fn div_comp_message_type_at_first_error() {
            (msg (and pt (get-text-property pt 'compilation-message))))
       (if msg (list (car msg) (nth 1 msg)) :none))))
 "##,
-        expect_test::expect![[r#""OK :none""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_comp_grep_mode_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 1""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'compile)
@@ -62,26 +65,28 @@ fn div_comp_grep_mode_parse() {
         (when (get-text-property pt 'compilation-message) (setq count (1+ count))))
       count)))
 "##,
-        expect_test::expect![[r#""OK 1""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_comp_error_regexp_alist_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'compile)
   (list (> (length compilation-error-regexp-alist) 10)
         (> (length (compilation-mode-font-lock-keywords)) 0)))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_comp_mode_buffer_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'compile)
@@ -91,13 +96,14 @@ fn div_comp_mode_buffer_mode() {
           (boundp 'compilation-error)
           (boundp 'compilation-current-error))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_comp_parse_filename_extraction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK :no-loc""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'compile)
@@ -110,13 +116,16 @@ fn div_comp_parse_filename_extraction() {
            (loc (and msg (cadr msg))))
       (if loc (list (nth 0 loc) (nth 1 loc)) :no-loc))))
 "##,
-        expect_test::expect![[r#""OK :no-loc""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_comp_warning_vs_error_classification() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-type-argument listp #s(compilation--message (1 1 ((\"b.c\" nil) nil (1 #2)) nil nil) 1 nil gnu))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'compile)
@@ -131,15 +140,14 @@ fn div_comp_warning_vs_error_classification() {
           (when msg (push (car msg) types))))
       (reverse types))))
 "##,
-        expect_test::expect![[
-            r#""ERR (wrong-type-argument listp #s(compilation--message (1 1 ((\"b.c\" nil) nil (1 #2)) nil nil) 1 nil gnu))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_comp_count_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'compile)
@@ -151,6 +159,6 @@ fn div_comp_count_function() {
         (list (length compilation-error) compilation-num-errors-found))
     (error (cons 'errored (car e)))))
 "##,
-        expect_test::expect![[r#""OK (5 2)""#]],
+        expect,
     );
 }

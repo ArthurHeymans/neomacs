@@ -32,10 +32,8 @@ fn oracle_prop_funcadv_compose_pipe_partial() {
                             (funcall f2 3)   ;; same
                             (funcall add10and 5)   ;; 4+6+5 = 15
                             (funcall add10and 100))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (64 64 15 110)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (64 64 15 110)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -75,12 +73,10 @@ fn oracle_prop_funcadv_church_numerals() {
     (fmakunbound 'neovm--church-add)
     (fmakunbound 'neovm--church-mul)
     (fmakunbound 'neovm--church-to-int)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""ERR (wrong-number-of-arguments (closure (t) (f) (lambda (x) x)) 0)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-number-of-arguments (closure (t) (f) (lambda (x) x)) 0)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -116,10 +112,8 @@ fn oracle_prop_funcadv_y_combinator() {
                               (funcall fib 0)
                               (funcall fib 1)
                               (funcall fib 10)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 1 720 3628800 0 1 55)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 1 720 3628800 0 1 55)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -166,10 +160,9 @@ fn oracle_prop_funcadv_fold_derived_operations() {
                         (funcall my-filter #'evenp '(1 2 3 4 5 6 7 8))
                         (funcall my-reverse '(a b c d e))
                         (funcall my-flatten '(1 (2 3) (4 (5 6)) 7)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 4 9 16 25) (2 4 6 8) (e d c b a) (1 2 3 4 5 6 7))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((1 4 9 16 25) (2 4 6 8) (e d c b a) (1 2 3 4 5 6 7))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -207,10 +200,8 @@ fn oracle_prop_funcadv_trampoline() {
     (fmakunbound 'neovm--trampoline)
     (fmakunbound 'neovm--tsum-helper)
     (fmakunbound 'neovm--tsum)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 1 55 5050 125250)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 1 55 5050 125250)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -245,10 +236,8 @@ fn oracle_prop_funcadv_cps_tree_sum() {
         (funcall 'neovm--tree-sum '((10 20) (30 (40 50)))))
     (fmakunbound 'neovm--tree-sum-cps)
     (fmakunbound 'neovm--tree-sum)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 42 6 28 150)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 42 6 28 150)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -302,10 +291,8 @@ fn oracle_prop_funcadv_maybe_monad() {
                                       (lambda (ph)
                                         (funcall safe-assq 'area-code ph)))))))
                           (list chain1 chain2 city missing)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (10 nil \"Boston\" nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (10 nil \"Boston\" nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -353,8 +340,6 @@ fn oracle_prop_funcadv_closure_iterator() {
                            (evens (funcall iter-filter #'evenp base))
                            (squared (funcall iter-map (lambda (x) (* x x)) evens)))
                       (funcall iter-collect squared)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (4 16 36 64 100)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (4 16 36 64 100)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

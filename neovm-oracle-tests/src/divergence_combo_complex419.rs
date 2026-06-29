@@ -11,6 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx419_eldoc_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'eldoc)
@@ -20,7 +21,7 @@ fn div_cx419_eldoc_mode() {
     (list eldoc-mode
           (functionp eldoc-documentation-strategy))))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
@@ -28,6 +29,9 @@ fn div_cx419_eldoc_mode() {
 #[test]
 fn div_cx419_show_paren_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (t [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified])""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'paren)
@@ -37,9 +41,7 @@ fn div_cx419_show_paren_mode() {
     (list show-paren-mode
           (facep 'show-paren-match))))
 "##,
-        expect_test::expect![[
-            r#""OK (t [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified])""#
-        ]],
+        expect,
     );
 }
 
@@ -47,6 +49,7 @@ fn div_cx419_show_paren_mode() {
 #[test]
 fn div_cx419_electric_pair_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t \"(\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'elec-pair)
@@ -56,7 +59,7 @@ fn div_cx419_electric_pair_mode() {
     (list electric-pair-mode
           (buffer-string))))
 "##,
-        expect_test::expect![[r#""OK (t \"(\")""#]],
+        expect,
     );
 }
 
@@ -64,6 +67,7 @@ fn div_cx419_electric_pair_mode() {
 #[test]
 fn div_cx419_display_line_numbers_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'display-line-numbers)
@@ -72,7 +76,7 @@ fn div_cx419_display_line_numbers_mode() {
     (display-line-numbers-mode 1)
     (display-line-numbers-mode)))
 "##,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -80,6 +84,7 @@ fn div_cx419_display_line_numbers_mode() {
 #[test]
 fn div_cx419_visual_line_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function visual-line-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -88,7 +93,7 @@ fn div_cx419_visual_line_mode() {
     (list visual-line-mode
           (visual-line-p))))
 "##,
-        expect_test::expect![[r#""ERR (void-function visual-line-p)""#]],
+        expect,
     );
 }
 
@@ -96,6 +101,9 @@ fn div_cx419_visual_line_mode() {
 #[test]
 fn div_cx419_auto_fill_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK \"This is a long sentence that should be broken at the fill column.\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -105,9 +113,7 @@ fn div_cx419_auto_fill_mode() {
   (insert "This is a long sentence that should be broken at the fill column.")
   (buffer-string))
 "##,
-        expect_test::expect![[
-            r#""OK \"This is a long sentence that should be broken at the fill column.\"""#
-        ]],
+        expect,
     );
 }
 
@@ -115,6 +121,7 @@ fn div_cx419_auto_fill_mode() {
 #[test]
 fn div_cx419_reverse_region_sort_pages() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"a\nb\nc\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -122,7 +129,7 @@ fn div_cx419_reverse_region_sort_pages() {
   (reverse-region (point-min) (point-max))
   (buffer-string))
 "##,
-        expect_test::expect![[r#""OK \"a\nb\nc\"""#]],
+        expect,
     );
 }
 
@@ -130,6 +137,7 @@ fn div_cx419_reverse_region_sort_pages() {
 #[test]
 fn div_cx419_register_config_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 3""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -140,7 +148,7 @@ fn div_cx419_register_config_point() {
   (jump-to-register ?a)
   (point))
 "##,
-        expect_test::expect![[r#""OK 3""#]],
+        expect,
     );
 }
 
@@ -148,6 +156,9 @@ fn div_cx419_register_config_point() {
 #[test]
 fn div_cx419_secure_hash_algorithms() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"5d41402abc4b2a76b9719d911017c592\" \"aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d\" \"ea09ae9cc6768c50fcee903ed054556e5bfc8347907f12598aa24193\" \"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\" \"59e1748777448c69de6b800d7a33bbfb9ff1b463e44354c3553bcdb9c666fa90125a3c79f90397bdf5f6a13de828684f\" \"9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "hello"))
@@ -158,9 +169,7 @@ fn div_cx419_secure_hash_algorithms() {
         (secure-hash 'sha384 s)
         (secure-hash 'sha512 s)))
 "##,
-        expect_test::expect![[
-            r#""OK (\"5d41402abc4b2a76b9719d911017c592\" \"aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d\" \"ea09ae9cc6768c50fcee903ed054556e5bfc8347907f12598aa24193\" \"2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824\" \"59e1748777448c69de6b800d7a33bbfb9ff1b463e44354c3553bcdb9c666fa90125a3c79f90397bdf5f6a13de828684f\" \"9b71d224bd62f3785d96d46ad3ea3d73319bfbc2890caadae2dff72519673ca72323c3d99ba5c11d7c7acc6e14b8c5da0c4663475c2e5c3adef46f73bcdec043\")""#
-        ]],
+        expect,
     );
 }
 
@@ -168,6 +177,9 @@ fn div_cx419_secure_hash_algorithms() {
 #[test]
 fn div_cx419_base64_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Multibyte character in data for base64 encoding\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "café世界"))
@@ -175,9 +187,7 @@ fn div_cx419_base64_multibyte() {
     (list enc
           (base64-decode-string enc))))
 "##,
-        expect_test::expect![[
-            r#""ERR (error \"Multibyte character in data for base64 encoding\")""#
-        ]],
+        expect,
     );
 }
 
@@ -185,6 +195,7 @@ fn div_cx419_base64_multibyte() {
 #[test]
 fn div_cx419_zlib_gzip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (zlib-available-p) (error (car e)))
@@ -195,7 +206,7 @@ fn div_cx419_zlib_gzip() {
             (buffer-size))
         (error (car e))))
 "##,
-        expect_test::expect![[r#""OK (t void-function)""#]],
+        expect,
     );
 }
 
@@ -203,13 +214,14 @@ fn div_cx419_zlib_gzip() {
 #[test]
 fn div_cx419_format_circular() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"(a b a b . #2)\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lst '(a b)))
   (setcdr (cdr lst) lst)
   (condition-case e (format "%S" lst) (error (car e))))
 "##,
-        expect_test::expect![[r#""OK \"(a b a b . #2)\"""#]],
+        expect,
     );
 }
 
@@ -217,6 +229,7 @@ fn div_cx419_format_circular() {
 #[test]
 fn div_cx419_prin1_print_circle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r##""OK \"#1=(a b . #1#)\"""##]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((lst '(a b))
@@ -224,7 +237,7 @@ fn div_cx419_prin1_print_circle() {
   (setcdr (cdr lst) lst)
   (prin1-to-string lst))
 "##,
-        expect_test::expect![[r##""OK \"#1=(a b . #1#)\"""##]],
+        expect,
     );
 }
 
@@ -232,13 +245,14 @@ fn div_cx419_prin1_print_circle() {
 #[test]
 fn div_cx419_prin1_print_length_level() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"((... ... ...))\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((print-length 3)
       (print-level 2))
   (prin1-to-string '(((1 2 3 4) (5 6) (7 8 9 10)))))
 "##,
-        expect_test::expect![[r#""OK \"((... ... ...))\"""#]],
+        expect,
     );
 }
 
@@ -246,6 +260,9 @@ fn div_cx419_prin1_print_length_level() {
 #[test]
 fn div_cx419_csv_utilities() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"csv-mode\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'csv-mode)
@@ -254,9 +271,7 @@ fn div_cx419_csv_utilities() {
     (csv-sort-fields 1 (point-min) (point-max))
     (buffer-string)))
 "##,
-        expect_test::expect![[
-            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"csv-mode\")""#
-        ]],
+        expect,
     );
 }
 
@@ -264,12 +279,13 @@ fn div_cx419_csv_utilities() {
 #[test]
 fn div_cx419_csv_delim_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"a,b,c\" \"1,2,3\" \"4,5,6\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((csv "a,b,c\n1,2,3\n4,5,6"))
   (split-string csv "\n"))
 "##,
-        expect_test::expect![[r#""OK (\"a,b,c\" \"1,2,3\" \"4,5,6\")""#]],
+        expect,
     );
 }
 
@@ -277,6 +293,7 @@ fn div_cx419_csv_delim_parsing() {
 #[test]
 fn div_cx419_file_checksum_md5() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function file-checksum)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-cx419-md5-")))
@@ -286,7 +303,7 @@ fn div_cx419_file_checksum_md5() {
             (file-checksum f 'md5))
     (delete-file f)))
 "##,
-        expect_test::expect![[r#""ERR (void-function file-checksum)""#]],
+        expect,
     );
 }
 
@@ -294,6 +311,7 @@ fn div_cx419_file_checksum_md5() {
 #[test]
 fn div_cx419_gzip_gunzip_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK void-function""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -306,7 +324,7 @@ fn div_cx419_gzip_gunzip_buffer() {
           (list orig-size compressed-size (buffer-size)))))
   (error (car e)))
 "##,
-        expect_test::expect![[r#""OK void-function""#]],
+        expect,
     );
 }
 

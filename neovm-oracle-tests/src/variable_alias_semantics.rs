@@ -45,12 +45,10 @@ fn oracle_defvaralias_migrates_existing_alias_value_to_void_base() {
       (makunbound sym))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t preexisting preexisting set-through-base set-through-base set-through-alias set-through-alias \"Alias doc.\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t preexisting preexisting set-through-base set-through-base set-through-alias set-through-alias \"Alias doc.\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -89,12 +87,10 @@ fn oracle_indirect_variable_follows_alias_chain_and_rejects_cycle() {
       (makunbound sym))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t leaf via-a via-a (cyclic-variable-indirection (neomacs--oracle-alias-chain-a)) 42 \"not-a-symbol\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t leaf via-a via-a (cyclic-variable-indirection (neomacs--oracle-alias-chain-a)) 42 \"not-a-symbol\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -128,12 +124,10 @@ fn oracle_defvaralias_rejects_constants_and_let_bound_aliases() {
       (makunbound sym))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((error (\"Cannot make a constant an alias: nil\")) (error (\"Cannot make a constant an alias: t\")) (error (\"Cannot make a constant an alias: :neomacs-oracle-alias-keyword\")) neomacs--oracle-alias-base)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((error (\"Cannot make a constant an alias: nil\")) (error (\"Cannot make a constant an alias: t\")) (error (\"Cannot make a constant an alias: :neomacs-oracle-alias-keyword\")) neomacs--oracle-alias-base)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -183,10 +177,8 @@ fn oracle_internal_delete_indirect_variable_restores_plain_void_symbol() {
       (makunbound sym))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t base-value \"Deleted alias doc.\") t t nil (void-variable (neomacs--oracle-delete-alias-name)) base-value nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t base-value \"Deleted alias doc.\") t t nil (void-variable (neomacs--oracle-delete-alias-name)) base-value nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

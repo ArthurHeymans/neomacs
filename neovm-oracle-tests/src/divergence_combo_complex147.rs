@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx147_gv_setf_expander_definition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -21,13 +22,14 @@ fn div_cx147_gv_setf_expander_definition() {
             (boundp 'gv-dynamically-lexically-macro-expanded)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx147_cl_setf_with_custom_expander() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -41,13 +43,14 @@ fn div_cx147_cl_setf_with_custom_expander() {
       neo-cx147-place)
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx147_cl_getf_setf_on_plist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:d 40 :a 10 :b 2 :c 3) 10 2 40)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (list :a 1 :b 2 :c 3)))
@@ -55,39 +58,42 @@ fn div_cx147_cl_getf_setf_on_plist() {
   (setf (cl-getf p :d) 40)
   (list p (cl-getf p :a) (cl-getf p :b) (cl-getf p :d)))
 "##,
-        expect_test::expect![[r#""OK ((:d 40 :a 10 :b 2 :c 3) 10 2 40)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx147_cl_rotatef_three_places() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 3 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((x 1) (y 2) (z 3))
   (cl-rotatef x y z)
   (list x y z))
 "##,
-        expect_test::expect![[r#""OK (2 3 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx147_cl_shiftf_chain_returns_first_old() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 2 3 99)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((x 1) (y 2) (z 3))
   (let ((result (cl-shiftf x y z 99)))
     (list result x y z)))
 "##,
-        expect_test::expect![[r#""OK (1 2 3 99)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx147_cl_letf_with_simple_var() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 1""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((x 1))
@@ -95,26 +101,28 @@ fn div_cx147_cl_letf_with_simple_var() {
     (list x))
   x)
 "##,
-        expect_test::expect![[r#""OK 1""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx147_cl_letf_with_setf_place() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 99 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((vec (vector 1 2 3)))
   (cl-letf (((aref vec 1) 99))
     (list (aref vec 0) (aref vec 1) (aref vec 2))))
 "##,
-        expect_test::expect![[r#""OK (1 99 3)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx147_define_symbol_prop_usage() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:val)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -123,13 +131,16 @@ fn div_cx147_define_symbol_prop_usage() {
       (list (get 'neo-cx147-sym 'neo-cx147-prop)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:val)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx147_cl_defmacro_complex_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (invalid-function (closure (t) ((a b &optional c) &rest body) `(let ((,a 1) (,b 2) (,c (or ,c 3))) ,@body)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (defmacro neo-cx147-let-complex ((a b &optional c) &rest body)
@@ -139,15 +150,15 @@ fn div_cx147_cl_defmacro_complex_destructuring() {
       (eval '(neo-cx147-let-complex (x y) (+ x y)) t)
       (eval '(neo-cx147-let-complex (x y z) (+ x y z)) t))
 "##,
-        expect_test::expect![[
-            r#""ERR (invalid-function (closure (t) ((a b &optional c) &rest body) `(let ((,a 1) (,b 2) (,c (or ,c 3))) ,@body)))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx147_pcase_app_pred_and_combined() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (:big-int (:string-of-len 5) :cons :other :other :other)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (v)
@@ -158,13 +169,14 @@ fn div_cx147_pcase_app_pred_and_combined() {
             (_ :other)))
         '(42 "hello" (1 2 3) [vec] nil :sym))
 "##,
-        expect_test::expect![[r#""OK (:big-int (:string-of-len 5) :cons :other :other :other)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx147_pcase_with_map_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:parsed nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -177,13 +189,14 @@ fn div_cx147_pcase_with_map_pattern() {
         (_ :no-match)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:parsed nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx147_gv_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (list :a 1 :b 2 :c 3)))
@@ -208,6 +221,6 @@ fn div_cx147_gv_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }

@@ -55,12 +55,10 @@ fn oracle_prop_narrow_widen_triple_nested_progressive() {
     (setq results (cons (list 'L0-restored (point-min) (point-max)
                                (buffer-size)) results))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((L0 1 53 52 \"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop\") (L1 6 40 52 \"56789ABCDE\") (L2 10 30 52 \"9ABCDEFGHIJKLMNOPQRS\") (L3 15 25 52 \"EFGHIJKLMN\") (L3-widen 1 53 52) (L2-restored 10 30 \"9ABCDEFGHIJKLMNOPQRS\") (L1-restored 6 40 52) (L0-restored 1 53 52))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((L0 1 53 52 \"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnop\") (L1 6 40 52 \"56789ABCDE\") (L2 10 30 52 \"9ABCDEFGHIJKLMNOPQRS\") (L3 15 25 52 \"EFGHIJKLMN\") (L3-widen 1 53 52) (L2-restored 10 30 \"9ABCDEFGHIJKLMNOPQRS\") (L1-restored 6 40 52) (L0-restored 1 53 52))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -117,12 +115,10 @@ fn oracle_prop_narrow_widen_markers_across_operations() {
                                (buffer-string))
                         results))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((markers-in-narrow 5 10 20 25) (after-insert 5 10 34 39 8 36 40) (after-delete 5 10 29 34) (widened 5 10 29 34 \"ABCDEFGHISERTED***JKLMNOPQRSTUVWXYZ\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((markers-in-narrow 5 10 20 25) (after-insert 5 10 34 39 8 36 40) (after-delete 5 10 29 34) (widened 5 10 29 34 \"ABCDEFGHISERTED***JKLMNOPQRSTUVWXYZ\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -170,12 +166,10 @@ fn oracle_prop_narrow_widen_search_confinement() {
     (let ((after-widen-found (search-forward "snake" nil t)))
       (setq results (cons (list 'snake-after-widen (not (null after-widen-found))) results)))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((full-count 5) (narrow-count 2 positions (21 30) visible \"at fish cat bird cat mous\") (re-matches (\"at\" \"fish\" \"cat\" \"bird\" \"cat\" \"mous\")) (snake-outside-narrow nil) (snake-after-widen t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((full-count 5) (narrow-count 2 positions (21 30) visible \"at fish cat bird cat mous\") (re-matches (\"at\" \"fish\" \"cat\" \"bird\" \"cat\" \"mous\")) (snake-outside-narrow nil) (snake-after-widen t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -233,12 +227,10 @@ fn oracle_prop_narrow_widen_point_operations() {
           (widen)
           (setq results (cons (list 'full-content-len (buffer-size)) results)))))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((point-after-narrow 36 pmin 15 pmax 36) (clamped-low 15 t) (clamped-high 36 t) (bol-eol 22 22 28 \"Line-4\") (forward-line-at-end 1 36) (forward-line-at-start -1 15) (narrow-content \"Line-3\nLine-4\nLine-5\n\") (full-content-len 49))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((point-after-narrow 36 pmin 15 pmax 36) (clamped-low 15 t) (clamped-high 36 t) (bol-eol 22 22 28 \"Line-4\") (forward-line-at-end 1 36) (forward-line-at-start -1 15) (narrow-content \"Line-3\nLine-4\nLine-5\n\") (full-content-len 49))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -283,12 +275,10 @@ fn oracle_prop_narrow_widen_save_restriction_widen_pattern() {
     ;; Back to double-narrow
     (setq results (cons (list 'double-narrow-restored (buffer-string)) results))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((initial-narrow \"Gamma Delta Epsilon\") (found-theta-in-widen t) (back-to-narrow \"Gamma Delta Epsilon\" same t) (full-peek \"Alpha Beta Gamma Delta Epsilon Zeta Eta Theta\" 45) (double-narrow \"Delta\") (widen-from-double 45 t) (double-narrow-restored \"Delta\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((initial-narrow \"Gamma Delta Epsilon\") (found-theta-in-widen t) (back-to-narrow \"Gamma Delta Epsilon\" same t) (full-peek \"Alpha Beta Gamma Delta Epsilon Zeta Eta Theta\" 45) (double-narrow \"Delta\") (widen-from-double 45 t) (double-narrow-restored \"Delta\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -353,12 +343,10 @@ fn oracle_prop_narrow_widen_multiple_buffers() {
         (nreverse results))
     (kill-buffer buf-a)
     (kill-buffer buf-b)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((buf-a-narrow \"BBBBB-CCCCC\" 7 18 29) (buf-b-narrow \"33333-44444\" 13 24 29) (buf-a-widened \"AAAAA-BBBBB-CCCCC-DDDDD-EEEEE\" 1 30) (buf-b-still-narrow \"33333-44444\" 13 24) (buf-b-after-insert \"XX33333-44444\" 31) (buf-a-unchanged \"AAAAA-BBBBB-CCCCC-DDDDD-EEEEE\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((buf-a-narrow \"BBBBB-CCCCC\" 7 18 29) (buf-b-narrow \"33333-44444\" 13 24 29) (buf-a-widened \"AAAAA-BBBBB-CCCCC-DDDDD-EEEEE\" 1 30) (buf-b-still-narrow \"33333-44444\" 13 24) (buf-b-after-insert \"XX33333-44444\" 31) (buf-a-unchanged \"AAAAA-BBBBB-CCCCC-DDDDD-EEEEE\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -422,12 +410,10 @@ fn oracle_prop_narrow_widen_buffer_size_tracking() {
                                'final-content (buffer-string))
                         results))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((full-size 62 full-pmin 1 full-pmax 63 size-eq-pmax-minus-pmin t) (narrow-size 62 narrow-region 19 size-eq-region nil) (after-insert buf-size 65 region 22 grew-by-3 t) (after-delete buf-size 59 region 16) (widen-peek total-size 59 original-total 62 delta -3) (narrow-content \"wn fox jumps ove\") (final-size 59 final-content \"The quick wn fox jumps over the lazy dog and runs away fast\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((full-size 62 full-pmin 1 full-pmax 63 size-eq-pmax-minus-pmin t) (narrow-size 62 narrow-region 19 size-eq-region nil) (after-insert buf-size 65 region 22 grew-by-3 t) (after-delete buf-size 59 region 16) (widen-peek total-size 59 original-total 62 delta -3) (narrow-content \"wn fox jumps ove\") (final-size 59 final-content \"The quick wn fox jumps over the lazy dog and runs away fast\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -470,10 +456,8 @@ fn oracle_prop_narrow_widen_search_replace_cycles() {
                           pairs)))
       (setq results (cons (list 'all-pairs (nreverse pairs)) results)))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((first-half-before \"foo=1;bar=2;baz=3;qux=4;\") (first-half-after \"foo=2;bar=4;baz=6;qux=8;\") (second-half-before \"foo=5;bar=6;baz=7;qux=8\") (second-half-after \"foo=15;bar=18;baz=21;qux=24\") (full-result \"foo=2;bar=4;baz=6;qux=8;foo=15;bar=18;baz=21;qux=24\") (all-pairs ((\"foo\" . 2) (\"bar\" . 4) (\"baz\" . 6) (\"qux\" . 8) (\"foo\" . 15) (\"bar\" . 18) (\"baz\" . 21) (\"qux\" . 24))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((first-half-before \"foo=1;bar=2;baz=3;qux=4;\") (first-half-after \"foo=2;bar=4;baz=6;qux=8;\") (second-half-before \"foo=5;bar=6;baz=7;qux=8\") (second-half-after \"foo=15;bar=18;baz=21;qux=24\") (full-result \"foo=2;bar=4;baz=6;qux=8;foo=15;bar=18;baz=21;qux=24\") (all-pairs ((\"foo\" . 2) (\"bar\" . 4) (\"baz\" . 6) (\"qux\" . 8) (\"foo\" . 15) (\"bar\" . 18) (\"baz\" . 21) (\"qux\" . 24))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

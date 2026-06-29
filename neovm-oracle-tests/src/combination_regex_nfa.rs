@@ -71,7 +71,8 @@ fn oracle_prop_regex_nfa_state_representation() {
         (fmakunbound 'neovm--nfa-state-trans) (fmakunbound 'neovm--nfa-make)
         (fmakunbound 'neovm--nfa-states) (fmakunbound 'neovm--nfa-start)
         (fmakunbound 'neovm--nfa-accept) (fmakunbound 'neovm--nfa-literal)))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (2 t 1 0)""#]]);
+    let expect = expect_test::expect![[r#""OK (2 t 1 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -191,10 +192,8 @@ fn oracle_prop_regex_nfa_thompson_construction() {
         (fmakunbound 'neovm--nfa-add-trans) (fmakunbound 'neovm--nfa-lit)
         (fmakunbound 'neovm--nfa-concat) (fmakunbound 'neovm--nfa-union)
         (fmakunbound 'neovm--nfa-star)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (2 4 6 4 t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 4 6 4 t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -268,10 +267,9 @@ fn oracle_prop_regex_nfa_epsilon_closure() {
               (fmakunbound 'neovm--ec-id) (fmakunbound 'neovm--ec-st)
               (fmakunbound 'neovm--ec-mk) (fmakunbound 'neovm--ec-find)
               (fmakunbound 'neovm--ec-closure))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3) (4 5) (3) (1 2 3 4 5) nil (10 11 12 13))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((1 2 3) (4 5) (3) (1 2 3 4 5) nil (10 11 12 13))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -437,12 +435,10 @@ fn oracle_prop_regex_nfa_simulation() {
         (fmakunbound 'neovm--sim-lit) (fmakunbound 'neovm--sim-dot)
         (fmakunbound 'neovm--sim-cat) (fmakunbound 'neovm--sim-alt)
         (fmakunbound 'neovm--sim-kleene)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t nil nil nil nil t t nil nil nil t t t nil t t t nil nil t t nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t nil nil nil nil t t nil nil nil t t t nil t t t nil nil t t nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -584,12 +580,10 @@ fn oracle_prop_regex_nfa_character_classes() {
         (fmakunbound 'neovm--cc-move) (fmakunbound 'neovm--cc-run)
         (fmakunbound 'neovm--cc-charclass) (fmakunbound 'neovm--cc-charrange)
         (fmakunbound 'neovm--cc-cat) (fmakunbound 'neovm--cc-lit)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t nil nil nil t t t nil nil t t t nil t t nil nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t nil nil nil t t t nil nil t t t nil t t nil nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -831,12 +825,10 @@ fn oracle_prop_regex_nfa_full_compiler() {
         (fmakunbound 'neovm--rc-star) (fmakunbound 'neovm--rc-plus)
         (fmakunbound 'neovm--rc-parse) (fmakunbound 'neovm--rc-parse-alt)
         (fmakunbound 'neovm--rc-parse-seq) (fmakunbound 'neovm--rc-parse-atom)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"ab\" t nil nil) (\"a|b\" t t nil) (\"a*\" t t t nil) (\"a+\" nil t t nil) (\"(a|b)*\" t t t nil) (\".*\" t t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"ab\" t nil nil) (\"a|b\" t t nil) (\"a*\" t t t nil) (\"a+\" nil t t nil) (\"(a|b)*\" t t t nil) (\".*\" t t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -1047,10 +1039,8 @@ fn oracle_prop_regex_nfa_complex_patterns() {
         (fmakunbound 'neovm--cx-star) (fmakunbound 'neovm--cx-plus)
         (fmakunbound 'neovm--cx-parse) (fmakunbound 'neovm--cx-parse-alt)
         (fmakunbound 'neovm--cx-parse-seq) (fmakunbound 'neovm--cx-parse-atom)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"a(b|c)d\" t t nil nil) (\"(ab)+\" t t t nil nil) (\"a.b\" t t nil nil) (\"(a|b|c)*d\" t t t t nil nil) (\"x(y|z)*x\" t t t nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"a(b|c)d\" t t nil nil) (\"(ab)+\" t t t nil nil) (\"a.b\" t t nil nil) (\"(a|b|c)*d\" t t t t nil nil) (\"x(y|z)*x\" t t t nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -54,12 +54,10 @@ fn oracle_prop_prin1_comp_all_value_types() {
   ;; Character (prints as integer in prin1)
   (prin1-to-string ?A)
   (prin1-to-string ?\n))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"0\" \"1\" \"-1\" \"2305843009213693951\" \"-2305843009213693952\" \"0.0\" \"-0.0\" \"3.141592653589793\" \"-2.718281828459045\" \"1.0e+INF\" \"-1.0e+INF\" \"0.0e+NaN\" \"\\\"\\\"\" \"\\\"hello\\\"\" \"\\\"hello world foo bar\\\"\" \"foo\" \"nil\" \"t\" \"foo-bar-baz\" \"foo/bar\" \":key\" \":another-keyword\" \"(1 2 3)\" \"(a . b)\" \"nil\" \"[1 2 3]\" \"[]\" \"65\" \"10\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"0\" \"1\" \"-1\" \"2305843009213693951\" \"-2305843009213693952\" \"0.0\" \"-0.0\" \"3.141592653589793\" \"-2.718281828459045\" \"1.0e+INF\" \"-1.0e+INF\" \"0.0e+NaN\" \"\\\"\\\"\" \"\\\"hello\\\"\" \"\\\"hello world foo bar\\\"\" \"foo\" \"nil\" \"t\" \"foo-bar-baz\" \"foo/bar\" \":key\" \":another-keyword\" \"(1 2 3)\" \"(a . b)\" \"nil\" \"[1 2 3]\" \"[]\" \"65\" \"10\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -97,12 +95,10 @@ fn oracle_prop_prin1_comp_nested_structures() {
                      (:nil . nil)
                      (:t . t)
                      (:list . (a b c)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"((1 2) (3 4) (5 6))\" \"(a (b (c (d (e)))))\" \"[(1 2 3) (4 5 6)]\" \"([1 2] [3 4] [5 6])\" \"[[1 2] [3 4]]\" \"((name . \\\"Alice\\\") (scores . [95 87 92 100]) (metadata (tags :math :science) (rank . 1)))\" \"([1 (2 [3 (4 [5])])])\" \"((:int . 42) (:float . 3.14) (:str . \\\"hello\\\") (:sym . foo) (:vec . [1 2 3]) (:nil) (:t . t) (:list a b c))\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"((1 2) (3 4) (5 6))\" \"(a (b (c (d (e)))))\" \"[(1 2 3) (4 5 6)]\" \"([1 2] [3 4] [5 6])\" \"[[1 2] [3 4]]\" \"((name . \\\"Alice\\\") (scores . [95 87 92 100]) (metadata (tags :math :science) (rank . 1)))\" \"([1 (2 [3 (4 [5])])])\" \"((:int . 42) (:float . 3.14) (:str . \\\"hello\\\") (:sym . foo) (:vec . [1 2 3]) (:nil) (:t . t) (:list a b c))\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -137,12 +133,10 @@ fn oracle_prop_prin1_comp_circular_with_print_circle() {
     (let* ((inner '(shared data))
            (v (vector inner 42 inner)))
       (prin1-to-string v))))"##;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"(#1=(x y z) #1#)\" (0 4) (0 12) \"[#1=(shared data) 42 #1#]\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"(#1=(x y z) #1#)\" (0 4) (0 12) \"[#1=(shared data) 42 #1#]\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,12 +171,10 @@ fn oracle_prop_prin1_comp_special_characters() {
   (prin1-to-string "\e")
   ;; Formfeed
   (prin1-to-string "\f"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"\\\"line1\nline2\nline3\\\"\" \"\\\"col1\tcol2\tcol3\\\"\" \"\\\"she said \\\\\\\"hello\\\\\\\" and \\\\\\\"goodbye\\\\\\\"\\\"\" \"\\\"C:\\\\\\\\Users\\\\\\\\test\\\\\\\\file.txt\\\"\" \"\\\"before\\rafter\\\"\" \"\\\"null\u{c}har\\\"\" \"\\\"a\tb\nc\\\\\\\\d\\\\\\\"e\\rf\\\"\" \"\\\"\n\n\n\n\n\\\"\" \"\\\"\t\t\t\\\"\" \"\\\"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\"\" \"\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\"\" \"\\\"\\\"\" \"\\\" \\\"\" \"\\\"   \\\"\" \"\\\"\u{7}\\\"\" \"\\\"\u{1b}\\\"\" \"\\\"\u{c}\\\"\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"\\\"line1\nline2\nline3\\\"\" \"\\\"col1\tcol2\tcol3\\\"\" \"\\\"she said \\\\\\\"hello\\\\\\\" and \\\\\\\"goodbye\\\\\\\"\\\"\" \"\\\"C:\\\\\\\\Users\\\\\\\\test\\\\\\\\file.txt\\\"\" \"\\\"before\\rafter\\\"\" \"\\\"null\u{c}har\\\"\" \"\\\"a\tb\nc\\\\\\\\d\\\\\\\"e\\rf\\\"\" \"\\\"\n\n\n\n\n\\\"\" \"\\\"\t\t\t\\\"\" \"\\\"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\"\" \"\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\\\\\"\\\"\" \"\\\"\\\"\" \"\\\" \\\"\" \"\\\"   \\\"\" \"\\\"\u{7}\\\"\" \"\\\"\u{1b}\\\"\" \"\\\"\u{c}\\\"\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -215,12 +207,10 @@ fn oracle_prop_prin1_comp_unicode_strings() {
   (prin1-to-string (string ?\u200e ?\u200f))
   ;; Long Unicode string
   (prin1-to-string (make-string 50 ?\u00e9)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"\\\"hello\\\"\" \"\\\"world\\\"\" \"\\\"abc\\\"\" \"\\\"abc-def-ghi\\\"\" \"\\\"Greek\\\"\" \"\\\"Cyrillic\\\"\" \"\\\"é\\\"\" \"\\\"üöä\\\"\" \"\\\"e\u{301}\\\"\" \"\\\"∀∃∅∈∉\\\"\" \"\\\"\u{200e}\u{200f}\\\"\" \"\\\"éééééééééééééééééééééééééééééééééééééééééééééééééé\\\"\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"\\\"hello\\\"\" \"\\\"world\\\"\" \"\\\"abc\\\"\" \"\\\"abc-def-ghi\\\"\" \"\\\"Greek\\\"\" \"\\\"Cyrillic\\\"\" \"\\\"é\\\"\" \"\\\"üöä\\\"\" \"\\\"e\u{301}\\\"\" \"\\\"∀∃∅∈∉\\\"\" \"\\\"\u{200e}\u{200f}\\\"\" \"\\\"éééééééééééééééééééééééééééééééééééééééééééééééééé\\\"\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -258,12 +248,10 @@ fn oracle_prop_prin1_comp_large_numbers() {
          most-positive-fixnum)
   (equal (car (read-from-string (prin1-to-string 3.141592653589793)))
          3.141592653589793))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"2305843009213693951\" \"-2305843009213693952\" \"1073741824\" \"2147483648\" \"-2147483648\" \"1.0e+INF\" \"-1.0e+INF\" \"0.0e+NaN\" \"1e-300\" \"-1e-300\" \"0.1\" \"0.2\" \"0.30000000000000004\" \"2305843009213693950\" \"-2305843009213693951\" t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"2305843009213693951\" \"-2305843009213693952\" \"1073741824\" \"2147483648\" \"-2147483648\" \"1.0e+INF\" \"-1.0e+INF\" \"0.0e+NaN\" \"1e-300\" \"-1e-300\" \"0.1\" \"0.2\" \"0.30000000000000004\" \"2305843009213693950\" \"-2305843009213693951\" t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -300,12 +288,10 @@ fn oracle_prop_prin1_comp_dotted_pairs_comprehensive() {
   (prin1-to-string '(head . (a b c)))
   ;; Cons chain that forms an improper list ending in a vector
   (prin1-to-string (cons 1 (cons 2 [3 4]))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"(a . b)\" \"(1 . 2)\" \"(\\\"key\\\" . \\\"value\\\")\" \"(:keyword . 42)\" \"(nil . t)\" \"(t)\" \"(a)\" \"(1 . 2)\" \"(1 2 . 3)\" \"(1 2 3 . 4)\" \"(1 2 3 4 . 5)\" \"(a b c d e . f)\" \"((a . 1) b . 2)\" \"((a b c . d))\" \"((x . 10) (y . 20) (z . 30))\" \"(head . [1 2 3])\" \"(head a b c)\" \"(1 2 . [3 4])\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"(a . b)\" \"(1 . 2)\" \"(\\\"key\\\" . \\\"value\\\")\" \"(:keyword . 42)\" \"(nil . t)\" \"(t)\" \"(a)\" \"(1 . 2)\" \"(1 2 . 3)\" \"(1 2 3 . 4)\" \"(1 2 3 4 . 5)\" \"(a b c d e . f)\" \"((a . 1) b . 2)\" \"((a b c . d))\" \"((x . 10) (y . 20) (z . 30))\" \"(head . [1 2 3])\" \"(head a b c)\" \"(1 2 . [3 4])\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -350,12 +336,10 @@ fn oracle_prop_prin1_comp_bool_vectors_and_char_tables() {
     (list (equal bv restored)
           (bool-vector-p restored)
           (length restored))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r##""OK (\"#&0\\\"\\\"\" \"#&8\\\"\\\\377\\\"\" \"#&8\\\"\\0\\\"\" \"#&16\\\"\\\\377\\\\377\\\"\" \"#&8\\\"U\\\"\" \"#&3\\\"\u{7}\\\"\" \"#&5\\\"\\0\\\"\" (0 t) (t t 16))""##
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r##""OK (\"#&0\\\"\\\"\" \"#&8\\\"\\\\377\\\"\" \"#&8\\\"\\0\\\"\" \"#&16\\\"\\\\377\\\\377\\\"\" \"#&8\\\"U\\\"\" \"#&3\\\"\u{7}\\\"\" \"#&5\\\"\\0\\\"\" (0 t) (t t 16))""##
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -411,12 +395,10 @@ fn oracle_prop_prin1_comp_prin1_vs_princ_vs_format() {
   ;; Dotted pair
   (list (prin1-to-string '(a . b))
         (prin1-to-string '(a . b) t)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"\\\"hello\\\"\" \"hello\" \"\\\"hello\\\"\" \"hello\") (\"foo\" \"foo\" \"foo\" \"foo\") (\"42\" \"42\" \"42\" \"42\") (\"(\\\"a\\\" \\\"b\\\")\" \"(a b)\" \"(\\\"a\\\" \\\"b\\\")\" \"(a b)\") (\"nil\" \"nil\" \"nil\" \"nil\") (\"t\" \"t\" \"t\" \"t\") (\"\\\"say \\\\\\\"hi\\\\\\\"\nnewline\\\"\" \"say \\\"hi\\\"\nnewline\") (\":foo\" \":foo\" \":foo\" \":foo\") (\"[1 \\\"two\\\" three]\" \"[1 two three]\") (\"(a . b)\" \"(a . b)\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"\\\"hello\\\"\" \"hello\" \"\\\"hello\\\"\" \"hello\") (\"foo\" \"foo\" \"foo\" \"foo\") (\"42\" \"42\" \"42\" \"42\") (\"(\\\"a\\\" \\\"b\\\")\" \"(a b)\" \"(\\\"a\\\" \\\"b\\\")\" \"(a b)\") (\"nil\" \"nil\" \"nil\" \"nil\") (\"t\" \"t\" \"t\" \"t\") (\"\\\"say \\\\\\\"hi\\\\\\\"\nnewline\\\"\" \"say \\\"hi\\\"\nnewline\") (\":foo\" \":foo\" \":foo\" \":foo\") (\"[1 \\\"two\\\" three]\" \"[1 two three]\") (\"(a . b)\" \"(a . b)\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -458,8 +440,7 @@ fn oracle_prop_prin1_comp_roundtrip_complex() {
              (match (equal val restored)))
         (list match (length printed))))
     test-values))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((t 32) (t 147) (t 37) (t 31) (t 13) (t 25) (t 15) (t 6))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((t 32) (t 147) (t 37) (t 31) (t 13) (t 25) (t 15) (t 6))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

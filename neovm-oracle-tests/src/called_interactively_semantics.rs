@@ -27,12 +27,10 @@ fn oracle_prop_gnu_called_interactively_batch_contracts() {
     (fmakunbound 'neovm--oracle-ci-target)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((nil nil nil nil) (t t nil nil) (t t nil nil) (t t nil nil))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((nil nil nil nil) (t t nil nil) (t t nil nil) (t t nil nil))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -58,8 +56,6 @@ fn oracle_prop_gnu_called_interactively_dynamic_gates() {
     (fmakunbound 'neovm--oracle-ci-dynamic-target)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((t (t nil) t) (t (t nil) t) (t (t nil) t))""#],
-    );
+    let expect = expect_test::expect![r#""OK ((t (t nil) t) (t (t nil) t) (t (t nil) t))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

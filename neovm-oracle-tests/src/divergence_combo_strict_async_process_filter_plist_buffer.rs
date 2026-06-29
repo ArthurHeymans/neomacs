@@ -13,6 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_j0_process_output_via_filter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"hello world\n\" exit 0 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (collected)
@@ -27,13 +28,14 @@ fn div_j0_process_output_via_filter() {
           (process-exit-status proc)
           (process-buffer proc))))
 "##,
-        expect_test::expect![[r#""OK (\"hello world\n\" exit 0 nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_j0_process_plist_get_put() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (42 nil 42)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "probe-proc-pl"
@@ -44,13 +46,16 @@ fn div_j0_process_plist_get_put() {
         (process-get proc 'missing)
         (plist-get (process-plist proc) 'probe-prop)))
 "##,
-        expect_test::expect![[r#""OK (42 nil 42)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_j0_process_buffer_and_mark() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (t 36 \" *probe-proc-buf*\" \"hi\n\nProcess probe-proc-bm finished\n\")""#
+    ]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK (t 4 " *probe-proc-buf*" "hi\n")
     // Neomacs:   OK (t 36 " *probe-proc-buf*" "hi\n")
@@ -70,15 +75,14 @@ fn div_j0_process_buffer_and_mark() {
           (buffer-name (process-buffer proc))
           (with-current-buffer buf (buffer-string)))))
 "##,
-        expect_test::expect![[
-            r#""OK (t 36 \" *probe-proc-buf*\" \"hi\n\nProcess probe-proc-bm finished\n\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_j0_process_connection_type_and_contact() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p1 (make-process :name "probe-pipe"
@@ -94,13 +98,16 @@ fn div_j0_process_connection_type_and_contact() {
         (car (process-contact p1))
         (car (process-contact p2))))
 "##,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_j0_process_stderr_separate_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"out\n\nProcess probe-stderr finished\n\" \"err\n\nProcess probe-stderr stderr finished\n\")""#
+    ]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK ("out\n    " "err\n    ")
     // Neomacs:   OK ("out\n\n    Process probe-stderr finished\n    " "err\n\n    Process probe-stderr stderr finished\n    ")
@@ -120,15 +127,14 @@ fn div_j0_process_stderr_separate_buffer() {
     (list (with-current-buffer outbuf (buffer-string))
           (with-current-buffer errbuf (buffer-string)))))
 "##,
-        expect_test::expect![[
-            r#""OK (\"out\n\nProcess probe-stderr finished\n\" \"err\n\nProcess probe-stderr stderr finished\n\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_j0_process_name_pid_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"probe-proc-np\" t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "probe-proc-np"
@@ -140,6 +146,6 @@ fn div_j0_process_name_pid_list() {
         (> (length (process-list)) 0)
         (memq proc (process-list))))
 "##,
-        expect_test::expect![[r#""OK (\"probe-proc-np\" t nil nil)""#]],
+        expect,
     );
 }

@@ -14,6 +14,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_advice_around_defun_buffer_local_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun combo--test-func ()
@@ -52,7 +53,7 @@ fn combo_advice_around_defun_buffer_local_marker_overlay_undo() {
               (advice-remove 'combo--test-func 'combo--advice)
               (kill-buffer buf)
               (list after-advice after-undo)))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -60,6 +61,7 @@ fn combo_advice_around_defun_buffer_local_marker_overlay_undo() {
 fn combo_advice_before_defun_textprop_marker_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun combo--insert-func ()
@@ -90,7 +92,7 @@ fn combo_advice_before_defun_textprop_marker_undo() {
             (advice-remove 'combo--insert-func 'combo--before-advice)
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -98,6 +100,7 @@ fn combo_advice_before_defun_textprop_marker_undo() {
 fn combo_advice_override_defun_with_buffer_local_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun combo--orig-func ()
@@ -133,7 +136,7 @@ fn combo_advice_override_defun_with_buffer_local_overlay() {
             (advice-remove 'combo--orig-func 'combo--override-func)
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -141,6 +144,7 @@ fn combo_advice_override_defun_with_buffer_local_overlay() {
 fn combo_advice_defmacro_expansion_with_overlay_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defmacro combo--def-advised (name body)
@@ -173,7 +177,7 @@ fn combo_advice_defmacro_expansion_with_overlay_marker() {
                                   (overlay-start ov) (overlay-end ov))))
               (kill-buffer buf)
               (list after restored)))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -181,6 +185,7 @@ fn combo_advice_defmacro_expansion_with_overlay_marker() {
 fn combo_advice_chain_multiple_on_same_defun_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun combo--chain-func ()
@@ -223,6 +228,6 @@ fn combo_advice_chain_multiple_on_same_defun_overlay_undo() {
             (advice-remove 'combo--chain-func 'combo--advice2)
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }

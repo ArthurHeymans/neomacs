@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx180_mega_all_subsystem_chaos_stress_1() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
@@ -63,13 +64,14 @@ fn div_cx180_mega_all_subsystem_chaos_stress_1() {
                 (hash-table-count ht)
                 (aref rec 2)))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx180_mega_all_subsystem_chaos_stress_2() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored user-error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -124,13 +126,14 @@ fn div_cx180_mega_all_subsystem_chaos_stress_2() {
                   (list state (buffer-live-p buf)))))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored user-error)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx180_mega_advice_clloop_closure_coding_charset_obarray_secure_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function make-obarray)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
@@ -167,13 +170,14 @@ fn div_cx180_mega_advice_clloop_closure_coding_charset_obarray_secure_hash() {
         (advice-remove 'neo-cx180-target 'mega-advice)
         snapshot))))
 "##,
-        expect_test::expect![[r#""ERR (void-function make-obarray)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx180_mega_pcase_rx_syntax_textprop_marker_overlay_register_window_config() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -212,13 +216,14 @@ fn div_cx180_mega_pcase_rx_syntax_textprop_marker_overlay_register_window_config
                     (text-properties-at 1)))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored wrong-type-argument)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx180_mega_search_replace_format_time_buflocal_undo_invis_textprop_clloop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
@@ -258,6 +263,6 @@ fn div_cx180_mega_search_replace_format_time_buflocal_undo_invis_textprop_clloop
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }

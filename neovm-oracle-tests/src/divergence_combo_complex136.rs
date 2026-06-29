@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx136_tramp_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -18,25 +19,29 @@ fn div_cx136_tramp_availability() {
             (boundp 'tramp-default-host)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx136_remote_file_predicate_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (file-remote-p "/local/path")
       (file-remote-p "/home/user/file"))
 "##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx136_remote_file_predicate_method_host() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"ssh\" \"host\" \"user\" \"/remote/path\" \"localhost\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (file-remote-p "/ssh:host:" 'method)
@@ -45,15 +50,14 @@ fn div_cx136_remote_file_predicate_method_host() {
       (file-remote-p "/method:host:/remote/path" 'localname)
       (file-remote-p "/ssh:localhost:" 'host))
 "##,
-        expect_test::expect![[
-            r#""OK (\"ssh\" \"host\" \"user\" \"/remote/path\" \"localhost\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx136_ange_ftp_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -64,13 +68,14 @@ fn div_cx136_ange_ftp_availability() {
             (boundp 'ange-ftp-default-password)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx136_tramp_completion_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -78,13 +83,16 @@ fn div_cx136_tramp_completion_availability() {
           (boundp 'tramp-completion-reread-directory-timeout))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx136_tramp_method_list_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (t (\"ssh\" \"remsh\" \"rsh\" \"rsync\" \"scpx\" \"scp\" \"remcp\" \"rcp\" \"smb\" \"sshfs\" \"sudoedit\" \"-\") (\"scp\" \"remcp\" \"rcp\" \"smb\" \"sshfs\" \"sudoedit\" \"-\") (\"rsync\" \"scpx\" \"scp\" \"remcp\" \"rcp\" \"smb\" \"sshfs\" \"sudoedit\" \"-\") (\"sudo\" \"sg\" \"su\" \"telnet\" \"sshx\" \"ssh\" \"remsh\" \"rsh\" \"rsync\" \"scpx\" \"scp\" \"remcp\" \"rcp\" \"smb\" \"sshfs\" \"sudoedit\" \"-\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -96,15 +104,14 @@ fn div_cx136_tramp_method_list_query() {
             (member "sudo" methods)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (t (\"ssh\" \"remsh\" \"rsh\" \"rsync\" \"scpx\" \"scp\" \"remcp\" \"rcp\" \"smb\" \"sshfs\" \"sudoedit\" \"-\") (\"scp\" \"remcp\" \"rcp\" \"smb\" \"sshfs\" \"sudoedit\" \"-\") (\"rsync\" \"scpx\" \"scp\" \"remcp\" \"rcp\" \"smb\" \"sshfs\" \"sudoedit\" \"-\") (\"sudo\" \"sg\" \"su\" \"telnet\" \"sshx\" \"ssh\" \"remsh\" \"rsh\" \"rsync\" \"scpx\" \"scp\" \"remcp\" \"rcp\" \"smb\" \"sshfs\" \"sudoedit\" \"-\"))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx136_docker_tramp_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -113,13 +120,14 @@ fn div_cx136_docker_tramp_method() {
           (boundp 'docker-tramp-docker-program))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx136_k8s_tramp_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -127,13 +135,14 @@ fn div_cx136_k8s_tramp_method() {
           (fboundp 'kubernetes-overview))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx136_tramp_get_connection_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -142,13 +151,15 @@ fn div_cx136_tramp_get_connection_property() {
           (boundp 'tramp-connection-properties))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx136_remote_directory_files_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (\"/ssh:fake-host:\" \"ssh\" \"fake-host\" \"/tmp/\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -159,13 +170,14 @@ fn div_cx136_remote_directory_files_format() {
             (file-remote-p remote-path 'localname)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"/ssh:fake-host:\" \"ssh\" \"fake-host\" \"/tmp/\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx136_tramp_persistency_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -174,13 +186,14 @@ fn div_cx136_tramp_persistency_availability() {
           (boundp 'tramp-verbose))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx136_tramp_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -208,6 +221,6 @@ fn div_cx136_tramp_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     );
 }

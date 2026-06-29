@@ -8,6 +8,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_make_keymap_define_and_lookup_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (insert-a insert-b nil (keymap (24 . combo-command)) combo-command)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((map (make-keymap)))\n\
@@ -19,9 +22,7 @@ fn deficiency_make_keymap_define_and_lookup_chain() {
          (lookup-key map \"c\")\n\
          (lookup-key map \"\\C-c\")\n\
          (lookup-key map \"\\C-c\\C-x\"))))",
-        expect_test::expect![[
-            r#""OK (insert-a insert-b nil (keymap (24 . combo-command)) combo-command)""#
-        ]],
+        expect,
     );
 }
 
@@ -29,6 +30,9 @@ fn deficiency_make_keymap_define_and_lookup_chain() {
 fn deficiency_make_sparse_keymap_with_parent_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (child-a parent-b child-c nil (keymap (98 . parent-b) (97 . parent-a)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((parent (make-sparse-keymap)))\n\
@@ -43,9 +47,7 @@ fn deficiency_make_sparse_keymap_with_parent_inheritance() {
          (lookup-key child \"c\")\n\
          (lookup-key child \"d\")\n\
          (keymap-parent child)))))",
-        expect_test::expect![[
-            r#""OK (child-a parent-b child-c nil (keymap (98 . parent-b) (97 . parent-a)))""#
-        ]],
+        expect,
     );
 }
 
@@ -53,6 +55,7 @@ fn deficiency_make_sparse_keymap_with_parent_inheritance() {
 fn deficiency_keymap_prefix_key_and_nested_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((map (make-sparse-keymap)))\n\
@@ -65,7 +68,7 @@ fn deficiency_keymap_prefix_key_and_nested_lookup() {
          (lookup-key map \"\\C-cb\")\n\
          (keymapp (lookup-key map \"\\C-c\"))\n\
          (keymapp (lookup-key map \"\\C-ca\")))))",
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -73,6 +76,7 @@ fn deficiency_keymap_prefix_key_and_nested_lookup() {
 fn deficiency_keymap_meta_and_function_key_bindings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (self-a meta-a ctrl-a help-fn meta-f2 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((map (make-sparse-keymap)))\n\
@@ -87,7 +91,7 @@ fn deficiency_keymap_meta_and_function_key_bindings() {
          (lookup-key map [f1])\n\
          (lookup-key map [M-f2])\n\
          (lookup-key map [f3]))))",
-        expect_test::expect![[r#""OK (self-a meta-a ctrl-a help-fn meta-f2 nil)""#]],
+        expect,
     );
 }
 
@@ -95,13 +99,14 @@ fn deficiency_keymap_meta_and_function_key_bindings() {
 fn deficiency_define_key_with_remap_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((map (make-sparse-keymap)))\n\
          (define-key map [remap self-insert-command] 'my-insert)\n\
          (list (lookup-key map [remap self-insert-command])\n\
          (lookup-key map \"a\")))",
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -109,6 +114,7 @@ fn deficiency_define_key_with_remap_binding() {
 fn deficiency_keymap_where_is_internal_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (([3 97]) ([3 98]) nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((map (make-sparse-keymap)))\n\
@@ -119,7 +125,7 @@ fn deficiency_keymap_where_is_internal_basic() {
          (list seqs\n\
          (where-is-internal 'test-cmd-b map)\n\
          (where-is-internal 'test-cmd-a (make-sparse-keymap))))))",
-        expect_test::expect![[r#""OK (([3 97]) ([3 98]) nil)""#]],
+        expect,
     );
 }
 
@@ -127,6 +133,7 @@ fn deficiency_keymap_where_is_internal_basic() {
 fn deficiency_copy_keymap_deep_vs_shallow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (cmd-a cmd-a-modified cmd-b cmd-b)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((orig (make-sparse-keymap)))\n\
@@ -138,7 +145,7 @@ fn deficiency_copy_keymap_deep_vs_shallow() {
          (lookup-key copy \"a\")\n\
          (lookup-key orig \"b\")\n\
          (lookup-key copy \"b\")))))",
-        expect_test::expect![[r#""OK (cmd-a cmd-a-modified cmd-b cmd-b)""#]],
+        expect,
     );
 }
 
@@ -146,6 +153,7 @@ fn deficiency_copy_keymap_deep_vs_shallow() {
 fn deficiency_minor_mode_map_alist_keymap_precedence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (from-map1 from-map2 nil from-map2-b)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((map1 (make-sparse-keymap))\n\
@@ -159,7 +167,7 @@ fn deficiency_minor_mode_map_alist_keymap_precedence() {
          (lookup-key map2 \"a\")\n\
          (lookup-key map1 \"b\")\n\
          (lookup-key map2 \"b\")))))",
-        expect_test::expect![[r#""OK (from-map1 from-map2 nil from-map2-b)""#]],
+        expect,
     );
 }
 
@@ -167,6 +175,7 @@ fn deficiency_minor_mode_map_alist_keymap_precedence() {
 fn deficiency_keymap_unbind_and_rebind() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((first second third) first nil third-modified)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((map (make-sparse-keymap)))\n\
@@ -182,7 +191,7 @@ fn deficiency_keymap_unbind_and_rebind() {
          (lookup-key map \"a\")\n\
          (lookup-key map \"b\")\n\
          (lookup-key map \"c\")))))",
-        expect_test::expect![[r#""OK ((first second third) first nil third-modified)""#]],
+        expect,
     );
 }
 
@@ -190,6 +199,7 @@ fn deficiency_keymap_unbind_and_rebind() {
 fn deficiency_key_description_and_key_vector_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (\"C-c C-x a\" \"M-x\" \"C-M-a\" 3 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((k1 (kbd \"C-c C-x a\"))\n\
@@ -201,6 +211,6 @@ fn deficiency_key_description_and_key_vector_parsing() {
          (length k1)\n\
          (length k2)\n\
          (length k3))))",
-        expect_test::expect![[r#""OK (\"C-c C-x a\" \"M-x\" \"C-M-a\" 3 1 1)""#]],
+        expect,
     );
 }

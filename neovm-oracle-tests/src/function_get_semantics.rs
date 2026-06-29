@@ -23,10 +23,8 @@ fn oracle_prop_function_get_reads_direct_symbol_property() {
   (setplist 'neovm--fg-direct nil))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (direct-value nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (direct-value nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -50,10 +48,8 @@ fn oracle_prop_function_get_follows_alias_chain_to_property() {
         '(neovm--fg-target neovm--fg-alias-1 neovm--fg-alias-2)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (target-value target-value target-value)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (target-value target-value target-value)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -76,10 +72,8 @@ fn oracle_prop_function_get_stops_at_first_symbol_property() {
         '(neovm--fg-base neovm--fg-wrapper)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (wrapper-value base-value)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (wrapper-value base-value)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -96,8 +90,6 @@ fn oracle_prop_function_get_unbound_and_non_symbol_inputs() {
   (setplist 'neovm--fg-unbound nil))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

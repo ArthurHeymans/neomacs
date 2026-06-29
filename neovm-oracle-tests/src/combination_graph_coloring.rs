@@ -65,12 +65,10 @@ fn oracle_prop_graph_coloring_greedy() {
                                 (setq max-c (max max-c (gethash node colors))))
                               (1+ max-c)))))))
     (fmakunbound 'neovm--gc-greedy-color)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (valid t assignments ((a . 0) (b . 1) (c . 0) (d . 1) (e . 2)) num-colors 3)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (valid t assignments ((a . 0) (b . 1) (c . 0) (d . 1) (e . 2)) num-colors 3)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -153,10 +151,9 @@ fn oracle_prop_graph_coloring_k_colorable() {
     (fmakunbound 'neovm--gc-is-safe)
     (fmakunbound 'neovm--gc-backtrack)
     (fmakunbound 'neovm--gc-k-colorable)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil t t nil nil t (t (p . 0) (q . 1) (r . 0) (s . 1)))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (nil t t nil nil t (t (p . 0) (q . 1) (r . 0) (s . 1)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -239,7 +236,8 @@ fn oracle_prop_graph_coloring_chromatic_number() {
     (fmakunbound 'neovm--gc-is-safe)
     (fmakunbound 'neovm--gc-backtrack)
     (fmakunbound 'neovm--gc-chromatic-number)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (1 2 3 2 3)""#]]);
+    let expect = expect_test::expect![[r#""OK (1 2 3 2 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -322,12 +320,10 @@ fn oracle_prop_graph_coloring_ordering_effects() {
     (fmakunbound 'neovm--gc-greedy-color)
     (fmakunbound 'neovm--gc-count-colors)
     (fmakunbound 'neovm--gc-verify)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t 2 3 2 ((a1 . 0) (a2 . 0) (a3 . 0) (b1 . 1) (b2 . 1) (b3 . 1)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t 2 3 2 ((a1 . 0) (a2 . 0) (a3 . 0) (b1 . 1) (b2 . 1) (b3 . 1)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -422,12 +418,10 @@ fn oracle_prop_graph_coloring_register_allocation() {
                                        (symbol-name (car b)))))))))
     (fmakunbound 'neovm--gc-greedy-color)
     (fmakunbound 'neovm--gc-build-interference)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (valid t registers-needed 3 assignments ((a \"R0\") (b \"R1\") (c \"R2\") (d \"R1\") (e \"R0\") (f \"R2\") (g \"R0\")) interference-edges ((a b) (a c) (a d) (b c) (c d) (d e) (d f) (e f) (f g)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (valid t registers-needed 3 assignments ((a \"R0\") (b \"R1\") (c \"R2\") (d \"R1\") (e \"R0\") (f \"R2\") (g \"R0\")) interference-edges ((a b) (a c) (a d) (b c) (c d) (d e) (d f) (e f) (f g)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -580,8 +574,6 @@ fn oracle_prop_graph_coloring_sudoku_4x4() {
     (fmakunbound 'neovm--gc-sudoku-solve)
     (fmakunbound 'neovm--gc-board-to-list)
     (fmakunbound 'neovm--gc-verify-sudoku)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (wrong-type-argument arrayp nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument arrayp nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

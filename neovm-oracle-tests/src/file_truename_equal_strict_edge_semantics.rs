@@ -67,12 +67,10 @@ fn oracle_file_truename_parent_symlink_missing_tail_and_file_equal() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"real/nested/target.txt\" \"real/nested/target.txt\" \"real/nested/missing-tail.txt\" \"real\" \".\" t t nil nil (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"real/nested/target.txt\" \"real/nested/target.txt\" \"real/nested/missing-tail.txt\" \"real\" \".\" t t nil nil (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -123,8 +121,6 @@ fn oracle_file_truename_empty_dot_and_symlink_cycle_edges() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 44)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 44)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -19,12 +19,10 @@ fn oracle_ignore_error_macroexpansion_edges() {
  (macroexpand '(ignore-error arith-error)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((condition-case nil (progn (read \"\")) ((end-of-file) nil)) (condition-case nil (progn (read \"\")) (error nil)) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((condition-case nil (progn (read \"\")) ((end-of-file) nil)) (condition-case nil (progn (read \"\")) (error nil)) nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -43,8 +41,6 @@ fn oracle_ignore_error_runtime_condition_matching() {
  (ignore-error error (+ 1 2)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil nil nil (arith-error nil) 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil (arith-error nil) 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

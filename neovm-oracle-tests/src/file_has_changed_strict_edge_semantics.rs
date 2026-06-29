@@ -58,12 +58,10 @@ fn oracle_file_has_changed_cache_tags_missing_and_type_edges() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 0 100 0 0) nil (1 0 100 0 0) nil nil nil (6 0 200 0 0) nil (6 0 200 0 0) nil nil nil (wrong-type-argument (stringp 42)) (wrong-type-argument (symbolp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 0 100 0 0) nil (1 0 100 0 0) nil nil nil (6 0 200 0 0) nil (6 0 200 0 0) nil nil nil (wrong-type-argument (stringp 42)) (wrong-type-argument (symbolp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -96,8 +94,6 @@ fn oracle_file_has_changed_directory_file_name_cache_key_edges() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 0 100 0 0) nil 1 (6 0 200 0 0) nil 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 0 100 0 0) nil 1 (6 0 200 0 0) nil 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

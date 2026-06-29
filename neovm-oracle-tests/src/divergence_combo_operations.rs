@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_combo_insert_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""CDEFGERR (error \"Changes to be undone are outside visible portion of buffer\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -21,9 +24,7 @@ fn divergence_combo_insert_narrow_undo() {
   (list (buffer-string))
   (widen)
   (buffer-string))"#,
-        expect_test::expect![[
-            r#""CDEFGERR (error \"Changes to be undone are outside visible portion of buffer\")""#
-        ]],
+        expect,
     );
 }
 
@@ -31,6 +32,7 @@ fn divergence_combo_insert_narrow_undo() {
 fn divergence_combo_overlay_prop_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCDEFGHIJOK (bold bold italic)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -45,7 +47,7 @@ fn divergence_combo_overlay_prop_narrow() {
     (list (get-char-property 4 'face)
           (get-char-property 6 'face)
           (get-char-property 8 'face))))"#,
-        expect_test::expect![[r#""ABCDEFGHIJOK (bold bold italic)""#]],
+        expect,
     );
 }
 
@@ -53,6 +55,7 @@ fn divergence_combo_overlay_prop_narrow() {
 fn divergence_combo_marker_insert_delete_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABXXCFGHIJOK (6 \"ABXXCFGHIJ\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -67,7 +70,7 @@ fn divergence_combo_marker_insert_delete_narrow() {
           (buffer-string))
     (widen)
     (list (marker-position m) (buffer-string))))"#,
-        expect_test::expect![[r#""ABXXCFGHIJOK (6 \"ABXXCFGHIJ\")""#]],
+        expect,
     );
 }
 
@@ -75,6 +78,7 @@ fn divergence_combo_marker_insert_delete_narrow() {
 fn divergence_combo_save_excursion_kill_yank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""Hello World Foo BarOK (\"Hello World Foo Bar\" 12)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World Foo Bar")
@@ -85,7 +89,7 @@ fn divergence_combo_save_excursion_kill_yank() {
   (goto-char 7)
   (yank)
   (list (buffer-string) (point)))"#,
-        expect_test::expect![[r#""Hello World Foo BarOK (\"Hello World Foo Bar\" 12)""#]],
+        expect,
     );
 }
 
@@ -93,6 +97,7 @@ fn divergence_combo_save_excursion_kill_yank() {
 fn divergence_combo_hash_symbol_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (1 2 3 (a 1 b 2 c 3))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setplist 'my-combo-sym '(a 1 b 2))
@@ -102,7 +107,7 @@ fn divergence_combo_hash_symbol_prop() {
           (get (gethash 'x ht) 'b)
           (put 'my-combo-sym 'c 3)
           (symbol-plist 'my-combo-sym))))"#,
-        expect_test::expect![[r#""OK (1 2 3 (a 1 b 2 c 3))""#]],
+        expect,
     );
 }
 
@@ -110,6 +115,7 @@ fn divergence_combo_hash_symbol_prop() {
 fn divergence_combo_catch_throw_unwind_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCDEFGHIJOK (\"CDEFG\" nil 1 11)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -123,7 +129,7 @@ fn divergence_combo_catch_throw_unwind_narrow() {
           (buffer-narrowed-p)
           (point-min)
           (point-max))))"#,
-        expect_test::expect![[r#""ABCDEFGHIJOK (\"CDEFG\" nil 1 11)""#]],
+        expect,
     );
 }
 
@@ -131,14 +137,15 @@ fn divergence_combo_catch_throw_unwind_narrow() {
 fn divergence_combo_read_print_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((a (b . c) [1 2 3] \"hello \\\"world\\\"\" 10) (a (b . c) [1 2 3] \"hello \\\"world\\\"\" 10) t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((data '(a (b . c) [1 2 3] "hello \"world\"" ?\n)))
   (list data
         (read (prin1-to-string data))
         (equal data (read (prin1-to-string data)))))"#,
-        expect_test::expect![[
-            r#""OK ((a (b . c) [1 2 3] \"hello \\\"world\\\"\" 10) (a (b . c) [1 2 3] \"hello \\\"world\\\"\" 10) t)""#
-        ]],
+        expect,
     );
 }
 
@@ -146,6 +153,7 @@ fn divergence_combo_read_print_roundtrip() {
 fn divergence_combo_condition_case_save_restriction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""CDEFGOK ((3 8 (error \"test\")) 3 8 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -160,7 +168,7 @@ fn divergence_combo_condition_case_save_restriction() {
           (point-min)
           (point-max)
           (buffer-narrowed-p))))"#,
-        expect_test::expect![[r#""CDEFGOK ((3 8 (error \"test\")) 3 8 t)""#]],
+        expect,
     );
 }
 
@@ -168,6 +176,8 @@ fn divergence_combo_condition_case_save_restriction() {
 fn divergence_combo_multiple_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""OK (\"AAA\" \"BBB\" #<buffer  *neovm-oracle-stdout*>)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((buf1 (generate-new-buffer " *combo1*"))
         (buf2 (generate-new-buffer " *combo2*")))
@@ -184,7 +194,7 @@ fn divergence_combo_multiple_buffers() {
               (current-buffer)))
     (kill-buffer buf1)
     (kill-buffer buf2)))"#,
-        expect_test::expect![[r#""OK (\"AAA\" \"BBB\" #<buffer  *neovm-oracle-stdout*>)""#]],
+        expect,
     );
 }
 
@@ -192,6 +202,8 @@ fn divergence_combo_multiple_buffers() {
 fn divergence_combo_keymap_closure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""OK ((closure (t) nil (setq counter (1+ counter))) t 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((map (make-sparse-keymap))
         (counter 0)
@@ -200,6 +212,6 @@ fn divergence_combo_keymap_closure() {
   (list (lookup-key map "a")
         (commandp increment)
         counter))"#,
-        expect_test::expect![[r#""OK ((closure (t) nil (setq counter (1+ counter))) t 0)""#]],
+        expect,
     );
 }

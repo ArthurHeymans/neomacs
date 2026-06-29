@@ -13,6 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_k1_add_function_compose() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable probe-addfn)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -22,13 +23,14 @@ fn div_k1_add_function_compose() {
     (remove-function 'probe-addfn t)
     (list r1 (probe-addfn 5))))
 "##,
-        expect_test::expect![[r#""ERR (void-variable probe-addfn)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_k1_bool_vector_set_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function bool-vector-complement)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((a (make-bool-vector 4 nil))
@@ -40,13 +42,14 @@ fn div_k1_bool_vector_set_ops() {
         (bool-vector-subsetp a b)
         (bool-vector-complement a)))
 "##,
-        expect_test::expect![[r#""ERR (void-function bool-vector-complement)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_k1_flatten_tree_and_dlet() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((1 2 3 4 5 6) ([1 [2 3] 4]) outer)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (flatten-tree '((1 2) (3 (4 5)) 6))
@@ -55,13 +58,14 @@ fn div_k1_flatten_tree_and_dlet() {
         (dlet ((x 'inner))
           x)))
 "##,
-        expect_test::expect![[r#""OK ((1 2 3 4 5 6) ([1 [2 3] 4]) outer)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_k1_seq_let_setf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (let ((v [1 2 3]))
@@ -69,13 +73,14 @@ fn div_k1_seq_let_setf() {
     (list a b c)))
 "##,
         &["emacs-lisp/seq.el"],
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_k1_fill_with_prefix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"ab foo bar baz\nab more text\nab here\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -84,6 +89,6 @@ fn div_k1_fill_with_prefix() {
     (fill-region (point-min) (point-max))
     (buffer-string)))
 "##,
-        expect_test::expect![[r#""OK \"ab foo bar baz\nab more text\nab here\n\"""#]],
+        expect,
     );
 }

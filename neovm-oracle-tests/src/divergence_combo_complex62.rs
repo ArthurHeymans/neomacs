@@ -9,6 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx62_cl_defstruct_included_and_print_object() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function copy-neo-cx62-base)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx62-base (:constructor neo-cx62-make-base)
@@ -29,13 +30,16 @@ fn div_cx62_cl_defstruct_included_and_print_object() {
         (copy-neo-cx62-base base)
         (let ((print-circle nil)) (prin1-to-string child))))
 "##,
-        expect_test::expect![[r#""ERR (void-function copy-neo-cx62-base)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx62_cl_defstruct_with_named_conc_str_prefix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (1 2 3 t (neo-cx62-rec 1 2 3) 99 99 (neo-cx62-rec 99 2 3))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (cl-defstruct (neo-cx62-rec (:type list) :named) a b c)
@@ -49,15 +53,14 @@ fn div_cx62_cl_defstruct_with_named_conc_str_prefix() {
         (neo-cx62-rec-a r)
         r))
 "##,
-        expect_test::expect![[
-            r#""OK (1 2 3 t (neo-cx62-rec 1 2 3) 99 99 (neo-cx62-rec 99 2 3))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx62_eieio_multiple_inheritance_method_resolution() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -77,13 +80,15 @@ fn div_cx62_eieio_multiple_inheritance_method_resolution() {
               (neo-cx62--c))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx62_eieio_method_qualifiers_before_after_around() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (:around-enter :before :primary :after :around-exit)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -103,13 +108,14 @@ fn div_cx62_eieio_method_qualifiers_before_after_around() {
           (nreverse calls))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:around-enter :before :primary :after :around-exit)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx62_add_function_before_until_after_while_combination() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable neo-cx62-fn)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s (symbol-function (defalias 'neo-cx62-fn (lambda (x) (list :primary x))))))
@@ -121,13 +127,16 @@ fn div_cx62_add_function_before_until_after_while_combination() {
     (let ((result (neo-cx62-fn 42)))
       (list result (nreverse calls)))))
 "##,
-        expect_test::expect![[r#""ERR (void-variable neo-cx62-fn)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx62_format_spec_edge_percent_and_missing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"alpha-beta\" \"%literal\" \"alpha-%-end\" error \"alpha alpha alpha\" error)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -140,15 +149,14 @@ fn div_cx62_format_spec_edge_percent_and_missing() {
             (condition-case e3 (format-spec "%a-%b-%c" spec) (error (car e3)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (\"alpha-beta\" \"%literal\" \"alpha-%-end\" error \"alpha alpha alpha\" error)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx62_rx_macro_evaluation_complex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable kw)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((kw 'foo)
@@ -168,13 +176,16 @@ fn div_cx62_rx_macro_evaluation_complex() {
         (regexp-opt '("a" "ab" "abc"))
         (regexp-quote "a.b*c?")))
 "##,
-        expect_test::expect![[r#""ERR (void-variable kw)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx62_cl_loop_for_hash_destructure_sum_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"alpha\" \"beta\" \"gamma\") 60 2 (:big ((\"beta\" . 20) (\"gamma\" . 30)) :small ((\"alpha\" . 10))))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
@@ -190,15 +201,16 @@ fn div_cx62_cl_loop_for_hash_destructure_sum_count() {
                  else collect (cons k (gethash k ht)) into small
                  finally (return (list :big big :small small)))))
 "##,
-        expect_test::expect![[
-            r#""OK ((\"alpha\" \"beta\" \"gamma\") 60 2 (:big ((\"beta\" . 20) (\"gamma\" . 30)) :small ((\"alpha\" . 10))))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx62_cl_loop_with_destructuring_and_collect_pattern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (((1 \"a\") (2 \"b\") (3 \"c\") (4 \"d\") (5 \"e\") (6 \"f\")) (100 200 300 400 500 600) (:total 6 :indices (1 2 3)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data '(((1 . "a") (2 . "b")) ((3 . "c")) ((4 . "d") (5 . "e") (6 . "f")))))
@@ -213,15 +225,15 @@ fn div_cx62_cl_loop_with_destructuring_and_collect_pattern() {
             collect i into indices
             finally (return (list :total total :indices indices)))))
 "##,
-        expect_test::expect![[
-            r#""OK (((1 \"a\") (2 \"b\") (3 \"c\") (4 \"d\") (5 \"e\") (6 \"f\")) (100 200 300 400 500 600) (:total 6 :indices (1 2 3)))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx62_cl_destructuring_with_default_and_ignore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (6 (1 2 nil) (1 2 3 4 5) (1 2 99) ((1 2) 1 2) (1 2 3 4))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((alist '((a . 1) (b . 2) (c . 3))))
@@ -233,13 +245,14 @@ fn div_cx62_cl_destructuring_with_default_and_ignore() {
    (cl-destructuring-bind (&whole whole a b) '(1 2) (list whole a b))
    (cl-destructuring-bind (a (b c) d) '(1 (2 3) 4) (list a b c d))))
 "##,
-        expect_test::expect![[r#""OK (6 (1 2 nil) (1 2 3 4 5) (1 2 99) ((1 2) 1 2) (1 2 3 4))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx62_cl_setf_getf_pushnew_remf_plist_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:c (5) :b 99) nil 99 (5))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p '(:a 1 :b 2)))
@@ -252,13 +265,14 @@ fn div_cx62_cl_setf_getf_pushnew_remf_plist_ops() {
         (cl-getf p :b)
         (cl-getf p :c)))
 "##,
-        expect_test::expect![[r#""OK ((:c (5) :b 99) nil 99 (5))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx62_defmacro_macroexpand_dotted_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp 10)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (defmacro neo-cx62-double-when (cond form)
@@ -269,13 +283,14 @@ fn div_cx62_defmacro_macroexpand_dotted_eval() {
         (eval (cons 'let '((x 10))) t)
         (eval '(let ((x 10)) (neo-cx62-double-when (> x 5) (setq x (+ x 1)))) t)))
 "##,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp 10)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx62_eieio_cl_defmethod_dispatch_with_qualifiers_print_undo_textprop_marker_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -305,13 +320,14 @@ fn div_cx62_eieio_cl_defmethod_dispatch_with_qualifiers_print_undo_textprop_mark
                       (buffer-string) (marker-position m)))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx62_eieio_static_class_slots_class_allocated() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 5 10 10 :a :b)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -333,6 +349,6 @@ fn div_cx62_eieio_static_class_slots_class_allocated() {
                 (slot-value b 'instance-tag)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (5 5 10 10 :a :b)""#]],
+        expect,
     );
 }

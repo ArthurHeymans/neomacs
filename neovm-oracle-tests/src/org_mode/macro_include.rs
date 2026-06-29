@@ -5,6 +5,9 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_include_keyword_expands_file_content_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK \"#+TITLE: Main\n#+MACRO: incmacro Included $1\n* Included\nBody {{{incmacro(value)}}}\n* Local\nBody\n\"""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -25,9 +28,7 @@ fn org_include_keyword_expands_file_content_combo() {
             (org-export-expand-include-keyword nil root nil nil nil)
             (buffer-substring-no-properties (point-min) (point-max))))
       (delete-directory root t))))"##,
-        expect_test::expect![[
-            r##""OK \"#+TITLE: Main\n#+MACRO: incmacro Included $1\n* Included\nBody {{{incmacro(value)}}}\n* Local\nBody\n\"""##
-        ]],
+        expect,
     );
 }
 
@@ -35,6 +36,9 @@ fn org_include_keyword_expands_file_content_combo() {
 fn org_macro_escape_extract_replace_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK (\"x\\\\,y,z\" (\"x,y\" \"z\") nil \"#+MACRO: count (eval (number-to-string (1+ (string-to-number $1))))\n#+MACRO: wrap [$1|$2]\nValue (eval (number-to-string (1+ (string-to-number 4)))); [a|b]; escaped [x,y|z].\n\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -52,9 +56,7 @@ fn org_macro_escape_extract_replace_combo() {
               (org-macro-replace-all templates)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
-        expect_test::expect![[
-            r##""OK (\"x\\\\,y,z\" (\"x,y\" \"z\") nil \"#+MACRO: count (eval (number-to-string (1+ (string-to-number $1))))\n#+MACRO: wrap [$1|$2]\nValue (eval (number-to-string (1+ (string-to-number 4)))); [a|b]; escaped [x,y|z].\n\")""##
-        ]],
+        expect,
     );
 }
 
@@ -62,6 +64,9 @@ fn org_macro_escape_extract_replace_combo() {
 fn org_macro_html_export_markup_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (t \"<div id=\\\"outline-container-org-id\\\" class=\\\"outline-2\\\">\n<h2 id=\\\"org-id\\\"><span class=\\\"section-number-2\\\">1.</span> H</h2>\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\n<p>\n<i>text</i>\n</p>\n</div>\n</div>\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
@@ -77,9 +82,7 @@ fn org_macro_html_export_markup_combo() {
              "org[[:alnum:]]+"
              "org-id"
              html)))))"##,
-        expect_test::expect![[
-            r#""OK (t \"<div id=\\\"outline-container-org-id\\\" class=\\\"outline-2\\\">\n<h2 id=\\\"org-id\\\"><span class=\\\"section-number-2\\\">1.</span> H</h2>\n<div class=\\\"outline-text-2\\\" id=\\\"text-1\\\">\n<p>\n<i>text</i>\n</p>\n</div>\n</div>\n\")""#
-        ]],
+        expect,
     );
 }
 
@@ -87,6 +90,7 @@ fn org_macro_html_export_markup_combo() {
 fn org_include_location_only_contents_footnotes_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 34)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -121,7 +125,7 @@ fn org_include_location_only_contents_footnotes_combo() {
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 34)""#]],
+        expect,
     );
 }
 
@@ -129,6 +133,7 @@ fn org_include_location_only_contents_footnotes_combo() {
 fn org_include_literal_blocks_lines_parse_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 28 34)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -158,7 +163,7 @@ fn org_include_literal_blocks_lines_parse_combo() {
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 28 34)""#]],
+        expect,
     );
 }
 
@@ -166,6 +171,8 @@ fn org_include_literal_blocks_lines_parse_combo() {
 fn org_macro_counter_nested_replacement_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""ERR (error \"Undefined Org macro: counter; aborting\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -185,7 +192,7 @@ fn org_macro_counter_nested_replacement_combo() {
               (org-macro-replace-all templates)
               (buffer-substring-no-properties
                (point-min) (point-max)))))))"##,
-        expect_test::expect![[r#""ERR (error \"Undefined Org macro: counter; aborting\")""#]],
+        expect,
     );
 }
 
@@ -193,6 +200,8 @@ fn org_macro_counter_nested_replacement_combo() {
 fn org_include_nested_macro_footnote_export_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""ERR (user-error \"Definition not found for footnote outer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
@@ -250,7 +259,7 @@ fn org_include_nested_macro_footnote_export_combo() {
                     (not (null (string-match-p "footnotes" html)))
                     html)))))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""ERR (user-error \"Definition not found for footnote outer\")""#]],
+        expect,
     );
 }
 
@@ -258,6 +267,9 @@ fn org_include_nested_macro_footnote_export_combo() {
 fn org_macro_builtin_property_date_env_include_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""ERR (user-error \"Unable to read file \\\"/$ORG_ORACLE_INCLUDE_ROOT/env-include.org\\\"\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -346,9 +358,7 @@ fn org_macro_builtin_property_date_env_include_combo() {
           (setenv "ORG_ORACLE_INCLUDE_ROOT" old-env)
         (setenv "ORG_ORACLE_INCLUDE_ROOT" nil))
       (delete-directory root t))))"##,
-        expect_test::expect![[
-            r#""ERR (user-error \"Unable to read file \\\"/$ORG_ORACLE_INCLUDE_ROOT/env-include.org\\\"\")""#
-        ]],
+        expect,
     );
 }
 
@@ -356,6 +366,7 @@ fn org_macro_builtin_property_date_env_include_combo() {
 fn org_include_export_environment_reference_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 73 34)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
@@ -430,7 +441,7 @@ fn org_include_export_environment_reference_combo() {
                       "org-id"
                       (org-export-as 'html nil nil t nil)))))))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 73 34)""#]],
+        expect,
     );
 }
 
@@ -438,6 +449,9 @@ fn org_include_export_environment_reference_combo() {
 fn org_macro_expand_nested_arg_export_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK (\"#+MACRO: greet Hello, $1!\n#+MACRO: wrap /$1/\n#+MACRO: twice $1 and $1\n#+MACRO: concat $1$2\n#+MACRO: nested {{{wrap($1)}}} plus $2\n\n* Section\nGreet: {{{greet(World)}}}\nWrap: {{{wrap(important)}}}\nTwice: {{{twice(repeated)}}}\nConcat: {{{concat(foo,bar)}}}\nNested: {{{nested(bold,extra)}}}\n\" \"#+MACRO: greet Hello, $1!\n#+MACRO: wrap /$1/\n#+MACRO: twice $1 and $1\n#+MACRO: concat $1$2\n#+MACRO: nested {{{wrap($1)}}} plus $2\n\n* Section\nGreet: Hello, World!\nWrap: /important/\nTwice: repeated and repeated\nConcat: foobar\nNested: /bold/ plus extra\n\" (\"author\" \"concat\" \"date\" \"email\" \"greet\" \"nested\" \"title\" \"twice\" \"wrap\") ((\"nested\" \"{{{wrap($1)}}} plus $2\") (\"concat\" \"$1$2\") (\"twice\" \"$1 and $1\") (\"wrap\" \"/$1/\") (\"greet\" \"Hello, $1!\") (\"author\" nil) (\"email\" nil) (\"title\" nil) (\"date\" nil)) (375 395))""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -475,9 +489,7 @@ fn org_macro_expand_nested_arg_export_combo() {
                   macro-names
                   macro-vals
                   (list has-greet has-italic))))))))"##,
-        expect_test::expect![[
-            r##""OK (\"#+MACRO: greet Hello, $1!\n#+MACRO: wrap /$1/\n#+MACRO: twice $1 and $1\n#+MACRO: concat $1$2\n#+MACRO: nested {{{wrap($1)}}} plus $2\n\n* Section\nGreet: {{{greet(World)}}}\nWrap: {{{wrap(important)}}}\nTwice: {{{twice(repeated)}}}\nConcat: {{{concat(foo,bar)}}}\nNested: {{{nested(bold,extra)}}}\n\" \"#+MACRO: greet Hello, $1!\n#+MACRO: wrap /$1/\n#+MACRO: twice $1 and $1\n#+MACRO: concat $1$2\n#+MACRO: nested {{{wrap($1)}}} plus $2\n\n* Section\nGreet: Hello, World!\nWrap: /important/\nTwice: repeated and repeated\nConcat: foobar\nNested: /bold/ plus extra\n\" (\"author\" \"concat\" \"date\" \"email\" \"greet\" \"nested\" \"title\" \"twice\" \"wrap\") ((\"nested\" \"{{{wrap($1)}}} plus $2\") (\"concat\" \"$1$2\") (\"twice\" \"$1 and $1\") (\"wrap\" \"/$1/\") (\"greet\" \"Hello, $1!\") (\"author\" nil) (\"email\" nil) (\"title\" nil) (\"date\" nil)) (375 395))""##
-        ]],
+        expect,
     );
 }
 
@@ -485,6 +497,9 @@ fn org_macro_expand_nested_arg_export_combo() {
 fn org_macro_chained_nested_expansion_divergence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK (\"#+MACRO: greet Hello, $1!\n#+MACRO: wrap /$1/\n#+MACRO: twice $1 and $1\n\n* Section\nChained: {{{twice({{{greet(A)}}})}}}\n\" \"#+MACRO: greet Hello, $1!\n#+MACRO: wrap /$1/\n#+MACRO: twice $1 and $1\n\n* Section\nChained: Hello, A and {{{greet(A!\n\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -503,9 +518,7 @@ fn org_macro_chained_nested_expansion_divergence() {
         (let ((after (buffer-substring-no-properties
                       (point-min) (point-max))))
           (list before after))))))"##,
-        expect_test::expect![[
-            r##""OK (\"#+MACRO: greet Hello, $1!\n#+MACRO: wrap /$1/\n#+MACRO: twice $1 and $1\n\n* Section\nChained: {{{twice({{{greet(A)}}})}}}\n\" \"#+MACRO: greet Hello, $1!\n#+MACRO: wrap /$1/\n#+MACRO: twice $1 and $1\n\n* Section\nChained: Hello, A and {{{greet(A!\n\")""##
-        ]],
+        expect,
     );
 }
 
@@ -513,6 +526,7 @@ fn org_macro_chained_nested_expansion_divergence() {
 fn org_include_file_lines_blocks_export_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 55 34)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -569,6 +583,6 @@ fn org_include_file_lines_blocks_export_deep_state_combo() {
                         has-code
                         html))))))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 55 34)""#]],
+        expect,
     );
 }

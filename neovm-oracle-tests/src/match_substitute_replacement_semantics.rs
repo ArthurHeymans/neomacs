@@ -19,12 +19,10 @@ fn oracle_match_substitute_basic_backrefs() {
    (match-substitute-replacement "\\1=\\1;\\2=\\2" nil nil s)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"alice/name\" \"<name=alice>\" \"name=name;alice=alice\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"alice/name\" \"<name=alice>\" \"name=name;alice=alice\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -43,12 +41,10 @@ fn oracle_match_substitute_literal_backslashes() {
    (match-substitute-replacement "x\\\\y" t t s)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"10:a\" \"\\\\2:\\\\1\" \"a-10\" \"\\\\&\" \"x\\\\y\" \"x\\\\\\\\y\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"10:a\" \"\\\\2:\\\\1\" \"a-10\" \"\\\\&\" \"x\\\\y\" \"x\\\\\\\\y\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -66,12 +62,10 @@ fn oracle_match_substitute_fixedcase_case_conversion() {
    cases))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"hello\" \"world\" \"world\") (\"Hello\" \"World\" \"world\") (\"HELLO\" \"WORLD\" \"world\") (\"HeLLo\" \"World\" \"world\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"hello\" \"world\" \"world\") (\"Hello\" \"World\" \"world\") (\"HELLO\" \"WORLD\" \"world\") (\"HeLLo\" \"World\" \"world\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -88,12 +82,10 @@ fn oracle_match_substitute_subexp_replacement() {
    (match-substitute-replacement "" t t s 3)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"WHOLE\" \"[ONE:beta:gamma]\" \"[alpha:gamma/beta/alpha:gamma]\" \"[alpha:beta:]\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"WHOLE\" \"[ONE:beta:gamma]\" \"[alpha:gamma/beta/alpha:gamma]\" \"[alpha:beta:]\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -112,10 +104,8 @@ fn oracle_match_substitute_unmatched_optional_group() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"key\" nil \"<key>|<>|<key=>\" \"\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"key\" nil \"<key>|<>|<key=>\" \"\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -131,8 +121,6 @@ fn oracle_match_substitute_preserves_outer_match_data() {
     (list replacement before after (equal before after))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"10/foo\" (0 6 0 3 4 6) (0 6 0 3 4 6) t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"10/foo\" (0 6 0 3 4 6) (0 6 0 3 4 6) t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

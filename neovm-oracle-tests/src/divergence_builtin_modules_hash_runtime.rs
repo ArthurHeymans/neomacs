@@ -10,11 +10,12 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn base64_url_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function base64url-decode-string)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (base64url-encode-string "subjects?_d" t)
         (base64-encode-string "Hello" t)
         (base64url-decode-string "c3ViamVjdHM_X2Q"))"##,
-        expect_test::expect![[r#""ERR (void-function base64url-decode-string)""#]],
+        expect,
     );
 }
 
@@ -22,10 +23,11 @@ fn base64_url_variants() {
 fn benchmark_run() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (numberp (car (benchmark-run 1 (+ 1 2))))
         (= (length (benchmark-run 2 (ignore))) 3))"##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
@@ -33,10 +35,11 @@ fn benchmark_run() {
 fn buffer_hash_fn() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer (insert "content")
   (list (stringp (buffer-hash)) (= (length (buffer-hash)) (length (buffer-hash)))))"##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
@@ -44,10 +47,11 @@ fn buffer_hash_fn() {
 fn json_builtin_fns() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (fboundp 'json-serialize) (fboundp 'json-parse-string)
         (fboundp 'json-parse-buffer) (fboundp 'json-insert))"##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -55,11 +59,12 @@ fn json_builtin_fns() {
 fn module_features() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (booleanp (featurep 'dynamic-setting))
         (booleanp (featurep 'json)) (booleanp module-file-suffix)
         (stringp (or system-configuration "")))"##,
-        expect_test::expect![[r#""OK (t t nil t)""#]],
+        expect,
     );
 }
 
@@ -67,12 +72,13 @@ fn module_features() {
 fn secure_hash_algos() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (56 96 128 \"d41d8cd98f00b204e9800998ecf8427e\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (length (secure-hash 'sha224 "x"))
         (length (secure-hash 'sha384 "x"))
         (length (secure-hash 'sha512 "x"))
         (secure-hash 'md5 ""))"##,
-        expect_test::expect![[r#""OK (56 96 128 \"d41d8cd98f00b204e9800998ecf8427e\")""#]],
+        expect,
     );
 }
 
@@ -80,10 +86,11 @@ fn secure_hash_algos() {
 fn sqlite_available() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (fboundp 'sqlite-available-p)
         (if (fboundp 'sqlite-available-p) (booleanp (sqlite-available-p)) 'no-fn))"##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
@@ -91,9 +98,10 @@ fn sqlite_available() {
 fn treesit_available() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (fboundp 'treesit-available-p)
         (if (fboundp 'treesit-available-p) (booleanp (treesit-available-p)) 'no-fn))"##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }

@@ -22,7 +22,8 @@ fn oracle_prop_closure_capture_with_shadowing() {
         (let ((x 999) (y 999))
           ;; x and y here are different bindings; closure sees x=2, y=10, z=100
           (funcall f))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![r#""OK (2 10 100)""#]);
+    let expect = expect_test::expect![r#""OK (2 10 100)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -47,10 +48,8 @@ fn oracle_prop_closure_mutable_counter_with_reset() {
           (let ((after-dec (funcall get)))
             (funcall reset)
             (list after-inc after-dec (funcall get))))))"#;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (7 6 0)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (7 6 0)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(7 6 0)", &o, &n);
 }
 
@@ -84,10 +83,8 @@ fn oracle_prop_closures_shared_environment_stack() {
                 (funcall items)
                 (funcall size)
                 (funcall peek)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((c b a) c (z a) 2 z)""#],
-    );
+    let expect = expect_test::expect![r#""OK ((c b a) c (z a) 2 z)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,10 +111,9 @@ fn oracle_prop_closure_mapcar_complex_callback() {
                                        (if (= (% x 2) 0) x nil))
                                      step2)))))
           (list step1 step2 step3))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((3 6 9 12 15) (13 16 19 22 25) (\"256\" \"484\"))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((3 6 9 12 15) (13 16 19 22 25) (\"256\" \"484\"))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,10 +145,8 @@ fn oracle_prop_closure_factory_pattern() {
           (funcall valid-score 101)
           (funcall html-bold "hello")
           (funcall parens "test"))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil nil t nil \"<b>hello</b>\" \"(test)\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil nil t nil \"<b>hello</b>\" \"(test)\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -180,10 +174,8 @@ fn oracle_prop_closure_nested_returning_closure() {
               ;; Verify each factory call creates independent closures
               (funcall (funcall (funcall make-curried-add 0) 0) 0)
               (funcall add-10-20 0))))))"#;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (60 6 600 0 30)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (60 6 600 0 30)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(60 6 600 0 30)", &o, &n);
 }
 
@@ -225,12 +217,10 @@ fn oracle_prop_closure_rest_args_advanced() {
           (funcall prod 2 3 4)
           (funcall sum)
           (funcall prod))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"[INFO] user logged-in 42\" \"[ERR] fail code 500\" 15 24 0 1)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"[INFO] user logged-in 42\" \"[ERR] fail code 500\" 15 24 0 1)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -279,10 +269,8 @@ fn oracle_prop_closure_object_system_dispatch() {
           (funcall acct2 'balance)
           (funcall acct1 'history)
           (length (funcall acct2 'history)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Alice\" 1100 \"Bob\" 700 ((deposit 200 1200) (withdraw 150 1050) (deposit 50 1100)) 2)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Alice\" 1100 \"Bob\" 700 ((deposit 200 1200) (withdraw 150 1050) (deposit 50 1100)) 2)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

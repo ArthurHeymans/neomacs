@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_eval_and_defun_macro_generate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable \\`)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (defmacro test-define-accessors-xxx (class slots)
@@ -20,13 +21,14 @@ fn divergence_eval_and_defun_macro_generate() {
   (let ((obj (test-item-xxx \"o\" :name \"test\" :value 42)))
     (list (test-item-name-xxx obj)
           (test-item-value-xxx obj)
-          (fboundp 'test-item-name-xxx)))) ", expect_test::expect![[r#""ERR (void-variable \\`)""#]]);
+          (fboundp 'test-item-name-xxx)))) ", expect);
 }
 
 #[test]
 fn divergence_advice_around_with_closure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (1050 1030 2 t t 1070)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (defvar test-around-count-xxx 0)
@@ -47,7 +49,7 @@ fn divergence_advice_around_with_closure() {
           (= r1 1050)
           (= r2 1030)
           (test-around-fn-xxx 7)))) ",
-        expect_test::expect![[r#""OK (1050 1030 2 t t 1070)""#]],
+        expect,
     );
 }
 
@@ -55,6 +57,7 @@ fn divergence_advice_around_with_closure() {
 fn divergence_compiler_macro_expansion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function inline-leteval)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (define-inline test-inline-square-xxx (x)
@@ -67,7 +70,7 @@ fn divergence_compiler_macro_expansion() {
         (test-use-square-xxx -5)
         (= (test-use-square-xxx 3) 10)
         (= (test-use-square-xxx 0) 1))) ",
-        expect_test::expect![[r#""ERR (void-function inline-leteval)""#]],
+        expect,
     );
 }
 
@@ -75,6 +78,7 @@ fn divergence_compiler_macro_expansion() {
 fn deficiency_obarray_intern_with_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (100 t 150 150 t test-ob-set-xxx t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((sym (intern \"test-ob-set-xxx\" obarray)))
   (set sym 100)
@@ -85,7 +89,7 @@ fn deficiency_obarray_intern_with_set() {
         (= (symbol-value sym) 150)
         (makunbound sym)
         (not (boundp sym)))) ",
-        expect_test::expect![[r#""OK (100 t 150 150 t test-ob-set-xxx t)""#]],
+        expect,
     );
 }
 
@@ -93,6 +97,7 @@ fn deficiency_obarray_intern_with_set() {
 fn divergence_nested_macro_with_gensym() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable \\`)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (defmacro test-alet-xxx (bindings &rest body)
@@ -103,7 +108,7 @@ fn divergence_nested_macro_with_gensym() {
          (let ((result (nreverse ,var)))
            ,@body))))
   (test-alet-xxx (1 2 3 4 5) result)) ",
-        expect_test::expect![[r#""ERR (void-variable \\`)""#]],
+        expect,
     );
 }
 
@@ -111,6 +116,7 @@ fn divergence_nested_macro_with_gensym() {
 fn divergence_cl_defgeneric_method_combination() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (defclass test-shape-xxx () ())
@@ -132,7 +138,7 @@ fn divergence_cl_defgeneric_method_combination() {
           (= (test-area-xxx s) 4)
           (> (test-perimeter-xxx c) 6.0)
           (= (test-perimeter-xxx s) 8)))) ",
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -140,6 +146,7 @@ fn divergence_cl_defgeneric_method_combination() {
 fn divergence_eval_region_with_defuns() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (15 15 25)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (let ((code \"
@@ -158,7 +165,7 @@ fn divergence_eval_region_with_defuns() {
     (list (test-eval-fn1-xxx 5)
           (test-eval-fn2-xxx 5)
           (test-eval-fn3-xxx 5)))) ",
-        expect_test::expect![[r#""OK (15 15 25)""#]],
+        expect,
     );
 }
 
@@ -166,6 +173,9 @@ fn divergence_eval_region_with_defuns() {
 fn divergence_cl_print_object_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK (\"#s(test-doc-xxx Hello)\" \"#s(test-num-xxx 42)\" 8 16)""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (defclass test-doc-xxx () ((title :initarg :title)))
@@ -182,9 +192,7 @@ fn divergence_cl_print_object_dispatch() {
           (format \"%s\" n)
           (string-match \"doc\" (format \"%s\" d))
           (string-match \"42\" (format \"%s\" n))))) ",
-        expect_test::expect![[
-            r##""OK (\"#s(test-doc-xxx Hello)\" \"#s(test-num-xxx 42)\" 8 16)""##
-        ]],
+        expect,
     );
 }
 
@@ -192,6 +200,7 @@ fn divergence_cl_print_object_dispatch() {
 fn divergence_function_documentation_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (\"Double X.\" \"Double X.\" t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (defun test-doc-fn-xxx (x) \"Double X.\" (* x 2))
@@ -200,7 +209,7 @@ fn divergence_function_documentation_chain() {
         (documentation 'test-doc-alias-xxx)
         (string= (documentation 'test-doc-fn-xxx) \"Double X.\")
         (string= (documentation 'test-doc-alias-xxx) \"Double X.\"))) ",
-        expect_test::expect![[r#""OK (\"Double X.\" \"Double X.\" t t)""#]],
+        expect,
     );
 }
 
@@ -208,6 +217,7 @@ fn divergence_function_documentation_chain() {
 fn divergence_setf_with_custom_places() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable \\`)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (defun test-getval-xxx (alist key)
@@ -223,6 +233,6 @@ fn divergence_setf_with_custom_places() {
           (test-getval-xxx data 'a)
           (test-getval-xxx data 'c)
           (length data)))) ",
-        expect_test::expect![[r#""ERR (void-variable \\`)""#]],
+        expect,
     );
 }

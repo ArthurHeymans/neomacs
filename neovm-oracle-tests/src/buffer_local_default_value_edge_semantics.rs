@@ -11,6 +11,7 @@ use super::common::{assert_err_kind, assert_ok_eq, assert_oracle_parity, eval_or
 #[test]
 fn oracle_make_local_variable_then_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (200 100)""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (defvar neovm--test-mlv-defvar 100)
@@ -18,7 +19,7 @@ fn oracle_make_local_variable_then_set() {
   (set 'neovm--test-mlv-defvar 200)
   (list neovm--test-mlv-defvar
         (default-value 'neovm--test-mlv-defvar)))"#,
-        expect_test::expect![[r#""OK (200 100)""#]],
+        expect,
     );
     assert_ok_eq("(200 100)", &oracle, &neovm);
 }
@@ -26,6 +27,7 @@ fn oracle_make_local_variable_then_set() {
 #[test]
 fn oracle_set_in_buffer_after_make_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (99 50)""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (defvar neovm--test-set-local 50)
@@ -33,7 +35,7 @@ fn oracle_set_in_buffer_after_make_local() {
   (setq neovm--test-set-local 99)
   (list neovm--test-set-local
         (default-value 'neovm--test-set-local)))"#,
-        expect_test::expect![[r#""OK (99 50)""#]],
+        expect,
     );
     assert_ok_eq("(99 50)", &oracle, &neovm);
 }
@@ -41,6 +43,7 @@ fn oracle_set_in_buffer_after_make_local() {
 #[test]
 fn oracle_kill_local_restores_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (neovm--test-kill-local 10)""#]];
     // GNU: kill-local-variable returns the variable symbol.
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
@@ -51,7 +54,7 @@ fn oracle_kill_local_restores_default() {
       (list (kill-local-variable 'neovm--test-kill-local)
             neovm--test-kill-local)
     (kill-local-variable 'neovm--test-kill-local)))"#,
-        expect_test::expect![[r#""OK (neovm--test-kill-local 10)""#]],
+        expect,
     );
     assert_ok_eq("(neovm--test-kill-local 10)", &oracle, &neovm);
 }
@@ -59,13 +62,14 @@ fn oracle_kill_local_restores_default() {
 #[test]
 fn oracle_default_boundp_after_make_local_without_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (defvar neovm--test-dbp-local 77)
   (make-variable-buffer-local 'neovm--test-dbp-local)
   (list (default-boundp 'neovm--test-dbp-local)
         (boundp 'neovm--test-dbp-local)))"#,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
     assert_ok_eq("(t t)", &oracle, &neovm);
 }
@@ -73,13 +77,14 @@ fn oracle_default_boundp_after_make_local_without_set() {
 #[test]
 fn oracle_buffer_local_value_returns_default_when_no_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 42""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (defvar neovm--test-blv-default 42)
   (make-variable-buffer-local 'neovm--test-blv-default)
   (let ((buf (get-buffer-create "*neovm-test-blv*")))
     (buffer-local-value 'neovm--test-blv-default buf)))"#,
-        expect_test::expect![[r#""OK 42""#]],
+        expect,
     );
     assert_ok_eq("42", &oracle, &neovm);
 }
@@ -87,6 +92,7 @@ fn oracle_buffer_local_value_returns_default_when_no_local() {
 #[test]
 fn oracle_buffer_local_value_in_different_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (99 1)""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (defvar neovm--test-blv-diff 1)
@@ -100,7 +106,7 @@ fn oracle_buffer_local_value_in_different_buffer() {
                 (progn (set-buffer (get-buffer-create "*scratch*"))
                        neovm--test-blv-diff)))
       (kill-buffer other-buf))))"#,
-        expect_test::expect![[r#""OK (99 1)""#]],
+        expect,
     );
     assert_ok_eq("(99 1)", &oracle, &neovm);
 }
@@ -178,8 +184,6 @@ fn oracle_local_variable_if_set_auto_local_alias_and_forwarded_edges() {
       (when (boundp sym)
         (makunbound sym)))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 64 28)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 64 28)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

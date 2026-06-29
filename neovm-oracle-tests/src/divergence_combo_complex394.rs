@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx394_try_completion_all_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"alp\" \"alpha\" t nil \"a\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((coll '("alpha" "alphabet" "alpine" "amplitude" "antelope" "beta" "gamma")))
@@ -17,13 +18,16 @@ fn div_cx394_try_completion_all_variants() {
         (try-completion "z" coll)
         (try-completion "a" coll)))
 "##,
-        expect_test::expect![[r#""OK (\"alp\" \"alpha\" t nil \"a\")""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx394_all_completions_with_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"apple1\" \"apple2\") (\"banana1\" \"banana2\") (\"apple1\") (\"banana2\") \"apple\" 6)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((coll '("apple1" "apple2" "banana1" "banana2" "cherry1" "cherry2")))
@@ -34,15 +38,14 @@ fn div_cx394_all_completions_with_predicates() {
         (try-completion "app" coll)
         (length (all-completions "" coll))))
 "##,
-        expect_test::expect![[
-            r#""OK ((\"apple1\" \"apple2\") (\"banana1\" \"banana2\") (\"apple1\") (\"banana2\") \"apple\" 6)""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx394_test_completion_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((coll '("alpha" "alphabet" "alpine" "beta" "gamma" "delta")))
@@ -51,13 +54,14 @@ fn div_cx394_test_completion_predicates() {
       (test-completion "missing" coll)
       (test-completion "gamma" coll)))
 "##,
-        expect_test::expect![[r#""OK (t nil nil t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx394_completion_with_obarray() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function make-obarray)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ob (make-obarray 31)))
@@ -69,13 +73,14 @@ fn div_cx394_completion_with_obarray() {
         (all-completions "amp" ob)
         (try-completion "al" ob)))
 "##,
-        expect_test::expect![[r#""ERR (void-function make-obarray)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx394_completion_ignore_case_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 3 \"alpha\" \"Alpha\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((coll '("Alpha" "ALPHA" "alpha" "Beta"))
@@ -85,28 +90,30 @@ fn div_cx394_completion_ignore_case_variants() {
         (try-completion "a" coll)
         (try-completion "A" coll)))
 "##,
-        expect_test::expect![[r#""OK (3 3 \"alpha\" \"Alpha\")""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx394_completion_styles_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((basic (basic partial-completion emacs22)) (partial-completion (partial-completion emacs22)) (substring nil) (initials nil) (emacs22 (emacs22)) (flex nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((styles '(basic partial-completion substring initials emacs22
                   flex)))
   (mapcar (lambda (s) (list s (memq s completion-styles))) styles))
 "##,
-        expect_test::expect![[
-            r#""OK ((basic (basic partial-completion emacs22)) (partial-completion (partial-completion emacs22)) (substring nil) (initials nil) (emacs22 (emacs22)) (flex nil))""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx394_completion_table_dynamic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"alp\" (\"alpha\" \"alphabet\" \"alpine\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((dynamic-table
@@ -116,13 +123,14 @@ fn div_cx394_completion_table_dynamic() {
   (list (try-completion "al" dynamic-table)
         (all-completions "al" dynamic-table)))
 "##,
-        expect_test::expect![[r#""OK (\"alp\" (\"alpha\" \"alphabet\" \"alpine\"))""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx394_completion_table_in_turn_and_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"a\" 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -133,13 +141,14 @@ fn div_cx394_completion_table_in_turn_and_merge() {
             (length (all-completions "a" combined))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"a\" 4)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx394_minibuffer_availability_and_depth() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'read-from-minibuffer)
@@ -153,13 +162,14 @@ fn div_cx394_minibuffer_availability_and_depth() {
       (boundp 'minibuffer-local-map)
       (keymapp minibuffer-local-map))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx394_completion_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((coll '("alpha" "alphabet" "alpine" "amplitude" "antelope")))
@@ -186,6 +196,6 @@ fn div_cx394_completion_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     )
 }

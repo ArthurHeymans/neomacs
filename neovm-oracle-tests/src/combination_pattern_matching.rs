@@ -89,12 +89,10 @@ fn oracle_prop_pattern_match_core_engine() {
         ;; Cons pattern fails on non-cons
         (funcall 'neovm--pm-match '(cpat (bind a) (bind b)) 42 nil))
     (fmakunbound 'neovm--pm-match)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t) (t) (t) (t) (nil) (t) (nil) (t (x . 99)) (t (name . \"Alice\")) (t (b . 2) (a . 1)) (nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t) (t) (t) (t) (nil) (t) (nil) (t (x . 99)) (t (name . \"Alice\")) (t (b . 2) (a . 1)) (nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -172,12 +170,10 @@ fn oracle_prop_pattern_match_list_destructuring() {
           (funcall 'neovm--pm-match '(literal nil) '(1) nil)))
     (fmakunbound 'neovm--pm-match)
     (fmakunbound 'neovm--pm-list-pat)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t (c . 3) (b . 2) (a . 1)) (nil) (nil) ((nil) (nil) (nil)) (t (d . 4) (c . 3) (b . 2) (a . 1)) (t) (nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t (c . 3) (b . 2) (a . 1)) (nil) (nil) ((nil) (nil) (nil)) (t (d . 4) (c . 3) (b . 2) (a . 1)) (t) (nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -262,12 +258,10 @@ fn oracle_prop_pattern_match_guards() {
           (list 'guard '(bind n) (lambda (v _b) (= 0 (% v 2))))
           43 nil))
     (fmakunbound 'neovm--pm-match)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t (x . 15)) (nil) (t (s . \"hello\")) (nil) (t (b . 7) (a . 3)) (nil) (t (n . 42)) (nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t (x . 15)) (nil) (t (s . \"hello\")) (nil) (t (b . 7) (a . 3)) (nil) (t (n . 42)) (nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -343,12 +337,10 @@ fn oracle_prop_pattern_match_or_patterns() {
           '(orp (bind first) (bind second))
           99 nil))
     (fmakunbound 'neovm--pm-match)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t) (t) (nil) (t (x . special)) (t (x . other)) (t (v . 42)) (t (v . \"oops\")) (nil) (t) (t (first . 99)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t) (t) (nil) (t (x . special)) (t (x . other)) (t (v . 42)) (t (v . \"oops\")) (nil) (t) (t (first . 99)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -434,12 +426,10 @@ fn oracle_prop_pattern_match_dispatcher() {
           (funcall 'neovm--pm-dispatch 999 clauses)))
     (fmakunbound 'neovm--pm-match)
     (fmakunbound 'neovm--pm-dispatch)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"empty\" \"ok:42\" \"unknown\" \"error:timeout\" \"unknown\" \"unknown\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"empty\" \"ok:42\" \"unknown\" \"error:timeout\" \"unknown\" \"unknown\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -531,12 +521,10 @@ fn oracle_prop_pattern_match_deep_nesting() {
           (funcall 'neovm--pm-match pat data nil)))
     (fmakunbound 'neovm--pm-match)
     (fmakunbound 'neovm--pm-list-pat)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t (root . 2)) (t (root . 2) (lval . 1)) (t (val . 42)) (nil) (t (val . 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t (root . 2)) (t (root . 2) (lval . 1)) (t (val . 42)) (nil) (t (val . 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -636,10 +624,8 @@ fn oracle_prop_pattern_match_expression_evaluator() {
     (fmakunbound 'neovm--pm-match)
     (fmakunbound 'neovm--pm-list-pat)
     (fmakunbound 'neovm--pm-eval-expr)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (42 3 30 -5 9 21 10)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (42 3 30 -5 9 21 10)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -711,10 +697,8 @@ fn oracle_prop_pattern_match_failure_handling() {
                 'count (length failures)
                 'results (nreverse failures))))
     (fmakunbound 'neovm--pm-match)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (all-failed t count 7 results ((nil) (nil) (nil) (nil) (nil) (nil) (nil)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (all-failed t count 7 results ((nil) (nil) (nil) (nil) (nil) (nil) (nil)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

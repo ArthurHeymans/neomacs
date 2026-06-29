@@ -36,12 +36,10 @@ fn oracle_delete_remove_non_list_identity_and_string_properties() {
    v))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((#(\"abacad\" 0 6 (face bold)) t (face bold)) (\"bcd\" nil nil) (#(\"abacad\" 0 6 (face bold)) t (face bold)) (\"bcd\" nil nil) ([\"a\" \"b\" \"a\"] t) ([\"b\"] nil) ([\"a\" \"b\" \"a\"] t) ([\"b\"] nil) [\"a\" \"b\" \"a\"])""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((#(\"abacad\" 0 6 (face bold)) t (face bold)) (\"bcd\" nil nil) (#(\"abacad\" 0 6 (face bold)) t (face bold)) (\"bcd\" nil nil) ([\"a\" \"b\" \"a\"] t) ([\"b\"] nil) ([\"a\" \"b\" \"a\"] t) ([\"b\"] nil) [\"a\" \"b\" \"a\"])""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -66,10 +64,9 @@ fn oracle_remq_leading_match_sharing_and_copy_boundary() {
          leading-again)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (((a b c) nil t (x a b c)) ((a b) nil nil (x a x b)))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (((a b c) nil t (x a b c)) ((a b) nil nil (x a x b)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -110,12 +107,10 @@ fn oracle_remq_improper_list_error_payloads_follow_gnu_wrapper_order() {
     xs)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-type-argument (listp tail)) ((wrong-type-argument (listp tail)) (x . tail)) ((wrong-type-argument (listp (a . tail))) (x a . tail)) ((wrong-type-argument (listp tail)) (a x . tail)) ((wrong-type-argument (listp (a b . tail))) (a b . tail)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-type-argument (listp tail)) ((wrong-type-argument (listp tail)) (x . tail)) ((wrong-type-argument (listp (a . tail))) (x a . tail)) ((wrong-type-argument (listp tail)) (a x . tail)) ((wrong-type-argument (listp (a b . tail))) (a b . tail)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -148,12 +143,10 @@ fn oracle_delq_delete_dotted_list_mutation_before_error() {
     xs)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((wrong-type-argument (listp (keep . tail))) (keep . tail)) ((wrong-type-argument (listp (keep . tail))) (\"drop\" keep . tail)) ((wrong-type-argument (listp (keep . tail))) (drop keep . tail)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((wrong-type-argument (listp (keep . tail))) (keep . tail)) ((wrong-type-argument (listp (keep . tail))) (\"drop\" keep . tail)) ((wrong-type-argument (listp (keep . tail))) (drop keep . tail)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -178,10 +171,8 @@ fn oracle_delete_remove_reject_bool_vector_like_gnu() {
    (error (list (car e) (cdr e)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-type-argument (sequencep #&4\"\u{5}\")) (wrong-type-argument (sequencep #&4\"\u{5}\")) (wrong-type-argument (listp #&4\"\u{5}\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-type-argument (sequencep #&4\"\u{5}\")) (wrong-type-argument (sequencep #&4\"\u{5}\")) (wrong-type-argument (listp #&4\"\u{5}\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

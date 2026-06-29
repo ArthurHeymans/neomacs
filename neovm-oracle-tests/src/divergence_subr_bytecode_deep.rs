@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_subrp_builtin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (subrp (symbol-function 'car))
@@ -15,7 +16,7 @@ fn divergence_subrp_builtin() {
   (subrp (symbol-function '+))
   (subrp (symbol-function 'lambda))
   (subrp 'not-a-function))"#,
-        expect_test::expect![[r#""OK (t t t t nil nil)""#]],
+        expect,
     );
 }
 
@@ -23,12 +24,13 @@ fn divergence_subrp_builtin() {
 fn divergence_compiled_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((fn (symbol-function 'car)))
   (list (compiled-function-p fn)
         (subrp fn)
         (or (subrp fn) (compiled-function-p fn))))"#,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
@@ -36,12 +38,13 @@ fn divergence_compiled_function() {
 fn divergence_byte_code_function_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (byte-code-function-p (symbol-function 'car))
   (byte-code-function-p (symbol-function 'list))
   (byte-code-function-p (lambda (x) x)))"#,
-        expect_test::expect![[r#""OK (nil nil nil)""#]],
+        expect,
     );
 }
 
@@ -49,12 +52,13 @@ fn divergence_byte_code_function_p() {
 fn divergence_function_type_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (subr interpreted-function subr)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (type-of (symbol-function 'car))
   (type-of (lambda (x) x))
   (type-of (symbol-function 'list)))"#,
-        expect_test::expect![[r#""OK (subr interpreted-function subr)""#]],
+        expect,
     );
 }
 
@@ -62,12 +66,13 @@ fn divergence_function_type_all() {
 fn divergence_interactive_lambda() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t (interactive \"nNum: \"))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((fn (lambda (x) (interactive "nNum: ") x)))
   (list (functionp fn)
         (commandp fn)
         (interactive-form fn)))"#,
-        expect_test::expect![[r#""OK (t t (interactive \"nNum: \"))""#]],
+        expect,
     );
 }
 
@@ -75,13 +80,14 @@ fn divergence_interactive_lambda() {
 fn divergence_closure_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (interpreted-function t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((x 42)
         (fn (lambda () x)))
   (list (type-of fn)
         (functionp fn)
         (closurep fn)))"#,
-        expect_test::expect![[r#""OK (interpreted-function t t)""#]],
+        expect,
     );
 }
 
@@ -89,14 +95,15 @@ fn divergence_closure_type() {
 fn divergence_function_documentation_builtin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (t t \"Return a newly created list with specified arguments as elements.\nAllows any number of arguments, including zero.\n\n(fn &rest OBJECTS)\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (stringp (documentation 'car))
   (stringp (documentation 'cons))
   (documentation 'list))"#,
-        expect_test::expect![[
-            r#""OK (t t \"Return a newly created list with specified arguments as elements.\nAllows any number of arguments, including zero.\n\n(fn &rest OBJECTS)\")""#
-        ]],
+        expect,
     );
 }
 
@@ -104,12 +111,13 @@ fn divergence_function_documentation_builtin() {
 fn divergence_advice_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'advice-info)
   (fboundp 'advice-map-tree)
   (fboundp 'advice--tweak))"#,
-        expect_test::expect![[r#""OK (nil nil t)""#]],
+        expect,
     );
 }
 
@@ -117,13 +125,14 @@ fn divergence_advice_info() {
 fn divergence_func_arity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((1 . 1) (0 . many) (0 . many) (1 . many))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (func-arity 'car)
   (func-arity 'list)
   (func-arity '+)
   (func-arity 'format))"#,
-        expect_test::expect![[r#""OK ((1 . 1) (0 . many) (0 . many) (1 . many))""#]],
+        expect,
     );
 }
 
@@ -131,11 +140,12 @@ fn divergence_func_arity() {
 fn divergence_help_function_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'help-function-arglist)
   (fboundp 'help-split-fundoc)
   (fboundp 'describe-function))"#,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }

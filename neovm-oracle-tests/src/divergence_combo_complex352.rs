@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx352_ring_create_insert_remove_ref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 :c :b :a :a 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((r (make-ring 5)))
@@ -16,13 +17,14 @@ fn div_cx352_ring_create_insert_remove_ref() {
   (list (ring-length r) (ring-ref r 0) (ring-ref r 1) (ring-ref r 2)
         (ring-remove r) (ring-length r)))
 "##,
-        expect_test::expect![[r#""OK (3 :c :b :a :a 2)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx352_ring_insert_at_remove_at() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function ring-insert-at)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((r (make-ring 5)))
@@ -33,13 +35,14 @@ fn div_cx352_ring_insert_at_remove_at() {
   (list (ring-length r) (ring-ref r 0) (ring-ref r 1) (ring-ref r 2) (ring-ref r 3)
         (ring-remove-at r 1) (ring-ref r 1)))
 "##,
-        expect_test::expect![[r#""ERR (void-function ring-insert-at)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx352_ring_overflow_drops_oldest() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 :d :c :b)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((r (make-ring 3)))
@@ -49,13 +52,14 @@ fn div_cx352_ring_overflow_drops_oldest() {
   (ring-insert r :d)
   (list (ring-length r) (ring-ref r 0) (ring-ref r 1) (ring-ref r 2)))
 "##,
-        expect_test::expect![[r#""OK (3 :d :c :b)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx352_ring_copy_and_equal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function copy-ring)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((r1 (make-ring 5)))
@@ -67,13 +71,14 @@ fn div_cx352_ring_copy_and_equal() {
           (ring-ref r1 1) (ring-ref r2 1)
           (ring-ref r2 2))))
 "##,
-        expect_test::expect![[r#""ERR (void-function copy-ring)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx352_system_process_attributes_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'system-process-attributes)
@@ -81,13 +86,14 @@ fn div_cx352_system_process_attributes_availability() {
       (fboundp 'list-system-processes)
       (boundp 'system-uses-terminfo))
 "##,
-        expect_test::expect![[r#""OK (nil t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx352_list_system_processes_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -97,13 +103,14 @@ fn div_cx352_list_system_processes_query() {
             (integerp (car procs))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx352_float_denormal_arithmetic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1e-308 1e-300 5e-324 0.0 0.0 -0.0 0.0 1.0e+INF)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (* 1.0 1e-308)
@@ -115,13 +122,16 @@ fn div_cx352_float_denormal_arithmetic() {
       (+ 0.5 -0.5)
       (* 1e308 10.0))
 "##,
-        expect_test::expect![[r#""OK (1e-308 1e-300 5e-324 0.0 0.0 -0.0 0.0 1.0e+INF)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx352_float_formatting_precision_extreme() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"3.14159265358979311600\" \"0\" \"2\" \"2\" \"1.000000000000000e-300\" \"10000000000\" \"1e-07\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%.20f" 3.14159265358979323846)
@@ -132,15 +142,14 @@ fn div_cx352_float_formatting_precision_extreme() {
       (format "%.15g" 1.0e10)
       (format "%.15g" 0.0000001))
 "##,
-        expect_test::expect![[
-            r#""OK (\"3.14159265358979311600\" \"0\" \"2\" \"2\" \"1.000000000000000e-300\" \"10000000000\" \"1e-07\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx352_ring_elements_to_list_and_back() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:e :d :c :b :a) 5 t 10)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((r (make-ring 10)))
@@ -150,13 +159,14 @@ fn div_cx352_ring_elements_to_list_and_back() {
     (list as-list (ring-length r)
           (ring-p r) (ring-size r))))
 "##,
-        expect_test::expect![[r#""OK ((:e :d :c :b :a) 5 t 10)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx352_ring_system_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((r (make-ring 5)))
@@ -184,6 +194,6 @@ fn div_cx352_ring_system_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     )
 }

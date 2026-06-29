@@ -146,12 +146,10 @@ fn oracle_prop_ll1_first_sets() {
     (fmakunbound 'neovm--ll1-set-add)
     (fmakunbound 'neovm--ll1-set-union)
     (fmakunbound 'neovm--ll1-compute-first)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (expr-firsts ((E \"(\" \"id\") (Ep \"+\" epsilon) (F \"(\" \"id\") (T \"(\" \"id\") (Tp \"*\" epsilon)) simple-firsts ((A \"a\" epsilon) (B \"b\") (S \"a\" \"b\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (expr-firsts ((E \"(\" \"id\") (Ep \"+\" epsilon) (F \"(\" \"id\") (T \"(\" \"id\") (Tp \"*\" epsilon)) simple-firsts ((A \"a\" epsilon) (B \"b\") (S \"a\" \"b\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -289,12 +287,10 @@ fn oracle_prop_ll1_follow_sets() {
     (fmakunbound 'neovm--ll2-first-of-seq)
     (fmakunbound 'neovm--ll2-compute-first)
     (fmakunbound 'neovm--ll2-compute-follow)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (follows ((E \"$\" \")\") (Ep \"$\" \")\") (F \"$\" \")\" \"*\" \"+\") (T \"$\" \")\" \"+\") (Tp \"$\" \")\" \"+\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (follows ((E \"$\" \")\") (Ep \"$\" \")\") (F \"$\" \")\" \"*\" \"+\") (T \"$\" \")\" \"+\") (Tp \"$\" \")\" \"+\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -439,12 +435,10 @@ fn oracle_prop_ll1_parse_table() {
     (fmakunbound 'neovm--ll3-compute-follow)
     (fmakunbound 'neovm--ll3-build-table)
     (fmakunbound 'neovm--ll3-table-to-alist)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (table-size 13 entries (((E . \"(\") T Ep) ((E . \"id\") T Ep) ((Ep . \"$\") epsilon) ((Ep . \")\") epsilon) ((Ep . \"+\") \"+\" T Ep) ((F . \"(\") \"(\" E \")\") ((F . \"id\") \"id\") ((T . \"(\") F Tp) ((T . \"id\") F Tp) ((Tp . \"$\") epsilon) ((Tp . \")\") epsilon) ((Tp . \"*\") \"*\" F Tp) ((Tp . \"+\") epsilon)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (table-size 13 entries (((E . \"(\") T Ep) ((E . \"id\") T Ep) ((Ep . \"$\") epsilon) ((Ep . \")\") epsilon) ((Ep . \"+\") \"+\" T Ep) ((F . \"(\") \"(\" E \")\") ((F . \"id\") \"id\") ((T . \"(\") F Tp) ((T . \"id\") F Tp) ((Tp . \"$\") epsilon) ((Tp . \")\") epsilon) ((Tp . \"*\") \"*\" F Tp) ((Tp . \"+\") epsilon)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -611,12 +605,10 @@ fn oracle_prop_ll1_predictive_parse() {
     (fmakunbound 'neovm--ll4-compute-follow)
     (fmakunbound 'neovm--ll4-build-table)
     (fmakunbound 'neovm--ll4-parse)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((error (no-entry Ep \"id\" 0)) (error (no-entry Ep \"id\" 0)) (error (no-entry Ep \"id\" 0)) (error (no-entry Ep \"id\" 0)) (error (no-entry Ep \"(\" 0)) (error (no-entry E \"+\" 0)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((error (no-entry Ep \"id\" 0)) (error (no-entry Ep \"id\" 0)) (error (no-entry Ep \"id\" 0)) (error (no-entry Ep \"id\" 0)) (error (no-entry Ep \"(\" 0)) (error (no-entry E \"+\" 0)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -735,12 +727,10 @@ fn oracle_prop_ll1_statement_grammar() {
     (fmakunbound 'neovm--ll5-compute-first)
     (fmakunbound 'neovm--ll5-compute-follow)
     (fmakunbound 'neovm--ll5-build-table)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (firsts ((E \"id\" \"num\") (S \"id\" \"if\") (Sp \"else\" epsilon)) follows ((E \"$\" \"else\" \"then\") (S \"$\" \"else\") (Sp \"$\" \"else\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (firsts ((E \"id\" \"num\") (S \"id\" \"if\") (Sp \"else\" epsilon)) follows ((E \"$\" \"else\" \"then\") (S \"$\" \"else\") (Sp \"$\" \"else\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -911,10 +901,8 @@ fn oracle_prop_ll1_error_recovery() {
     (fmakunbound 'neovm--ll6-compute-follow)
     (fmakunbound 'neovm--ll6-build-table)
     (fmakunbound 'neovm--ll6-parse-recover)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil (trace nil errors ((panic E \"+\" 0)) success nil) (trace ((E -> (T Ep))) errors ((panic Ep \"id\" 0) (panic T \"$\" 4)) success nil) (trace ((E -> (T Ep))) errors ((panic Ep \"(\" 0) (panic T \"$\" 4)) success nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil (trace nil errors ((panic E \"+\" 0)) success nil) (trace ((E -> (T Ep))) errors ((panic Ep \"id\" 0) (panic T \"$\" 4)) success nil) (trace ((E -> (T Ep))) errors ((panic Ep \"(\" 0) (panic T \"$\" 4)) success nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

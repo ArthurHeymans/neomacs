@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_face_attributes_complete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (nil nil nil nil nil nil nil t nil t [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((attrs (face-all-attributes 'default (selected-frame))))
@@ -26,9 +29,7 @@ fn divergence_face_attributes_complete() {
           (facep 'italic)
           (facep 'underline)
           (not (facep 'nonexistent-face-xxx))))) "#,
-        expect_test::expect![[
-            r#""OK (nil nil nil nil nil nil nil t nil t [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] t)""#
-        ]],
+        expect,
     );
 }
 
@@ -36,6 +37,9 @@ fn divergence_face_attributes_complete() {
 fn divergence_face_all_attributes_custom() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ([face unspecified unspecified unspecified unspecified bold italic t unspecified \"red\" \"blue\" unspecified t t nil unspecified default unspecified unspecified unspecified] nil nil nil nil nil nil nil nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (make-face 'test-faac-xxx)
@@ -59,9 +63,7 @@ fn divergence_face_all_attributes_custom() {
           (plist-get attrs :overline)
           (plist-get attrs :strike-through)
           (eq (plist-get attrs :inherit) 'default)))) "#,
-        expect_test::expect![[
-            r#""OK ([face unspecified unspecified unspecified unspecified bold italic t unspecified \"red\" \"blue\" unspecified t t nil unspecified default unspecified unspecified unspecified] nil nil nil nil nil nil nil nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -69,6 +71,9 @@ fn divergence_face_all_attributes_custom() {
 fn divergence_face_documentation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ([face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] \"Test face for divergence tests\" t \"Basic default face.\" t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (make-face 'test-fdoc-xxx)
@@ -79,9 +84,7 @@ fn divergence_face_documentation() {
                  "Test face for divergence tests")
         (face-documentation 'default)
         (stringp (or (face-documentation 'default) "")))) "#,
-        expect_test::expect![[
-            r#""OK ([face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] \"Test face for divergence tests\" t \"Basic default face.\" t)""#
-        ]],
+        expect,
     );
 }
 
@@ -89,6 +92,7 @@ fn divergence_face_documentation() {
 fn divergence_face_inheritance_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (make-face 'test-fic-base-xxx)
@@ -110,7 +114,7 @@ fn divergence_face_inheritance_chain() {
             'test-fic-mid-xxx)
         (equal (plist-get (face-all-attributes 'test-fic-top-xxx (selected-frame)) :background)
                "cyan"))) "#,
-        expect_test::expect![[r#""OK (nil nil nil nil nil nil)""#]],
+        expect,
     );
 }
 
@@ -118,6 +122,7 @@ fn divergence_face_inheritance_chain() {
 fn divergence_display_table_setup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function display-table-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((dt (make-display-table)))
@@ -134,7 +139,7 @@ fn divergence_display_table_setup() {
           (= (length dt) 256)
           (setq buffer-display-table nil)
           (null buffer-display-table)))) "#,
-        expect_test::expect![[r#""ERR (void-function display-table-p)""#]],
+        expect,
     );
 }
 
@@ -142,6 +147,9 @@ fn divergence_display_table_setup() {
 fn divergence_face_list_and_sort() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (t t t t t t [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (make-face 'test-fls1-xxx)
@@ -158,9 +166,7 @@ fn divergence_face_list_and_sort() {
           (facep 'test-fls2-xxx)
           (facep 'test-fls3-xxx)
           (not (facep 'nonexistent-face-xxx))))) "#,
-        expect_test::expect![[
-            r#""OK (t t t t t t [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] t)""#
-        ]],
+        expect,
     );
 }
 
@@ -168,6 +174,7 @@ fn divergence_face_list_and_sort() {
 fn divergence_face_color_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
           (make-face 'test-fcv-xxx)\n\
@@ -184,7 +191,7 @@ fn divergence_face_color_values() {
                   (plist-get (face-all-attributes 'test-fcv-xxx\n\
                                                    (selected-frame))\n\
                              :foreground)))) ",
-        expect_test::expect![[r#""OK (t t t t t t nil)""#]],
+        expect,
     );
 }
 
@@ -192,6 +199,7 @@ fn divergence_face_color_values() {
 fn divergence_font_spec_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function font-spec-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((fs (font-spec :family "Monospace" :weight 'normal :slant 'normal
@@ -206,7 +214,7 @@ fn divergence_font_spec_creation() {
           (font-get fs :size)
           (equal (font-get fs :size) 12)
           (font-spec-p fs)))) "#,
-        expect_test::expect![[r#""ERR (void-function font-spec-p)""#]],
+        expect,
     );
 }
 
@@ -214,6 +222,9 @@ fn divergence_font_spec_creation() {
 fn divergence_font_spec_style_symbol_casefolding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (bold extra-bold italic extra-expanded (error error \"invalid font property\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (font-get (font-spec :weight 'BOLD) :weight)
@@ -223,9 +234,7 @@ fn divergence_font_spec_style_symbol_casefolding() {
   (condition-case err
       (font-spec :slant 'roman)
     (error (list 'error (car err) (cadr err)))))"#,
-        expect_test::expect![[
-            r#""OK (bold extra-bold italic extra-expanded (error error \"invalid font property\"))""#
-        ]],
+        expect,
     );
 }
 
@@ -233,6 +242,9 @@ fn divergence_font_spec_style_symbol_casefolding() {
 fn divergence_font_spec_spacing_gnu_codes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (0 90 100 110 0 90 100 110 1 109 ((0 0 \"-*-*-*-*-*-*-*-*-*-*-p-*-*-*\") (1 1 \"-*-*-*-*-*-*-*-*-*-*-d-*-*-*\") (89 89 \"-*-*-*-*-*-*-*-*-*-*-d-*-*-*\") (90 90 \"-*-*-*-*-*-*-*-*-*-*-d-*-*-*\") (91 91 \"-*-*-*-*-*-*-*-*-*-*-m-*-*-*\") (99 99 \"-*-*-*-*-*-*-*-*-*-*-m-*-*-*\") (100 100 \"-*-*-*-*-*-*-*-*-*-*-m-*-*-*\") (101 101 \"-*-*-*-*-*-*-*-*-*-*-c-*-*-*\") (109 109 \"-*-*-*-*-*-*-*-*-*-*-c-*-*-*\") (110 110 \"-*-*-*-*-*-*-*-*-*-*-c-*-*-*\")) ((error error) (error error) (error error) (error error) (error error)) (error error))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (font-get (font-spec :spacing 'p) :spacing)
@@ -258,9 +270,7 @@ fn divergence_font_spec_spacing_gnu_codes() {
   (condition-case err
       (font-spec :spacing 111)
     (error (list 'error (car err))))) "#,
-        expect_test::expect![[
-            r#""OK (0 90 100 110 0 90 100 110 1 109 ((0 0 \"-*-*-*-*-*-*-*-*-*-*-p-*-*-*\") (1 1 \"-*-*-*-*-*-*-*-*-*-*-d-*-*-*\") (89 89 \"-*-*-*-*-*-*-*-*-*-*-d-*-*-*\") (90 90 \"-*-*-*-*-*-*-*-*-*-*-d-*-*-*\") (91 91 \"-*-*-*-*-*-*-*-*-*-*-m-*-*-*\") (99 99 \"-*-*-*-*-*-*-*-*-*-*-m-*-*-*\") (100 100 \"-*-*-*-*-*-*-*-*-*-*-m-*-*-*\") (101 101 \"-*-*-*-*-*-*-*-*-*-*-c-*-*-*\") (109 109 \"-*-*-*-*-*-*-*-*-*-*-c-*-*-*\") (110 110 \"-*-*-*-*-*-*-*-*-*-*-c-*-*-*\")) ((error error) (error error) (error error) (error error) (error error)) (error error))""#
-        ]],
+        expect,
     );
 }
 
@@ -268,6 +278,7 @@ fn divergence_font_spec_spacing_gnu_codes() {
 fn divergence_face_remapping() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (make-face 'test-fremap-xxx)
@@ -279,7 +290,7 @@ fn divergence_face_remapping() {
                  "purple")
           (face-remap-add-relative 'default :height 200)
           (face-remap-remove-relative 'default :height 200)))) "#,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 2)""#]],
+        expect,
     );
 }
 
@@ -287,6 +298,8 @@ fn divergence_face_remapping() {
 fn divergence_glyphless_char_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""ERR (void-function make-glyphless-char-display-table)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((table (make-glyphless-char-display-table)))
@@ -299,6 +312,6 @@ fn divergence_glyphless_char_display() {
           (null (char-table-range table ?\x41))
           (boundp 'glyphless-char-display-control)
           (listp glyphless-char-display-control)))) "#,
-        expect_test::expect![[r#""ERR (void-function make-glyphless-char-display-table)""#]],
+        expect,
     );
 }

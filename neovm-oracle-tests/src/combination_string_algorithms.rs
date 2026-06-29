@@ -27,12 +27,10 @@ fn oracle_prop_stralgos_edit_distance_verify() {
                              (b (cadr pair)))
                          (list a b (string-distance a b))))
                      pairs))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"kitten\" \"sitting\" 3) (\"\" \"abc\" 3) (\"abc\" \"\" 3) (\"abc\" \"abc\" 0) (\"flaw\" \"lawn\" 2) (\"gumbo\" \"gambol\" 2))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"kitten\" \"sitting\" 3) (\"\" \"abc\" 3) (\"abc\" \"\" 3) (\"abc\" \"abc\" 0) (\"flaw\" \"lawn\" 2) (\"gumbo\" \"gambol\" 2))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -66,10 +64,8 @@ fn oracle_prop_stralgos_longest_common_prefix() {
                      (funcall lcp '("abc" "abc" "abc"))
                      (funcall lcp '(""))
                      (funcall lcp nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"fl\" \"inters\" \"\" \"abc\" \"\" \"\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"fl\" \"inters\" \"\" \"abc\" \"\" \"\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -92,10 +88,8 @@ fn oracle_prop_stralgos_is_rotation() {
                      (funcall is-rotation "abc" "abc")
                      (funcall is-rotation "a" "a")
                      (funcall is-rotation "ab" "ba")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 nil 0 0 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 nil 0 0 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -143,12 +137,10 @@ fn oracle_prop_stralgos_rle_roundtrip() {
                                  (funcall rle-decode encoded)
                                  (string= s (funcall rle-decode encoded)))))
                        inputs)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"aaabbbccccddde\" ((97 . 3) (98 . 3) (99 . 4) (100 . 3) (101 . 1)) \"aaabbbccccddde\" t) (\"abcde\" ((97 . 1) (98 . 1) (99 . 1) (100 . 1) (101 . 1)) \"abcde\" t) (\"aaaa\" ((97 . 4)) \"aaaa\" t) (\"a\" ((97 . 1)) \"a\" t) (\"\" nil \"\" t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"aaabbbccccddde\" ((97 . 3) (98 . 3) (99 . 4) (100 . 3) (101 . 1)) \"aaabbbccccddde\" t) (\"abcde\" ((97 . 1) (98 . 1) (99 . 1) (100 . 1) (101 . 1)) \"abcde\" t) (\"aaaa\" ((97 . 4)) \"aaaa\" t) (\"a\" ((97 . 1)) \"a\" t) (\"\" nil \"\" t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -192,10 +184,8 @@ fn oracle_prop_stralgos_caesar_cipher() {
                                     (setq ok nil)))
                                 (setq shift (1+ shift)))
                               ok))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"Khoor Zruog!\" \"Hello World!\" t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"Khoor Zruog!\" \"Hello World!\" t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -222,12 +212,10 @@ fn oracle_prop_stralgos_word_frequency() {
                                 (or (> (cdr a) (cdr b))
                                     (and (= (cdr a) (cdr b))
                                          (string< (car a) (car b)))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"the\" . 4) (\"cat\" . 2) (\"ate\" . 1) (\"mat\" . 1) (\"on\" . 1) (\"rat\" . 1) (\"sat\" . 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"the\" . 4) (\"cat\" . 2) (\"ate\" . 1) (\"mat\" . 1) (\"on\" . 1) (\"rat\" . 1) (\"sat\" . 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -253,12 +241,10 @@ fn oracle_prop_stralgos_template_engine() {
                                (cdr v)
                                result t t)))
                       result))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK \"Dear Alice,\nYour order #12345 of 3 items is shipped.\nTotal: $42.99\"""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK \"Dear Alice,\nYour order #12345 of 3 items is shipped.\nTotal: $42.99\"""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -290,8 +276,6 @@ fn oracle_prop_stralgos_palindrome() {
                      (funcall is-palindrome "Was it a car or a cat I saw")
                      (funcall is-palindrome "")
                      (funcall is-palindrome "a")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t nil t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t nil t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

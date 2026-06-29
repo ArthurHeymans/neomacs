@@ -9,6 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_p4_prefix_command_and_key_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (self-insert-command probe-prefix t bar)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((map (make-sparse-keymap)))
@@ -21,13 +22,14 @@ fn div_p4_prefix_command_and_key_binding() {
         (keymapp (lookup-key map "\C-c"))
         (lookup-key (lookup-key map "\C-c") "b")))
 "##,
-        expect_test::expect![[r#""OK (self-insert-command probe-prefix t bar)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_p4_composed_keymap() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (from-parent from-child t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((parent (make-sparse-keymap))
@@ -39,13 +41,14 @@ fn div_p4_composed_keymap() {
           (lookup-key composed "b")
           (keymapp composed))))
 "##,
-        expect_test::expect![[r#""OK (from-parent from-child t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_p4_global_local_key_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (find-file keyboard-quit t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (global-key-binding "\C-x\C-f")
@@ -53,13 +56,14 @@ fn div_p4_global_local_key_binding() {
       (not (null (global-key-binding "\C-x")))
       (eq (key-binding "\C-g") 'keyboard-quit))
 "##,
-        expect_test::expect![[r#""OK (find-file keyboard-quit t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_p4_keymap_parent_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (m1-x m2-y t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((m1 (make-sparse-keymap))
@@ -71,6 +75,6 @@ fn div_p4_keymap_parent_chain() {
         (lookup-key m1 "y")
         (eq (keymap-parent m1) m2)))
 "##,
-        expect_test::expect![[r#""OK (m1-x m2-y t)""#]],
+        expect,
     );
 }

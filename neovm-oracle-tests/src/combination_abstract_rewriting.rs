@@ -50,10 +50,8 @@ fn oracle_prop_ars_reduction_relation() {
           (funcall 'neovm--ars-successors rel 'z)))
     (fmakunbound 'neovm--ars-successors)
     (fmakunbound 'neovm--ars-is-reducible)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((b c) nil (d e) t nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((b c) nil (d e) t nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -104,10 +102,8 @@ fn oracle_prop_ars_reflexive_transitive_closure() {
           (funcall 'neovm--ars-reachable rel 'e)))
     (fmakunbound 'neovm--ars-successors)
     (fmakunbound 'neovm--ars-reachable)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((a b c d e f) (c d e f) (d) (e f))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((a b c d e f) (c d e f) (d) (e f))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -191,10 +187,8 @@ fn oracle_prop_ars_normal_forms() {
     (fmakunbound 'neovm--ars-normal-form-p)
     (fmakunbound 'neovm--ars-all-normal-forms)
     (fmakunbound 'neovm--ars-reachable-nfs)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil t t (d f) (d f) (d) (d f))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil t t (d f) (d f) (d) (d f))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -279,7 +273,8 @@ fn oracle_prop_ars_church_rosser() {
     (fmakunbound 'neovm--ars-reachable-set)
     (fmakunbound 'neovm--ars-have-common-reduct)
     (fmakunbound 'neovm--ars-church-rosser-p)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t nil t)""#]]);
+    let expect = expect_test::expect![[r#""OK (t nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -356,7 +351,8 @@ fn oracle_prop_ars_diamond_property() {
     (fmakunbound 'neovm--ars-successors)
     (fmakunbound 'neovm--ars-diamond-at)
     (fmakunbound 'neovm--ars-diamond-p)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t nil nil)""#]]);
+    let expect = expect_test::expect![[r#""OK (t nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -463,10 +459,8 @@ fn oracle_prop_ars_newmans_lemma() {
     (fmakunbound 'neovm--ars-reachable-set)
     (fmakunbound 'neovm--ars-terminating-p)
     (fmakunbound 'neovm--ars-locally-confluent-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((t t) (t nil) (nil t) (t t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((t t) (t nil) (nil t) (t t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -518,12 +512,10 @@ fn oracle_prop_ars_reduction_sequences() {
           (mapcar #'length (funcall 'neovm--ars-all-paths rel 'a 10))))
     (fmakunbound 'neovm--ars-successors)
     (fmakunbound 'neovm--ars-all-paths)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((a b d) (a c d) (a c e f)) ((c d) (c e f)) ((d)) (3 3 4))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((a b d) (a c d) (a c e f)) ((c d) (c e f)) ((d)) (3 3 4))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -610,10 +602,8 @@ fn oracle_prop_ars_strongly_normalizing() {
     (fmakunbound 'neovm--ars-successors)
     (fmakunbound 'neovm--ars-strongly-normalizing-p)
     (fmakunbound 'neovm--ars-all-sn-terms)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((a b c d) (c) (c d e) t nil t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((a b c d) (c) (c d e) t nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -686,10 +676,8 @@ fn oracle_prop_ars_head_reduction_strategy() {
     (fmakunbound 'neovm--ars-successors)
     (fmakunbound 'neovm--ars-head-reduce)
     (fmakunbound 'neovm--ars-rightmost-reduce)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((a b d) (a c f g) (d g 3 4) (c e g) (c f g))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((a b d) (a c f g) (d g 3 4) (c e g) (c f g))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -757,10 +745,8 @@ fn oracle_prop_ars_parallel_reduction() {
     (fmakunbound 'neovm--ars-par-rules)
     (fmakunbound 'neovm--ars-par-reduce-step)
     (fmakunbound 'neovm--ars-par-reduce-full)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable neovm--ars-par-rules)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable neovm--ars-par-rules)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -827,10 +813,8 @@ fn oracle_prop_ars_reduction_graph_analysis() {
           (funcall 'neovm--ars-sources-and-sinks rel)))
     (fmakunbound 'neovm--ars-graph-degrees)
     (fmakunbound 'neovm--ars-sources-and-sinks)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((((a . 2) (b . 1) (c . 2) (d . 0) (e . 1) (f . 0)) ((a . 0) (b . 1) (c . 1) (d . 2) (e . 1) (f . 1))) ((a) (d f)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((((a . 2) (b . 1) (c . 2) (d . 0) (e . 1) (f . 0)) ((a . 0) (b . 1) (c . 1) (d . 2) (e . 1) (f . 1))) ((a) (d f)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

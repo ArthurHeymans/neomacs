@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx67_hash_table_eq_vs_eql_vs_equal_with_floats_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil :v nil :v :v)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((str1 "hello")
@@ -24,13 +25,14 @@ fn div_cx67_hash_table_eq_vs_eql_vs_equal_with_floats_strings() {
    (let ((ht (make-hash-table :test 'eql)))   (puthash n1 :v ht) (gethash n2 ht))
    (let ((ht (make-hash-table :test 'eq)))    (puthash sym1 :v ht) (gethash sym2 ht))))
 "##,
-        expect_test::expect![[r#""OK (nil nil :v nil :v :v)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx67_hash_table_custom_test_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -45,13 +47,16 @@ fn div_cx67_hash_table_custom_test_function() {
             (gethash '(:b) ht)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored error)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx67_hash_table_weakness_kinds_after_gc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((key 3 0) (value 3 0) (key-and-value 3 0) (key-or-value 3 0))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (results)
@@ -63,15 +68,16 @@ fn div_cx67_hash_table_weakness_kinds_after_gc() {
         (push (list w before (hash-table-count ht)) results))))
   (nreverse results))
 "##,
-        expect_test::expect![[
-            r#""OK ((key 3 0) (value 3 0) (key-and-value 3 0) (key-or-value 3 0))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx67_hash_table_maphash_remhash_iteration_order_independence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (8 ((0 . 0) (1 . 1) (2 . 4) (4 . 16) (5 . 25) (6 . 36) (8 . 64) (9 . 81)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal))
@@ -85,15 +91,14 @@ fn div_cx67_hash_table_maphash_remhash_iteration_order_independence() {
   (list count-after-remhash
         (sort collected (lambda (a b) (< (car a) (car b))))))
 "##,
-        expect_test::expect![[
-            r#""OK (8 ((0 . 0) (1 . 1) (2 . 4) (4 . 16) (5 . 25) (6 . 36) (8 . 64) (9 . 81)))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx67_record_type_create_access_and_setf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function record-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((r1 (record 'neo-cx67-tag 1 2 3))
@@ -106,13 +111,16 @@ fn div_cx67_record_type_create_access_and_setf() {
         (aref r1 2)
         (record-length r2)))
 "##,
-        expect_test::expect![[r#""ERR (void-function record-p)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx67_char_table_subtype_range_extra_slots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (args-out-of-range #^[:default nil neo-cx67-subtype :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default] 0)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'neo-cx67-subtype :default)))
@@ -128,15 +136,14 @@ fn div_cx67_char_table_subtype_range_extra_slots() {
         (char-table-range ct '(?a . ?z))
         (char-table-range ct nil)))
 "##,
-        expect_test::expect![[
-            r#""ERR (args-out-of-range #^[:default nil neo-cx67-subtype :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default :default] 0)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx67_bool_vector_bit_ops_and_length() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function bool-vector-intersection-and)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((bv1 (make-bool-vector 16 nil))
@@ -153,13 +160,14 @@ fn div_cx67_bool_vector_bit_ops_and_length() {
           subset
           (length bv1))))
 "##,
-        expect_test::expect![[r#""ERR (void-function bool-vector-intersection-and)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx67_sxhash_equal_p_equal_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 13 46)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s1 "hello")
@@ -175,13 +183,14 @@ fn div_cx67_sxhash_equal_p_equal_hash() {
         (sxhash-eql 1.5)
         (= (sxhash-eql 1) (sxhash-eql 1.0)))))
 "##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 13 46)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx67_hash_table_size_resize_threshold() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (64 30 1.5 0.8125 equal nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal :size 16 :rehash-size 2.0 :rehash-threshold 0.7)))
@@ -193,13 +202,14 @@ fn div_cx67_hash_table_size_resize_threshold() {
         (hash-table-test ht)
         (hash-table-weakness ht)))
 "##,
-        expect_test::expect![[r#""OK (64 30 1.5 0.8125 equal nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx67_obarray_intern_after_unintern_reuse_slot() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function make-obarray)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ob (make-obarray 17)))
@@ -217,13 +227,14 @@ fn div_cx67_obarray_intern_after_unintern_reuse_slot() {
             (intern-soft "beta" ob)
             (intern-soft "delta" ob)))))
 "##,
-        expect_test::expect![[r#""ERR (void-function make-obarray)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx67_char_table_map_optimized_with_overrides() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:digit . 1) (:word . 2))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'syntax-table nil)))
@@ -240,13 +251,14 @@ fn div_cx67_char_table_map_optimized_with_overrides() {
      ct)
     (sort counts (lambda (a b) (string< (symbol-name (car a)) (symbol-name (car b)))))))
 "##,
-        expect_test::expect![[r#""OK ((:digit . 1) (:word . 2))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx67_hash_table_record_marker_overlay_undo_textprop_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ht (make-hash-table :test 'equal)))
@@ -277,6 +289,6 @@ fn div_cx67_hash_table_record_marker_overlay_undo_textprop_narrow_mega() {
                 (overlayp ov) (overlay-start ov)
                 (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }

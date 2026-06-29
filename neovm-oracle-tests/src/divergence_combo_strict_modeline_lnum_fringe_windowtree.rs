@@ -11,21 +11,25 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_f4_mode_line_format_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"%e\" mode-line-front-space (:propertize (\"\" mode-line-mule-info mode-line-client mode-line-modified mode-line-remote mode-line-window-dedicated) display (min-width (6.0))) mode-line-frame-identification mode-line-buffer-identification \"   \" mode-line-position (project-mode-line project-mode-line-format) (vc-mode vc-mode) \"  \" mode-line-modes mode-line-misc-info mode-line-end-spaces) nil nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (default-value 'mode-line-format)
       (default-value 'header-line-format)
       (default-value 'tab-line-format))
 "##,
-        expect_test::expect![[
-            r#""OK ((\"%e\" mode-line-front-space (:propertize (\"\" mode-line-mule-info mode-line-client mode-line-modified mode-line-remote mode-line-window-dedicated) display (min-width (6.0))) mode-line-frame-identification mode-line-buffer-identification \"   \" mode-line-position (project-mode-line project-mode-line-format) (vc-mode vc-mode) \"  \" mode-line-modes mode-line-misc-info mode-line-end-spaces) nil nil)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_f4_frame_title_format_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((multiple-frames \"%b\" (\"\" \"%b - GNU Emacs at \" system-name)) (multiple-frames \"%b\" (\"\" \"%b - GNU Emacs at \" system-name)))""#
+    ]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK ((multiple-frames "%b" ("" "%b - GNU Emacs at " system-name)) (multiple-frames "%b" ("" "%b - GNU Emacs at " system-name)))
     // Neomacs:   OK ("%b" nil)
@@ -37,15 +41,14 @@ fn div_f4_frame_title_format_defaults() {
 (list (default-value 'frame-title-format)
       (default-value 'icon-title-format))
 "##,
-        expect_test::expect![[
-            r#""OK ((multiple-frames \"%b\" (\"\" \"%b - GNU Emacs at \" system-name)) (multiple-frames \"%b\" (\"\" \"%b - GNU Emacs at \" system-name)))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_f4_display_line_numbers_body_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 t 80)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-dln*")))
@@ -62,13 +65,14 @@ fn div_f4_display_line_numbers_body_width() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
-        expect_test::expect![[r#""OK (5 t 80)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f4_fringe_indicator_settings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list fringe-mode
@@ -78,13 +82,16 @@ fn div_f4_fringe_indicator_settings() {
       (default-value 'overflow-newline-into-fringe)
       (default-value 'fringes-outside-margins))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil nil t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f4_window_tree_complex_split() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (3 nil \" *probe-wtc2*\" 40 12 (\" *probe-wtc2*\" \" *probe-wtc3*\" \" *probe-wtc1*\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b1 (get-buffer-create " *probe-wtc1*"))
@@ -110,15 +117,14 @@ fn div_f4_window_tree_complex_split() {
     (mapc (lambda (x) (when (buffer-live-p x) (kill-buffer x))) (list b1 b2 b3))
     (delete-other-windows)))
 "##,
-        expect_test::expect![[
-            r#""OK (3 nil \" *probe-wtc2*\" 40 12 (\" *probe-wtc2*\" \" *probe-wtc3*\" \" *probe-wtc1*\"))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_f4_balance_windows_geometry() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (7 17 12 12)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b1 (get-buffer-create " *probe-bw1*"))
@@ -138,13 +144,14 @@ fn div_f4_balance_windows_geometry() {
     (mapc (lambda (x) (when (buffer-live-p x) (kill-buffer x))) (list b1 b2))
     (delete-other-windows)))
 "##,
-        expect_test::expect![[r#""OK (7 17 12 12)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f4_selective_display_motion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 4 7 19)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -156,13 +163,14 @@ fn div_f4_selective_display_motion() {
           (progn (goto-char 1) (forward-line 1) (point))
           (progn (forward-line 1) (point)))))
 "##,
-        expect_test::expect![[r#""OK (3 4 7 19)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f4_display_table_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function buffer-display-table)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (buffer-display-table)
@@ -170,6 +178,6 @@ fn div_f4_display_table_defaults() {
       (default-value 'buffer-display-table)
       (window-parameter nil 'no-other-window))
 "##,
-        expect_test::expect![[r#""ERR (void-function buffer-display-table)""#]],
+        expect,
     );
 }

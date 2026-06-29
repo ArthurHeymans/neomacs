@@ -7,19 +7,18 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_sort_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    crate::common::assert_oracle_parity_expect(
-        r#"(sort '(3 1 4 1 5 9 2 6) #'<)"#,
-        expect_test::expect![[r#""OK (1 1 2 3 4 5 6 9)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 1 2 3 4 5 6 9)""#]];
+    crate::common::assert_oracle_parity_expect(r#"(sort '(3 1 4 1 5 9 2 6) #'<)"#, expect);
 }
 
 #[test]
 fn divergence_sort_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (\"apple\" \"banana\" \"cherry\" \"date\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(sort '("banana" "apple" "cherry" "date") #'string<)"#,
-        expect_test::expect![[r#""OK (\"apple\" \"banana\" \"cherry\" \"date\")""#]],
+        expect,
     );
 }
 
@@ -27,6 +26,7 @@ fn divergence_sort_strings() {
 fn divergence_type_predicates_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t nil t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (listp '(1 2 3))
@@ -39,7 +39,7 @@ fn divergence_type_predicates_deep() {
   (atom 42)
   (atom "string")
   (atom '(1 2)))"#,
-        expect_test::expect![[r#""OK (t t t t t nil t t t nil)""#]],
+        expect,
     );
 }
 
@@ -47,6 +47,7 @@ fn divergence_type_predicates_deep() {
 fn divergence_sequence_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t nil t t nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (sequencep '(1 2 3))
@@ -59,7 +60,7 @@ fn divergence_sequence_predicates() {
   (char-table-p (make-char-table 'foo))
   (bool-vector-p (make-bool-vector 5 t))
   (vectorp [1 2 3]))"#,
-        expect_test::expect![[r#""OK (t t t nil t t nil t t t)""#]],
+        expect,
     );
 }
 
@@ -67,6 +68,7 @@ fn divergence_sequence_predicates() {
 fn divergence_number_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t nil t nil t t nil t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (integerp 42)
@@ -79,7 +81,7 @@ fn divergence_number_predicates() {
   (natnump 5)
   (natnump -1)
   (zerop 0))"#,
-        expect_test::expect![[r#""OK (t nil t nil t t nil t nil t)""#]],
+        expect,
     );
 }
 
@@ -87,6 +89,7 @@ fn divergence_number_predicates() {
 fn divergence_comparison_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t nil t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (eq 'foo 'foo)
@@ -98,7 +101,7 @@ fn divergence_comparison_deep() {
     (propertize "foo" 'face 'bold)
     (propertize "foo" 'face 'bold))
   (string-equal "foo" "foo"))"#,
-        expect_test::expect![[r#""OK (t nil t t t t t)""#]],
+        expect,
     );
 }
 
@@ -106,13 +109,14 @@ fn divergence_comparison_deep() {
 fn divergence_max_min() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (9 1 42 42)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (max 1 5 3 9 2)
   (min 1 5 3 9 2)
   (abs -42)
   (abs 42))"#,
-        expect_test::expect![[r#""OK (9 1 42 42)""#]],
+        expect,
     );
 }
 
@@ -120,6 +124,7 @@ fn divergence_max_min() {
 fn divergence_arithmetic_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (1 2 3 4 4 3 3.0 4.0)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (mod 10 3)
@@ -130,7 +135,7 @@ fn divergence_arithmetic_edge() {
   (truncate 3.7)
   (ffloor 3.7)
   (fround 3.5))"#,
-        expect_test::expect![[r#""OK (1 2 3 4 4 3 3.0 4.0)""#]],
+        expect,
     );
 }
 
@@ -138,6 +143,7 @@ fn divergence_arithmetic_edge() {
 fn divergence_float_special() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil nil t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (floatp most-positive-fixnum)
@@ -147,7 +153,7 @@ fn divergence_float_special() {
   (number-or-marker-p (point-marker))
   (integer-or-marker-p 42)
   (integer-or-marker-p (point-marker)))"#,
-        expect_test::expect![[r#""OK (nil nil t t t t t)""#]],
+        expect,
     );
 }
 
@@ -155,6 +161,7 @@ fn divergence_float_special() {
 fn divergence_string_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t nil t t nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (stringp "hello")
@@ -165,6 +172,6 @@ fn divergence_string_predicates() {
   (char-or-string-p ?A)
   (char-or-string-p "A")
   (char-or-string-p 42))"#,
-        expect_test::expect![[r#""OK (t nil t t nil t t t)""#]],
+        expect,
     );
 }

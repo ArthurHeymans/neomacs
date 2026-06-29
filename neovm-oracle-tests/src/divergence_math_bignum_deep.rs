@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_float_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t nil t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (floatp 3.14)
@@ -15,7 +16,7 @@ fn divergence_float_basic() {
   (= (* 2.0 3.0) 6.0)
   (= (/ 10.0 3.0) (/ 10.0 3.0))
   (= (- 5.5 2.5) 3.0)) "#,
-        expect_test::expect![[r#""OK (t nil t t t t)""#]],
+        expect,
     );
 }
 
@@ -23,6 +24,7 @@ fn divergence_float_basic() {
 fn divergence_float_comparison() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (< 1.5 2.5)
@@ -31,7 +33,7 @@ fn divergence_float_comparison() {
   (>= 3.0 3.0)
   (= 0.0 -0.0)
   (/= 1.0 2.0)) "#,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -39,6 +41,7 @@ fn divergence_float_comparison() {
 fn divergence_float_special() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'isnan)
@@ -49,7 +52,7 @@ fn divergence_float_special() {
   (fboundp 'float-sign)
   (fboundp 'float-digits)
   (fboundp 'float-precision)) "#,
-        expect_test::expect![[r#""OK (t t t t t nil nil nil)""#]],
+        expect,
     );
 }
 
@@ -57,6 +60,7 @@ fn divergence_float_special() {
 fn divergence_trig_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'sin)
@@ -67,7 +71,7 @@ fn divergence_trig_functions() {
   (fboundp 'atan)
   (floatp (sin 3.14))
   (floatp (cos 3.14))) "#,
-        expect_test::expect![[r#""OK (t t t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -75,6 +79,7 @@ fn divergence_trig_functions() {
 fn divergence_math_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'sqrt)
@@ -84,7 +89,7 @@ fn divergence_math_functions() {
   (floatp (sqrt 4.0))
   (= (sqrt 4.0) 2.0)
   (= (expt 2 10) 1024)) "#,
-        expect_test::expect![[r#""OK (t t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -92,6 +97,7 @@ fn divergence_math_functions() {
 fn divergence_abs_floor_ceil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (5 3.14 t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (abs -5)
@@ -100,7 +106,7 @@ fn divergence_abs_floor_ceil() {
   (= (ceiling 3.2) 4)
   (= (round 3.5) 4)
   (= (truncate 3.7) 3)) "#,
-        expect_test::expect![[r#""OK (5 3.14 t t t t)""#]],
+        expect,
     );
 }
 
@@ -108,6 +114,7 @@ fn divergence_abs_floor_ceil() {
 fn divergence_mod_rem() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function fmod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (mod 10 3)
@@ -115,7 +122,7 @@ fn divergence_mod_rem() {
   (% 10 3)
   (% -10 3)
   (= (fmod 10.0 3.0) (fmod 10.0 3.0))) "#,
-        expect_test::expect![[r#""ERR (void-function fmod)""#]],
+        expect,
     );
 }
 
@@ -123,6 +130,7 @@ fn divergence_mod_rem() {
 fn divergence_bignum_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (integerp (expt 2 64))
@@ -130,7 +138,7 @@ fn divergence_bignum_basic() {
   (= (expt 2 10) 1024)
   (= (* (expt 2 60) (expt 2 4)) (expt 2 64))
   (= (1+ most-positive-fixnum) (+ most-positive-fixnum 1))) "#,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
@@ -138,6 +146,7 @@ fn divergence_bignum_basic() {
 fn divergence_bignum_eq() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((a (expt 2 64))
         (b (expt 2 64)))
@@ -145,7 +154,7 @@ fn divergence_bignum_eq() {
         (eql a b)
         (eq a b)
         (equal a b))) "#,
-        expect_test::expect![[r#""OK (t t nil t)""#]],
+        expect,
     );
 }
 
@@ -153,6 +162,7 @@ fn divergence_bignum_eq() {
 fn divergence_random() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (fboundp 'random)
@@ -160,6 +170,6 @@ fn divergence_random() {
   (>= (random 100) 0)
   (< (random 100) 100)
   (fboundp 'random-seed)) "#,
-        expect_test::expect![[r#""OK (t t t t nil)""#]],
+        expect,
     );
 }

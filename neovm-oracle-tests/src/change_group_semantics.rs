@@ -28,10 +28,8 @@ fn oracle_prop_atomic_change_group_success_keeps_changes() {
           (consp buffer-undo-list))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"base-ok\" \"base-ok\" t t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"base-ok\" \"base-ok\" t t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -55,10 +53,8 @@ fn oracle_prop_atomic_change_group_error_rolls_back_changes() {
      (consp buffer-undo-list))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((error \"stop\") \"base\" t t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((error \"stop\") \"base\" t t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -86,10 +82,8 @@ fn oracle_prop_manual_change_group_cancel_and_accept() {
               (consp buffer-undo-list))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"abc\" \"abc-accept\" t t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"abc\" \"abc-accept\" t t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -111,10 +105,8 @@ fn oracle_with_undo_amalgamate_removes_inner_undo_boundaries() {
     (insert "c"))
   (list (buffer-string) buffer-undo-list))
 "#;
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (\"abc\" ((3 . 4) (2 . 3) (1 . 2) (t . 0)))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"abc\" ((3 . 4) (2 . 3) (1 . 2) (t . 0)))""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq(
         r#"("abc" ((3 . 4) (2 . 3) (1 . 2) (t . 0)))"#,
         &oracle,
@@ -134,10 +126,8 @@ fn oracle_with_undo_amalgamate_keeps_disabled_undo_disabled() {
                   (buffer-string))))
     (list result (buffer-string) buffer-undo-list)))
 "#;
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (\"x\" \"x\" t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"x\" \"x\" t)""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq(r#"("x" "x" t)"#, &oracle, &neovm);
 }
 
@@ -170,10 +160,8 @@ fn oracle_prop_with_silent_modifications_restores_modified_state() {
           (consp buffer-undo-list))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"abcX\" nil nil nil t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"abcX\" nil nil nil t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -197,10 +185,8 @@ fn oracle_prop_combine_after_change_calls_coalesces_without_before_hooks() {
           (nreverse after-log))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"aYbcdefZ\" ((2 9 5 \"aYbcdefZ\")))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"aYbcdefZ\" ((2 9 5 \"aYbcdefZ\")))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -230,12 +216,10 @@ fn oracle_prop_combine_after_change_calls_disabled_by_before_hooks() {
           (nreverse after-log))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"aYbcdefZ\" ((2 2 \"abcdef\") (8 8 \"aYbcdef\")) ((2 3 0 \"aYbcdef\") (8 9 0 \"aYbcdefZ\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"aYbcdefZ\" ((2 2 \"abcdef\") (8 8 \"aYbcdef\")) ((2 3 0 \"aYbcdef\") (8 9 0 \"aYbcdefZ\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -261,10 +245,8 @@ fn oracle_prop_combine_after_change_calls_flushes_during_unwind() {
      (nreverse after-log))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((error \"stop\") \"abcX\" ((4 5 0 \"abcX\")))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((error \"stop\") \"abcX\" ((4 5 0 \"abcX\")))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -300,12 +282,10 @@ fn oracle_prop_nested_combine_after_change_calls_defers_until_outer_exit() {
      (nreverse after-log))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:outer-value \"aXbcdefY\" (nil :after-first (:inside-inner nil) (:after-inner :inner-value nil)) ((2 4 0 \"aXbcdefY\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:outer-value \"aXbcdefY\" (nil :after-first (:inside-inner nil) (:after-inner :inner-value nil)) ((2 4 0 \"aXbcdefY\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -350,12 +330,10 @@ fn oracle_prop_combine_change_calls_runs_hooks_once_and_suppresses_body_hooks() 
             (local-variable-p 'after-change-functions)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:body-value \"abXYef\" (nil nil t t nil ((2 5 \"abcdef\")) :entry (:exit ((2 5 \"abcdef\")) nil \"abXYef\")) ((2 5 \"abcdef\")) ((2 5 3 \"abXYef\")) t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:body-value \"abXYef\" (nil nil t t nil ((2 5 \"abcdef\")) :entry (:exit ((2 5 \"abcdef\")) nil \"abXYef\")) ((2 5 \"abcdef\")) ((2 5 3 \"abXYef\")) t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -387,8 +365,6 @@ fn oracle_prop_combine_change_calls_records_single_undo_apply_entry() {
                 buffer-undo-list)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"abXYef!\" ((apply 0 2 5 t 2 5 t)))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"abXYef!\" ((apply 0 2 5 t 2 5 t)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

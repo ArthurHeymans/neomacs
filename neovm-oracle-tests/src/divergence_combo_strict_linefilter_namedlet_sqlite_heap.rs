@@ -12,6 +12,8 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_n4_keep_flush_how_many_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (\"foo\nbar\nfoo\nbaz\n\" \"foo\nbar\nfoo\nbaz\n\" 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer
@@ -26,13 +28,14 @@ fn div_n4_keep_flush_how_many_lines() {
         (insert "foo bar foo baz foo")
         (how-many "foo" (point-min) (point-max))))
 "##,
-        expect_test::expect![[r#""OK (\"foo\nbar\nfoo\nbaz\n\" \"foo\nbar\nfoo\nbaz\n\" 3)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_n4_delete_duplicate_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"a\nb\nc\n\" \"a\nb\na\nc\nb\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer
@@ -44,13 +47,14 @@ fn div_n4_delete_duplicate_lines() {
         (delete-matching-lines "^a$")
         (buffer-string)))
 "##,
-        expect_test::expect![[r#""OK (\"a\nb\nc\n\" \"a\nb\na\nc\nb\n\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_n4_named_let_tco() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (15 720 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (named-let loop ((i 0) (acc 0))
@@ -60,13 +64,16 @@ fn div_n4_named_let_tco() {
       (length (named-let collect ((i 0) (out))
                   (if (> i 5) out (collect (1+ i) (cons i out))))))
 "##,
-        expect_test::expect![[r#""OK (15 720 6)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_n4_heap_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/emacs-lisp/heap.el\")""#
+    ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (let ((h (make-heap #'< 3)))
@@ -81,8 +88,6 @@ fn div_n4_heap_ops() {
         (heap-root h)))
 "##,
         &["emacs-lisp/heap.el"],
-        expect_test::expect![[
-            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/emacs-lisp/heap.el\")""#
-        ]],
+        expect,
     );
 }

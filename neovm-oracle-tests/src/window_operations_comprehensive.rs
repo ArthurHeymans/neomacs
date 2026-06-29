@@ -28,10 +28,8 @@ fn oracle_prop_window_selected_window_basic_properties() {
        (point-matches (= (window-point w) (point))))
   (list is-window is-live same-again buf-is-current has-point point-matches))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t nil t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t nil t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -59,10 +57,8 @@ fn oracle_prop_window_buffer_interactions() {
           nil-arg-same
           (> (length temp-name) 0))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -98,10 +94,8 @@ fn oracle_prop_window_point_set_and_query() {
           (= point-after-goto 20)
           point-eq-point)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil t nil nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil t nil nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +119,8 @@ fn oracle_prop_window_start_end_relationship() {
           start-in-range
           (= start (window-start)))))
 "#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t)""#]]);
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -160,10 +155,8 @@ fn oracle_prop_window_list_properties() {
                            ok)))
   (list is-list non-empty all-windows all-live selected-in-list all-have-buffers))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -181,7 +174,8 @@ fn oracle_prop_window_dedicated_default() {
        (both-same (eq ded ded-nil-arg)))
   (list ded both-same (or (null ded) (eq ded t) t)))
 "#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (nil t t)""#]]);
+    let expect = expect_test::expect![[r#""OK (nil t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -223,10 +217,8 @@ fn oracle_prop_window_parameters_round_trip() {
         (equal val-b '(1 2 3))
         (listp params-alist)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -256,10 +248,8 @@ fn oracle_prop_window_dimensions() {
         (>= width-total width)
         (>= height-total height)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -282,10 +272,8 @@ fn oracle_prop_window_live_p_type_dispatch() {
       (windowp nil)
       (windowp 42))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil nil nil nil nil nil t nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil nil nil nil nil nil t nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -311,10 +299,8 @@ fn oracle_prop_window_buffer_switch_point_preservation() {
   ;; Build result
   (nreverse results))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((in-temp \" *temp*\" 12) (back t t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((in-temp \" *temp*\" 12) (back t t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -346,7 +332,8 @@ fn oracle_prop_window_point_nested_save_excursion() {
           (= p2 20)
           (= p3 15))))
 "#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t nil nil)""#]]);
+    let expect = expect_test::expect![[r#""OK (t nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -379,7 +366,8 @@ fn oracle_prop_window_all_windows_have_valid_buffers() {
               (unless v (setq ok nil))))
           ok)))
 "#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t)""#]]);
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -418,5 +406,6 @@ fn oracle_prop_window_parameters_as_kv_store() {
     (dolist (k keys)
       (set-window-parameter w k nil))))
 "#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t 5)""#]]);
+    let expect = expect_test::expect![[r#""OK (t t 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

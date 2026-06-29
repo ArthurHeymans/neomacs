@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_f5_frame_parameter_sweep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (frame-parameters)))
@@ -23,13 +24,14 @@ fn div_f5_frame_parameter_sweep() {
         (assq 'z-group p)
         (assq 'inhibit-double-buffering p)))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil nil nil nil nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f5_explicit_name_frame_param() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK nil
     // Neomacs:   OK (explicit-name)
@@ -39,13 +41,14 @@ fn div_f5_explicit_name_frame_param() {
         r##"
 (assq 'explicit-name (frame-parameters))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f5_window_parameter_obscure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b (get-buffer-create " *probe-wpo*")))
@@ -62,13 +65,14 @@ fn div_f5_window_parameter_obscure() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f5_buffer_local_var_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable right-margin)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (default-value 'bidi-display-reordering)
@@ -82,13 +86,16 @@ fn div_f5_buffer_local_var_defaults() {
       (default-value 'bidi-paragraph-separate-re)
       (default-value 'enable-multibyte-characters))
 "##,
-        expect_test::expect![[r#""ERR (void-variable right-margin)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f5_face_attribute_sweep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"unspecified-bg\" \"unspecified-bg\" \"unspecified-bg\" \"unspecified-fg\" \"unspecified-fg\" \"unspecified-fg\" \"unspecified-fg\" \"unspecified-fg\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (face-attribute 'region :background nil 'default)
@@ -100,15 +107,14 @@ fn div_f5_face_attribute_sweep() {
       (face-attribute 'success :foreground nil 'default)
       (face-attribute 'shadow :foreground nil 'default))
 "##,
-        expect_test::expect![[
-            r#""OK (\"unspecified-bg\" \"unspecified-bg\" \"unspecified-bg\" \"unspecified-fg\" \"unspecified-fg\" \"unspecified-fg\" \"unspecified-fg\" \"unspecified-fg\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_f5_window_resize_config_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil window-size 10 4 tty t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (default-value 'window-resize-pixelwise)
@@ -119,13 +125,14 @@ fn div_f5_window_resize_config_defaults() {
       (default-value 'recenter-redisplay)
       (default-value 'auto-window-vscroll))
 "##,
-        expect_test::expect![[r#""OK (nil nil window-size 10 4 tty t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f5_even_window_heights_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK t
     // Neomacs:   OK width-only
@@ -135,13 +142,16 @@ fn div_f5_even_window_heights_default() {
         r##"
 (default-value 'even-window-heights)
 "##,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f5_line_number_face_and_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ([face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] \"unspecified-fg\" \"unspecified-fg\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (facep 'line-number)
@@ -149,15 +159,14 @@ fn div_f5_line_number_face_and_format() {
       (face-attribute 'line-number :foreground nil 'default)
       (face-attribute 'line-number-current-line :foreground nil 'default))
 "##,
-        expect_test::expect![[
-            r#""OK ([face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] \"unspecified-fg\" \"unspecified-fg\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_f5_obarray_global_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t car defun nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((n 0))
@@ -167,6 +176,6 @@ fn div_f5_obarray_global_count() {
         (intern-soft "defun")
         (intern-soft "nonexistent-probe-sym-xyz")))
 "##,
-        expect_test::expect![[r#""OK (t car defun nil)""#]],
+        expect,
     );
 }

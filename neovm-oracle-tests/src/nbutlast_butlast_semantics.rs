@@ -21,10 +21,8 @@ fn oracle_butlast_negative_zero_and_identity() {
         lst))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((a b c) t (a b c) t (a b) (a b c))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((a b c) t (a b c) t (a b) (a b c))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -49,10 +47,8 @@ fn oracle_butlast_positive_copy_and_improper_errors() {
           (error (list (car err) (cdr err)))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 16 48)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 16 48)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -71,10 +67,9 @@ fn oracle_nbutlast_negative_zero_and_large_n() {
         rc c))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((a b c) (a b c) t (a b c) (a b c) t nil (a b c))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((a b c) (a b c) t (a b c) (a b c) t nil (a b c))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -99,10 +94,8 @@ fn oracle_nbutlast_destructive_identity_and_improper_errors() {
           (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3) (1 2 3) t (wrong-type-argument (listp c)) (wrong-type-argument (listp c)) (wrong-type-argument (sequencep 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3) (1 2 3) t (wrong-type-argument (listp c)) (wrong-type-argument (listp c)) (wrong-type-argument (sequencep 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

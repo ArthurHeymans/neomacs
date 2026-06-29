@@ -72,12 +72,10 @@ fn oracle_prop_symmath_differentiation() {
        ;; d/dx(x^2 + 3*x + 5)
        (funcall 'neovm--sm-deriv '(+ (+ (expt x 2) (* 3 x)) 5) 'x))
     (fmakunbound 'neovm--sm-deriv)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (0 1 0 (+ 1 0) (+ (* 1 x) (* x 1)) (+ (* 0 x) (* 3 1)) (* (* 3 (expt x (- 3 1))) 1) (+ (+ (* (* 2 (expt x (- 2 1))) 1) (+ (* 0 x) (* 3 1))) 0))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (0 1 0 (+ 1 0) (+ (* 1 x) (* x 1)) (+ (* 0 x) (* 3 1)) (* (* 3 (expt x (- 3 1))) 1) (+ (+ (* (* 2 (expt x (- 2 1))) 1) (+ (* 0 x) (* 3 1))) 0))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,10 +147,8 @@ fn oracle_prop_symmath_simplification() {
        ;; (+ (* 2 3) (* 1 x)) -> (+ 6 x)
        (funcall 'neovm--sm-simplify '(+ (* 2 3) (* 1 x))))
     (fmakunbound 'neovm--sm-simplify)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (7 x x 0 x 1 3 0 x (+ 6 x))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (7 x x 0 x 1 3 0 x (+ 6 x))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -210,10 +206,9 @@ fn oracle_prop_symmath_eval_with_bindings() {
              (funcall 'neovm--sm-eval 'w env)
            (error (list 'error (cadr err))))))
     (fmakunbound 'neovm--sm-eval)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 7 60 9 5.0 28 -7 (error \"unbound variable\"))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (3 7 60 9 5.0 28 -7 (error \"unbound variable\"))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -329,12 +324,10 @@ fn oracle_prop_symmath_polynomial_ops() {
     (fmakunbound 'neovm--sm-poly-mul)
     (fmakunbound 'neovm--sm-poly-eval)
     (fmakunbound 'neovm--sm-poly-to-string)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((2 . 4) (1 . 1) (0 . 5)) ((2 . 1) (0 . -1)) ((3 . 3) (2 . 5) (1 . 3) (0 . 1)) 17 1 24 \"3x^2 + 2x + 1\" \"x^2 + -1\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((2 . 4) (1 . 1) (0 . 5)) ((2 . 1) (0 . -1)) ((3 . 3) (2 . 5) (1 . 3) (0 . 1)) 17 1 24 \"3x^2 + 2x + 1\" \"x^2 + -1\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -425,10 +418,8 @@ fn oracle_prop_symmath_deriv_then_simplify() {
     (fmakunbound 'neovm--sm-d)
     (fmakunbound 'neovm--sm-s)
     (fmakunbound 'neovm--sm-simplify-fix)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 3 (* 2 x) (+ (* 2 x) 1) 0 5 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 3 (* 2 x) (+ (* 2 x) 1) 0 5 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -505,12 +496,10 @@ fn oracle_prop_symmath_simple_integration() {
        ;; integral of constant 0
        (funcall 'neovm--sm-integrate 0 'x))
     (fmakunbound 'neovm--sm-integrate)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((* 3 x) (/ (expt x 2) 2) (/ (expt x 3) 3) (ln (abs x)) (* 3 (/ (expt x 3) 3)) (+ (/ (expt x 3) 3) (/ (expt x 2) 2)) (+ (* 2 (/ (expt x 2) 2)) (* 1 x)) 0)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((* 3 x) (/ (expt x 2) 2) (/ (expt x 3) 3) (ln (abs x)) (* 3 (/ (expt x 3) 3)) (+ (/ (expt x 3) 3) (/ (expt x 2) 2)) (+ (* 2 (/ (expt x 2) 2)) (* 1 x)) 0)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -588,10 +577,8 @@ fn oracle_prop_symmath_expression_tree_ops() {
     (fmakunbound 'neovm--sm-size)
     (fmakunbound 'neovm--sm-vars)
     (fmakunbound 'neovm--sm-subst)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((2 3 0 0) (7 11 1 1) (x y) (x y z) nil (+ (* 3 (+ a 1)) (* 2 y)) (+ (expt x 2) (* (- 0 1) (+ x z))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((2 3 0 0) (7 11 1 1) (x y) (x y z) nil (+ (* 3 (+ a 1)) (* 2 y)) (+ (expt x 2) (* (- 0 1) (+ x z))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

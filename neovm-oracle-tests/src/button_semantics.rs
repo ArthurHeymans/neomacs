@@ -37,12 +37,10 @@ fn oracle_prop_button_type_inheritance_and_text_button_properties() {
             (button-at 5)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (2 t 2 5 neomacs-oracle-child-button child t \"base-help\" \"local\" nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (2 t 2 5 neomacs-oracle-child-button child t \"base-help\" \"local\" nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -75,12 +73,10 @@ fn oracle_prop_insert_text_button_next_previous_and_put() {
             (button-at (point-min))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (#(\"pre one gap two\" 4 7 (tag changed category default-button button (t)) 12 15 (extra \"yes\" tag 2 category default-button button (t))) 5 8 changed 13 16 2 \"yes\" changed 2 2 nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (#(\"pre one gap two\" 4 7 (tag changed category default-button button (t)) 12 15 (extra \"yes\" tag 2 category default-button button (t))) 5 8 changed 13 16 2 \"yes\" changed 2 2 nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -106,12 +102,10 @@ fn oracle_prop_make_text_button_string_and_category_errors() {
             (error (list (car err) (cadr err)))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (#(\"label\" 0 5 (tag string-button category default-button button (t))) string-button button (t) (error \"Button ‘category’ property may not be set directly\") (error \"Button ‘category’ property may not be set directly\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (#(\"label\" 0 5 (tag string-button category default-button button (t))) string-button button (t) (error \"Button ‘category’ property may not be set directly\") (error \"Button ‘category’ property may not be set directly\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -139,10 +133,8 @@ fn oracle_prop_overlay_buttons_and_activation_data() {
               (nreverse log))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t 3 7 \"2345\" button ((action payload) (mouse payload)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t 3 7 \"2345\" button ((action payload) (mouse payload)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

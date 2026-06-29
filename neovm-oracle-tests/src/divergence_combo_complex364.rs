@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx364_fill_region_with_fill_column_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -16,13 +17,16 @@ fn div_cx364_fill_region_with_fill_column_variants() {
     (fill-region (point-min) (point-max))
     (buffer-string))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx364_fill_region_with_fill_prefix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK \"    This is a paragraph with a fill\n    prefix that should be wrapped\n    at the column boundary.  Second\n    line of the same paragraph\n    continues here.\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -33,28 +37,30 @@ fn div_cx364_fill_region_with_fill_prefix() {
     (fill-region (point-min) (point-max))
     (buffer-string)))
 "##,
-        expect_test::expect![[
-            r#""OK \"    This is a paragraph with a fill\n    prefix that should be wrapped\n    at the column boundary.  Second\n    line of the same paragraph\n    continues here.\"""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx364_auto_fill_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'auto-fill-mode)
       (boundp 'auto-fill-function)
       (boundp 'comment-auto-fill-only-comments))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx364_fill_paragraph_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK \"This is a paragraph that is\nlong enough to require\nwrapping at a reasonable fill\ncolumn setting like 30\ncharacters or so.\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -64,15 +70,14 @@ fn div_cx364_fill_paragraph_basic() {
     (fill-paragraph)
     (buffer-string)))
 "##,
-        expect_test::expect![[
-            r#""OK \"This is a paragraph that is\nlong enough to require\nwrapping at a reasonable fill\ncolumn setting like 30\ncharacters or so.\"""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx364_justify_current_line_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"This is a paragraph of text.\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -84,13 +89,14 @@ fn div_cx364_justify_current_line_variants() {
         (buffer-string)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK \"This is a paragraph of text.\n\"""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx364_center_line_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"\t       short line\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -102,13 +108,15 @@ fn div_cx364_center_line_basic() {
         (buffer-string)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK \"\t       short line\n\"""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx364_center_region_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK \"\t\tline one\n\t\tline two\n\t       line three\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -119,13 +127,16 @@ fn div_cx364_center_region_basic() {
         (buffer-string)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK \"\t\tline one\n\t\tline two\n\t       line three\n\"""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx364_fill_individual_paragraphs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK \"First paragraph here\nthat is long enough\nto wrap at 20.\n\nSecond paragraph\nalso long enough to\nwrap at 20 chars.\n\"""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -136,15 +147,14 @@ fn div_cx364_fill_individual_paragraphs() {
         (buffer-string)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK \"First paragraph here\nthat is long enough\nto wrap at 20.\n\nSecond paragraph\nalso long enough to\nwrap at 20 chars.\n\"""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx364_fill_column_indicator_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'fill-column)
@@ -153,13 +163,14 @@ fn div_cx364_fill_column_indicator_query() {
       (fboundp 'set-fill-column)
       (fboundp 'set-fill-prefix))
 "##,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx364_fill_justify_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -181,6 +192,6 @@ fn div_cx364_fill_justify_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
+        expect,
     )
 }

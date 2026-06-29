@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_point_marker_after_large_insert_scroll() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAERR (wrong-type-argument listp t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 100 ?A))
@@ -37,9 +40,7 @@ fn divergence_point_marker_after_large_insert_scroll() {
             (get-text-property 50 'half) (null (get-text-property 50 'half))
             (get-text-property 51 'half) (eq (get-text-property 51 'half) 'second)
             (overlay-get ov 'section) (eq (overlay-get ov 'section) 'whole))))) "#,
-        expect_test::expect![[
-            r#""AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAERR (wrong-type-argument listp t)""#
-        ]],
+        expect,
     );
 }
 
@@ -47,6 +48,9 @@ fn divergence_point_marker_after_large_insert_scroll() {
 fn divergence_overlay_recenter_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXERR (void-variable wp)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 500 ?X))
@@ -72,9 +76,7 @@ fn divergence_overlay_recenter_tracking() {
               ov-e (= ov-e 200)
               (overlay-get ov 'visible) (eq (overlay-get ov 'visible) 'yes)
               (marker-position m) (= (marker-position m) 101)))))) "#,
-        expect_test::expect![[
-            r#""XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXERR (void-variable wp)""#
-        ]],
+        expect,
     );
 }
 
@@ -82,6 +84,9 @@ fn divergence_overlay_recenter_tracking() {
 fn divergence_window_start_end_with_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZOK (t t t t t 5 t 10 t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 1000 ?Z))
@@ -102,9 +107,7 @@ fn divergence_window_start_end_with_overlays() {
           (= (buffer-size) 1000)
           (get-text-property 500 'chunk) (= (get-text-property 500 'chunk) 5)
           (get-text-property 999 'chunk) (= (get-text-property 999 'chunk) 10)))) "#,
-        expect_test::expect![[
-            r#""ZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZZOK (t t t t t 5 t 10 t)""#
-        ]],
+        expect,
     );
 }
 
@@ -112,6 +115,8 @@ fn divergence_window_start_end_with_overlays() {
 fn divergence_narrow_to_visible_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""QQWWWWWW-EEE-FFF-GGG-HHH-IIERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAA-BBB-CCC-DDD-EEE-FFF-GGG-HHH-III-JJJ-KKK-LLL")
@@ -162,7 +167,7 @@ fn divergence_narrow_to_visible_with_undo() {
               (get-text-property 37 'seg) (eq (get-text-property 37 'seg) 'j)
               (get-text-property 41 'seg) (eq (get-text-property 41 'seg) 'k)
               (get-text-property 45 'seg) (eq (get-text-property 45 'seg) 'l)))))) "#,
-        expect_test::expect![[r#""QQWWWWWW-EEE-FFF-GGG-HHH-IIERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -170,6 +175,7 @@ fn divergence_narrow_to_visible_with_undo() {
 fn divergence_marker_insertion_type_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCXXXXDEFGHERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGH")
@@ -197,7 +203,7 @@ fn divergence_marker_insertion_type_with_undo() {
             (get-text-property 1 'part) (eq (get-text-property 1 'part) 'left)
             (get-text-property 5 'part) (eq (get-text-property 5 'part) 'right)
             (overlay-get ov 'point) (eq (overlay-get ov 'point) 'boundary))))) "#,
-        expect_test::expect![[r#""ABCXXXXDEFGHERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -205,6 +211,9 @@ fn divergence_marker_insertion_type_with_undo() {
 fn divergence_overlay_chain_move_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""111-PPPPREPLACED-333-REPLACED-555-REPLACED-777ERR (wrong-type-argument listp t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "111-222-333-444-555-666-777")
@@ -234,9 +243,7 @@ fn divergence_overlay_chain_move_with_undo() {
               (dotimes (i 7 t)
                 (and (= (overlay-get (nth i ovs) 'idx) (+ i 1))
                      (= (get-text-property (+ 1 (* i 4)) 'val) (+ i 1))))))))) "#,
-        expect_test::expect![[
-            r#""111-PPPPREPLACED-333-REPLACED-555-REPLACED-777ERR (wrong-type-argument listp t)""#
-        ]],
+        expect,
     );
 }
 
@@ -244,6 +251,7 @@ fn divergence_overlay_chain_move_with_undo() {
 fn divergence_textprop_boundary_after_kill_yank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""AAAXBBBXXXBCCCCERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAXXXXBBBBCCCC")
@@ -274,7 +282,7 @@ fn divergence_textprop_boundary_after_kill_yank() {
               (get-text-property 12 'zone) (eq (get-text-property 12 'zone) 'c)
               (marker-position m) (= (marker-position m) 4)
               (overlay-get ov 'scope) (eq (overlay-get ov 'scope) 'all)))))) "#,
-        expect_test::expect![[r#""AAAXBBBXXXBCCCCERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -282,6 +290,9 @@ fn divergence_textprop_boundary_after_kill_yank() {
 fn divergence_100_overlay_sweep_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""ABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEERR (wrong-type-argument listp t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 500 ?T))
@@ -314,9 +325,7 @@ fn divergence_100_overlay_sweep_undo() {
               (= (buffer-size) 500)
               (= (length ovs) 100)
               (= (length mids) 100)))))) "#,
-        expect_test::expect![[
-            r#""ABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEERR (wrong-type-argument listp t)""#
-        ]],
+        expect,
     );
 }
 
@@ -324,6 +333,9 @@ fn divergence_100_overlay_sweep_undo() {
 fn divergence_overlay_face_propagation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""NORMAL-XXHEAVY-ITALIC-UNDERLINE-NORMALERR (wrong-type-argument listp t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "NORMAL-BOLD-ITALIC-UNDERLINE-NORMAL")
@@ -364,9 +376,7 @@ fn divergence_overlay_face_propagation() {
             (get-text-property 13 'style) (eq (get-text-property 13 'style) 'italic)
             (get-text-property 20 'style) (eq (get-text-property 20 'style) 'underline)
             (get-text-property 30 'style) (eq (get-text-property 30 'style) 'plain))))) "#,
-        expect_test::expect![[
-            r#""NORMAL-XXHEAVY-ITALIC-UNDERLINE-NORMALERR (wrong-type-argument listp t)""#
-        ]],
+        expect,
     );
 }
 
@@ -374,6 +384,7 @@ fn divergence_overlay_face_propagation() {
 fn divergence_region_active_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""XXXX-C-DDDD-EEEEERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
@@ -405,6 +416,6 @@ fn divergence_region_active_with_undo() {
             (get-text-property 11 'zone) (eq (get-text-property 11 'zone) 'c)
             (get-text-property 16 'zone) (eq (get-text-property 16 'zone) 'd)
             (get-text-property 21 'zone) (eq (get-text-property 21 'zone) 'e))))) "#,
-        expect_test::expect![[r#""XXXX-C-DDDD-EEEEERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }

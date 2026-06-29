@@ -60,12 +60,10 @@ fn oracle_prop_compression_rle() {
                     test-strings))
         (fmakunbound 'neovm--test-rle-encode)
         (fmakunbound 'neovm--test-rle-decode)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"aaabbbccc\" ((3 . 97) (3 . 98) (3 . 99)) \"aaabbbccc\" t 3) (\"aabccddddee\" ((2 . 97) (1 . 98) (2 . 99) (4 . 100) (2 . 101)) \"aabccddddee\" t 5) (\"abcdef\" ((1 . 97) (1 . 98) (1 . 99) (1 . 100) (1 . 101) (1 . 102)) \"abcdef\" t 6) (\"zzzzzzzzzzzzzzz\" ((15 . 122)) \"zzzzzzzzzzzzzzz\" t 1) (\"\" nil \"\" t 0) (\"a\" ((1 . 97)) \"a\" t 1) (\"aabbccddeeaabbcc\" ((2 . 97) (2 . 98) (2 . 99) (2 . 100) (2 . 101) (2 . 97) (2 . 98) (2 . 99)) \"aabbccddeeaabbcc\" t 8))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"aaabbbccc\" ((3 . 97) (3 . 98) (3 . 99)) \"aaabbbccc\" t 3) (\"aabccddddee\" ((2 . 97) (1 . 98) (2 . 99) (4 . 100) (2 . 101)) \"aabccddddee\" t 5) (\"abcdef\" ((1 . 97) (1 . 98) (1 . 99) (1 . 100) (1 . 101) (1 . 102)) \"abcdef\" t 6) (\"zzzzzzzzzzzzzzz\" ((15 . 122)) \"zzzzzzzzzzzzzzz\" t 1) (\"\" nil \"\" t 0) (\"a\" ((1 . 97)) \"a\" t 1) (\"aabbccddeeaabbcc\" ((2 . 97) (2 . 98) (2 . 99) (2 . 100) (2 . 101) (2 . 97) (2 . 98) (2 . 99)) \"aabbccddeeaabbcc\" t 8))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -180,12 +178,10 @@ fn oracle_prop_compression_huffman() {
         (fmakunbound 'neovm--test-huffman-build)
         (fmakunbound 'neovm--test-huffman-codes)
         (fmakunbound 'neovm--test-huff-walk)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((100 . 1) (99 . 1) (114 . 2) (98 . 2) (97 . 5)) ((\"a\" . \"0\") (\"b\" . \"10\") (\"c\" . \"1101\") (\"d\" . \"1100\") (\"r\" . \"111\")) \"01011101101011000101110\" 23 88 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((100 . 1) (99 . 1) (114 . 2) (98 . 2) (97 . 5)) ((\"a\" . \"0\") (\"b\" . \"10\") (\"c\" . \"1101\") (\"d\" . \"1100\") (\"r\" . \"111\")) \"01011101101011000101110\" 23 88 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -282,12 +278,10 @@ fn oracle_prop_compression_base64_custom() {
                     inputs))
         (fmakunbound 'neovm--test-b64-encode)
         (fmakunbound 'neovm--test-b64-decode)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"Hello\" \"SGVsbG8=\" \"Hello\" t) (\"Hi\" \"SGk=\" \"Hi\" t) (\"A\" \"QQ==\" \"A\" t) (\"foobar\" \"Zm9vYmFy\" \"foobar\" t) (\"Elisp!\" \"RWxpc3Ah\" \"Elisp!\" t) (\"test123\" \"dGVzdDEyMw==\" \"test123\" t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"Hello\" \"SGVsbG8=\" \"Hello\" t) (\"Hi\" \"SGk=\" \"Hi\" t) (\"A\" \"QQ==\" \"A\" t) (\"foobar\" \"Zm9vYmFy\" \"foobar\" t) (\"Elisp!\" \"RWxpc3Ah\" \"Elisp!\" t) (\"test123\" \"dGVzdDEyMw==\" \"test123\" t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -351,12 +345,10 @@ fn oracle_prop_compression_delta_encoding() {
                     sequences))
         (fmakunbound 'neovm--test-delta-encode)
         (fmakunbound 'neovm--test-delta-decode)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 3 6 10 15 21 28 36 45 55) (1 2 3 4 5 6 7 8 9 10) (1 3 6 10 15 21 28 36 45 55) t t) ((100 200 300 400 500 600) (100 100 100 100 100 100) (100 200 300 400 500 600) t t) ((1000 1001 1003 1004 1004 1005) (1000 1 2 1 0 1) (1000 1001 1003 1004 1004 1005) t t) ((1 100 10000 1000000) (1 99 9900 990000) (1 100 10000 1000000) t t) ((42) (42) (42) t t) ((10 5 8 3 7 1) (10 -5 3 -5 4 -6) (10 5 8 3 7 1) t nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 3 6 10 15 21 28 36 45 55) (1 2 3 4 5 6 7 8 9 10) (1 3 6 10 15 21 28 36 45 55) t t) ((100 200 300 400 500 600) (100 100 100 100 100 100) (100 200 300 400 500 600) t t) ((1000 1001 1003 1004 1004 1005) (1000 1 2 1 0 1) (1000 1001 1003 1004 1004 1005) t t) ((1 100 10000 1000000) (1 99 9900 990000) (1 100 10000 1000000) t t) ((42) (42) (42) t t) ((10 5 8 3 7 1) (10 -5 3 -5 4 -6) (10 5 8 3 7 1) t nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -436,12 +428,10 @@ fn oracle_prop_compression_lz77_like() {
                     inputs))
         (fmakunbound 'neovm--test-lz77-encode)
         (fmakunbound 'neovm--test-lz77-decode)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"aabaabaab\" 5 t \"aabaabaab\") (\"abcabcabc\" 5 t \"abcabcabc\") (\"aaaaaaaaaa\" 5 t \"aaaaaaaaaa\") (\"abcdefgh\" 8 t \"abcdefgh\") (\"the cat sat on the mat\" 20 t \"the cat sat on the mat\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"aabaabaab\" 5 t \"aabaabaab\") (\"abcabcabc\" 5 t \"abcabcabc\") (\"aaaaaaaaaa\" 5 t \"aaaaaaaaaa\") (\"abcdefgh\" 8 t \"abcdefgh\") (\"the cat sat on the mat\" 20 t \"the cat sat on the mat\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -521,10 +511,8 @@ fn oracle_prop_compression_bwt() {
                     inputs))
         (fmakunbound 'neovm--test-bwt-forward)
         (fmakunbound 'neovm--test-bwt-inverse)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"banana\" \"annb$aa\" 4 \"$banan\" nil) (\"abcabc\" \"cc$aabb\" 2 \"$abcab\" nil) (\"mississippi\" \"ipssm$pissii\" 5 \"$mississipp\" nil) (\"hello\" \"oh$ell\" 2 \"$hell\" nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"banana\" \"annb$aa\" 4 \"$banan\" nil) (\"abcabc\" \"cc$aabb\" 2 \"$abcab\" nil) (\"mississippi\" \"ipssm$pissii\" 5 \"$mississipp\" nil) (\"hello\" \"oh$ell\" 2 \"$hell\" nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

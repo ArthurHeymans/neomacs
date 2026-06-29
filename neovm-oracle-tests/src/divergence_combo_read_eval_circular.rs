@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_circular_list_print_read_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t (a b c a b . #2))""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((print-circle t)
         (print-gensym t)
@@ -16,7 +17,7 @@ fn divergence_circular_list_print_read_roundtrip() {
         (r (read-from-string \"#1=(a b c . #1#)\")))
     (list (string= printed \"#1=(a b c . #1#)\")
           (car (read-from-string printed))))) ",
-        expect_test::expect![[r#""OK (t (a b c a b . #2))""#]],
+        expect,
     );
 }
 
@@ -24,6 +25,7 @@ fn divergence_circular_list_print_read_roundtrip() {
 fn divergence_shared_substructure_print_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (1 12 ((1 2 3) (1 2 3) ((1 2 3))))""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((print-circle t)
         (shared (list 1 2 3)))
@@ -32,7 +34,7 @@ fn divergence_shared_substructure_print_read() {
       (list (string-match \"#1=\" printed)
             (string-match \"#1#\" printed)
             (car (read-from-string printed)))))) ",
-        expect_test::expect![[r#""OK (1 12 ((1 2 3) (1 2 3) ((1 2 3))))""#]],
+        expect,
     );
 }
 
@@ -40,6 +42,7 @@ fn divergence_shared_substructure_print_read() {
 fn divergence_eval_defun_closure_print_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable captured)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((lexical-binding t))
   (eval '(defun test-clo-fn-xxx (x)
@@ -50,7 +53,7 @@ fn divergence_eval_defun_closure_print_read() {
     (list (funcall fn 5)
           (stringp printed)
           (string-match \"closure\" printed)))) ",
-        expect_test::expect![[r#""ERR (void-variable captured)""#]],
+        expect,
     );
 }
 
@@ -58,6 +61,7 @@ fn divergence_eval_defun_closure_print_read() {
 fn divergence_record_print_read_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t cl-struct-tag cl-struct-tag 1 1 (3) (3) 5 5)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let* ((r (record 'cl-struct-tag 1 \"two\" (list 3) [4 5])))
   (let* ((printed (prin1-to-string r))
@@ -67,7 +71,7 @@ fn divergence_record_print_read_roundtrip() {
           (aref r 1) (aref r2 1)
           (aref r 3) (aref r2 3)
           (length r) (length r2)))) ",
-        expect_test::expect![[r#""OK (t cl-struct-tag cl-struct-tag 1 1 (3) (3) 5 5)""#]],
+        expect,
     );
 }
 
@@ -75,6 +79,7 @@ fn divergence_record_print_read_roundtrip() {
 fn divergence_print_length_level_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (\"((... ...) (... ...))\" \"(... ...)\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((data '(((a b) (c d)) ((e f) (g h))))
         (print-length 3)
@@ -82,7 +87,7 @@ fn divergence_print_length_level_nested() {
   (list (prin1-to-string data)
         (let ((print-length 1) (print-level 1))
           (prin1-to-string data)))) ",
-        expect_test::expect![[r#""OK (\"((... ...) (... ...))\" \"(... ...)\")""#]],
+        expect,
     );
 }
 
@@ -90,6 +95,8 @@ fn divergence_print_length_level_nested() {
 fn divergence_string_with_special_chars_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""OK (t 5 \"hello\nworld\" \"tab\there\" \"quote\\\"inside\")""#]];
     crate::common::assert_oracle_parity_expect(
         "(let* ((strings (list \"hello\\nworld\"
                             \"tab\\there\"
@@ -103,7 +110,7 @@ fn divergence_string_with_special_chars_roundtrip() {
         (nth 0 read-back)
         (nth 1 read-back)
         (nth 2 read-back))) ",
-        expect_test::expect![[r#""OK (t 5 \"hello\nworld\" \"tab\there\" \"quote\\\"inside\")""#]],
+        expect,
     );
 }
 
@@ -111,6 +118,7 @@ fn divergence_string_with_special_chars_roundtrip() {
 fn divergence_hash_table_print_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (32 47 t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((ht (make-hash-table :test 'equal)))
   (puthash \"key1\" '(1 2 3) ht)
@@ -119,7 +127,7 @@ fn divergence_hash_table_print_read() {
     (list (string-match \"key1\" printed)
           (string-match \"key2\" printed)
           (hash-table-p (car (read-from-string printed)))))) ",
-        expect_test::expect![[r#""OK (32 47 t)""#]],
+        expect,
     );
 }
 
@@ -127,6 +135,7 @@ fn divergence_hash_table_print_read() {
 fn divergence_eval_nested_quote_backquote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable \\`)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((x 42)
         (items '(a b c)))
@@ -135,7 +144,7 @@ fn divergence_eval_nested_quote_backquote() {
         (eval (list 'quote items))
         (eval (list 'list x (1+ x)))
         (macroexpand-all '\\`(list ,@items)))) ",
-        expect_test::expect![[r#""ERR (void-variable \\`)""#]],
+        expect,
     );
 }
 
@@ -143,6 +152,7 @@ fn divergence_eval_nested_quote_backquote() {
 fn divergence_print_read_multibyte_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let* ((syms (list 'hello 'world 'test-sym-xxx))
         (printed (prin1-to-string syms))
@@ -150,7 +160,7 @@ fn divergence_print_read_multibyte_symbols() {
   (list (equal syms read-back)
         (= (length printed) (1- (length (substring printed 1))))
         (string= (symbol-name (nth 0 syms)) \"hello\"))) ",
-        expect_test::expect![[r#""OK (t nil t)""#]],
+        expect,
     );
 }
 
@@ -158,14 +168,15 @@ fn divergence_print_read_multibyte_symbols() {
 fn divergence_format_spec_with_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (\"Name: Alice, Age: 30\" \"Score: 95.5%\" \"((name . \\\"Alice\\\") (age . 30) (score . 95.5))\" \"(:a 1 :b 2 :c 3)\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(let ((data '((name . \"Alice\") (age . 30) (score . 95.5))))
   (list (format \"Name: %s, Age: %d\" (cdr (assoc 'name data)) (cdr (assoc 'age data)))
         (format \"Score: %.1f%%\" (cdr (assoc 'score data)))
         (format \"%S\" data)
         (format \"%s\" (plist-put '(:a 1 :b 2) :c 3)))) ",
-        expect_test::expect![[
-            r#""OK (\"Name: Alice, Age: 30\" \"Score: 95.5%\" \"((name . \\\"Alice\\\") (age . 30) (score . 95.5))\" \"(:a 1 :b 2 :c 3)\")""#
-        ]],
+        expect,
     );
 }

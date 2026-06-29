@@ -5,6 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_fold_core_region_copy_narrow_edit_recovery_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable visibility)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -146,7 +147,7 @@ fn org_fold_core_region_copy_narrow_edit_recovery_combo() {
                  (buffer-substring-no-properties
                   (point-min) (point-max))
                  "\n" t))))))"##,
-        expect_test::expect![[r#""ERR (void-variable visibility)""#]],
+        expect,
     );
 }
 
@@ -154,6 +155,9 @@ fn org_fold_core_region_copy_narrow_edit_recovery_combo() {
 fn org_fold_context_narrow_subtree_drawer_block_recovery_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (((overview ((\"Root\" 2 nil) (\"Root paragraph\" 2 nil) (\"root quote\" 2 nil) (\"Owner\" 2 nil) (\"Alpha\" 2 nil) (\"Alpha body\" 2 nil) (\"Alpha child\" 2 nil) (\"Alpha child body\" 2 nil) (\"Alpha fourth\" 2 nil) (\"Alpha fourth body\" 2 nil) (\"Alpha fifth\" 2 nil) (\"Alpha fifth body\" 2 nil) (\"Alpha sixth\" 2 nil) (\"Alpha sixth body\" 2 nil) (\"Beta\" 2 nil) (\"Beta body\" 2 nil) (\"Beta child\" 2 nil) (\"Beta child body\" 2 nil) (\"Beta fourth\" 2 nil) (\"Beta fourth body\" 2 nil) (\"Sibling\" 2 nil) (\"Sibling body\" 2 nil))) (isearch-sixth ((\"Root\" 2 nil) (\"Root paragraph\" 2 nil) (\"root quote\" 2 nil) (\"Owner\" 2 nil) (\"Alpha\" 2 nil) (\"Alpha body\" 2 nil) (\"Alpha child\" 2 nil) (\"Alpha child body\" 2 nil) (\"Alpha fourth\" 2 nil) (\"Alpha fourth body\" 2 nil) (\"Alpha fifth\" 2 nil) (\"Alpha fifth body\" 2 nil) (\"Alpha sixth\" nil nil) (\"Alpha sixth body\" nil nil) (\"Beta\" 2 nil) (\"Beta body\" 2 nil) (\"Beta child\" 2 nil) (\"Beta child body\" 2 nil) (\"Beta fourth\" 2 nil) (\"Beta fourth body\" 2 nil) (\"Sibling\" 2 nil) (\"Sibling body\" 2 nil))) (default-beta-fourth ((\"Root\" 2 nil) (\"Root paragraph\" 2 nil) (\"root quote\" 2 nil) (\"Owner\" 2 nil) (\"Alpha\" 2 nil) (\"Alpha body\" 2 nil) (\"Alpha child\" 2 nil) (\"Alpha child body\" 2 nil) (\"Alpha fourth\" 2 nil) (\"Alpha fourth body\" 2 nil) (\"Alpha fifth\" 2 nil) (\"Alpha fifth body\" 2 nil) (\"Alpha sixth\" 2 nil) (\"Alpha sixth body\" 2 nil) (\"Beta\" 2 nil) (\"Beta body\" 2 nil) (\"Beta child\" 2 nil) (\"Beta child body\" 2 nil) (\"Beta fourth\" nil nil) (\"Beta fourth body\" nil nil) (\"Sibling\" 2 nil) (\"Sibling body\" 2 nil))) (agenda-alpha-child ((\"Root\" 2 nil) (\"Root paragraph\" 2 nil) (\"root quote\" 2 nil) (\"Owner\" 2 nil) (\"Alpha\" 2 nil) (\"Alpha body\" 2 nil) (\"Alpha child\" nil nil) (\"Alpha child body\" nil nil) (\"Alpha fourth\" 2 nil) (\"Alpha fourth body\" 2 nil) (\"Alpha fifth\" 2 nil) (\"Alpha fifth body\" 2 nil) (\"Alpha sixth\" 2 nil) (\"Alpha sixth body\" 2 nil) (\"Beta\" 2 nil) (\"Beta body\" 2 nil) (\"Beta child\" 2 nil) (\"Beta child body\" 2 nil) (\"Beta fourth\" 2 nil) (\"Beta fourth body\" 2 nil) (\"Sibling\" 2 nil) (\"Sibling body\" 2 nil))) (mark-goto-quote ((\"Root\" nil nil) (\"Root paragraph\" nil nil) (\"root quote\" nil nil) (\"Owner\" nil nil) (\"Alpha\" 2 nil) (\"Alpha body\" 2 nil) (\"Alpha child\" 2 nil) (\"Alpha child body\" 2 nil) (\"Alpha fourth\" 2 nil) (\"Alpha fourth body\" 2 nil) (\"Alpha fifth\" 2 nil) (\"Alpha fifth body\" 2 nil) (\"Alpha sixth\" 2 nil) (\"Alpha sixth body\" 2 nil) (\"Beta\" 2 nil) (\"Beta body\" 2 nil) (\"Beta child\" 2 nil) (\"Beta child body\" 2 nil) (\"Beta fourth\" 2 nil) (\"Beta fourth body\" 2 nil) (\"Sibling\" 2 nil) (\"Sibling body\" 2 nil))) (drawers-blocks-hidden ((\"Root\" nil nil) (\"Root paragraph\" nil nil) (\"root quote\" 2 nil) (\"Owner\" 2 nil) (\"Alpha\" nil nil) (\"Alpha body\" nil nil) (\"Alpha child\" nil nil) (\"Alpha child body\" nil nil) (\"Alpha fourth\" nil nil) (\"Alpha fourth body\" nil nil) (\"Alpha fifth\" nil nil) (\"Alpha fifth body\" nil nil) (\"Alpha sixth\" nil nil) (\"Alpha sixth body\" nil nil) (\"Beta\" nil nil) (\"Beta body\" nil nil) (\"Beta child\" nil nil) (\"Beta child body\" nil nil) (\"Beta fourth\" nil nil) (\"Beta fourth body\" nil nil) (\"Sibling\" nil nil) (\"Sibling body\" nil nil))) (narrowed-alpha-hidden ((\"Root\" nil nil) (\"Root paragraph\" nil nil) (\"root quote\" 2 nil) (\"Owner\" 2 nil) (\"Alpha\" 2 nil) (\"Alpha body\" 2 nil) (\"Alpha child\" 2 nil) (\"Alpha child body\" 2 nil) (\"Alpha fourth\" 2 nil) (\"Alpha fourth body\" 2 nil) (\"Alpha fifth\" 2 nil) (\"Alpha fifth body\" 2 nil) (\"Alpha sixth\" 2 nil) (\"Alpha sixth body\" 2 nil) (\"Beta\" nil nil) (\"Beta body\" nil nil) (\"Beta child\" nil nil) (\"Beta child body\" nil nil) (\"Beta fourth\" nil nil) (\"Beta fourth body\" nil nil) (\"Sibling\" not-found nil) (\"Sibling body\" not-found nil))) (narrowed-alpha-shown ((\"Root\" nil nil) (\"Root paragraph\" nil nil) (\"root quote\" 2 nil) (\"Owner\" 2 nil) (\"Alpha\" nil nil) (\"Alpha body\" nil nil) (\"Alpha child\" nil nil) (\"Alpha child body\" nil nil) (\"Alpha fourth\" nil nil) (\"Alpha fourth body\" nil nil) (\"Alpha fifth\" nil nil) (\"Alpha fifth body\" nil nil) (\"Alpha sixth\" nil nil) (\"Alpha sixth body\" nil nil) (\"Beta\" nil nil) (\"Beta body\" nil nil) (\"Beta child\" nil nil) (\"Beta child body\" nil nil) (\"Beta fourth\" nil nil) (\"Beta fourth body\" nil nil) (\"Sibling\" not-found nil) (\"Sibling body\" not-found nil))) (narrowed-sublevels-2 ((\"Root\" 2 nil) (\"Root paragraph\" 2 nil) (\"root quote\" 2 nil) (\"Owner\" 2 nil) (\"Alpha\" 2 nil) (\"Alpha body\" 2 nil) (\"Alpha child\" 2 nil) (\"Alpha child body\" 2 nil) (\"Alpha fourth\" 2 nil) (\"Alpha fourth body\" 2 nil) (\"Alpha fifth\" 2 nil) (\"Alpha fifth body\" 2 nil) (\"Alpha sixth\" 2 nil) (\"Alpha sixth body\" 2 nil) (\"Beta\" 2 nil) (\"Beta body\" 2 nil) (\"Beta child\" 2 nil) (\"Beta child body\" 2 nil) (\"Beta fourth\" 2 nil) (\"Beta fourth body\" 2 nil) (\"Sibling\" not-found nil) (\"Sibling body\" not-found nil))) (after-widen ((\"Root\" 2 nil) (\"Root paragraph\" 2 nil) (\"root quote\" 2 nil) (\"Owner\" 2 nil) (\"Alpha\" 2 nil) (\"Alpha body\" 2 nil) (\"Alpha child\" 2 nil) (\"Alpha child body\" 2 nil) (\"Alpha fourth\" 2 nil) (\"Alpha fourth body\" 2 nil) (\"Alpha fifth\" 2 nil) (\"Alpha fifth body\" 2 nil) (\"Alpha sixth\" 2 nil) (\"Alpha sixth body\" 2 nil) (\"Beta\" 2 nil) (\"Beta body\" 2 nil) (\"Beta child\" 2 nil) (\"Beta child body\" 2 nil) (\"Beta fourth\" 2 nil) (\"Beta fourth body\" 2 nil) (\"Sibling\" nil nil) (\"Sibling body\" nil nil)))) \"* Root\n:PROPERTIES:\n:Owner: Ada\n:END:\nRoot paragraph.\n#+begin_quote\nroot quote\n#+end_quote\n** Alpha\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 09:30] =>  0:30\n:END:\nAlpha body.\n*** Alpha child\nAlpha child body.\n**** Alpha fourth\nAlpha fourth body.\n***** Alpha fifth\nAlpha fifth body.\n****** Alpha sixth\nAlpha sixth body.\n** Beta\nBeta body.\n*** Beta child\nBeta child body.\n**** Beta fourth\nBeta fourth body.\n* Sibling\nSibling body.\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -257,9 +261,7 @@ fn org_fold_context_narrow_subtree_drawer_block_recovery_combo() {
            (list (nreverse states)
                  (buffer-substring-no-properties
                   (point-min) (point-max))))))))"##,
-        expect_test::expect![[
-            r#""OK (((overview ((\"Root\" 2 nil) (\"Root paragraph\" 2 nil) (\"root quote\" 2 nil) (\"Owner\" 2 nil) (\"Alpha\" 2 nil) (\"Alpha body\" 2 nil) (\"Alpha child\" 2 nil) (\"Alpha child body\" 2 nil) (\"Alpha fourth\" 2 nil) (\"Alpha fourth body\" 2 nil) (\"Alpha fifth\" 2 nil) (\"Alpha fifth body\" 2 nil) (\"Alpha sixth\" 2 nil) (\"Alpha sixth body\" 2 nil) (\"Beta\" 2 nil) (\"Beta body\" 2 nil) (\"Beta child\" 2 nil) (\"Beta child body\" 2 nil) (\"Beta fourth\" 2 nil) (\"Beta fourth body\" 2 nil) (\"Sibling\" 2 nil) (\"Sibling body\" 2 nil))) (isearch-sixth ((\"Root\" 2 nil) (\"Root paragraph\" 2 nil) (\"root quote\" 2 nil) (\"Owner\" 2 nil) (\"Alpha\" 2 nil) (\"Alpha body\" 2 nil) (\"Alpha child\" 2 nil) (\"Alpha child body\" 2 nil) (\"Alpha fourth\" 2 nil) (\"Alpha fourth body\" 2 nil) (\"Alpha fifth\" 2 nil) (\"Alpha fifth body\" 2 nil) (\"Alpha sixth\" nil nil) (\"Alpha sixth body\" nil nil) (\"Beta\" 2 nil) (\"Beta body\" 2 nil) (\"Beta child\" 2 nil) (\"Beta child body\" 2 nil) (\"Beta fourth\" 2 nil) (\"Beta fourth body\" 2 nil) (\"Sibling\" 2 nil) (\"Sibling body\" 2 nil))) (default-beta-fourth ((\"Root\" 2 nil) (\"Root paragraph\" 2 nil) (\"root quote\" 2 nil) (\"Owner\" 2 nil) (\"Alpha\" 2 nil) (\"Alpha body\" 2 nil) (\"Alpha child\" 2 nil) (\"Alpha child body\" 2 nil) (\"Alpha fourth\" 2 nil) (\"Alpha fourth body\" 2 nil) (\"Alpha fifth\" 2 nil) (\"Alpha fifth body\" 2 nil) (\"Alpha sixth\" 2 nil) (\"Alpha sixth body\" 2 nil) (\"Beta\" 2 nil) (\"Beta body\" 2 nil) (\"Beta child\" 2 nil) (\"Beta child body\" 2 nil) (\"Beta fourth\" nil nil) (\"Beta fourth body\" nil nil) (\"Sibling\" 2 nil) (\"Sibling body\" 2 nil))) (agenda-alpha-child ((\"Root\" 2 nil) (\"Root paragraph\" 2 nil) (\"root quote\" 2 nil) (\"Owner\" 2 nil) (\"Alpha\" 2 nil) (\"Alpha body\" 2 nil) (\"Alpha child\" nil nil) (\"Alpha child body\" nil nil) (\"Alpha fourth\" 2 nil) (\"Alpha fourth body\" 2 nil) (\"Alpha fifth\" 2 nil) (\"Alpha fifth body\" 2 nil) (\"Alpha sixth\" 2 nil) (\"Alpha sixth body\" 2 nil) (\"Beta\" 2 nil) (\"Beta body\" 2 nil) (\"Beta child\" 2 nil) (\"Beta child body\" 2 nil) (\"Beta fourth\" 2 nil) (\"Beta fourth body\" 2 nil) (\"Sibling\" 2 nil) (\"Sibling body\" 2 nil))) (mark-goto-quote ((\"Root\" nil nil) (\"Root paragraph\" nil nil) (\"root quote\" nil nil) (\"Owner\" nil nil) (\"Alpha\" 2 nil) (\"Alpha body\" 2 nil) (\"Alpha child\" 2 nil) (\"Alpha child body\" 2 nil) (\"Alpha fourth\" 2 nil) (\"Alpha fourth body\" 2 nil) (\"Alpha fifth\" 2 nil) (\"Alpha fifth body\" 2 nil) (\"Alpha sixth\" 2 nil) (\"Alpha sixth body\" 2 nil) (\"Beta\" 2 nil) (\"Beta body\" 2 nil) (\"Beta child\" 2 nil) (\"Beta child body\" 2 nil) (\"Beta fourth\" 2 nil) (\"Beta fourth body\" 2 nil) (\"Sibling\" 2 nil) (\"Sibling body\" 2 nil))) (drawers-blocks-hidden ((\"Root\" nil nil) (\"Root paragraph\" nil nil) (\"root quote\" 2 nil) (\"Owner\" 2 nil) (\"Alpha\" nil nil) (\"Alpha body\" nil nil) (\"Alpha child\" nil nil) (\"Alpha child body\" nil nil) (\"Alpha fourth\" nil nil) (\"Alpha fourth body\" nil nil) (\"Alpha fifth\" nil nil) (\"Alpha fifth body\" nil nil) (\"Alpha sixth\" nil nil) (\"Alpha sixth body\" nil nil) (\"Beta\" nil nil) (\"Beta body\" nil nil) (\"Beta child\" nil nil) (\"Beta child body\" nil nil) (\"Beta fourth\" nil nil) (\"Beta fourth body\" nil nil) (\"Sibling\" nil nil) (\"Sibling body\" nil nil))) (narrowed-alpha-hidden ((\"Root\" nil nil) (\"Root paragraph\" nil nil) (\"root quote\" 2 nil) (\"Owner\" 2 nil) (\"Alpha\" 2 nil) (\"Alpha body\" 2 nil) (\"Alpha child\" 2 nil) (\"Alpha child body\" 2 nil) (\"Alpha fourth\" 2 nil) (\"Alpha fourth body\" 2 nil) (\"Alpha fifth\" 2 nil) (\"Alpha fifth body\" 2 nil) (\"Alpha sixth\" 2 nil) (\"Alpha sixth body\" 2 nil) (\"Beta\" nil nil) (\"Beta body\" nil nil) (\"Beta child\" nil nil) (\"Beta child body\" nil nil) (\"Beta fourth\" nil nil) (\"Beta fourth body\" nil nil) (\"Sibling\" not-found nil) (\"Sibling body\" not-found nil))) (narrowed-alpha-shown ((\"Root\" nil nil) (\"Root paragraph\" nil nil) (\"root quote\" 2 nil) (\"Owner\" 2 nil) (\"Alpha\" nil nil) (\"Alpha body\" nil nil) (\"Alpha child\" nil nil) (\"Alpha child body\" nil nil) (\"Alpha fourth\" nil nil) (\"Alpha fourth body\" nil nil) (\"Alpha fifth\" nil nil) (\"Alpha fifth body\" nil nil) (\"Alpha sixth\" nil nil) (\"Alpha sixth body\" nil nil) (\"Beta\" nil nil) (\"Beta body\" nil nil) (\"Beta child\" nil nil) (\"Beta child body\" nil nil) (\"Beta fourth\" nil nil) (\"Beta fourth body\" nil nil) (\"Sibling\" not-found nil) (\"Sibling body\" not-found nil))) (narrowed-sublevels-2 ((\"Root\" 2 nil) (\"Root paragraph\" 2 nil) (\"root quote\" 2 nil) (\"Owner\" 2 nil) (\"Alpha\" 2 nil) (\"Alpha body\" 2 nil) (\"Alpha child\" 2 nil) (\"Alpha child body\" 2 nil) (\"Alpha fourth\" 2 nil) (\"Alpha fourth body\" 2 nil) (\"Alpha fifth\" 2 nil) (\"Alpha fifth body\" 2 nil) (\"Alpha sixth\" 2 nil) (\"Alpha sixth body\" 2 nil) (\"Beta\" 2 nil) (\"Beta body\" 2 nil) (\"Beta child\" 2 nil) (\"Beta child body\" 2 nil) (\"Beta fourth\" 2 nil) (\"Beta fourth body\" 2 nil) (\"Sibling\" not-found nil) (\"Sibling body\" not-found nil))) (after-widen ((\"Root\" 2 nil) (\"Root paragraph\" 2 nil) (\"root quote\" 2 nil) (\"Owner\" 2 nil) (\"Alpha\" 2 nil) (\"Alpha body\" 2 nil) (\"Alpha child\" 2 nil) (\"Alpha child body\" 2 nil) (\"Alpha fourth\" 2 nil) (\"Alpha fourth body\" 2 nil) (\"Alpha fifth\" 2 nil) (\"Alpha fifth body\" 2 nil) (\"Alpha sixth\" 2 nil) (\"Alpha sixth body\" 2 nil) (\"Beta\" 2 nil) (\"Beta body\" 2 nil) (\"Beta child\" 2 nil) (\"Beta child body\" 2 nil) (\"Beta fourth\" 2 nil) (\"Beta fourth body\" 2 nil) (\"Sibling\" nil nil) (\"Sibling body\" nil nil)))) \"* Root\n:PROPERTIES:\n:Owner: Ada\n:END:\nRoot paragraph.\n#+begin_quote\nroot quote\n#+end_quote\n** Alpha\n:LOGBOOK:\nCLOCK: [2026-05-27 Wed 09:00]--[2026-05-27 Wed 09:30] =>  0:30\n:END:\nAlpha body.\n*** Alpha child\nAlpha child body.\n**** Alpha fourth\nAlpha fourth body.\n***** Alpha fifth\nAlpha fifth body.\n****** Alpha sixth\nAlpha sixth body.\n** Beta\nBeta body.\n*** Beta child\nBeta child body.\n**** Beta fourth\nBeta fourth body.\n* Sibling\nSibling body.\n\")""#
-        ]],
+        expect,
     );
 }
 
@@ -267,6 +269,9 @@ fn org_fold_context_narrow_subtree_drawer_block_recovery_combo() {
 fn org_fold_core_region_spec_visibility_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (((\"Owner\" 2 nil) (\"(+ 1 2)\" 2 nil) (\"clock line\" 2 nil) (\"Alpha body\" nil nil) (\"Beta body\" nil nil) (\"Gamma body\" nil nil)) ((\"Beta body\" 2 nil) (\"Gamma body\" 2 nil) (\"Delta body\" nil nil)) ((\"Beta body\" nil nil) (\"Gamma body\" nil nil) (\"Delta body\" nil nil)) ((\"Owner\" nil nil) (\"(+ 1 2)\" nil nil) (\"clock line\" nil nil)) \"* Alpha\n:PROPERTIES:\n:Owner: Ada\n:END:\nAlpha body.\n#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n** Beta\n:LOGBOOK:\nclock line\n:END:\nBeta body.\n*** Gamma\nGamma body.\n* Delta\nDelta body.\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -306,9 +311,7 @@ fn org_fold_core_region_spec_visibility_deep_state_combo() {
               (list after-db after-hide after-show after-db-show
                     (buffer-substring-no-properties
                      (point-min) (point-max))))))))))"##,
-        expect_test::expect![[
-            r#""OK (((\"Owner\" 2 nil) (\"(+ 1 2)\" 2 nil) (\"clock line\" 2 nil) (\"Alpha body\" nil nil) (\"Beta body\" nil nil) (\"Gamma body\" nil nil)) ((\"Beta body\" 2 nil) (\"Gamma body\" 2 nil) (\"Delta body\" nil nil)) ((\"Beta body\" nil nil) (\"Gamma body\" nil nil) (\"Delta body\" nil nil)) ((\"Owner\" nil nil) (\"(+ 1 2)\" nil nil) (\"clock line\" nil nil)) \"* Alpha\n:PROPERTIES:\n:Owner: Ada\n:END:\nAlpha body.\n#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n** Beta\n:LOGBOOK:\nclock line\n:END:\nBeta body.\n*** Gamma\nGamma body.\n* Delta\nDelta body.\n\")""#
-        ]],
+        expect,
     );
 }
 
@@ -316,6 +319,9 @@ fn org_fold_core_region_spec_visibility_deep_state_combo() {
 fn org_fold_reveal_context_narrow_widen_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (((\"Root\" 1 2 org-fold-outline) (\"root body\" 2 2 org-fold-outline) (\"Alpha\" 3 2 org-fold-outline) (\"Beta\" 5 2 org-fold-outline) (\"Delta\" 9 2 org-fold-outline) (\"Sibling\" 11 2 org-fold-outline)) ((\"Root\" 1 2 org-fold-outline) (\"root body\" 2 nil nil) (\"Alpha\" 3 2 org-fold-outline) (\"alpha body\" 4 nil nil) (\"Beta\" 5 2 org-fold-outline) (\"beta body\" 6 nil nil) (\"Gamma\" 7 2 org-fold-outline) (\"delta body\" 10 nil nil) (\"Sibling\" 11 2 org-fold-outline)) ((\"Root\" 1 2 org-fold-outline) (\"Alpha\" 3 2 org-fold-outline) (\"Beta\" 5 nil nil) (\"beta body\" 6 nil nil) (\"Gamma\" 7 2 org-fold-outline) (\"Sibling\" 11 2 org-fold-outline)) ((\"Alpha\" 1 2 org-fold-outline) (\"alpha body\" 2 2 org-fold-outline) (\"Beta\" 3 2 org-fold-outline) (\"gamma body\" 6 2 org-fold-outline) (\"Sibling\" not-found nil nil)) \"** Alpha\nalpha body\n*** Beta\nbeta body\n**** Gamma\ngamma body\n***** Delta\ndelta body\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -369,9 +375,7 @@ fn org_fold_reveal_context_narrow_widen_deep_state_combo() {
                          narrowed-vis
                          (buffer-substring-no-properties
                           (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[
-            r#""OK (((\"Root\" 1 2 org-fold-outline) (\"root body\" 2 2 org-fold-outline) (\"Alpha\" 3 2 org-fold-outline) (\"Beta\" 5 2 org-fold-outline) (\"Delta\" 9 2 org-fold-outline) (\"Sibling\" 11 2 org-fold-outline)) ((\"Root\" 1 2 org-fold-outline) (\"root body\" 2 nil nil) (\"Alpha\" 3 2 org-fold-outline) (\"alpha body\" 4 nil nil) (\"Beta\" 5 2 org-fold-outline) (\"beta body\" 6 nil nil) (\"Gamma\" 7 2 org-fold-outline) (\"delta body\" 10 nil nil) (\"Sibling\" 11 2 org-fold-outline)) ((\"Root\" 1 2 org-fold-outline) (\"Alpha\" 3 2 org-fold-outline) (\"Beta\" 5 nil nil) (\"beta body\" 6 nil nil) (\"Gamma\" 7 2 org-fold-outline) (\"Sibling\" 11 2 org-fold-outline)) ((\"Alpha\" 1 2 org-fold-outline) (\"alpha body\" 2 2 org-fold-outline) (\"Beta\" 3 2 org-fold-outline) (\"gamma body\" 6 2 org-fold-outline) (\"Sibling\" not-found nil nil)) \"** Alpha\nalpha body\n*** Beta\nbeta body\n**** Gamma\ngamma body\n***** Delta\ndelta body\")""#
-        ]],
+        expect,
     );
 }
 
@@ -379,6 +383,9 @@ fn org_fold_reveal_context_narrow_widen_deep_state_combo() {
 fn org_fold_drawer_block_hide_show_all_recovery_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (((\"Owner\" 2 nil) (\"clock line\" 2 nil) (\"(+ 1 2)\" 2 nil) (\"quoted text\" 2 nil) (\"Alpha body\" nil nil) (\"Beta body\" nil nil)) ((\"Owner\" nil nil) (\"clock line\" nil nil) (\"(+ 1 2)\" nil nil) (\"quoted text\" nil nil) (\"Alpha body\" nil nil) (\"Beta body\" nil nil)) ((\"Owner\" 2 nil) (\"clock line\" 2 nil) (\"(+ 1 2)\" 2 nil) (\"quoted text\" 2 nil)) ((\"Owner\" nil nil) (\"clock line\" nil nil) (\"(+ 1 2)\" nil nil) (\"quoted text\" nil nil) (\"Alpha body\" nil nil) (\"Beta body\" nil nil)) \"* Alpha\n:PROPERTIES:\n:Owner: Ada\n:Effort: 1:00\n:END:\n:LOGBOOK:\nclock line\n:END:\nAlpha body.\n#+begin_quote\nquoted text\n#+end_quote\n#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n** Beta\n:PROPERTIES:\n:Owner: Bob\n:END:\nBeta body.\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -421,9 +428,7 @@ fn org_fold_drawer_block_hide_show_all_recovery_deep_state_combo() {
                     after-show-all
                     (buffer-substring-no-properties
                      (point-min) (point-max))))))))))"##,
-        expect_test::expect![[
-            r#""OK (((\"Owner\" 2 nil) (\"clock line\" 2 nil) (\"(+ 1 2)\" 2 nil) (\"quoted text\" 2 nil) (\"Alpha body\" nil nil) (\"Beta body\" nil nil)) ((\"Owner\" nil nil) (\"clock line\" nil nil) (\"(+ 1 2)\" nil nil) (\"quoted text\" nil nil) (\"Alpha body\" nil nil) (\"Beta body\" nil nil)) ((\"Owner\" 2 nil) (\"clock line\" 2 nil) (\"(+ 1 2)\" 2 nil) (\"quoted text\" 2 nil)) ((\"Owner\" nil nil) (\"clock line\" nil nil) (\"(+ 1 2)\" nil nil) (\"quoted text\" nil nil) (\"Alpha body\" nil nil) (\"Beta body\" nil nil)) \"* Alpha\n:PROPERTIES:\n:Owner: Ada\n:Effort: 1:00\n:END:\n:LOGBOOK:\nclock line\n:END:\nAlpha body.\n#+begin_quote\nquoted text\n#+end_quote\n#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n** Beta\n:PROPERTIES:\n:Owner: Bob\n:END:\nBeta body.\n\")""#
-        ]],
+        expect,
     );
 }
 
@@ -431,6 +436,7 @@ fn org_fold_drawer_block_hide_show_all_recovery_deep_state_combo() {
 fn org_fold_subtree_edit_hidden_body_reveal_font_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 64 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -496,6 +502,6 @@ fn org_fold_subtree_edit_hidden_body_reveal_font_combo() {
               (nreverse merged)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 64 45)""#]],
+        expect,
     );
 }

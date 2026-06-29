@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx246_interprogram_cut_paste_functions_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'interprogram-cut-function)
@@ -15,13 +16,14 @@ fn div_cx246_interprogram_cut_paste_functions_query() {
       (or (null interprogram-cut-function) (functionp interprogram-cut-function))
       (or (null interprogram-paste-function) (functionp interprogram-paste-function)))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx246_gui_selection_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t nil nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -33,13 +35,14 @@ fn div_cx246_gui_selection_availability() {
           (fboundp 'gui-backend-selection-owner-p))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t nil nil t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx246_x_selection_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -50,13 +53,14 @@ fn div_cx246_x_selection_availability() {
           (fboundp 'x-disown-selection-internal))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx246_selection_coding_system_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'selection-coding-system)
@@ -64,13 +68,14 @@ fn div_cx246_selection_coding_system_query() {
       (boundp 'gui-select-enable-clipboard)
       (boundp 'x-select-enable-clipboard))
 "##,
-        expect_test::expect![[r#""OK (t t nil t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx246_clipboard_functions_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'clipboard-kill-ring-save)
@@ -78,13 +83,16 @@ fn div_cx246_clipboard_functions_availability() {
       (fboundp 'clipboard-yank)
       (fboundp 'clipboard-yank-rectangle))
 "##,
-        expect_test::expect![[r#""OK (t t t nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx246_kill_ring_and_clipboard_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"test-string-2\" \"test-string-1\") \"test-string-2\" \"test-string-1\" \"test-string-2\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((kill-ring nil))
@@ -95,15 +103,14 @@ fn div_cx246_kill_ring_and_clipboard_interaction() {
         (current-kill 1 t)
         (car kill-ring)))
 "##,
-        expect_test::expect![[
-            r#""OK ((\"test-string-2\" \"test-string-1\") \"test-string-2\" \"test-string-1\" \"test-string-2\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx246_x_select_request_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -111,13 +118,16 @@ fn div_cx246_x_select_request_type() {
           (boundp 'x-select-enable-clipboard-manager))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx246_register_clipboard_connection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"clipboard test content\") \"clipboard test content\" \"clipboard test content\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((kill-ring nil))
@@ -126,28 +136,28 @@ fn div_cx246_register_clipboard_connection() {
         (car kill-ring)
         (current-kill 0 t)))
 "##,
-        expect_test::expect![[
-            r#""OK ((\"clipboard test content\") \"clipboard test content\" \"clipboard test content\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx246_clipboard_manager_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'emacs-clipboard-manager-exit-hook)
       (boundp 'x-lost-selection-functions)
       (boundp 'x-sent-selection-functions))
 "##,
-        expect_test::expect![[r#""OK (nil t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx246_clipboard_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((kill-ring nil))
@@ -175,6 +185,6 @@ fn div_cx246_clipboard_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     )
 }

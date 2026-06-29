@@ -96,12 +96,10 @@ fn oracle_prop_codegen_three_address() {
     (makunbound 'neovm--tac-counter)
     (fmakunbound 'neovm--tac-fresh)
     (fmakunbound 'neovm--tac-gen)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t7 7 ((load t1 a) (load t2 b) (+ t3 t1 t2) (load t4 c) (assign t5 2) (- t6 t4 t5) (* t7 t3 t6)) t10 15 ((load t1 x) (assign t2 10) (cmp t3 < t1 t2) (if-false t3 L10) (load t4 x) (assign t5 1) (+ t6 t4 t5) (assign t10 t6) (goto L11) (label L10) (load t7 x) (assign t8 2) (* t9 t7 t8) (assign t10 t9) (label L11)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t7 7 ((load t1 a) (load t2 b) (+ t3 t1 t2) (load t4 c) (assign t5 2) (- t6 t4 t5) (* t7 t3 t6)) t10 15 ((load t1 x) (assign t2 10) (cmp t3 < t1 t2) (if-false t3 L10) (load t4 x) (assign t5 1) (+ t6 t4 t5) (assign t10 t6) (goto L11) (label L10) (load t7 x) (assign t8 2) (* t9 t7 t8) (assign t10 t9) (label L11)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -199,12 +197,10 @@ fn oracle_prop_codegen_register_allocation() {
     (fmakunbound 'neovm--ra-build-interference)
     (fmakunbound 'neovm--ra-color-graph)
     (fmakunbound 'neovm--ra-assign-registers)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((f c b a) (e d c) (d e c a) (c f e d b a) (b f c a) (a f d c b)) ((c . 0) (a . 1) (f . 2) (d . 2) (b . -1) (e . 1)) ((c . rax) (a . rbx) (f . rcx) (d . rcx) (b . spill) (e . rbx)) ((c . r0) (a . r1) (f . r2) (d . r2) (b . r3) (e . r1)) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((f c b a) (e d c) (d e c a) (c f e d b a) (b f c a) (a f d c b)) ((c . 0) (a . 1) (f . 2) (d . 2) (b . -1) (e . 1)) ((c . rax) (a . rbx) (f . rcx) (d . rcx) (b . spill) (e . rbx)) ((c . r0) (a . r1) (f . r2) (d . r2) (b . r3) (e . r1)) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -294,12 +290,10 @@ fn oracle_prop_codegen_instruction_selection() {
                 (types (mapcar #'car instrs)))
            (list types (length instrs)))))
     (fmakunbound 'neovm--isel-match)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((MOV x x) (SHL v734 x 3)) ((MOV a a) (ADDI v588 a 42)) ((MOV base base) (LD v220 base 16)) ((MOV a a) (MOV b b) (ADD v225 a b) (SHL v335 b 2)) ((MOV SHL ADDI) 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((MOV x x) (SHL v734 x 3)) ((MOV a a) (ADDI v588 a 42)) ((MOV base base) (LD v220 base 16)) ((MOV a a) (MOV b b) (ADD v225 a b) (SHL v335 b 2)) ((MOV SHL ADDI) 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -371,12 +365,10 @@ fn oracle_prop_codegen_stack_frame_layout() {
               (gethash "callee-saved-size" layout)))
     (fmakunbound 'neovm--frame-align)
     (fmakunbound 'neovm--frame-layout)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"return-addr\" . 0) (\"saved-rbp\" . 8) (\"saved-rbx\" . 16) (\"callee-saved-size\" . 24) (\"saved-r14\" . 24) (\"saved-r15\" . 32) (\"spill-r12\" . 40) (\"spill-r13\" . 48) (\"local-buf\" . 64) (\"local-counter\" . 320) (\"local-flag\" . 324) (\"local-ptr\" . 328) (\"total-size\" . 336)) 336 64 24)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"return-addr\" . 0) (\"saved-rbp\" . 8) (\"saved-rbx\" . 16) (\"callee-saved-size\" . 24) (\"saved-r14\" . 24) (\"saved-r15\" . 32) (\"spill-r12\" . 40) (\"spill-r13\" . 48) (\"local-buf\" . 64) (\"local-counter\" . 320) (\"local-flag\" . 324) (\"local-ptr\" . 328) (\"total-size\" . 336)) 336 64 24)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -468,12 +460,10 @@ fn oracle_prop_codegen_calling_convention() {
     (fmakunbound 'neovm--cc-classify-args)
     (fmakunbound 'neovm--cc-gen-prologue)
     (fmakunbound 'neovm--cc-gen-call)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((((0 reg rdi) (1 reg rsi) (2 reg rdx) (3 reg rcx))) (((0 reg rdi) (1 reg rsi) (2 reg rdx) (3 reg rcx) (4 reg r8) (5 reg r9)) (6 stack 0) (7 stack 8)) (((0 reg rdi) (1 reg rsi) (3 reg rdx) (4 reg rcx) (5 reg r8) (6 reg r9)) (2 stack-ptr 0 32)) 10 ((PUSH \"arg7\") (PUSH \"arg6\") (MOV rdi \"arg0\") (MOV rsi \"arg1\") (MOV rdx \"arg2\") (MOV rcx \"arg3\") (MOV r8 \"arg4\") (MOV r9 \"arg5\") (CALL \"my_func\") (ADD rsp 16)) ((MOV \"[rbp-8]\" rdi) (MOV \"[rbp-16]\" rsi) (MOV \"[rbp-24]\" rdx) (MOV \"[rbp-32]\" rcx)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((((0 reg rdi) (1 reg rsi) (2 reg rdx) (3 reg rcx))) (((0 reg rdi) (1 reg rsi) (2 reg rdx) (3 reg rcx) (4 reg r8) (5 reg r9)) (6 stack 0) (7 stack 8)) (((0 reg rdi) (1 reg rsi) (3 reg rdx) (4 reg rcx) (5 reg r8) (6 reg r9)) (2 stack-ptr 0 32)) 10 ((PUSH \"arg7\") (PUSH \"arg6\") (MOV rdi \"arg0\") (MOV rsi \"arg1\") (MOV rdx \"arg2\") (MOV rcx \"arg3\") (MOV r8 \"arg4\") (MOV r9 \"arg5\") (CALL \"my_func\") (ADD rsp 16)) ((MOV \"[rbp-8]\" rdi) (MOV \"[rbp-16]\" rsi) (MOV \"[rbp-24]\" rdx) (MOV \"[rbp-32]\" rcx)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -581,12 +571,10 @@ fn oracle_prop_codegen_optimization_passes() {
     (fmakunbound 'neovm--opt-constant-fold)
     (fmakunbound 'neovm--opt-dead-code-elim)
     (fmakunbound 'neovm--opt-strength-reduce)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (10 ((assign a 10) (assign b 20) (+ c a b) (* d c 2) (assign e 5) (+ f e 0) (* g d 1) (* h d 8) (assign dead 999) (assign result h)) 10 ((assign a 10) (assign b 20) (assign c 30) (* d c 2) (assign e 5) (+ f e 0) (* g d 1) (* h d 8) (assign dead 999) (assign result h)) 10 ((assign a 10) (assign b 20) (assign c 30) (shl d c 1) (assign e 5) (assign f e) (shl g d 0) (shl h d 3) (assign dead 999) (assign result h)) 5 ((assign c 30) (shl d c 1) (assign e 5) (shl g d 0) (shl h d 3)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (10 ((assign a 10) (assign b 20) (+ c a b) (* d c 2) (assign e 5) (+ f e 0) (* g d 1) (* h d 8) (assign dead 999) (assign result h)) 10 ((assign a 10) (assign b 20) (assign c 30) (* d c 2) (assign e 5) (+ f e 0) (* g d 1) (* h d 8) (assign dead 999) (assign result h)) 10 ((assign a 10) (assign b 20) (assign c 30) (shl d c 1) (assign e 5) (assign f e) (shl g d 0) (shl h d 3) (assign dead 999) (assign result h)) 5 ((assign c 30) (shl d c 1) (assign e 5) (shl g d 0) (shl h d 3)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -684,10 +672,8 @@ fn oracle_prop_codegen_assembly_output() {
               (length (split-string asm-text "\n"))
               full-fn))
     (fmakunbound 'neovm--asm-gen)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"    mov rax, 10\n    mov rbx, 20\n    mov rcx, rax\n    add rcx, rbx\n    mov rdx, rcx\n    shl rdx, 3\n    mov rsi, rdx\n    sub rsi, 5\ndone:\n    ret\" 10 \"my_function:\n    push rbp\n    mov rbp, rsp\n    mov rax, 10\n    mov rbx, 20\n    mov rcx, rax\n    add rcx, rbx\n    mov rdx, rcx\n    shl rdx, 3\n    mov rsi, rdx\n    sub rsi, 5\ndone:\n    ret\n    pop rbp\n    ret\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"    mov rax, 10\n    mov rbx, 20\n    mov rcx, rax\n    add rcx, rbx\n    mov rdx, rcx\n    shl rdx, 3\n    mov rsi, rdx\n    sub rsi, 5\ndone:\n    ret\" 10 \"my_function:\n    push rbp\n    mov rbp, rsp\n    mov rax, 10\n    mov rbx, 20\n    mov rcx, rax\n    add rcx, rbx\n    mov rdx, rcx\n    shl rdx, 3\n    mov rsi, rdx\n    sub rsi, 5\ndone:\n    ret\n    pop rbp\n    ret\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

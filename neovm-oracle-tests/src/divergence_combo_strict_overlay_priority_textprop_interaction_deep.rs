@@ -10,6 +10,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_s3_overlay_priority_and_face_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3) (bold underline italic) 3 italic italic bold nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r####"
 (with-temp-buffer
@@ -31,15 +34,14 @@ fn div_s3_overlay_priority_and_face_merge() {
           (get-char-property 2 'face)
           (get-char-property 8 'face))))
 "####,
-        expect_test::expect![[
-            r#""OK ((1 2 3) (bold underline italic) 3 italic italic bold nil)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_s3_overlay_evaporate_with_textprops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r####"
 (with-temp-buffer
@@ -56,13 +58,14 @@ fn div_s3_overlay_evaporate_with_textprops() {
           (length (overlays-in 1 5))
           (null (overlay-buffer o))))
 "####,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_s3_overlay_before_after_string_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument buffer-or-string-p face)""#]];
     crate::common::assert_oracle_parity_expect(
         r####"
 (with-temp-buffer
@@ -75,13 +78,16 @@ fn div_s3_overlay_before_after_string_display() {
           (overlay-get o 'after-string)
           (get-text-property 0 (overlay-get o 'before-string) 'face))))
 "####,
-        expect_test::expect![[r#""ERR (wrong-type-argument buffer-or-string-p face)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_s3_overlay_invisibility_with_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"visible INVISIBLE visible INVISIBLE visible\" \"visible INVISIBLE visible INVISIBLE visible\" (#<overlay in no buffer>) nil 8 8)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r####"
 (with-temp-buffer
@@ -97,8 +103,6 @@ fn div_s3_overlay_invisibility_with_search() {
           (next-overlay-change 1)
           (next-single-char-property-change 1 'invisible))))
 "####,
-        expect_test::expect![[
-            r#""OK (\"visible INVISIBLE visible INVISIBLE visible\" \"visible INVISIBLE visible INVISIBLE visible\" (#<overlay in no buffer>) nil 8 8)""#
-        ]],
+        expect,
     );
 }

@@ -90,10 +90,8 @@ fn oracle_prop_protocol_definition_and_step() {
     (fmakunbound 'neovm--pv-initial)
     (fmakunbound 'neovm--pv-find-transition)
     (fmakunbound 'neovm--pv-step)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (running paused running stopped nil nil t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (running paused running stopped nil nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -164,12 +162,10 @@ fn oracle_prop_protocol_reachability_bfs() {
                     (memq 'orphan2 reach))))))
     (fmakunbound 'neovm--pv-reachable-states)
     (fmakunbound 'neovm--pv-events-from)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((closing connected connecting error idle sending) (closing connected connecting error idle sending) (connect) (fail success) (close send) (ack timeout) (abort retry) (done) (nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((closing connected connecting error idle sending) (closing connected connecting error idle sending) (connect) (fail success) (close send) (ack timeout) (abort retry) (done) (nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -251,12 +247,10 @@ fn oracle_prop_protocol_safety_checking() {
           '(a b)))
     (fmakunbound 'neovm--pv-reachable)
     (fmakunbound 'neovm--pv-check-safety)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((safe t violations nil reachable-count 4) (safe nil violations (corrupted) reachable-count 4) (safe nil violations (bad1 bad2) reachable-count 5) (safe t violations nil reachable-count 1) (safe nil violations (a b) reachable-count 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((safe t violations nil reachable-count 4) (safe nil violations (corrupted) reachable-count 4) (safe nil violations (bad1 bad2) reachable-count 5) (safe t violations nil reachable-count 1) (safe nil violations (a b) reachable-count 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -350,12 +344,10 @@ fn oracle_prop_protocol_deadlock_freedom() {
           'a
           '(done)))
     (fmakunbound 'neovm--pv-check-deadlock-free)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((deadlock-free t deadlocked-states nil total-states 3 terminal-states 1) (deadlock-free nil deadlocked-states (stuck) total-states 5 terminal-states 1) (deadlock-free nil deadlocked-states (dead1 dead2) total-states 5 terminal-states 0) (deadlock-free t deadlocked-states nil total-states 2 terminal-states 2) (deadlock-free t deadlocked-states nil total-states 4 terminal-states 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((deadlock-free t deadlocked-states nil total-states 3 terminal-states 1) (deadlock-free nil deadlocked-states (stuck) total-states 5 terminal-states 1) (deadlock-free nil deadlocked-states (dead1 dead2) total-states 5 terminal-states 0) (deadlock-free t deadlocked-states nil total-states 2 terminal-states 2) (deadlock-free t deadlocked-states nil total-states 4 terminal-states 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -422,12 +414,10 @@ fn oracle_prop_protocol_trace_generation() {
           ;; Empty event list
           (funcall 'neovm--pv-run-trace trs 'idle '())))
     (fmakunbound 'neovm--pv-run-trace)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((final-state idle trace ((1 idle connect connecting ok) (2 connecting ok ready ok) (3 ready send busy ok) (4 busy ack ready ok) (5 ready send busy ok) (6 busy ack ready ok) (7 ready close idle ok)) steps 7 accepted 1 rejected 0) (final-state busy trace ((1 idle connect connecting ok) (2 connecting ok ready ok) (3 ready send busy ok) (4 busy send nil rejected)) steps 4 accepted 0 rejected 1) (final-state idle trace ((1 idle connect connecting ok) (2 connecting fail idle ok) (3 idle connect connecting ok) (4 connecting ok ready ok) (5 ready close idle ok)) steps 5 accepted 1 rejected 0) (final-state idle trace ((1 idle ok nil rejected) (2 idle fail nil rejected) (3 idle ack nil rejected) (4 idle close nil rejected)) steps 4 accepted 0 rejected 1) (final-state idle trace nil steps 0 accepted 0 rejected 0))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((final-state idle trace ((1 idle connect connecting ok) (2 connecting ok ready ok) (3 ready send busy ok) (4 busy ack ready ok) (5 ready send busy ok) (6 busy ack ready ok) (7 ready close idle ok)) steps 7 accepted 1 rejected 0) (final-state busy trace ((1 idle connect connecting ok) (2 connecting ok ready ok) (3 ready send busy ok) (4 busy send nil rejected)) steps 4 accepted 0 rejected 1) (final-state idle trace ((1 idle connect connecting ok) (2 connecting fail idle ok) (3 idle connect connecting ok) (4 connecting ok ready ok) (5 ready close idle ok)) steps 5 accepted 1 rejected 0) (final-state idle trace ((1 idle ok nil rejected) (2 idle fail nil rejected) (3 idle ack nil rejected) (4 idle close nil rejected)) steps 4 accepted 0 rejected 1) (final-state idle trace nil steps 0 accepted 0 rejected 0))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -505,12 +495,10 @@ fn oracle_prop_protocol_sequence_diagram() {
           '(sender receiver)
           '((1 sender receiver ping))))
     (fmakunbound 'neovm--pv-sequence-diagram)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"client    server\n----------------\n  1: client -> server : syn\n  2: server -> client : syn-ack\n  3: client -> server : ack\n  4: client -> server : data\n  5: server -> client : data-ack\n  6: client -> server : fin\n  7: server -> client : fin-ack\" \"alice    bob    carol\n------------------------\n  1: alice -> bob : hello\n  2: bob -> alice : hello-back\n  3: alice -> carol : invite\n  4: carol -> alice : accept\n  5: carol -> bob : greeting\n  6: bob -> carol : greeting-back\" \"a    b\n----------------\" \"sender    receiver\n----------------\n  1: sender -> receiver : ping\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"client    server\n----------------\n  1: client -> server : syn\n  2: server -> client : syn-ack\n  3: client -> server : ack\n  4: client -> server : data\n  5: server -> client : data-ack\n  6: client -> server : fin\n  7: server -> client : fin-ack\" \"alice    bob    carol\n------------------------\n  1: alice -> bob : hello\n  2: bob -> alice : hello-back\n  3: alice -> carol : invite\n  4: carol -> alice : accept\n  5: carol -> bob : greeting\n  6: bob -> carol : greeting-back\" \"a    b\n----------------\" \"sender    receiver\n----------------\n  1: sender -> receiver : ping\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -601,12 +589,10 @@ fn oracle_prop_protocol_liveness_checking() {
             (list 'branch 'right nil 'goal2 nil))
           'init '(goal1 goal2) '(goal1 goal2)))
     (fmakunbound 'neovm--pv-check-liveness)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((live t violations nil) (live nil violations (stuck)) (live t violations nil) (live t violations nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((live t violations nil) (live nil violations (stuck)) (live t violations nil) (live t violations nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -698,10 +684,8 @@ fn oracle_prop_protocol_composition() {
                   (nth 3 result)
                   (nth 5 result)))))
     (fmakunbound 'neovm--pv-compose)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (((a . p) 5 5) ((a . p) 4 4) ((a . p) 2 1))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (((a . p) 5 5) ((a . p) 4 4) ((a . p) 2 1))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -797,12 +781,10 @@ fn oracle_prop_protocol_bisimulation() {
         (funcall 'neovm--pv-check-bisimilar nil 'a nil 'p))
     (fmakunbound 'neovm--pv-enabled-events)
     (fmakunbound 'neovm--pv-check-bisimilar)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((bisimilar t visited-pairs 2 reason nil) (bisimilar nil visited-pairs 1 reason (event-mismatch a (x) p (y))) (bisimilar t visited-pairs 2 reason nil) (bisimilar nil visited-pairs 1 reason (event-mismatch a (x y) p (x))) (bisimilar t visited-pairs 1 reason nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((bisimilar t visited-pairs 2 reason nil) (bisimilar nil visited-pairs 1 reason (event-mismatch a (x) p (y))) (bisimilar t visited-pairs 2 reason nil) (bisimilar nil visited-pairs 1 reason (event-mismatch a (x y) p (x))) (bisimilar t visited-pairs 1 reason nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -865,12 +847,10 @@ fn oracle_prop_protocol_path_finding() {
           ;; Path from middle
           (funcall 'neovm--pv-find-path trs 'c 'e)))
     (fmakunbound 'neovm--pv-find-path)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((found t path (e1) length 1) (found t path (shortcut) length 1) (found t path (e1 branch) length 2) (found t path nil length 0) (found nil path nil length -1) (found t path (e3 e4) length 2))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((found t path (e1) length 1) (found t path (shortcut) length 1) (found t path (e1 branch) length 2) (found t path nil length 0) (found nil path nil length -1) (found t path (e3 e4) length 2))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -953,12 +933,10 @@ fn oracle_prop_protocol_invariant_checking() {
           (lambda (state ctx)
             (memq state '(a b c)))))
     (fmakunbound 'neovm--pv-check-invariant)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((invariant-holds t checked 3 violations nil) (invariant-holds nil checked 3 violations (error)) (invariant-holds t checked 3 violations nil) (invariant-holds t checked 3 violations nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((invariant-holds t checked 3 violations nil) (invariant-holds nil checked 3 violations (error)) (invariant-holds t checked 3 violations nil) (invariant-holds t checked 3 violations nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -1040,10 +1018,8 @@ fn oracle_prop_protocol_state_space_stats() {
           (list (list 'loop 'tick nil 'loop nil))
           'loop))
     (fmakunbound 'neovm--pv-state-stats)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((total-states 4 total-transitions 3 total-events 3 sources (a) sinks (d) max-out-degree 1 max-out-state c) (total-states 5 total-transitions 6 total-events 4 sources (start) sinks (end) max-out-degree 3 max-out-state start) (total-states 3 total-transitions 3 total-events 1 sources nil sinks nil max-out-degree 1 max-out-state c) (total-states 1 total-transitions 1 total-events 1 sources nil sinks nil max-out-degree 1 max-out-state loop))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((total-states 4 total-transitions 3 total-events 3 sources (a) sinks (d) max-out-degree 1 max-out-state c) (total-states 5 total-transitions 6 total-events 4 sources (start) sinks (end) max-out-degree 3 max-out-state start) (total-states 3 total-transitions 3 total-events 1 sources nil sinks nil max-out-degree 1 max-out-state c) (total-states 1 total-transitions 1 total-events 1 sources nil sinks nil max-out-degree 1 max-out-state loop))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

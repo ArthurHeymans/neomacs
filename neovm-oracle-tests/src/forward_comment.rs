@@ -29,10 +29,8 @@ fn oracle_prop_forward_comment_single_line_elisp_comment() {
     (let ((result (forward-comment 1)))
       (list result (point)
             (buffer-substring (point) (point-max))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t 22 \"real code here\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t 22 \"real code here\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -54,10 +52,8 @@ fn oracle_prop_forward_comment_multiline_c_style() {
     (let ((result (forward-comment 1)))
       (list result (point)
             (buffer-substring (point) (point-max))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t 25 \" after\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t 25 \" after\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -91,10 +87,8 @@ fn oracle_prop_forward_comment_count_variations() {
           (list (list 'zero r0 p0)
                 (list 'two r2 p2)
                 (list 'neg-one r-1 p-1)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((zero t 1) (two t 20) (neg-one t 10))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((zero t 1) (two t 20) (neg-one t 10))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -128,10 +122,9 @@ fn oracle_prop_forward_comment_at_eob_and_no_comment() {
           (list (list 'eob r1 p1)
                 (list 'non-comment r2 p2)
                 (list 'bob-back r3 p3)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((eob nil 17) (non-comment nil 1) (bob-back nil 1))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((eob nil 17) (non-comment nil 1) (bob-back nil 1))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -155,10 +148,8 @@ fn oracle_prop_forward_comment_whitespace_plus_comments() {
     (let ((r (forward-comment 100)))
       (list r (point)
             (buffer-substring (point) (point-max))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil 34 \"code\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil 34 \"code\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -185,10 +176,8 @@ fn oracle_prop_forward_comment_backward_multiple() {
             (p2 (point)))
         (list (list 'back3 r p)
               (list 'back100 r2 p2))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((back3 t 6) (back100 nil 5))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((back3 t 6) (back100 nil 5))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -221,8 +210,6 @@ fn oracle_prop_forward_comment_extract_code_lines() {
             (when (< (point) (point-max))
               (forward-char 1)))))
       (nreverse code-lines))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"(setq x 1)\" \"(setq y 2)\" \"(setq z 3)\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"(setq x 1)\" \"(setq y 2)\" \"(setq z 3)\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

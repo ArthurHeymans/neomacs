@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_k2_char_property_search_overlay_aware() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function char-property-search-forward)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -24,13 +25,16 @@ fn div_k2_char_property_search_overlay_aware() {
         (get-char-property 5 'face)
         (progn (goto-char 13) (char-property-search-backward 'face 'a) (point))))
 "##,
-        expect_test::expect![[r#""ERR (void-function char-property-search-forward)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_k2_font_lock_fontify_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (font-lock-keyword-face font-lock-function-name-face nil font-lock-doc-face)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -42,15 +46,14 @@ fn div_k2_font_lock_fontify_buffer() {
         (get-text-property 16 'face)
         (get-text-property 26 'face)))
 "##,
-        expect_test::expect![[
-            r#""OK (font-lock-keyword-face font-lock-function-name-face nil font-lock-doc-face)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_k2_page_motion_and_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (13 26 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -60,6 +63,6 @@ fn div_k2_page_motion_and_count() {
     (forward-page 1)
     (list p1 (point) (count-lines (point-min) (point-max)))))
 "##,
-        expect_test::expect![[r#""OK (13 26 5)""#]],
+        expect,
     );
 }

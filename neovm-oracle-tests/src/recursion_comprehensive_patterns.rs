@@ -76,10 +76,9 @@ fn oracle_prop_recursion_comprehensive_direct_multi() {
     (fmakunbound 'neovm--rcp-gcd)
     (fmakunbound 'neovm--rcp-digit-sum)
     (fmakunbound 'neovm--rcp-palindrome-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 2 1024 243 125 6 25 1 5 12 0 9 6 36 t nil t t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (1 2 1024 243 125 6 25 1 5 12 0 9 6 36 t nil t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -167,12 +166,10 @@ fn oracle_prop_recursion_comprehensive_mutual_parser() {
     (fmakunbound 'neovm--rcp-classify-a)
     (fmakunbound 'neovm--rcp-classify-b)
     (makunbound 'neovm--rcp-toks)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3) (1 (2 3) 4) ((1) (2 (3))) 42 hello (zero-mod3 one-mod3 two-mod3 zero-mod3 one-mod3 two-mod3 zero-mod3 one-mod3 two-mod3 zero-mod3 one-mod3 two-mod3 zero-mod3 one-mod3 zero-mod3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3) (1 (2 3) 4) ((1) (2 (3))) 42 hello (zero-mod3 one-mod3 two-mod3 zero-mod3 one-mod3 two-mod3 zero-mod3 one-mod3 two-mod3 zero-mod3 one-mod3 two-mod3 zero-mod3 one-mod3 zero-mod3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -269,12 +266,10 @@ fn oracle_prop_recursion_comprehensive_tail_recursive() {
     (fmakunbound 'neovm--rcp-bsearch)
     (fmakunbound 'neovm--rcp-fact-notail)
     (fmakunbound 'neovm--rcp-len-tail)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 1 120 3628800 479001600) (1 1 120 3628800 479001600) t (0 1 1 2 3 5 8 13 21 34 55 610 6765) (5 4 3 2 1) nil (a) (0 4 9 nil nil) 7 0)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 1 120 3628800 479001600) (1 1 120 3628800 479001600) t (0 1 1 2 3 5 8 13 21 34 55 610 6765) (5 4 3 2 1) nil (a) (0 4 9 nil nil) 7 0)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -355,12 +350,10 @@ fn oracle_prop_recursion_comprehensive_tree_recursive() {
     (fmakunbound 'neovm--rcp-subset-sum)
     (fmakunbound 'neovm--rcp-powerset)
     (fmakunbound 'neovm--rcp-catalan)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (1 1 2 3 6 t nil t t t nil (8 (0 1 2 3 3 4 5 6)) (1 1 2 5 14 42))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (1 1 2 3 6 t nil t t t nil (8 (0 1 2 3 3 4 5 6)) (1 1 2 5 14 42))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -445,12 +438,10 @@ fn oracle_prop_recursion_comprehensive_nested_list_ops() {
     (fmakunbound 'neovm--rcp-deep-replace)
     (fmakunbound 'neovm--rcp-collect-atoms)
     (fmakunbound 'neovm--rcp-deep-zip)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (8 0 1 1 8 0 1 5 (99 (2 99) (99 (99 3))) (x (b x) c) (1 2 3 4) ((1 . a) ((2 . b) (3 . c) nil) nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (8 0 1 1 8 0 1 5 (99 (2 99) (99 (99 3))) (x (b x) c) (1 2 3 4) ((1 . a) ((2 . b) (3 . c) nil) nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -532,12 +523,10 @@ fn oracle_prop_recursion_comprehensive_memoized() {
     (fmakunbound 'neovm--rcp-fib-memo)
     (fmakunbound 'neovm--rcp-stairs-memo)
     (fmakunbound 'neovm--rcp-partition-memo)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 1 1 5 55 610 6765 75025 832040) 31 (1 2 3 5 8 13 21 34 55 89) (1 1 2 3 5 7 11 15 22 30 42) t 89 7)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 1 1 5 55 610 6765 75025 832040) 31 (1 2 3 5 8 13 21 34 55 89) (1 1 2 3 5 7 11 15 22 30 42) t 89 7)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -627,10 +616,9 @@ fn oracle_prop_recursion_comprehensive_indirect_funcall() {
     (fmakunbound 'neovm--rcp-y-fact)
     (fmakunbound 'neovm--rcp-compose-chain)
     (fmakunbound 'neovm--rcp-dispatch)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((2 3 4 5 6) (2 (3 (4 5)) 6) 120 3628800 3 169 42 100 49)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((2 3 4 5 6) (2 (3 (4 5)) 6) 120 3628800 3 169 42 100 49)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -718,12 +706,10 @@ fn oracle_prop_recursion_comprehensive_mathematical_structures() {
     (fmakunbound 'neovm--rcp-pascal-triangle)
     (fmakunbound 'neovm--rcp-stern-brocot)
     (fmakunbound 'neovm--rcp-permutations)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1) (1 1) (1 1 2) (1 1 2 3) (1 1 2 3 5) (1 1 2 3 5 8)) (1 1 2 3 5) (1 2 4 7 12 20 33) (1 1 1 2 1 3 1 3 2 4 1 4 3 4 1) ((1 2 3) (1 3 2) (2 1 3) (2 3 1) (3 1 2) (3 2 1)) 24 (nil) ((a)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1) (1 1) (1 1 2) (1 1 2 3) (1 1 2 3 5) (1 1 2 3 5 8)) (1 1 2 3 5) (1 2 4 7 12 20 33) (1 1 1 2 1 3 1 3 2 4 1 4 3 4 1) ((1 2 3) (1 3 2) (2 1 3) (2 3 1) (3 1 2) (3 2 1)) 24 (nil) ((a)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -807,12 +793,10 @@ fn oracle_prop_recursion_comprehensive_sorting() {
     (fmakunbound 'neovm--rcp-split)
     (fmakunbound 'neovm--rcp-merge-sort)
     (fmakunbound 'neovm--rcp-quick-sort)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((3 9 10 27 38 43 82) (1 2 3 4 5) (1 2 3 4 5) (1) nil (1 1 2 2 3 3 3) (3 9 10 27 38 43 82) (1 2 3 4 5) (1 2 3 4 5) (1) nil (1 1 2 2 3 3 3) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((3 9 10 27 38 43 82) (1 2 3 4 5) (1 2 3 4 5) (1) nil (1 1 2 2 3 3 3) (3 9 10 27 38 43 82) (1 2 3 4 5) (1 2 3 4 5) (1) nil (1 1 2 2 3 3 3) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -910,8 +894,7 @@ fn oracle_prop_recursion_comprehensive_bst_operations() {
     (fmakunbound 'neovm--rcp-bst-height)
     (fmakunbound 'neovm--rcp-bst-min)
     (fmakunbound 'neovm--rcp-bst-from-list)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3 4 5 6 7 8 9) t t t nil nil 4 1 t 7 7 nil (42))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((1 2 3 4 5 6 7 8 9) t t t nil nil 4 1 t 7 7 nil (42))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

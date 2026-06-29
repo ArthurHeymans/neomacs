@@ -39,12 +39,10 @@ fn oracle_prop_buffer_position_patterns_basic_positions() {
     ;; After widen, point should be restored
     (push (list 'after-widen (point) (point-min) (point-max)) results)
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((after-insert 29 1 29) (at-min 1 1 29) (at-15 15 1 29) (narrowed 15 12 22) (narrow-min 12 12 22) (narrow-max 22 12 22) (after-widen 22 1 29))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((after-insert 29 1 29) (at-min 1 1 29) (at-15 15 1 29) (narrowed 15 12 22) (narrow-min 12 12 22) (narrow-max 22 12 22) (after-widen 22 1 29))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -83,12 +81,10 @@ fn oracle_prop_buffer_position_patterns_goto_char_range() {
       (goto-char 10)
       (push (list 'narrow-inside (point)) results))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((pos-1 1 72) (last-char 36 101) (at-max 37 nil) (mid-second 20 100) (at-newline 14 t) (narrow-beyond-low 8) (narrow-beyond-high 20) (narrow-inside 10))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((pos-1 1 72) (last-char 36 101) (at-max 37 nil) (mid-second 20 100) (at-newline 14 t) (narrow-beyond-low 8) (narrow-beyond-high 20) (narrow-inside 10))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -127,12 +123,10 @@ fn oracle_prop_buffer_position_patterns_predicates() {
     (erase-buffer)
     (push (list 'empty (bobp) (bolp) (eolp) (eobp)) results)
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((bob t t nil nil) (eol1 nil nil t nil) (bol2 nil t nil nil) (eol2 nil nil t nil) (bol3 nil t nil nil) (eob nil nil t t) (mid nil nil nil nil) (empty t t t t))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((bob t t nil nil) (eol1 nil nil t nil) (bol2 nil t nil nil) (eol2 nil nil t nil) (bol3 nil t nil nil) (eob nil nil t t) (mid nil nil nil nil) (empty t t t t))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -162,12 +156,10 @@ fn oracle_prop_buffer_position_patterns_predicates_narrowed() {
       (goto-char 12)
       (push (list 'narrow-mid-bol (bobp) (bolp) (eolp) (eobp) (point)) results)
       (nreverse results))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((narrow-start t t nil nil 6) (narrow-end nil t t t 16) (narrow-mid-eol nil t nil nil 11) (narrow-mid-bol nil nil nil nil 12))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((narrow-start t t nil nil 6) (narrow-end nil t t t 16) (narrow-mid-eol nil t nil nil 11) (narrow-mid-bol nil nil nil nil 12))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -226,12 +218,10 @@ fn oracle_prop_buffer_position_patterns_line_positions_with_n() {
                 (line-end-position 2))
           results)
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((default 19 29) (n=1 19 29) (n=0 10 18) (n=2 30 39) (n=-1 1 9) (n=3 40 49) (first-n=0 1 1) (last-n=2 50 50))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((default 19 29) (n=1 19 29) (n=0 10 18) (n=2 30 39) (n=-1 1 9) (n=3 40 49) (first-n=0 1 1) (last-n=2 50 50))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -274,12 +264,10 @@ fn oracle_prop_buffer_position_patterns_tracking_through_ops() {
     (insert "C")
     (push (list 'multi-insert (point) (buffer-string)) results)
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((initial 12 12 \"Hello World\") (after-insert 17 23 \"Hello, Beautiful World\") (after-delete 6 12 \"Hello World\") (after-prefix 4 15 \"=> Hello World\") (after-save-exc 9 6 20 \"** => Hello World!!\") (multi-insert 8 \"** =ABC> Hello World!!\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((initial 12 12 \"Hello World\") (after-insert 17 23 \"Hello, Beautiful World\") (after-delete 6 12 \"Hello World\") (after-prefix 4 15 \"=> Hello World\") (after-save-exc 9 6 20 \"** => Hello World!!\") (multi-insert 8 \"** =ABC> Hello World!!\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -330,12 +318,10 @@ fn oracle_prop_buffer_position_patterns_narrowing_arithmetic() {
                     (buffer-substring (point-min) (point-max)))
               results)))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""\n        OK ((full 1 44 43) (narrow-range 12 33 21) (narrow-begin 12 97) (narrow-line-pos 12 22 10) (narrow-line2 23 33) (narrow-content \"abcdefghij\n        KLMNOPQRST\") (narrow-lines 2) (widened 1 44) (nested-narrow 15 25 \"defghij\n        KL\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""\n        OK ((full 1 44 43) (narrow-range 12 33 21) (narrow-begin 12 97) (narrow-line-pos 12 22 10) (narrow-line2 23 33) (narrow-content \"abcdefghij\n        KLMNOPQRST\") (narrow-lines 2) (widened 1 44) (nested-narrow 15 25 \"defghij\n        KL\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -392,12 +378,10 @@ fn oracle_prop_buffer_position_patterns_line_index() {
                       (setq prev (nth 1 entry)))))
             results)
       (nreverse results))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((total-lines 6) (first (1 1 6 5 \"short\" t nil)) (empty-line (3 28 28 0 \"\" t t)) (last (6 58 78 20 \"sixth and final line\" t nil)) (total-length 72) (bols-increasing t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((total-lines 6) (first (1 1 6 5 \"short\" t nil)) (empty-line (3 28 28 0 \"\" t t)) (last (6 58 78 20 \"sixth and final line\" t nil)) (total-length 72) (bols-increasing t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -447,12 +431,10 @@ fn oracle_prop_buffer_position_patterns_manipulation_pipeline() {
                   (- (point-max) (point-min)))
             results))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""\n        OK ((line-starts (1 7 12 18 24)) (prefixed \"1: alpha\n        2: beta\n        3: gamma\n        4: delta\n        5: epsilon\") (lengths (8 7 8 8 10)) (narrowed-line \"3: gamma\" 18 26 8))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""\n        OK ((line-starts (1 7 12 18 24)) (prefixed \"1: alpha\n        2: beta\n        3: gamma\n        4: delta\n        5: epsilon\") (lengths (8 7 8 8 10)) (narrowed-line \"3: gamma\" 18 26 8))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -494,10 +476,8 @@ fn oracle_prop_buffer_position_patterns_edge_cases() {
                 (= (line-end-position) (point-max)))
           results))
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((single-min 1 t nil t nil) (single-max 2 nil t nil t) (newline-min 1 t nil t t) (newline-max 2 nil t t t) (mid-newlines 2 nil nil t t 2 2) (long-line 500 1 1001 t t))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((single-min 1 t nil t nil) (single-max 2 nil t nil t) (newline-min 1 t nil t t) (newline-max 2 nil t t t) (mid-newlines 2 nil nil t t 2 2) (long-line 500 1 1001 t t))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

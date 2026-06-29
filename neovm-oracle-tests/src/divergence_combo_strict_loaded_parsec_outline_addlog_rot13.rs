@@ -11,6 +11,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_h8_parsec_collect_regexp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/emacs-lisp/parsec.el\")""#
+    ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (parsec-parse "abc123"
@@ -19,15 +22,16 @@ fn div_h8_parsec_collect_regexp() {
     (parsec-regexp "[0-9]+")))
 "##,
         &["emacs-lisp/parsec.el"],
-        expect_test::expect![[
-            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/emacs-lisp/parsec.el\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_h8_parsec_choice_and_many() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/emacs-lisp/parsec.el\")""#
+    ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (parsec-parse "foo42"
@@ -38,15 +42,14 @@ fn div_h8_parsec_choice_and_many() {
         (parsec-or (parsec-str "xyz") (parsec-str "abc"))))
 "##,
         &["emacs-lisp/parsec.el"],
-        expect_test::expect![[
-            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/emacs-lisp/parsec.el\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_h8_outline_levels() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 0 4)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
@@ -58,13 +61,16 @@ fn div_h8_outline_levels() {
         (progn (outline-next-heading) (outline-level))))
 "##,
         &["outline.el"],
-        expect_test::expect![[r#""ERR (args-out-of-range #<killed buffer> 0 4)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_h8_add_log_current_defun() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/progmodes/add-log.el\")""#
+    ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
@@ -74,15 +80,14 @@ fn div_h8_add_log_current_defun() {
   (add-log-current-defun))
 "##,
         &["progmodes/add-log.el"],
-        expect_test::expect![[
-            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/lisp/progmodes/add-log.el\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_h8_rot13_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"Uryyb, Jbeyq!\" \"Round trip 123\" 3)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (rot13-string "Hello, World!")
@@ -90,6 +95,6 @@ fn div_h8_rot13_roundtrip() {
       (length (rot13-string "abc")))
 "##,
         &["rot13.el"],
-        expect_test::expect![[r#""OK (\"Uryyb, Jbeyq!\" \"Round trip 123\" 3)""#]],
+        expect,
     );
 }

@@ -32,12 +32,10 @@ fn oracle_prop_iso8601_parse_date_variants() {
        (iso8601-parse-date 42)
      (error (list (car err) (cadr err))))))"#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((nil nil nil nil nil 2020 nil -1 nil) (nil nil nil nil 1 2020 nil -1 nil) (nil nil nil 15 1 2020 nil -1 nil) (nil nil nil 15 1 2020 nil -1 nil) (nil nil nil 15 1 2020 nil -1 nil) (nil nil nil 15 1 2020 nil -1 nil) (nil nil nil 30 12 2019 nil -1 nil) (nil nil nil 5 1 2020 nil -1 nil) (nil nil nil 15 1 nil nil -1 nil) (nil nil nil 15 nil nil nil -1 nil) (nil nil nil 40 13 2020 nil -1 nil) (wrong-type-argument stringp))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((nil nil nil nil nil 2020 nil -1 nil) (nil nil nil nil 1 2020 nil -1 nil) (nil nil nil 15 1 2020 nil -1 nil) (nil nil nil 15 1 2020 nil -1 nil) (nil nil nil 15 1 2020 nil -1 nil) (nil nil nil 15 1 2020 nil -1 nil) (nil nil nil 30 12 2019 nil -1 nil) (nil nil nil 5 1 2020 nil -1 nil) (nil nil nil 15 1 nil nil -1 nil) (nil nil nil 15 nil nil nil -1 nil) (nil nil nil 40 13 2020 nil -1 nil) (wrong-type-argument stringp))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -67,12 +65,10 @@ fn oracle_prop_iso8601_parse_time_zone_and_fraction() {
        (iso8601-parse-zone "UTC")
      (error (list (car err) (cadr err))))))"#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 0 16 nil nil nil nil -1 nil) (0 12 16 nil nil nil nil -1 nil) (21 12 16 nil nil nil nil -1 nil) (21 12 16 nil nil nil nil nil 0) (21 12 16 nil nil nil nil -1 19800) (21 12 16 nil nil nil nil -1 nil) ((2125 . 100) 12 16 nil nil nil nil -1 nil) (30 12 16 nil nil nil nil -1 nil) (0 30 16 nil nil nil nil -1 nil) 0 330 -210 (99 99 99 nil nil nil nil -1 nil) (wrong-type-argument \"UTC\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 0 16 nil nil nil nil -1 nil) (0 12 16 nil nil nil nil -1 nil) (21 12 16 nil nil nil nil -1 nil) (21 12 16 nil nil nil nil nil 0) (21 12 16 nil nil nil nil -1 19800) (21 12 16 nil nil nil nil -1 nil) ((2125 . 100) 12 16 nil nil nil nil -1 nil) (30 12 16 nil nil nil nil -1 nil) (0 30 16 nil nil nil nil -1 nil) 0 330 -210 (99 99 99 nil nil nil nil -1 nil) (wrong-type-argument \"UTC\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -97,12 +93,10 @@ fn oracle_prop_iso8601_parse_combined_and_validity() {
        (iso8601-valid-p 42)
      (error (list (car err) (cadr err))))))"#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (0 0 0 nil (21 12 16 15 1 2020 nil nil 0) (21 12 16 15 1 2020 nil -1 -28800) (3 2 1 30 12 2019 nil -1 7200) (wrong-type-argument \"not-a-date\") (wrong-type-argument stringp))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (0 0 0 nil (21 12 16 15 1 2020 nil nil 0) (21 12 16 15 1 2020 nil -1 -28800) (3 2 1 30 12 2019 nil -1 7200) (wrong-type-argument \"not-a-date\") (wrong-type-argument stringp))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -126,10 +120,8 @@ fn oracle_prop_iso8601_duration_and_interval() {
        (iso8601-parse-interval "not/an/interval")
      (error (list (car err) (cadr err))))))"#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((5 30 12 4 6 3 nil -1 nil) (nil nil nil 14 nil nil nil -1 nil) (21 12 16 15 1 2020 nil nil 0) (wrong-type-argument \"P\") ((nil nil nil 1 1 2020 nil -1 nil) (nil nil nil 3 1 2020 nil -1 nil) (0 0 0 3 1 1970 6 nil 0)) ((nil nil nil 1 1 2020 nil -1 nil) (0 0 0 3 1 2020 nil -1 nil) (0 0 0 2 0 0 nil -1 nil)) ((0 0 0 1 1 2020 nil -1 nil) (nil nil nil 3 1 2020 nil -1 nil) (0 0 0 2 0 0 nil -1 nil)) (wrong-type-argument \"not/an/interval\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((5 30 12 4 6 3 nil -1 nil) (nil nil nil 14 nil nil nil -1 nil) (21 12 16 15 1 2020 nil nil 0) (wrong-type-argument \"P\") ((nil nil nil 1 1 2020 nil -1 nil) (nil nil nil 3 1 2020 nil -1 nil) (0 0 0 3 1 1970 6 nil 0)) ((nil nil nil 1 1 2020 nil -1 nil) (0 0 0 3 1 2020 nil -1 nil) (0 0 0 2 0 0 nil -1 nil)) ((0 0 0 1 1 2020 nil -1 nil) (nil nil nil 3 1 2020 nil -1 nil) (0 0 0 2 0 0 nil -1 nil)) (wrong-type-argument \"not/an/interval\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

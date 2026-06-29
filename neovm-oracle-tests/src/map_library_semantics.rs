@@ -28,10 +28,8 @@ fn oracle_prop_map_lookup_contains_and_nested_elt() {
      (map-nested-elt ht '("nested" :missing) 'fallback))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (2 nil (:b nil) one nil \"gnu\" 42 fallback)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 nil (:b nil) one nil \"gnu\" 42 fallback)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -50,12 +48,10 @@ fn oracle_prop_map_keys_values_pairs_and_apply_order() {
    (map-remove (lambda (k _v) (eq k 'b)) '((a . 1) (b . 2) (c . 3)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((a b a) (1 2 3) ((0 . x) (1 . y) (2 . z)) ((:a 1) (:b 2)) ((b . 2) (c . 3)) ((a . 1) (c . 3)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((a b a) (1 2 3) ((0 . x) (1 . y) (2 . z)) ((:a 1) (:b 2)) ((b . 2) (c . 3)) ((a . 1) (c . 3)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -81,12 +77,10 @@ fn oracle_prop_map_into_merge_and_merge_with() {
      summed)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((a 1 b 2) ((:b . 20) (:c . 30)) (equal 1 2) ((a . 10) (b . 2) (d . 4)) (:b 5 :c 30 :d 6) ((a . 11) (b . 2) (c . 30)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((a 1 b 2) ((:b . 20) (:c . 30)) (equal 1 2) ((a . 10) (b . 2) (d . 4)) (:b 5 :c 30 :d 6) ((a . 11) (b . 2) (c . 30)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -117,10 +111,8 @@ fn oracle_prop_map_let_and_mutation_semantics() {
        vec))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable b-val)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable b-val)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -159,12 +151,10 @@ fn oracle_prop_map_nested_and_inplace_edge_contracts() {
        (error (list (car err) (cadr err)))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (fallback 0 (map-not-inplace ((a . 1))) ((a . 1)) (9 ((a . 9))) (2 (:a 1 :b 2)) ((:b 2) (:a 1 :b 2)) (((a . 1)) ((a . 1))) missing)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (fallback 0 (map-not-inplace ((a . 1))) ((a . 1)) (9 ((a . 9))) (2 (:a 1 :b 2)) ((:b 2) (:a 1 :b 2)) (((a . 1)) ((a . 1))) missing)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -237,10 +227,8 @@ fn oracle_prop_map_predicate_iteration_and_copy_edges() {
        (error (list (car err) (cadr err)))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t nil (:a nil :b 2) t (nil (\"k\" 1) missing 1) (t t nil 2 2 3 2) (:a :b) (10 nil 30) ((b 2) (a b)) (nil (a b c)) (((a inner . 1)) ((a . changed))) ((:a 1 :b 2) (:changed 1 :b 2)) ([a b] [changed b]) (args-out-of-range [a]))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t nil (:a nil :b 2) t (nil (\"k\" 1) missing 1) (t t nil 2 2 3 2) (:a :b) (10 nil 30) ((b 2) (a b)) (nil (a b c)) (((a inner . 1)) ((a . changed))) ((:a 1 :b 2) (:changed 1 :b 2)) ([a b] [changed b]) (args-out-of-range [a]))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

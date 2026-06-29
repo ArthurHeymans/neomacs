@@ -11,6 +11,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_o3_executable_set_magic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r##""OK \"#!/nix/store/i27rhb3nr65rkrwz36bchkwmav6ggsmn-bash-5.3p9/bin/sh\nline1\nline2\n\"""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -18,15 +21,14 @@ fn div_o3_executable_set_magic() {
   (executable-set-magic "sh")
   (buffer-string))
 "##,
-        expect_test::expect![[
-            r##""OK \"#!/nix/store/i27rhb3nr65rkrwz36bchkwmav6ggsmn-bash-5.3p9/bin/sh\nline1\nline2\n\"""##
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_o3_fringe_bitmap_introspection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function fringe-bitmaps)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (fringe-bitmap-p 'left-triangle)
@@ -35,13 +37,14 @@ fn div_o3_fringe_bitmap_introspection() {
       (> (length (fringe-bitmaps)) 5)
       (memq 'left-triangle (fringe-bitmaps)))
 "##,
-        expect_test::expect![[r#""ERR (void-function fringe-bitmaps)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_o3_iso_transl_decode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function iso-transl-decode)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (iso-transl-decode "A`")
@@ -51,13 +54,14 @@ fn div_o3_iso_transl_decode() {
       (length iso-transl-esc-map))
 "##,
         &["international/iso-transl.el"],
-        expect_test::expect![[r#""ERR (void-function iso-transl-decode)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_o3_hideshow_minor_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil nil nil)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
@@ -72,6 +76,6 @@ fn div_o3_hideshow_minor_mode() {
         (hs-already-hidden-p)))
 "##,
         &["progmodes/hideshow.el"],
-        expect_test::expect![[r#""OK (t nil nil nil)""#]],
+        expect,
     );
 }

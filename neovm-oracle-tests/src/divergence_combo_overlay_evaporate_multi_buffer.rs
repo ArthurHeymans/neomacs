@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_overlay_evaporate_multi_buffer_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer "oe1"))
@@ -55,7 +56,7 @@ fn combo_overlay_evaporate_multi_buffer_undo() {
               (overlay-end ov1))))
     (kill-buffer b1)
     (kill-buffer b2)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -63,6 +64,7 @@ fn combo_overlay_evaporate_multi_buffer_undo() {
 fn combo_overlay_evaporate_clone_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "oec")))
@@ -94,7 +96,7 @@ fn combo_overlay_evaporate_clone_undo() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -102,6 +104,7 @@ fn combo_overlay_evaporate_clone_undo() {
 fn combo_overlay_evaporate_multi_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "oem")))
@@ -131,7 +134,7 @@ fn combo_overlay_evaporate_multi_overlay_undo() {
                 (overlay-end ov1)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -139,6 +142,7 @@ fn combo_overlay_evaporate_multi_overlay_undo() {
 fn combo_overlay_evaporate_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "oen")))
@@ -168,7 +172,7 @@ fn combo_overlay_evaporate_narrow_undo() {
                 (overlay-end ov)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -176,6 +180,7 @@ fn combo_overlay_evaporate_narrow_undo() {
 fn combo_overlay_evaporate_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "oet")))
@@ -204,6 +209,6 @@ fn combo_overlay_evaporate_textprop_undo() {
                 (overlay-end ov)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

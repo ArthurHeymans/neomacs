@@ -93,12 +93,10 @@ fn oracle_prop_difference_list_core_operations() {
     (fmakunbound 'neovm--dl-cons)
     (fmakunbound 'neovm--dl-snoc)
     (fmakunbound 'neovm--dl-from-list)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil (42) (1) (1 2 3) (99) (1 2 3) (a b c d) (first middle last))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil (42) (1) (1 2 3) (99) (1 2 3) (a b c d) (first middle last))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,12 +175,10 @@ fn oracle_prop_difference_list_append() {
     (fmakunbound 'neovm--dl2-to-list)
     (fmakunbound 'neovm--dl2-from-list)
     (fmakunbound 'neovm--dl2-append)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4 5 6) (a b c) (x y) nil (1 2 3 4 5 6) t (0 1 2 3 4 5 6 7 8 9))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5 6) (a b c) (x y) nil (1 2 3 4 5 6) t (0 1 2 3 4 5 6 7 8 9))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -276,12 +272,10 @@ fn oracle_prop_difference_list_stream_building() {
     (fmakunbound 'neovm--dl3-filter)
     (fmakunbound 'neovm--dl3-map)
     (fmakunbound 'neovm--dl3-flatmap)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((2 4 6 8 10) (1 4 9 16 25) (10 11 20 21 30 31) (40 50 60) ((1 1) (2 4) (3 9) (4 16) (5 25)) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((2 4 6 8 10) (1 4 9 16 25) (10 11 20 21 30 31) (40 50 60) ((1 1) (2 4) (3 9) (4 16) (5 25)) nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -360,12 +354,10 @@ fn oracle_prop_difference_list_tree_flatten() {
     (fmakunbound 'neovm--dl4-flatten)
     (fmakunbound 'neovm--dl4-flatten-list)
     (fmakunbound 'neovm--dl4-inorder)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4 5) (1 2 3 4 5) (1 2 3 4 5 6) (42) nil (a b c d e f g h) (1 2 3 4 5 6 7))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5) (1 2 3 4 5) (1 2 3 4 5 6) (42) nil (a b c d e f g h) (1 2 3 4 5 6 7))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -438,10 +430,9 @@ fn oracle_prop_difference_list_vs_regular_append() {
     (fmakunbound 'neovm--dl5-from-list)
     (fmakunbound 'neovm--build-via-append)
     (fmakunbound 'neovm--build-via-dl)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t (1 2 3 4 5 6 7 8 9 10 11 12) t nil (a b c d e) t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (t (1 2 3 4 5 6 7 8 9 10 11 12) t nil (a b c d e) t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -522,10 +513,8 @@ fn oracle_prop_difference_list_string_builder() {
     (fmakunbound 'neovm--sb-from-list)
     (fmakunbound 'neovm--sb-add-string)
     (fmakunbound 'neovm--sb-to-string)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"hello world\" \"a-b-c-d-e-\" \"name,age,city\" \"\" \"1, 2, 3, 4, 5\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"hello world\" \"a-b-c-d-e-\" \"name,age,city\" \"\" \"1, 2, 3, 4, 5\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

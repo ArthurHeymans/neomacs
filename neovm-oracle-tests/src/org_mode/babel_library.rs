@@ -5,6 +5,9 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_babel_lob_ingest_call_execute_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK (2 (\"add-pair\" \"decorate\") \"emacs-lisp\" \"(list :sum (+ x y) :product (* x y))\" \"replace drawer value\" \"emacs-lisp\" \"raw replace value\" \"#+CALL: add-pair(x=6,y=7) :results value drawer replace\n\n#+RESULTS:\n:results:\n| :sum | 13 | :product | 42 |\n:end:\n\nPrefix call_decorate[:results raw](label=\\\"nums\\\", values='(3 4)) nums=(3 4) suffix.\n\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -53,9 +56,7 @@ fn org_babel_lob_ingest_call_execute_combo() {
                           (buffer-substring-no-properties
                            (point-min) (point-max)))))))))
       (delete-directory root t))))"##,
-        expect_test::expect![[
-            r##""OK (2 (\"add-pair\" \"decorate\") \"emacs-lisp\" \"(list :sum (+ x y) :product (* x y))\" \"replace drawer value\" \"emacs-lisp\" \"raw replace value\" \"#+CALL: add-pair(x=6,y=7) :results value drawer replace\n\n#+RESULTS:\n:results:\n| :sum | 13 | :product | 42 |\n:end:\n\nPrefix call_decorate[:results raw](label=\\\"nums\\\", values='(3 4)) nums=(3 4) suffix.\n\")""##
-        ]],
+        expect,
     );
 }
 
@@ -63,6 +64,9 @@ fn org_babel_lob_ingest_call_execute_combo() {
 fn org_babel_ref_remote_table_headline_index_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Reference ‘remote-head’ not found in this buffer\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -107,9 +111,7 @@ fn org_babel_ref_remote_table_headline_index_combo() {
                  (substring-no-properties
                   (org-babel-ref-resolve "remote-head")))))))
       (delete-directory root t))))"##,
-        expect_test::expect![[
-            r#""ERR (error \"Reference ‘remote-head’ not found in this buffer\")""#
-        ]],
+        expect,
     );
 }
 
@@ -117,6 +119,7 @@ fn org_babel_ref_remote_table_headline_index_combo() {
 fn org_babel_sbe_table_formula_literal_header_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -152,7 +155,7 @@ fn org_babel_sbe_table_formula_literal_header_combo() {
               (org-babel-table-truncate-at-newline "single")
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -160,6 +163,7 @@ fn org_babel_sbe_table_formula_literal_header_combo() {
 fn org_babel_local_call_table_cache_inline_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument stringp 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -238,7 +242,7 @@ fn org_babel_local_call_table_cache_inline_combo() {
               inline-read
               after-second
               no-info)))))"##,
-        expect_test::expect![[r#""ERR (wrong-type-argument stringp 2)""#]],
+        expect,
     );
 }
 
@@ -246,6 +250,7 @@ fn org_babel_local_call_table_cache_inline_combo() {
 fn org_babel_lob_noweb_export_result_replacement_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function helper-lines)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -342,7 +347,7 @@ fn org_babel_lob_noweb_export_result_replacement_combo() {
                     html
                     ascii))))
       (when (file-directory-p root) (delete-directory root t)))))"##,
-        expect_test::expect![[r#""ERR (void-function helper-lines)""#]],
+        expect,
     );
 }
 
@@ -350,6 +355,7 @@ fn org_babel_lob_noweb_export_result_replacement_combo() {
 fn org_babel_execute_buffer_call_inline_remove_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument stringp 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -453,7 +459,7 @@ fn org_babel_execute_buffer_call_inline_remove_combo() {
               (sort (mapcar #'symbol-name executable-types) #'string<)
               parsed-results
               after-remove)))))"##,
-        expect_test::expect![[r#""ERR (wrong-type-argument stringp 2)""#]],
+        expect,
     );
 }
 
@@ -461,6 +467,7 @@ fn org_babel_execute_buffer_call_inline_remove_combo() {
 fn org_babel_session_dir_noweb_file_tangle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function (:n 3 :square 9))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -537,7 +544,7 @@ fn org_babel_session_dir_noweb_file_tangle_combo() {
                        (point-min) (point-max))))))
              (kill-buffer)))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""ERR (invalid-function (:n 3 :square 9))""#]],
+        expect,
     );
 }
 
@@ -545,6 +552,7 @@ fn org_babel_session_dir_noweb_file_tangle_combo() {
 fn org_babel_cache_file_var_result_lifecycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 76 34)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -622,7 +630,7 @@ fn org_babel_cache_file_var_result_lifecycle_combo() {
                               after-re-exec))))))))
             (kill-buffer)))
       (delete-directory root t))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 76 34)""#]],
+        expect,
     );
 }
 
@@ -630,6 +638,7 @@ fn org_babel_cache_file_var_result_lifecycle_combo() {
 fn org_babel_execute_result_value_insertion_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 61 39)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -692,7 +701,7 @@ fn org_babel_execute_result_value_insertion_deep_state_combo() {
                               (org-element-property :language sb)
                               (org-element-property :parameters sb))))
                     tabler-buf))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 61 39)""#]],
+        expect,
     );
 }
 
@@ -700,6 +709,9 @@ fn org_babel_execute_result_value_insertion_deep_state_combo() {
 fn org_babel_dir_default_dir_header_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK (\"(expand-file-name \\\"probe.txt\\\")\n\" \"(princ (format \\\"default-dir=%s\\\" default-directory))\n\" \"#+begin_src emacs-lisp :dir <root> :results value replace\n(expand-file-name \\\"probe.txt\\\")\n#+end_src\n\n#+RESULTS:\n: <root>/probe.txt\n\n#+begin_src emacs-lisp :results output replace\n(princ (format \\\"default-dir=%s\\\" default-directory))\n#+end_src\n\n\" \"#+begin_src emacs-lisp :dir <root> :results value replace\n(expand-file-name \\\"probe.txt\\\")\n#+end_src\n\n#+RESULTS:\n: <root>/probe.txt\n\n#+begin_src emacs-lisp :results output replace\n(princ (format \\\"default-dir=%s\\\" default-directory))\n#+end_src\n\n#+RESULTS:\n: default-dir=~/Projects/github.com/eval-exec/neomacs-main/\n\n\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -740,9 +752,7 @@ fn org_babel_dir_default_dir_header_deep_state_combo() {
                     (replace-regexp-in-string
                      (regexp-quote root) "<root>" after-default)))))
       (delete-directory root t))))"##,
-        expect_test::expect![[
-            r##""OK (\"(expand-file-name \\\"probe.txt\\\")\n\" \"(princ (format \\\"default-dir=%s\\\" default-directory))\n\" \"#+begin_src emacs-lisp :dir <root> :results value replace\n(expand-file-name \\\"probe.txt\\\")\n#+end_src\n\n#+RESULTS:\n: <root>/probe.txt\n\n#+begin_src emacs-lisp :results output replace\n(princ (format \\\"default-dir=%s\\\" default-directory))\n#+end_src\n\n\" \"#+begin_src emacs-lisp :dir <root> :results value replace\n(expand-file-name \\\"probe.txt\\\")\n#+end_src\n\n#+RESULTS:\n: <root>/probe.txt\n\n#+begin_src emacs-lisp :results output replace\n(princ (format \\\"default-dir=%s\\\" default-directory))\n#+end_src\n\n#+RESULTS:\n: default-dir=~/Projects/github.com/eval-exec/neomacs-main/\n\n\")""##
-        ]],
+        expect,
     );
 }
 
@@ -750,6 +760,7 @@ fn org_babel_dir_default_dir_header_deep_state_combo() {
 fn org_babel_execute_buffer_inline_call_remove_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (search-failed \"=>\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -814,7 +825,7 @@ fn org_babel_execute_buffer_inline_call_remove_deep_state_combo() {
                   elements
                   after-remove
                    after-remove-block)))))))))"##,
-        expect_test::expect![[r#""ERR (search-failed \"=>\")""#]],
+        expect,
     );
 }
 
@@ -822,6 +833,7 @@ fn org_babel_execute_buffer_inline_call_remove_deep_state_combo() {
 fn org_babel_execute_var_table_output_header_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 47 35)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -870,7 +882,7 @@ fn org_babel_execute_var_table_output_header_deep_state_combo() {
                  output-result
                  after-output
                  results-els)))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 47 35)""#]],
+        expect,
     );
 }
 
@@ -878,6 +890,7 @@ fn org_babel_execute_var_table_output_header_deep_state_combo() {
 fn org_babel_header_arg_merge_property_inherit_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 57 41)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -936,7 +949,7 @@ fn org_babel_header_arg_merge_property_inherit_deep_state_combo() {
                           (buffer-substring-no-properties
                            (point-min) (point-max))))))))
            (delete-directory root t))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 57 41)""#]],
+        expect,
     );
 }
 
@@ -944,6 +957,7 @@ fn org_babel_header_arg_merge_property_inherit_deep_state_combo() {
 fn org_babel_execute_result_type_handling_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (search-failed \"src_\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -985,7 +999,7 @@ fn org_babel_execute_result_type_handling_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (search-failed \"src_\")""#]],
+        expect,
     );
 }
 
@@ -993,6 +1007,7 @@ fn org_babel_execute_result_type_handling_deep_state_combo() {
 fn org_babel_execute_header_override_noweb_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 31)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1040,7 +1055,7 @@ fn org_babel_execute_header_override_noweb_deep_state_combo() {
                  output-result
                  after-output
                  results)))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 31)""#]],
+        expect,
     );
 }
 
@@ -1048,6 +1063,7 @@ fn org_babel_execute_header_override_noweb_deep_state_combo() {
 fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 49)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1097,7 +1113,7 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
                  elements
                  (buffer-substring-no-properties
                   (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 49)""#]],
+        expect,
     );
 }
 
@@ -1105,6 +1121,7 @@ fn org_babel_execute_multiple_blocks_result_chain_deep_state_combo() {
 fn org_babel_two_stage_rank_edit_reexecute_v19() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1158,7 +1175,7 @@ fn org_babel_two_stage_rank_edit_reexecute_v19() {
               (list heights1 ranked1 heights2 ranked2
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]],
+        expect,
     );
 }
 
@@ -1166,6 +1183,7 @@ fn org_babel_two_stage_rank_edit_reexecute_v19() {
 fn org_babel_two_stage_weighted_avg_edit_reexecute_v18() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1219,7 +1237,7 @@ fn org_babel_two_stage_weighted_avg_edit_reexecute_v18() {
               (list measures1 wavg1 measures2 wavg2
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]],
+        expect,
     );
 }
 
@@ -1227,6 +1245,7 @@ fn org_babel_two_stage_weighted_avg_edit_reexecute_v18() {
 fn org_babel_two_stage_interest_edit_reexecute_v17() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1280,7 +1299,7 @@ fn org_babel_two_stage_interest_edit_reexecute_v17() {
               (list principals1 interest1 principals2 interest2
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]],
+        expect,
     );
 }
 
@@ -1288,6 +1307,7 @@ fn org_babel_two_stage_interest_edit_reexecute_v17() {
 fn org_babel_two_stage_grade_edit_reexecute_v16() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1341,7 +1361,7 @@ fn org_babel_two_stage_grade_edit_reexecute_v16() {
               (list scores1 graded1 scores2 graded2
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]],
+        expect,
     );
 }
 
@@ -1349,6 +1369,7 @@ fn org_babel_two_stage_grade_edit_reexecute_v16() {
 fn org_babel_two_stage_tax_edit_reexecute_v15() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1402,7 +1423,7 @@ fn org_babel_two_stage_tax_edit_reexecute_v15() {
               (list incomes1 taxed1 incomes2 taxed2
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]],
+        expect,
     );
 }
 
@@ -1410,6 +1431,7 @@ fn org_babel_two_stage_tax_edit_reexecute_v15() {
 fn org_babel_two_stage_ratio_edit_reexecute_v14() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1463,7 +1485,7 @@ fn org_babel_two_stage_ratio_edit_reexecute_v14() {
               (list nums1 ratios1 nums2 ratios2
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]],
+        expect,
     );
 }
 
@@ -1471,6 +1493,7 @@ fn org_babel_two_stage_ratio_edit_reexecute_v14() {
 fn org_babel_two_stage_discount_edit_reexecute_v13() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1524,7 +1547,7 @@ fn org_babel_two_stage_discount_edit_reexecute_v13() {
               (list prices1 discounted1 prices2 discounted2
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]],
+        expect,
     );
 }
 
@@ -1532,6 +1555,7 @@ fn org_babel_two_stage_discount_edit_reexecute_v13() {
 fn org_babel_two_stage_percent_edit_reexecute_v12() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1585,7 +1609,7 @@ fn org_babel_two_stage_percent_edit_reexecute_v12() {
               (list scores1 pct1 scores2 pct2
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]],
+        expect,
     );
 }
 
@@ -1593,6 +1617,7 @@ fn org_babel_two_stage_percent_edit_reexecute_v12() {
 fn org_babel_two_stage_cumulative_edit_reexecute_v11() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1646,7 +1671,7 @@ fn org_babel_two_stage_cumulative_edit_reexecute_v11() {
               (list amounts1 cumulative1 amounts2 cumulative2
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]],
+        expect,
     );
 }
 
@@ -1654,6 +1679,7 @@ fn org_babel_two_stage_cumulative_edit_reexecute_v11() {
 fn org_babel_two_stage_mapcar_edit_reexecute_v10() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1707,7 +1733,7 @@ fn org_babel_two_stage_mapcar_edit_reexecute_v10() {
               (list raw1 squared1 raw2 squared2
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]],
+        expect,
     );
 }
 
@@ -1715,6 +1741,7 @@ fn org_babel_two_stage_mapcar_edit_reexecute_v10() {
 fn org_babel_three_format_execute_edit_reexecute_v9() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 53 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1769,7 +1796,7 @@ fn org_babel_three_format_execute_edit_reexecute_v9() {
           (list (nreverse r1) (nreverse r2)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 53 48)""#]],
+        expect,
     );
 }
 
@@ -1777,6 +1804,7 @@ fn org_babel_three_format_execute_edit_reexecute_v9() {
 fn org_babel_two_stage_weighted_sum_edit_reexecute_v8() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1830,7 +1858,7 @@ fn org_babel_two_stage_weighted_sum_edit_reexecute_v8() {
               (list vals1 weighted1 vals2 weighted2
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]],
+        expect,
     );
 }
 
@@ -1838,6 +1866,7 @@ fn org_babel_two_stage_weighted_sum_edit_reexecute_v8() {
 fn org_babel_two_stage_map_edit_reexecute_v7() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1891,7 +1920,7 @@ fn org_babel_two_stage_map_edit_reexecute_v7() {
               (list coords1 computed1 coords2 computed2
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]],
+        expect,
     );
 }
 
@@ -1899,6 +1928,7 @@ fn org_babel_two_stage_map_edit_reexecute_v7() {
 fn org_babel_two_stage_sort_index_edit_reexecute_v6() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 54 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1954,7 +1984,7 @@ fn org_babel_two_stage_sort_index_edit_reexecute_v6() {
               (list raw1 indexed1 raw2 indexed2
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 54 54)""#]],
+        expect,
     );
 }
 
@@ -1962,6 +1992,7 @@ fn org_babel_two_stage_sort_index_edit_reexecute_v6() {
 fn org_babel_two_stage_filter_edit_reexecute_v5() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2015,7 +2046,7 @@ fn org_babel_two_stage_filter_edit_reexecute_v5() {
               (list items1 big1 items2 big2
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]],
+        expect,
     );
 }
 
@@ -2023,6 +2054,7 @@ fn org_babel_two_stage_filter_edit_reexecute_v5() {
 fn org_babel_two_stage_double_edit_reexecute_v4() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2076,7 +2108,7 @@ fn org_babel_two_stage_double_edit_reexecute_v4() {
               (list nums1 comp1 nums2 comp2
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 52 54)""#]],
+        expect,
     );
 }
 
@@ -2084,6 +2116,7 @@ fn org_babel_two_stage_double_edit_reexecute_v4() {
 fn org_babel_two_stage_intermediate_read_edit_reexecute_v3() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r##""ERR (search-failed \"#+RESULTS: result\")""##]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2137,7 +2170,7 @@ fn org_babel_two_stage_intermediate_read_edit_reexecute_v3() {
               (list data1 result1 data2 result2
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r##""ERR (search-failed \"#+RESULTS: result\")""##]],
+        expect,
     );
 }
 
@@ -2145,6 +2178,7 @@ fn org_babel_two_stage_intermediate_read_edit_reexecute_v3() {
 fn org_babel_four_stage_intermediate_read_back_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 54 51)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2200,7 +2234,7 @@ fn org_babel_four_stage_intermediate_read_back_edit_deep() {
             (list results1 results2
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 54 51)""#]],
+        expect,
     );
 }
 
@@ -2208,6 +2242,7 @@ fn org_babel_four_stage_intermediate_read_back_edit_deep() {
 fn org_babel_three_stage_intermediate_read_back_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 66 60)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2275,7 +2310,7 @@ fn org_babel_three_stage_intermediate_read_back_edit_deep() {
                         raw2 doubled2 added2
                         (buffer-substring-no-properties
                          (point-min) (point-max))))))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 66 60)""#]],
+        expect,
     );
 }
 
@@ -2283,6 +2318,7 @@ fn org_babel_three_stage_intermediate_read_back_edit_deep() {
 fn org_babel_two_stage_intermediate_read_edit_reexecute_v2() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 54 54)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2338,7 +2374,7 @@ fn org_babel_two_stage_intermediate_read_edit_reexecute_v2() {
                     gen-result2 xform-result2
                     (buffer-substring-no-properties
                      (point-min) (point-max)))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 54 54)""#]],
+        expect,
     );
 }
 
@@ -2346,6 +2382,7 @@ fn org_babel_two_stage_intermediate_read_edit_reexecute_v2() {
 fn org_babel_two_stage_intermediate_results_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 51 51)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2398,7 +2435,7 @@ fn org_babel_two_stage_intermediate_results_edit_deep() {
                   (nreverse results2)
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 51 51)""#]],
+        expect,
     );
 }
 
@@ -2406,6 +2443,7 @@ fn org_babel_two_stage_intermediate_results_edit_deep() {
 fn org_babel_four_stage_chain_filter_sort_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 55 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2462,7 +2500,7 @@ fn org_babel_four_stage_chain_filter_sort_edit_deep() {
                 (nreverse results2)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 55 48)""#]],
+        expect,
     );
 }
 
@@ -2470,6 +2508,7 @@ fn org_babel_four_stage_chain_filter_sort_edit_deep() {
 fn org_babel_three_stage_chain_edit_reexecute_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 50 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2521,7 +2560,7 @@ fn org_babel_three_stage_chain_edit_reexecute_deep() {
                 (nreverse results2)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 50 48)""#]],
+        expect,
     );
 }
 
@@ -2529,6 +2568,7 @@ fn org_babel_three_stage_chain_edit_reexecute_deep() {
 fn org_babel_scalar_list_table_edit_reexecute_chain_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 54 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2584,7 +2624,7 @@ fn org_babel_scalar_list_table_edit_reexecute_chain_deep() {
                 (nreverse results2)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 54 48)""#]],
+        expect,
     );
 }
 
@@ -2592,6 +2632,7 @@ fn org_babel_scalar_list_table_edit_reexecute_chain_deep() {
 fn org_babel_nested_variable_chain_edit_reexecute_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 56 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2649,7 +2690,7 @@ fn org_babel_nested_variable_chain_edit_reexecute_deep() {
                 (nreverse results2)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 56 48)""#]],
+        expect,
     );
 }
 
@@ -2657,6 +2698,7 @@ fn org_babel_nested_variable_chain_edit_reexecute_deep() {
 fn org_babel_multi_format_results_edit_reexecute_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 55 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2713,7 +2755,7 @@ fn org_babel_multi_format_results_edit_reexecute_deep() {
                 (nreverse results2)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 55 48)""#]],
+        expect,
     );
 }
 
@@ -2721,6 +2763,7 @@ fn org_babel_multi_format_results_edit_reexecute_deep() {
 fn org_babel_list_results_chain_edit_reexecute_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2768,7 +2811,7 @@ fn org_babel_list_results_chain_edit_reexecute_deep() {
                 (nreverse results2)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 48)""#]],
+        expect,
     );
 }
 
@@ -2776,6 +2819,7 @@ fn org_babel_list_results_chain_edit_reexecute_deep() {
 fn org_babel_execute_table_results_edit_reexecute_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 56 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2833,7 +2877,7 @@ fn org_babel_execute_table_results_edit_reexecute_deep() {
                 (nreverse results2)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 56 48)""#]],
+        expect,
     );
 }
 
@@ -2841,6 +2885,7 @@ fn org_babel_execute_table_results_edit_reexecute_deep() {
 fn org_babel_header_args_results_format_edit_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2888,7 +2933,7 @@ fn org_babel_header_args_results_format_edit_deep() {
                 (nreverse results2)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 48)""#]],
+        expect,
     );
 }
 
@@ -2896,6 +2941,7 @@ fn org_babel_header_args_results_format_edit_deep() {
 fn org_babel_variable_propagation_edit_reexecute_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 51 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -2948,7 +2994,7 @@ fn org_babel_variable_propagation_edit_reexecute_deep() {
                 (nreverse results2)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 51 48)""#]],
+        expect,
     );
 }
 
@@ -2956,6 +3002,7 @@ fn org_babel_variable_propagation_edit_reexecute_deep() {
 fn org_babel_execute_edit_code_reexecute_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3002,7 +3049,7 @@ fn org_babel_execute_edit_code_reexecute_deep() {
                 (nreverse results2)
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 48)""#]],
+        expect,
     );
 }
 
@@ -3010,6 +3057,7 @@ fn org_babel_execute_edit_code_reexecute_deep() {
 fn org_babel_execute_fifteen_block_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 36 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3047,7 +3095,7 @@ fn org_babel_execute_fifteen_block_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 36 45)""#]],
+        expect,
     );
 }
 
@@ -3055,6 +3103,7 @@ fn org_babel_execute_fifteen_block_chain_deep_combo() {
 fn org_babel_execute_fourteen_block_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3097,7 +3146,7 @@ fn org_babel_execute_fourteen_block_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 45)""#]],
+        expect,
     );
 }
 
@@ -3105,6 +3154,7 @@ fn org_babel_execute_fourteen_block_chain_deep_combo() {
 fn org_babel_execute_thirteen_block_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3147,7 +3197,7 @@ fn org_babel_execute_thirteen_block_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 45)""#]],
+        expect,
     );
 }
 
@@ -3155,6 +3205,7 @@ fn org_babel_execute_thirteen_block_chain_deep_combo() {
 fn org_babel_execute_twelve_block_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3197,7 +3248,7 @@ fn org_babel_execute_twelve_block_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 45)""#]],
+        expect,
     );
 }
 
@@ -3205,6 +3256,7 @@ fn org_babel_execute_twelve_block_chain_deep_combo() {
 fn org_babel_execute_eleven_block_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3252,7 +3304,7 @@ fn org_babel_execute_eleven_block_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 45)""#]],
+        expect,
     );
 }
 
@@ -3260,6 +3312,7 @@ fn org_babel_execute_eleven_block_chain_deep_combo() {
 fn org_babel_execute_ten_block_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3307,7 +3360,7 @@ fn org_babel_execute_ten_block_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 45)""#]],
+        expect,
     );
 }
 
@@ -3315,6 +3368,7 @@ fn org_babel_execute_ten_block_chain_deep_combo() {
 fn org_babel_execute_nine_block_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 51 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3367,7 +3421,7 @@ fn org_babel_execute_nine_block_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 51 45)""#]],
+        expect,
     );
 }
 
@@ -3375,6 +3429,7 @@ fn org_babel_execute_nine_block_chain_deep_combo() {
 fn org_babel_execute_eight_block_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 51 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3427,7 +3482,7 @@ fn org_babel_execute_eight_block_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 51 45)""#]],
+        expect,
     );
 }
 
@@ -3435,6 +3490,7 @@ fn org_babel_execute_eight_block_chain_deep_combo() {
 fn org_babel_execute_seven_block_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 51 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3487,7 +3543,7 @@ fn org_babel_execute_seven_block_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 51 45)""#]],
+        expect,
     );
 }
 
@@ -3495,6 +3551,7 @@ fn org_babel_execute_seven_block_chain_deep_combo() {
 fn org_babel_execute_six_block_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 51 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3547,7 +3604,7 @@ fn org_babel_execute_six_block_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 51 45)""#]],
+        expect,
     );
 }
 
@@ -3555,6 +3612,7 @@ fn org_babel_execute_six_block_chain_deep_combo() {
 fn org_babel_execute_five_block_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3602,7 +3660,7 @@ fn org_babel_execute_five_block_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 45)""#]],
+        expect,
     );
 }
 
@@ -3610,6 +3668,7 @@ fn org_babel_execute_five_block_chain_deep_combo() {
 fn org_babel_execute_four_block_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3652,7 +3711,7 @@ fn org_babel_execute_four_block_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 45)""#]],
+        expect,
     );
 }
 
@@ -3660,6 +3719,7 @@ fn org_babel_execute_four_block_chain_deep_combo() {
 fn org_babel_execute_three_table_join_aggregate_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3718,7 +3778,7 @@ fn org_babel_execute_three_table_join_aggregate_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -3726,6 +3786,7 @@ fn org_babel_execute_three_table_join_aggregate_deep_combo() {
 fn org_babel_execute_two_table_join_sort_aggregate_deep_v3_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3785,7 +3846,7 @@ fn org_babel_execute_two_table_join_sort_aggregate_deep_v3_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -3793,6 +3854,7 @@ fn org_babel_execute_two_table_join_sort_aggregate_deep_v3_combo() {
 fn org_babel_execute_two_table_join_sort_aggregate_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|--------+-----|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3835,7 +3897,7 @@ fn org_babel_execute_two_table_join_sort_aggregate_deep_v2_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|--------+-----|\n\")""#]],
+        expect,
     );
 }
 
@@ -3843,6 +3905,7 @@ fn org_babel_execute_two_table_join_sort_aggregate_deep_v2_combo() {
 fn org_babel_execute_two_table_join_aggregate_chain_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3893,7 +3956,7 @@ fn org_babel_execute_two_table_join_aggregate_chain_deep_v2_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -3901,6 +3964,7 @@ fn org_babel_execute_two_table_join_aggregate_chain_deep_v2_combo() {
 fn org_babel_execute_two_table_join_sort_chain_deep_v3_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -3950,7 +4014,7 @@ fn org_babel_execute_two_table_join_sort_chain_deep_v3_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -3958,6 +4022,7 @@ fn org_babel_execute_two_table_join_sort_chain_deep_v3_combo() {
 fn org_babel_execute_multi_table_join_sort_deep_v3_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4008,7 +4073,7 @@ fn org_babel_execute_multi_table_join_sort_deep_v3_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -4016,6 +4081,7 @@ fn org_babel_execute_multi_table_join_sort_deep_v3_combo() {
 fn org_babel_execute_two_table_join_sort_chain_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4065,7 +4131,7 @@ fn org_babel_execute_two_table_join_sort_chain_deep_v2_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -4073,6 +4139,7 @@ fn org_babel_execute_two_table_join_sort_chain_deep_v2_combo() {
 fn org_babel_execute_two_table_join_sort_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4122,7 +4189,7 @@ fn org_babel_execute_two_table_join_sort_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -4130,6 +4197,7 @@ fn org_babel_execute_two_table_join_sort_deep_combo() {
 fn org_babel_execute_multi_block_chain_aggregate_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4170,7 +4238,7 @@ fn org_babel_execute_multi_block_chain_aggregate_deep_v2_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 45)""#]],
+        expect,
     );
 }
 
@@ -4178,6 +4246,7 @@ fn org_babel_execute_multi_block_chain_aggregate_deep_v2_combo() {
 fn org_babel_execute_multi_block_chain_table_var_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4216,7 +4285,7 @@ fn org_babel_execute_multi_block_chain_table_var_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]],
+        expect,
     );
 }
 
@@ -4224,6 +4293,7 @@ fn org_babel_execute_multi_block_chain_table_var_deep_combo() {
 fn org_babel_execute_table_join_filter_sort_chain_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4276,7 +4346,7 @@ fn org_babel_execute_table_join_filter_sort_chain_deep_v2_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -4284,6 +4354,7 @@ fn org_babel_execute_table_join_filter_sort_chain_deep_v2_combo() {
 fn org_babel_execute_table_join_compute_sort_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4334,7 +4405,7 @@ fn org_babel_execute_table_join_compute_sort_deep_v2_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -4342,6 +4413,7 @@ fn org_babel_execute_table_join_compute_sort_deep_v2_combo() {
 fn org_babel_execute_list_table_join_aggregate_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4392,7 +4464,7 @@ fn org_babel_execute_list_table_join_aggregate_deep_v2_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -4400,6 +4472,7 @@ fn org_babel_execute_list_table_join_aggregate_deep_v2_combo() {
 fn org_babel_execute_table_column_sort_filter_chain_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4440,7 +4513,7 @@ fn org_babel_execute_table_column_sort_filter_chain_deep_v2_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]],
+        expect,
     );
 }
 
@@ -4448,6 +4521,7 @@ fn org_babel_execute_table_column_sort_filter_chain_deep_v2_combo() {
 fn org_babel_execute_mapcar_chain_table_aggregate_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4484,7 +4558,7 @@ fn org_babel_execute_mapcar_chain_table_aggregate_deep_v2_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]],
+        expect,
     );
 }
 
@@ -4492,6 +4566,7 @@ fn org_babel_execute_mapcar_chain_table_aggregate_deep_v2_combo() {
 fn org_babel_execute_table_var_column_sort_chain_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4529,7 +4604,7 @@ fn org_babel_execute_table_var_column_sort_chain_deep_v2_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]],
+        expect,
     );
 }
 
@@ -4537,6 +4612,7 @@ fn org_babel_execute_table_var_column_sort_chain_deep_v2_combo() {
 fn org_babel_execute_table_filter_sort_chain_deep_v3_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4577,7 +4653,7 @@ fn org_babel_execute_table_filter_sort_chain_deep_v3_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]],
+        expect,
     );
 }
 
@@ -4585,6 +4661,7 @@ fn org_babel_execute_table_filter_sort_chain_deep_v3_combo() {
 fn org_babel_execute_table_var_column_aggregate_deep_v3_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|-----+-----|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4627,7 +4704,7 @@ fn org_babel_execute_table_var_column_aggregate_deep_v3_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|-----+-----|\n\")""#]],
+        expect,
     );
 }
 
@@ -4635,6 +4712,7 @@ fn org_babel_execute_table_var_column_aggregate_deep_v3_combo() {
 fn org_babel_execute_table_filter_sort_aggregate_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4674,7 +4752,7 @@ fn org_babel_execute_table_filter_sort_aggregate_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]],
+        expect,
     );
 }
 
@@ -4682,6 +4760,7 @@ fn org_babel_execute_table_filter_sort_aggregate_chain_deep_combo() {
 fn org_babel_execute_table_column_filter_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4721,7 +4800,7 @@ fn org_babel_execute_table_column_filter_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]],
+        expect,
     );
 }
 
@@ -4729,6 +4808,7 @@ fn org_babel_execute_table_column_filter_chain_deep_combo() {
 fn org_babel_execute_mapcar_table_chain_simple_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4769,7 +4849,7 @@ fn org_babel_execute_mapcar_table_chain_simple_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]],
+        expect,
     );
 }
 
@@ -4777,6 +4857,7 @@ fn org_babel_execute_mapcar_table_chain_simple_deep_combo() {
 fn org_babel_execute_table_join_sort_chain_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4827,7 +4908,7 @@ fn org_babel_execute_table_join_sort_chain_deep_v2_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -4835,6 +4916,7 @@ fn org_babel_execute_table_join_sort_chain_deep_v2_combo() {
 fn org_babel_execute_multi_table_join_sort_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4885,7 +4967,7 @@ fn org_babel_execute_multi_table_join_sort_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -4893,6 +4975,7 @@ fn org_babel_execute_multi_table_join_sort_chain_deep_combo() {
 fn org_babel_execute_mapcar_filter_sort_chain_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+-------|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4933,7 +5016,7 @@ fn org_babel_execute_mapcar_filter_sort_chain_deep_v2_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|------+-------|\n\")""#]],
+        expect,
     );
 }
 
@@ -4941,6 +5024,7 @@ fn org_babel_execute_mapcar_filter_sort_chain_deep_v2_combo() {
 fn org_babel_execute_table_join_sort_aggregate_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -4989,7 +5073,7 @@ fn org_babel_execute_table_join_sort_aggregate_deep_v2_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -4997,6 +5081,7 @@ fn org_babel_execute_table_join_sort_aggregate_deep_v2_combo() {
 fn org_babel_execute_table_join_filter_aggregate_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5049,7 +5134,7 @@ fn org_babel_execute_table_join_filter_aggregate_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -5057,6 +5142,7 @@ fn org_babel_execute_table_join_filter_aggregate_deep_combo() {
 fn org_babel_execute_mapcar_table_column_chain_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5107,7 +5193,7 @@ fn org_babel_execute_mapcar_table_column_chain_deep_v2_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -5115,6 +5201,7 @@ fn org_babel_execute_mapcar_table_column_chain_deep_v2_combo() {
 fn org_babel_execute_table_column_pivot_compute_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+---+-----|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5172,7 +5259,7 @@ fn org_babel_execute_table_column_pivot_compute_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|------+---+-----|\n\")""#]],
+        expect,
     );
 }
 
@@ -5180,6 +5267,8 @@ fn org_babel_execute_table_column_pivot_compute_deep_combo() {
 fn org_babel_execute_table_row_col_pivot_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""ERR (invalid-function \"|--------+---------+-----|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5237,7 +5326,7 @@ fn org_babel_execute_table_row_col_pivot_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|--------+---------+-----|\n\")""#]],
+        expect,
     );
 }
 
@@ -5245,6 +5334,7 @@ fn org_babel_execute_table_row_col_pivot_deep_state_combo() {
 fn org_babel_execute_table_column_chain_aggregate_deep_v3_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+-------+-----|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5284,7 +5374,7 @@ fn org_babel_execute_table_column_chain_aggregate_deep_v3_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|------+-------+-----|\n\")""#]],
+        expect,
     );
 }
 
@@ -5292,6 +5382,7 @@ fn org_babel_execute_table_column_chain_aggregate_deep_v3_combo() {
 fn org_babel_execute_seq_group_by_partition_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 29 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5322,7 +5413,7 @@ fn org_babel_execute_seq_group_by_partition_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 29 45)""#]],
+        expect,
     );
 }
 
@@ -5330,6 +5421,7 @@ fn org_babel_execute_seq_group_by_partition_deep_state_combo() {
 fn org_babel_execute_list_filter_map_reduce_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5365,7 +5457,7 @@ fn org_babel_execute_list_filter_map_reduce_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 45)""#]],
+        expect,
     );
 }
 
@@ -5373,6 +5465,7 @@ fn org_babel_execute_list_filter_map_reduce_deep_combo() {
 fn org_babel_execute_table_join_sort_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5423,7 +5516,7 @@ fn org_babel_execute_table_join_sort_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -5431,6 +5524,7 @@ fn org_babel_execute_table_join_sort_chain_deep_combo() {
 fn org_babel_execute_table_var_column_sort_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+-----|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5473,7 +5567,7 @@ fn org_babel_execute_table_var_column_sort_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|------+-----|\n\")""#]],
+        expect,
     );
 }
 
@@ -5481,6 +5575,7 @@ fn org_babel_execute_table_var_column_sort_deep_combo() {
 fn org_babel_execute_table_var_column_filter_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+------|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5522,7 +5617,7 @@ fn org_babel_execute_table_var_column_filter_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|------+------|\n\")""#]],
+        expect,
     );
 }
 
@@ -5530,6 +5625,7 @@ fn org_babel_execute_table_var_column_filter_deep_combo() {
 fn org_babel_execute_table_column_compute_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5571,7 +5667,7 @@ fn org_babel_execute_table_column_compute_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|---+---|\n\")""#]],
+        expect,
     );
 }
 
@@ -5579,6 +5675,7 @@ fn org_babel_execute_table_column_compute_chain_deep_combo() {
 fn org_babel_execute_list_table_join_compute_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5629,7 +5726,7 @@ fn org_babel_execute_list_table_join_compute_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -5637,6 +5734,7 @@ fn org_babel_execute_list_table_join_compute_chain_deep_combo() {
 fn org_babel_execute_table_column_aggregate_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|--------+-----|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5680,7 +5778,7 @@ fn org_babel_execute_table_column_aggregate_deep_v2_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|--------+-----|\n\")""#]],
+        expect,
     );
 }
 
@@ -5688,6 +5786,7 @@ fn org_babel_execute_table_column_aggregate_deep_v2_combo() {
 fn org_babel_execute_mapcar_table_assoc_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5733,7 +5832,7 @@ fn org_babel_execute_mapcar_table_assoc_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -5741,6 +5840,7 @@ fn org_babel_execute_mapcar_table_assoc_chain_deep_combo() {
 fn org_babel_execute_mapcar_assoc_chain_aggregate_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+-----|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5784,7 +5884,7 @@ fn org_babel_execute_mapcar_assoc_chain_aggregate_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|------+-----|\n\")""#]],
+        expect,
     );
 }
 
@@ -5792,6 +5892,7 @@ fn org_babel_execute_mapcar_assoc_chain_aggregate_deep_combo() {
 fn org_babel_execute_table_filter_sort_aggregate_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|------+-----|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5831,7 +5932,7 @@ fn org_babel_execute_table_filter_sort_aggregate_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|------+-----|\n\")""#]],
+        expect,
     );
 }
 
@@ -5839,6 +5940,7 @@ fn org_babel_execute_table_filter_sort_aggregate_deep_combo() {
 fn org_babel_execute_table_group_aggregate_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|--------+-----|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5882,7 +5984,7 @@ fn org_babel_execute_table_group_aggregate_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|--------+-----|\n\")""#]],
+        expect,
     );
 }
 
@@ -5890,6 +5992,7 @@ fn org_babel_execute_table_group_aggregate_deep_combo() {
 fn org_babel_execute_table_column_join_compute_deep_v2_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5940,7 +6043,7 @@ fn org_babel_execute_table_column_join_compute_deep_v2_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -5948,6 +6051,7 @@ fn org_babel_execute_table_column_join_compute_deep_v2_combo() {
 fn org_babel_execute_table_var_chain_aggregate_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|-----+-----|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -5991,7 +6095,7 @@ fn org_babel_execute_table_var_chain_aggregate_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|-----+-----|\n\")""#]],
+        expect,
     );
 }
 
@@ -5999,6 +6103,7 @@ fn org_babel_execute_table_var_chain_aggregate_deep_combo() {
 fn org_babel_execute_table_join_compute_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-function \"|---------+------|\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6045,7 +6150,7 @@ fn org_babel_execute_table_join_compute_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-function \"|---------+------|\n\")""#]],
+        expect,
     );
 }
 
@@ -6053,6 +6158,7 @@ fn org_babel_execute_table_join_compute_deep_state_combo() {
 fn org_babel_execute_multi_table_join_aggregate_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 49 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6103,7 +6209,7 @@ fn org_babel_execute_multi_table_join_aggregate_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 49 45)""#]],
+        expect,
     );
 }
 
@@ -6111,6 +6217,7 @@ fn org_babel_execute_multi_table_join_aggregate_deep_combo() {
 fn org_babel_execute_table_map_reduce_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6147,7 +6254,7 @@ fn org_babel_execute_table_map_reduce_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 45)""#]],
+        expect,
     );
 }
 
@@ -6155,6 +6262,7 @@ fn org_babel_execute_table_map_reduce_deep_combo() {
 fn org_babel_execute_list_table_join_aggregate_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6204,7 +6312,7 @@ fn org_babel_execute_list_table_join_aggregate_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 45)""#]],
+        expect,
     );
 }
 
@@ -6212,6 +6320,7 @@ fn org_babel_execute_list_table_join_aggregate_deep_combo() {
 fn org_babel_execute_table_column_join_stats_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 51 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6264,7 +6373,7 @@ fn org_babel_execute_table_column_join_stats_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 51 45)""#]],
+        expect,
     );
 }
 
@@ -6272,6 +6381,7 @@ fn org_babel_execute_table_column_join_stats_deep_combo() {
 fn org_babel_execute_mapcar_table_assoc_compute_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6314,7 +6424,7 @@ fn org_babel_execute_mapcar_table_assoc_compute_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 45)""#]],
+        expect,
     );
 }
 
@@ -6322,6 +6432,7 @@ fn org_babel_execute_mapcar_table_assoc_compute_deep_combo() {
 fn org_babel_execute_pcase_cond_cl_case_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6360,7 +6471,7 @@ fn org_babel_execute_pcase_cond_cl_case_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 45)""#]],
+        expect,
     );
 }
 
@@ -6368,6 +6479,7 @@ fn org_babel_execute_pcase_cond_cl_case_deep_state_combo() {
 fn org_babel_execute_multi_table_join_stats_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 49 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6418,7 +6530,7 @@ fn org_babel_execute_multi_table_join_stats_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 49 45)""#]],
+        expect,
     );
 }
 
@@ -6426,6 +6538,7 @@ fn org_babel_execute_multi_table_join_stats_deep_combo() {
 fn org_babel_execute_list_map_filter_reduce_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6466,7 +6579,7 @@ fn org_babel_execute_list_map_filter_reduce_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 45)""#]],
+        expect,
     );
 }
 
@@ -6474,6 +6587,7 @@ fn org_babel_execute_list_map_filter_reduce_chain_deep_combo() {
 fn org_babel_execute_table_row_sort_filter_compute_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6513,7 +6627,7 @@ fn org_babel_execute_table_row_sort_filter_compute_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 45)""#]],
+        expect,
     );
 }
 
@@ -6521,6 +6635,7 @@ fn org_babel_execute_table_row_sort_filter_compute_deep_combo() {
 fn org_babel_execute_mapcar_filter_chain_table_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6564,7 +6679,7 @@ fn org_babel_execute_mapcar_filter_chain_table_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 45)""#]],
+        expect,
     );
 }
 
@@ -6572,6 +6687,7 @@ fn org_babel_execute_mapcar_filter_chain_table_deep_combo() {
 fn org_babel_execute_letrec_named_let_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6608,7 +6724,7 @@ fn org_babel_execute_letrec_named_let_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 45)""#]],
+        expect,
     );
 }
 
@@ -6616,6 +6732,7 @@ fn org_babel_execute_letrec_named_let_deep_state_combo() {
 fn org_babel_execute_table_column_join_compute_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6663,7 +6780,7 @@ fn org_babel_execute_table_column_join_compute_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 45)""#]],
+        expect,
     );
 }
 
@@ -6671,6 +6788,7 @@ fn org_babel_execute_table_column_join_compute_deep_state_combo() {
 fn org_babel_execute_multi_block_var_chain_table_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6711,7 +6829,7 @@ fn org_babel_execute_multi_block_var_chain_table_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 45)""#]],
+        expect,
     );
 }
 
@@ -6719,6 +6837,7 @@ fn org_babel_execute_multi_block_var_chain_table_deep_combo() {
 fn org_babel_execute_table_row_filter_map_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6759,7 +6878,7 @@ fn org_babel_execute_table_row_filter_map_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 45)""#]],
+        expect,
     );
 }
 
@@ -6767,6 +6886,7 @@ fn org_babel_execute_table_row_filter_map_deep_state_combo() {
 fn org_babel_execute_table_column_stats_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6810,7 +6930,7 @@ fn org_babel_execute_table_column_stats_deep_state_combo() {
                 table-lisp
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 48)""#]],
+        expect,
     );
 }
 
@@ -6818,6 +6938,7 @@ fn org_babel_execute_table_column_stats_deep_state_combo() {
 fn org_babel_execute_assoc_list_transform_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6858,7 +6979,7 @@ fn org_babel_execute_assoc_list_transform_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 45)""#]],
+        expect,
     );
 }
 
@@ -6866,6 +6987,7 @@ fn org_babel_execute_assoc_list_transform_deep_state_combo() {
 fn org_babel_execute_mapcar_cl_loop_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6901,7 +7023,7 @@ fn org_babel_execute_mapcar_cl_loop_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 45)""#]],
+        expect,
     );
 }
 
@@ -6909,6 +7031,7 @@ fn org_babel_execute_mapcar_cl_loop_deep_state_combo() {
 fn org_babel_execute_map_assoc_chain_table_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 49 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -6959,7 +7082,7 @@ fn org_babel_execute_map_assoc_chain_table_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 49 45)""#]],
+        expect,
     );
 }
 
@@ -6967,6 +7090,7 @@ fn org_babel_execute_map_assoc_chain_table_deep_combo() {
 fn org_babel_execute_mapcar_table_column_compute_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7006,7 +7130,7 @@ fn org_babel_execute_mapcar_table_column_compute_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 45)""#]],
+        expect,
     );
 }
 
@@ -7014,6 +7138,7 @@ fn org_babel_execute_mapcar_table_column_compute_deep_combo() {
 fn org_babel_execute_map_tree_assoc_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7056,7 +7181,7 @@ fn org_babel_execute_map_tree_assoc_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 45)""#]],
+        expect,
     );
 }
 
@@ -7064,6 +7189,7 @@ fn org_babel_execute_map_tree_assoc_chain_deep_combo() {
 fn org_babel_execute_tree_map_reduce_pipeline_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7113,7 +7239,7 @@ fn org_babel_execute_tree_map_reduce_pipeline_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 45)""#]],
+        expect,
     );
 }
 
@@ -7121,6 +7247,7 @@ fn org_babel_execute_tree_map_reduce_pipeline_deep_combo() {
 fn org_babel_execute_multi_table_var_chain_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 47 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7169,7 +7296,7 @@ fn org_babel_execute_multi_table_var_chain_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 47 45)""#]],
+        expect,
     );
 }
 
@@ -7177,6 +7304,7 @@ fn org_babel_execute_multi_table_var_chain_deep_state_combo() {
 fn org_babel_execute_sequence_slice_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7217,7 +7345,7 @@ fn org_babel_execute_sequence_slice_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 45)""#]],
+        expect,
     );
 }
 
@@ -7225,6 +7353,7 @@ fn org_babel_execute_sequence_slice_deep_state_combo() {
 fn org_babel_execute_io_process_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7268,7 +7397,7 @@ fn org_babel_execute_io_process_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 45)""#]],
+        expect,
     );
 }
 
@@ -7276,6 +7405,7 @@ fn org_babel_execute_io_process_deep_state_combo() {
 fn org_babel_execute_vector_operations_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7312,7 +7442,7 @@ fn org_babel_execute_vector_operations_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 45)""#]],
+        expect,
     );
 }
 
@@ -7320,6 +7450,7 @@ fn org_babel_execute_vector_operations_deep_state_combo() {
 fn org_babel_execute_type_check_coerce_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7355,7 +7486,7 @@ fn org_babel_execute_type_check_coerce_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 45)""#]],
+        expect,
     );
 }
 
@@ -7363,6 +7494,7 @@ fn org_babel_execute_type_check_coerce_deep_state_combo() {
 fn org_babel_execute_string_predicates_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7403,7 +7535,7 @@ fn org_babel_execute_string_predicates_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 45)""#]],
+        expect,
     );
 }
 
@@ -7411,6 +7543,7 @@ fn org_babel_execute_string_predicates_deep_state_combo() {
 fn org_babel_execute_number_predicates_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7445,7 +7578,7 @@ fn org_babel_execute_number_predicates_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]],
+        expect,
     );
 }
 
@@ -7453,6 +7586,7 @@ fn org_babel_execute_number_predicates_deep_state_combo() {
 fn org_babel_execute_list_map_tree_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p (3 4))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7494,7 +7628,7 @@ fn org_babel_execute_list_map_tree_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p (3 4))""#]],
+        expect,
     );
 }
 
@@ -7502,6 +7636,7 @@ fn org_babel_execute_list_map_tree_deep_state_combo() {
 fn org_babel_execute_seq_count_position_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7538,7 +7673,7 @@ fn org_babel_execute_seq_count_position_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 45)""#]],
+        expect,
     );
 }
 
@@ -7546,6 +7681,7 @@ fn org_babel_execute_seq_count_position_deep_state_combo() {
 fn org_babel_execute_seq_partition_flatten_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 32 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7579,7 +7715,7 @@ fn org_babel_execute_seq_partition_flatten_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 32 45)""#]],
+        expect,
     );
 }
 
@@ -7587,6 +7723,7 @@ fn org_babel_execute_seq_partition_flatten_deep_state_combo() {
 fn org_babel_execute_map_assoc_sort_reverse_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7626,7 +7763,7 @@ fn org_babel_execute_map_assoc_sort_reverse_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 45)""#]],
+        expect,
     );
 }
 
@@ -7634,6 +7771,7 @@ fn org_babel_execute_map_assoc_sort_reverse_deep_combo() {
 fn org_babel_execute_string_replace_concat_length_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7670,7 +7808,7 @@ fn org_babel_execute_string_replace_concat_length_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 45)""#]],
+        expect,
     );
 }
 
@@ -7678,6 +7816,7 @@ fn org_babel_execute_string_replace_concat_length_deep_combo() {
 fn org_babel_execute_multi_var_header_chain_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7721,7 +7860,7 @@ fn org_babel_execute_multi_var_header_chain_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 42 45)""#]],
+        expect,
     );
 }
 
@@ -7729,6 +7868,7 @@ fn org_babel_execute_multi_var_header_chain_deep_state_combo() {
 fn org_babel_execute_table_row_col_access_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7775,7 +7915,7 @@ fn org_babel_execute_table_row_col_access_deep_state_combo() {
                 table-lisp
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 48)""#]],
+        expect,
     );
 }
 
@@ -7783,6 +7923,7 @@ fn org_babel_execute_table_row_col_access_deep_state_combo() {
 fn org_babel_execute_mapcar_plist_alist_transform_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7818,7 +7959,7 @@ fn org_babel_execute_mapcar_plist_alist_transform_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 45)""#]],
+        expect,
     );
 }
 
@@ -7826,6 +7967,7 @@ fn org_babel_execute_mapcar_plist_alist_transform_deep_combo() {
 fn org_babel_execute_seq_union_intersection_diff_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7860,7 +8002,7 @@ fn org_babel_execute_seq_union_intersection_diff_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]],
+        expect,
     );
 }
 
@@ -7868,6 +8010,7 @@ fn org_babel_execute_seq_union_intersection_diff_deep_combo() {
 fn org_babel_execute_map_table_reduce_pipeline_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7914,7 +8057,7 @@ fn org_babel_execute_map_table_reduce_pipeline_deep_combo() {
                 raw-lisp
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 45 48)""#]],
+        expect,
     );
 }
 
@@ -7922,6 +8065,7 @@ fn org_babel_execute_map_table_reduce_pipeline_deep_combo() {
 fn org_babel_execute_struct_access_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -7960,7 +8104,7 @@ fn org_babel_execute_struct_access_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 45)""#]],
+        expect,
     );
 }
 
@@ -7968,6 +8112,7 @@ fn org_babel_execute_struct_access_deep_state_combo() {
 fn org_babel_execute_catch_throw_block_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8002,7 +8147,7 @@ fn org_babel_execute_catch_throw_block_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]],
+        expect,
     );
 }
 
@@ -8010,6 +8155,7 @@ fn org_babel_execute_catch_throw_block_deep_state_combo() {
 fn org_babel_execute_cl_loop_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8044,7 +8190,7 @@ fn org_babel_execute_cl_loop_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]],
+        expect,
     );
 }
 
@@ -8052,6 +8198,7 @@ fn org_babel_execute_cl_loop_deep_state_combo() {
 fn org_babel_execute_multi_type_result_chain_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8094,7 +8241,7 @@ fn org_babel_execute_multi_type_result_chain_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 45)""#]],
+        expect,
     );
 }
 
@@ -8102,6 +8249,7 @@ fn org_babel_execute_multi_type_result_chain_deep_state_combo() {
 fn org_babel_execute_list_append_reverse_sort_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 47 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8150,7 +8298,7 @@ fn org_babel_execute_list_append_reverse_sort_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 47 45)""#]],
+        expect,
     );
 }
 
@@ -8158,6 +8306,7 @@ fn org_babel_execute_list_append_reverse_sort_deep_combo() {
 fn org_babel_execute_condition_case_unwind_protect_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8196,7 +8345,7 @@ fn org_babel_execute_condition_case_unwind_protect_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 45)""#]],
+        expect,
     );
 }
 
@@ -8204,6 +8353,7 @@ fn org_babel_execute_condition_case_unwind_protect_deep_combo() {
 fn org_babel_execute_multi_block_dependency_chain_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8244,7 +8394,7 @@ fn org_babel_execute_multi_block_dependency_chain_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 39 45)""#]],
+        expect,
     );
 }
 
@@ -8252,6 +8402,7 @@ fn org_babel_execute_multi_block_dependency_chain_deep_combo() {
 fn org_babel_execute_seq_sort_group_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8288,7 +8439,7 @@ fn org_babel_execute_seq_sort_group_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 45)""#]],
+        expect,
     );
 }
 
@@ -8296,6 +8447,7 @@ fn org_babel_execute_seq_sort_group_deep_state_combo() {
 fn org_babel_execute_hash_table_operations_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 43 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8340,7 +8492,7 @@ fn org_babel_execute_hash_table_operations_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 43 45)""#]],
+        expect,
     );
 }
 
@@ -8348,6 +8500,7 @@ fn org_babel_execute_hash_table_operations_deep_state_combo() {
 fn org_babel_execute_property_list_alist_conversion_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8384,7 +8537,7 @@ fn org_babel_execute_property_list_alist_conversion_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 45)""#]],
+        expect,
     );
 }
 
@@ -8392,6 +8545,7 @@ fn org_babel_execute_property_list_alist_conversion_deep_combo() {
 fn org_babel_execute_number_theory_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function gcd)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8428,7 +8582,7 @@ fn org_babel_execute_number_theory_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (void-function gcd)""#]],
+        expect,
     );
 }
 
@@ -8436,6 +8590,7 @@ fn org_babel_execute_number_theory_deep_state_combo() {
 fn org_babel_execute_string_split_join_match_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8472,7 +8627,7 @@ fn org_babel_execute_string_split_join_match_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 45)""#]],
+        expect,
     );
 }
 
@@ -8480,6 +8635,7 @@ fn org_babel_execute_string_split_join_match_deep_state_combo() {
 fn org_babel_execute_setq_let_star_dolist_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8514,7 +8670,7 @@ fn org_babel_execute_setq_let_star_dolist_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]],
+        expect,
     );
 }
 
@@ -8522,6 +8678,7 @@ fn org_babel_execute_setq_let_star_dolist_deep_state_combo() {
 fn org_babel_execute_char_alist_plist_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8558,7 +8715,7 @@ fn org_babel_execute_char_alist_plist_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 45)""#]],
+        expect,
     );
 }
 
@@ -8566,6 +8723,7 @@ fn org_babel_execute_char_alist_plist_deep_state_combo() {
 fn org_babel_execute_recursive_fib_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 31 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8598,7 +8756,7 @@ fn org_babel_execute_recursive_fib_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 31 45)""#]],
+        expect,
     );
 }
 
@@ -8606,6 +8764,7 @@ fn org_babel_execute_recursive_fib_deep_state_combo() {
 fn org_babel_execute_type_coercion_boundary_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8640,7 +8799,7 @@ fn org_babel_execute_type_coercion_boundary_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]],
+        expect,
     );
 }
 
@@ -8648,6 +8807,7 @@ fn org_babel_execute_type_coercion_boundary_deep_state_combo() {
 fn org_babel_execute_mapcar_filter_reduce_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8690,7 +8850,7 @@ fn org_babel_execute_mapcar_filter_reduce_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 45)""#]],
+        expect,
     );
 }
 
@@ -8762,6 +8922,7 @@ fn org_babel_execute_file_output_tangle_deep_state_combo() {
 fn org_babel_execute_string_list_table_mixed_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8801,7 +8962,7 @@ fn org_babel_execute_string_list_table_mixed_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 45)""#]],
+        expect,
     );
 }
 
@@ -8809,6 +8970,7 @@ fn org_babel_execute_string_list_table_mixed_deep_combo() {
 fn org_babel_execute_let_lambda_defun_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8843,7 +9005,7 @@ fn org_babel_execute_let_lambda_defun_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]],
+        expect,
     );
 }
 
@@ -8851,6 +9013,7 @@ fn org_babel_execute_let_lambda_defun_deep_state_combo() {
 fn org_babel_execute_cond_assoc_lookup_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8885,7 +9048,7 @@ fn org_babel_execute_cond_assoc_lookup_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]],
+        expect,
     );
 }
 
@@ -8893,6 +9056,7 @@ fn org_babel_execute_cond_assoc_lookup_deep_state_combo() {
 fn org_babel_execute_arithmetic_comparison_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8927,7 +9091,7 @@ fn org_babel_execute_arithmetic_comparison_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]],
+        expect,
     );
 }
 
@@ -8935,6 +9099,7 @@ fn org_babel_execute_arithmetic_comparison_deep_state_combo() {
 fn org_babel_execute_string_concat_format_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -8970,7 +9135,7 @@ fn org_babel_execute_string_concat_format_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 45)""#]],
+        expect,
     );
 }
 
@@ -8978,6 +9143,7 @@ fn org_babel_execute_string_concat_format_deep_state_combo() {
 fn org_babel_execute_map_accumulate_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -9025,7 +9191,7 @@ fn org_babel_execute_map_accumulate_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 45)""#]],
+        expect,
     );
 }
 
@@ -9033,6 +9199,7 @@ fn org_babel_execute_map_accumulate_deep_state_combo() {
 fn org_babel_execute_complex_list_structure_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -9068,7 +9235,7 @@ fn org_babel_execute_complex_list_structure_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 45)""#]],
+        expect,
     );
 }
 
@@ -9076,6 +9243,7 @@ fn org_babel_execute_complex_list_structure_deep_combo() {
 fn org_babel_execute_result_type_boolean_vector_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -9114,7 +9282,7 @@ fn org_babel_execute_result_type_boolean_vector_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 45)""#]],
+        expect,
     );
 }
 
@@ -9122,6 +9290,7 @@ fn org_babel_execute_result_type_boolean_vector_deep_combo() {
 fn org_babel_execute_block_var_ref_result_order_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -9161,7 +9330,7 @@ fn org_babel_execute_block_var_ref_result_order_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 45)""#]],
+        expect,
     );
 }
 
@@ -9169,6 +9338,7 @@ fn org_babel_execute_block_var_ref_result_order_deep_combo() {
 fn org_babel_execute_table_named_result_header_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 55 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -9225,7 +9395,7 @@ fn org_babel_execute_table_named_result_header_deep_combo() {
                 table-lisp
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 55 48)""#]],
+        expect,
     );
 }
 
@@ -9233,6 +9403,7 @@ fn org_babel_execute_table_named_result_header_deep_combo() {
 fn org_babel_execute_result_insert_update_replace_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -9282,7 +9453,7 @@ fn org_babel_execute_result_insert_update_replace_deep_combo() {
                     after-remove
                     after-new
                     (integerp result-3))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 48 48)""#]],
+        expect,
     );
 }
 
@@ -9290,6 +9461,7 @@ fn org_babel_execute_result_insert_update_replace_deep_combo() {
 fn org_babel_execute_result_type_string_number_list_deep_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -9328,7 +9500,7 @@ fn org_babel_execute_result_type_string_number_list_deep_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 45)""#]],
+        expect,
     );
 }
 
@@ -9336,6 +9508,7 @@ fn org_babel_execute_result_type_string_number_list_deep_combo() {
 fn org_babel_execute_nested_var_reference_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -9378,7 +9551,7 @@ fn org_babel_execute_nested_var_reference_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 41 45)""#]],
+        expect,
     );
 }
 
@@ -9386,6 +9559,7 @@ fn org_babel_execute_nested_var_reference_deep_state_combo() {
 fn org_babel_execute_output_format_string_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 31 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -9418,7 +9592,7 @@ fn org_babel_execute_output_format_string_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 31 45)""#]],
+        expect,
     );
 }
 
@@ -9426,6 +9600,7 @@ fn org_babel_execute_output_format_string_deep_state_combo() {
 fn org_babel_execute_multiple_named_results_order_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -9460,7 +9635,7 @@ fn org_babel_execute_multiple_named_results_order_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 33 45)""#]],
+        expect,
     );
 }
 
@@ -9468,6 +9643,7 @@ fn org_babel_execute_multiple_named_results_order_deep_state_combo() {
 fn org_babel_execute_noweb_var_chain_output_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -9506,7 +9682,7 @@ fn org_babel_execute_noweb_var_chain_output_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 45)""#]],
+        expect,
     );
 }
 
@@ -9514,6 +9690,7 @@ fn org_babel_execute_noweb_var_chain_output_deep_state_combo() {
 fn org_babel_execute_table_var_format_spec_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -9561,7 +9738,7 @@ fn org_babel_execute_table_var_format_spec_deep_state_combo() {
                 table-lisp
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 46 48)""#]],
+        expect,
     );
 }
 
@@ -9569,6 +9746,7 @@ fn org_babel_execute_table_var_format_spec_deep_state_combo() {
 fn org_babel_execute_header_arg_inherit_override_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -9623,7 +9801,7 @@ fn org_babel_execute_header_arg_inherit_override_deep_state_combo() {
                          (buffer-substring-no-properties
                           (point-min) (point-max))))))
           (delete-directory root t))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -9631,6 +9809,7 @@ fn org_babel_execute_header_arg_inherit_override_deep_state_combo() {
 fn org_babel_execute_assign_header_var_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -9669,7 +9848,7 @@ fn org_babel_execute_assign_header_var_deep_state_combo() {
         (list (nreverse results)
               (buffer-substring-no-properties
                (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 37 45)""#]],
+        expect,
     );
 }
 
@@ -9677,6 +9856,9 @@ fn org_babel_execute_assign_header_var_deep_state_combo() {
 fn org_babel_execute_error_handling_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""OK ((30 nil nil) ((src-block \"valid\" \"(+ 10 20)\n\") (fixed-width nil \"30\") (src-block \"niler\" \"nil\n\") (src-block \"emptier\" \"'()\n\")) \"#+NAME: valid\n#+begin_src emacs-lisp :results value replace\n(+ 10 20)\n#+end_src\n\n#+RESULTS: valid\n: 30\n\n#+NAME: niler\n#+begin_src emacs-lisp :results value replace\nnil\n#+end_src\n\n#+RESULTS: niler\n\n#+NAME: emptier\n#+begin_src emacs-lisp :results value replace\n'()\n#+end_src\n\n#+RESULTS: emptier\n\n\")""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -9725,9 +9907,7 @@ fn org_babel_execute_error_handling_deep_state_combo() {
           (list (nreverse results)
                 elements
                 buf-text))))))"##,
-        expect_test::expect![[
-            r##""OK ((30 nil nil) ((src-block \"valid\" \"(+ 10 20)\n\") (fixed-width nil \"30\") (src-block \"niler\" \"nil\n\") (src-block \"emptier\" \"'()\n\")) \"#+NAME: valid\n#+begin_src emacs-lisp :results value replace\n(+ 10 20)\n#+end_src\n\n#+RESULTS: valid\n: 30\n\n#+NAME: niler\n#+begin_src emacs-lisp :results value replace\nnil\n#+end_src\n\n#+RESULTS: niler\n\n#+NAME: emptier\n#+begin_src emacs-lisp :results value replace\n'()\n#+end_src\n\n#+RESULTS: emptier\n\n\")""##
-        ]],
+        expect,
     );
 }
 
@@ -9735,6 +9915,7 @@ fn org_babel_execute_error_handling_deep_state_combo() {
 fn org_babel_execute_result_insert_replace_remove_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 37)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -9774,7 +9955,7 @@ fn org_babel_execute_result_insert_replace_remove_deep_state_combo() {
                    after-remove
                    after-reexec
                    reexec-val))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 38 37)""#]],
+        expect,
     );
 }
 
@@ -9782,6 +9963,7 @@ fn org_babel_execute_result_insert_replace_remove_deep_state_combo() {
 fn org_babel_execute_output_var_list_table_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 47 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -9830,6 +10012,6 @@ fn org_babel_execute_output_var_list_table_deep_state_combo() {
                 elements
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 47 48)""#]],
+        expect,
     );
 }

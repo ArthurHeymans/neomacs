@@ -5,6 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_crypt_stubbed_encrypt_decrypt_reuse_hook_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -111,7 +112,7 @@ fn org_crypt_stubbed_encrypt_decrypt_reuse_hook_combo() {
                                              (nth 1 call)))
                                     call))
                                 (reverse calls)))))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -119,6 +120,7 @@ fn org_crypt_stubbed_encrypt_decrypt_reuse_hook_combo() {
 fn org_crypt_decrypt_nested_headings_autosave_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -258,7 +260,7 @@ fn org_crypt_decrypt_nested_headings_autosave_combo() {
                                      (nth 1 call))))
                              (_ call)))
                          (reverse calls)))))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -266,6 +268,7 @@ fn org_crypt_decrypt_nested_headings_autosave_combo() {
 fn org_crypt_matcher_key_error_autosave_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -421,7 +424,7 @@ fn org_crypt_matcher_key_error_autosave_combo() {
                   corrupt-still-encrypted
                    policy-results
                    (mapcar #'compact-call (reverse calls))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -429,6 +432,7 @@ fn org_crypt_matcher_key_error_autosave_combo() {
 fn org_crypt_tag_match_encrypt_decrypt_visibility_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function org-crypt--matcher-tags)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -481,6 +485,6 @@ fn org_crypt_tag_match_encrypt_decrypt_visibility_combo() {
                     after-decrypt
                     (not (string= encrypted-buf decrypted-buf))
                     (string-match-p "Secret body" decrypted-buf)))))))))"##,
-        expect_test::expect![[r#""ERR (void-function org-crypt--matcher-tags)""#]],
+        expect,
     );
 }

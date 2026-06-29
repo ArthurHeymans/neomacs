@@ -170,12 +170,10 @@ fn oracle_prop_interp2_closures_lexical_env() {
                            (app is-odd 0) (app is-odd 3) (app is-odd 6)))
                 nil))
     (fmakunbound 'neovm--i2-eval)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (15 101 (10 15 24) (11 12) (1 1 120 5040) (t t nil nil t nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (15 101 (10 15 24) (11 12) (1 1 120 5040) (t t nil nil t nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -285,10 +283,8 @@ fn oracle_prop_interp2_recursive_algorithms() {
                            (app ack 3 0) (app ack 3 2)))
                 nil))
     (fmakunbound 'neovm--i2-eval)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (excessive-lisp-nesting 1601)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (excessive-lisp-nesting 1601)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -385,12 +381,10 @@ fn oracle_prop_interp2_trampoline_tco() {
     (fmakunbound 'neovm--tramp-sum)
     (fmakunbound 'neovm--tramp-countdown-iter)
     (fmakunbound 'neovm--tramp-countdown)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (1 1 120 3628800 0 1 55 610 6765 0 55 5050 (0 1 2 3 4 5) (0) t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (1 1 120 3628800 0 1 55 610 6765 0 55 5050 (0 1 2 3 4 5) (0) t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -578,12 +572,10 @@ fn oracle_prop_interp2_error_handling() {
                   (catch validation msg (mklist "invalid" msg)))
                 nil))
     (fmakunbound 'neovm--e-eval)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((error div-by-zero \"division by zero\") 3 (error div-by-zero \"division by zero\") \"division by zero\" 5 (error (error unbound \"unbound variable: type-error\") \"expected integer\") (\"recovered\" \"division by zero\") (error div-by-zero \"division by zero\") 42 (error (error unbound \"unbound variable: validation\") \"value too small\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((error div-by-zero \"division by zero\") 3 (error div-by-zero \"division by zero\") \"division by zero\" 5 (error (error unbound \"unbound variable: type-error\") \"expected integer\") (\"recovered\" \"division by zero\") (error div-by-zero \"division by zero\") 42 (error (error unbound \"unbound variable: validation\") \"value too small\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -720,12 +712,10 @@ fn oracle_prop_interp2_scoping_and_capture() {
                      (app double 21)))
                 nil))
     (fmakunbound 'neovm--i2-eval)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (20 10 (100 11 111) (1 5 11 15) (1 2 3 4 5 3) (0 5 10) 42)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (20 10 (100 11 111) (1 5 11 15) (1 2 3 4 5 3) (0 5 10) 42)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -886,8 +876,6 @@ fn oracle_prop_interp2_mutation_and_sequencing() {
                              (app increment) (app increment))))
                 nil))
     (fmakunbound 'neovm--m-eval)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (20 55 3628800 42 (3 6) 55 (1 2 3 4 5))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (20 55 3628800 42 (3 6) 55 (1 2 3 4 5))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

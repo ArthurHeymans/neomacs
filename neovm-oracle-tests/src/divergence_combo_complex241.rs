@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx241_display_space_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((space :width 20) nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -17,13 +18,16 @@ fn div_cx241_display_space_property() {
         (get-text-property 1 'display)
         (get-text-property 9 'display)))
 "##,
-        expect_test::expect![[r#""OK ((space :width 20) nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx241_display_integer_and_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (42 \"REPLACED\" (image :type xpm :file \"fake.xpm\") #(\"AAA BBB CCC\" 0 2 (display 42) 4 6 (display \"REPLACED\") 8 10 (display (image :type xpm :file \"fake.xpm\"))))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -36,15 +40,14 @@ fn div_cx241_display_integer_and_string() {
         (get-text-property 9 'display)
         (buffer-string)))
 "##,
-        expect_test::expect![[
-            r#""OK (42 \"REPLACED\" (image :type xpm :file \"fake.xpm\") #(\"AAA BBB CCC\" 0 2 (display 42) 4 6 (display \"REPLACED\") 8 10 (display (image :type xpm :file \"fake.xpm\"))))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx241_display_height_and_raise() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 13 18)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -55,13 +58,16 @@ fn div_cx241_display_height_and_raise() {
         (get-text-property 13 'display)
         (get-text-property 1 'display)))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 13 18)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx241_display_left_right_fringe() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((left-fringe right-arrow) (right-fringe left-arrow help-echo \"tip\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -71,15 +77,16 @@ fn div_cx241_display_left_right_fringe() {
   (list (get-text-property 1 'display)
         (get-text-property 7 'display)))
 "##,
-        expect_test::expect![[
-            r#""OK ((left-fringe right-arrow) (right-fringe left-arrow help-echo \"tip\"))""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx241_display_slice_for_image() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((slice 0 0 50 50 (image :type png :file \"fake.png\" :scale default)) slice)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((img (create-image "fake.png" 'png nil)))
@@ -89,15 +96,16 @@ fn div_cx241_display_slice_for_image() {
     (list (get-text-property 1 'display)
           (car (get-text-property 1 'display)))))
 "##,
-        expect_test::expect![[
-            r#""OK ((slice 0 0 50 50 (image :type png :file \"fake.png\" :scale default)) slice)""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx241_display_with_space_width_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((space :width 10) (space :width 5 :height 2) (space :align-to 20))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -109,15 +117,14 @@ fn div_cx241_display_with_space_width_variants() {
         (get-text-property 8 'display)
         (get-text-property 10 'display)))
 "##,
-        expect_test::expect![[
-            r#""OK ((space :width 10) (space :width 5 :height 2) (space :align-to 20))""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx241_display_chain_across_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"TEXT\" \"OVERLAY\" \"OVERLAY\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -130,13 +137,14 @@ fn div_cx241_display_chain_across_overlays() {
         (get-char-property 5 'display)
         (get-char-property 7 'display)))
 "##,
-        expect_test::expect![[r#""OK (\"TEXT\" \"OVERLAY\" \"OVERLAY\" nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx241_display_wrap_prefix_line_prefix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"LP> \" \"WP> \" nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -148,13 +156,16 @@ fn div_cx241_display_wrap_prefix_line_prefix() {
         (get-text-property 11 'line-prefix)
         (get-text-property 11 'wrap-prefix)))
 "##,
-        expect_test::expect![[r#""OK (\"LP> \" \"WP> \" nil nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx241_display_invisible_with_display_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (#(\"visible hidden visib\" 0 6 (display \"V\")) #(\"visible hidden visib\" 0 6 (display \"V\")) \"V\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -167,15 +178,14 @@ fn div_cx241_display_invisible_with_display_prop() {
         (filter-buffer-substring 1 21)
         (get-text-property 1 'display)))
 "##,
-        expect_test::expect![[
-            r#""OK (#(\"visible hidden visib\" 0 6 (display \"V\")) #(\"visible hidden visib\" 0 6 (display \"V\")) \"V\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx241_display_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -205,6 +215,6 @@ fn div_cx241_display_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1)))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1)""#]],
+        expect,
     );
 }

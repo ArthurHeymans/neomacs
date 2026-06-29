@@ -10,10 +10,9 @@ use super::common::{ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity, eval_
 fn oracle_prop_concat_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(concat "hello" " " "world")"#,
-        expect_test::expect![[r#""OK \"hello world\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"hello world\"""#]];
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(r#"(concat "hello" " " "world")"#, expect);
     assert_ok_eq(r#""hello world""#, &o, &n);
 }
 
@@ -21,10 +20,8 @@ fn oracle_prop_concat_strings() {
 fn oracle_prop_concat_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        "(concat)",
-        expect_test::expect![[r#""OK \"\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect("(concat)", expect);
     assert_ok_eq(r#""""#, &o, &n);
 }
 
@@ -32,10 +29,8 @@ fn oracle_prop_concat_empty() {
 fn oracle_prop_concat_single() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(concat "only")"#,
-        expect_test::expect![[r#""OK \"only\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"only\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(concat "only")"#, expect);
     assert_ok_eq(r#""only""#, &o, &n);
 }
 
@@ -43,10 +38,9 @@ fn oracle_prop_concat_single() {
 fn oracle_prop_concat_many() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(concat "a" "b" "c" "d" "e" "f")"#,
-        expect_test::expect![[r#""OK \"abcdef\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"abcdef\"""#]];
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(r#"(concat "a" "b" "c" "d" "e" "f")"#, expect);
     assert_ok_eq(r#""abcdef""#, &o, &n);
 }
 
@@ -60,20 +54,17 @@ fn oracle_prop_concat_rejects_bool_vector_as_sequence_like_gnu() {
     let form = r#"(let ((bv (make-bool-vector 3 nil)))
                     (aset bv 1 t)
                     (concat bv))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (wrong-type-argument sequencep #&3\"\u{2}\")""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument sequencep #&3\"\u{2}\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
 fn oracle_prop_concat_with_empty_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(concat "" "hi" "" "!" "")"#,
-        expect_test::expect![[r#""OK \"hi!\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"hi!\"""#]];
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(r#"(concat "" "hi" "" "!" "")"#, expect);
     assert_ok_eq(r#""hi!""#, &o, &n);
 }
 
@@ -82,10 +73,8 @@ fn oracle_prop_concat_with_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r####"(concat (format "%d" 42) "-" (format "%s" "hello"))"####;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK \"42-hello\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"42-hello\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq(r#""42-hello""#, &o, &n);
 }
 
@@ -94,10 +83,8 @@ fn oracle_prop_concat_with_number_to_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
     let form = r####"(concat "[" (number-to-string 42) "]")"####;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK \"[42]\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"[42]\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq(r#""[42]""#, &o, &n);
 }
 
@@ -109,10 +96,8 @@ fn oracle_prop_concat_in_loop() {
                     (dotimes (i 5)
                       (setq result (concat result (number-to-string i))))
                     result)"####;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK \"01234\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"01234\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq(r#""01234""#, &o, &n);
 }
 

@@ -42,10 +42,9 @@ fn oracle_prop_proper_list_predicates_dotted_and_circular() {
                       (proper-list-p 'symbol)
                       (proper-list-p t)
                       (proper-list-p [1 2 3])))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 5 1 50 nil nil nil nil nil nil nil nil nil nil)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (0 5 1 50 nil nil nil nil nil nil nil nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -85,12 +84,10 @@ fn oracle_prop_proper_list_predicates_type_discrimination() {
                                     (if (null v) 'nil-special
                                       (eq (consp v) (not (atom v))))))
                             values))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((nil t nil nil t 0 t nil-special) (t nil t nil t nil t t) (42 nil t nil t nil t t) (3.14 nil t nil t nil t t) (\"string\" nil t nil t nil t t) (symbol nil t nil t nil t t) ((1 2 3) t nil t nil 3 t t) ((a . b) t nil t nil nil t t) ((nil) t nil t nil 1 t t) ([1 2 3] nil t nil t nil t t) (#s(hash-table) nil t nil t nil t t) (65 nil t nil t nil t t) (:keyword nil t nil t nil t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((nil t nil nil t 0 t nil-special) (t nil t nil t nil t t) (42 nil t nil t nil t t) (3.14 nil t nil t nil t t) (\"string\" nil t nil t nil t t) (symbol nil t nil t nil t t) ((1 2 3) t nil t nil 3 t t) ((a . b) t nil t nil nil t t) ((nil) t nil t nil 1 t t) ([1 2 3] nil t nil t nil t t) (#s(hash-table) nil t nil t nil t t) (65 nil t nil t nil t t) (:keyword nil t nil t nil t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -135,10 +132,8 @@ fn oracle_prop_proper_list_predicates_deeply_nested() {
                       (listp (caaar deep1))
                       (consp (caaar deep1))
                       (atom (caaaar deep1))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 1 1 1 1 1 nil 2 2 t 2 2 2 t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 1 1 1 1 1 nil 2 2 t 2 2 2 t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -208,12 +203,10 @@ fn oracle_prop_proper_list_predicates_safe_length_analysis() {
                                 check-results))))
                 (nreverse check-results))))))
     (fmakunbound 'neovm--test-classify-structure)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((atom 0 symbol) (proper-list 3 3) (dotted-list 1 b) (dotted-list 2 z) (dotted-list 3 4) (proper-list 20 20) (atom 0 integer) (atom 0 string) (atom 0 vector) (proper-list 1 1)) (circular 5 detected) (t t t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((atom 0 symbol) (proper-list 3 3) (dotted-list 1 b) (dotted-list 2 z) (dotted-list 3 4) (proper-list 20 20) (atom 0 integer) (atom 0 string) (atom 0 vector) (proper-list 1 1)) (circular 5 detected) (t t t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -282,12 +275,10 @@ fn oracle_prop_proper_list_predicates_dispatch_tree() {
         (mapcar (lambda (v) (funcall 'neovm--test-process-value v))
                 test-values))
     (fmakunbound 'neovm--test-process-value)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((nil-value empty-proper-list atom) (number-list 15 5) (string-list \"hello,world\" 2) (mixed-proper-list 3 (integer string symbol)) (dotted-pair a b nil nil) (dotted-pair (1 2) (3 . 4) t t) (number 42 1764) (string \"test\" 4) (vector 3) (symbol \"my-symbol\") (symbol \"t\") (symbol \":keyword\") (dotted-pair 10 (20 . 30) nil t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((nil-value empty-proper-list atom) (number-list 15 5) (string-list \"hello,world\" 2) (mixed-proper-list 3 (integer string symbol)) (dotted-pair a b nil nil) (dotted-pair (1 2) (3 . 4) t t) (number 42 1764) (string \"test\" 4) (vector 3) (symbol \"my-symbol\") (symbol \"t\") (symbol \":keyword\") (dotted-pair 10 (20 . 30) nil t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -323,12 +314,10 @@ fn oracle_prop_proper_list_predicates_invariant_checks() {
                               (cons (list v inv1 inv2 inv3 inv4 inv5 pass)
                                     details))))
                     (list all-pass (nreverse details)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t ((nil t t t t t t) (t t t t t t t) (0 t t t t t t) (1 t t t t t t) (-1 t t t t t t) (3.14 t t t t t t) (\"s\" t t t t t t) (sym t t t t t t) (:kw t t t t t t) ((a) t t t t t t) ((1 2 3) t t t t t t) ((a . b) t t t t t t) ((nil) t t t t t t) ((1 . 2) t t t t t t) ((1 2 . 3) t t t t t t) ([1] t t t t t t) ((x x x x x) t t t t t t)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t ((nil t t t t t t) (t t t t t t t) (0 t t t t t t) (1 t t t t t t) (-1 t t t t t t) (3.14 t t t t t t) (\"s\" t t t t t t) (sym t t t t t t) (:kw t t t t t t) ((a) t t t t t t) ((1 2 3) t t t t t t) ((a . b) t t t t t t) ((nil) t t t t t t) ((1 . 2) t t t t t t) ((1 2 . 3) t t t t t t) ([1] t t t t t t) ((x x x x x) t t t t t t)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -378,8 +367,6 @@ fn oracle_prop_proper_list_predicates_filter_heterogeneous() {
                           (unless (null a)
                             (unless (nlistp a) (setq check nil))))
                         check)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (6 8 3 3 nil nil (t 0 nil t) t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (6 8 3 3 nil nil (t 0 nil t) t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -36,12 +36,10 @@ fn oracle_prop_regexp_ops_adv_regexp_quote_all_specials_in_context() {
                   (list needle quoted found
                         (if found (match-string 0 haystack) nil))))
               test-cases))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"file.txt\" \"file\\\\.txt\" 5 \"file.txt\") (\"a*b+c?\" \"a\\\\*b\\\\+c\\\\?\" 5 \"a*b+c?\") (\"[0-9]\" \"\\\\[0-9]\" 6 \"[0-9]\") (\"^start$\" \"\\\\^start\\\\$\" 4 \"^start$\") (\"(group)\" \"(group)\" 3 \"(group)\") (\"a\\\\b\" \"a\\\\\\\\b\" 5 \"a\\\\b\") (\"x|y\" \"x|y\" 7 \"x|y\") (\"a{3}\" \"a{3}\" 7 \"a{3}\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"file.txt\" \"file\\\\.txt\" 5 \"file.txt\") (\"a*b+c?\" \"a\\\\*b\\\\+c\\\\?\" 5 \"a*b+c?\") (\"[0-9]\" \"\\\\[0-9]\" 6 \"[0-9]\") (\"^start$\" \"\\\\^start\\\\$\" 4 \"^start$\") (\"(group)\" \"(group)\" 3 \"(group)\") (\"a\\\\b\" \"a\\\\\\\\b\" 5 \"a\\\\b\") (\"x|y\" \"x|y\" 7 \"x|y\") (\"a{3}\" \"a{3}\" 7 \"a{3}\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -71,12 +69,10 @@ fn oracle_prop_regexp_ops_adv_replace_regexp_all_params_combined() {
       ;; START past the first match
       (replace-regexp-in-string "[0-9]+" "NUM"
                                 "a1 b2 c3 d4" nil nil nil 5))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"10:foo 20:bar 30:baz\" \"20:bar 30:baz\" \"\\\\1-literal \\\\1-literal \\\\1-literal\" \"GOODBYE world\" \" cNUM dNUM\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"10:foo 20:bar 30:baz\" \"20:bar 30:baz\" \"\\\\1-literal \\\\1-literal \\\\1-literal\" \"GOODBYE world\" \" cNUM dNUM\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -106,12 +102,10 @@ fn oracle_prop_regexp_ops_adv_nested_groups_extraction() {
             (setq results (cons (list full fname arg-list (length arg-list)) results)))
           (setq start mend)))
       (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"func(arg1, arg2)\" \"func\" (\"arg1\" \"arg2\") 2) (\"func(x, y, z)\" \"func\" (\"x\" \"y\" \"z\") 3) (\"func()\" \"func\" nil 0))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"func(arg1, arg2)\" \"func\" (\"arg1\" \"arg2\") 2) (\"func(x, y, z)\" \"func\" (\"x\" \"y\" \"z\") 3) (\"func()\" \"func\" nil 0))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -148,12 +142,10 @@ fn oracle_prop_regexp_ops_adv_non_greedy_matching() {
         (let ((nested "<div><span>inner</span></div>"))
           (string-match "<div>\\([^<]*\\)" nested)
           (match-string 1 nested))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"content1</tag> <tag>content2\" \"content1\" (\"content1\" \"content2\") \"<span>inner</span>\" \"\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"content1</tag> <tag>content2\" \"content1\" (\"content1\" \"content2\") \"<span>inner</span>\" \"\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -196,12 +188,10 @@ fn oracle_prop_regexp_ops_adv_alternation_complex() {
         (setq results (cons (match-string 1 s) results)))
 
       (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"if\" \"then\" \"else\" \"while\") (\"42\" \"0xFF\" \"0o77\" \"0b1010\") \"foo\" \"foobar\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"if\" \"then\" \"else\" \"while\") (\"42\" \"0xFF\" \"0o77\" \"0b1010\") \"foo\" \"foobar\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -252,12 +242,10 @@ fn oracle_prop_regexp_ops_adv_looking_at_position_scanning() {
              (setq tokens (cons (list 'unknown (char-to-string (char-after))) tokens))
              (forward-char 1))))
         (nreverse tokens)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((number \"123\") (string \"hello\") (open-paren \"(\") (symbol \"+\") (symbol \"a\") (symbol \"b\") (close-paren \")\") (comment \"; comment\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((number \"123\") (string \"hello\") (open-paren \"(\") (symbol \"+\") (symbol \"a\") (symbol \"b\") (close-paren \")\") (comment \"; comment\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -304,12 +292,10 @@ fn oracle_prop_regexp_ops_adv_structured_data_extractor() {
           (mapcar #'test--parse-log-entry logs)))
       ;; Cleanup
       (fmakunbound 'test--parse-log-entry))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"level\" . \"INFO\") (\"time\" . \"10:30:45\") (\"msg\" . \"User logged in\") (\"meta\" (\"user\" . \"alice\") (\"ip\" . \"10.0.0.1\"))) ((\"level\" . \"ERROR\") (\"time\" . \"10:31:02\") (\"msg\" . \"Connection failed\") (\"meta\" (\"host\" . \"db.local\") (\"port\" . \"5432\") (\"retry\" . \"3\"))) ((\"level\" . \"WARN\") (\"time\" . \"10:31:15\") (\"msg\" . \"High memory usage\") (\"meta\")) ((\"level\" . \"DEBUG\") (\"time\" . \"10:32:00\") (\"msg\" . \"Cache hit\") (\"meta\" (\"key\" . \"session_42\"))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"level\" . \"INFO\") (\"time\" . \"10:30:45\") (\"msg\" . \"User logged in\") (\"meta\" (\"user\" . \"alice\") (\"ip\" . \"10.0.0.1\"))) ((\"level\" . \"ERROR\") (\"time\" . \"10:31:02\") (\"msg\" . \"Connection failed\") (\"meta\" (\"host\" . \"db.local\") (\"port\" . \"5432\") (\"retry\" . \"3\"))) ((\"level\" . \"WARN\") (\"time\" . \"10:31:15\") (\"msg\" . \"High memory usage\") (\"meta\")) ((\"level\" . \"DEBUG\") (\"time\" . \"10:32:00\") (\"msg\" . \"Cache hit\") (\"meta\" (\"key\" . \"session_42\"))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -361,10 +347,8 @@ fn oracle_prop_regexp_ops_adv_url_parser() {
       ;; Cleanup
       (fmakunbound 'test--parse-url)
       (fmakunbound 'test--parse-query-string))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"http\" \"example.com\" nil \"/path/to/page\" \"key=val&foo=bar\") ((\"key\" . \"val\") (\"foo\" . \"bar\"))) ((\"https\" \"api.server.io\" 8443 \"/v2/users\" \"limit=10&offset=20\") ((\"limit\" . \"10\") (\"offset\" . \"20\"))) ((\"ftp\" \"files.host.net\" nil \"/pub/data.tar.gz\" nil) nil) ((\"http\" \"localhost\" 3000 \"/\" nil) nil) ((\"https\" \"example.com\" nil \"/\" nil) nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"http\" \"example.com\" nil \"/path/to/page\" \"key=val&foo=bar\") ((\"key\" . \"val\") (\"foo\" . \"bar\"))) ((\"https\" \"api.server.io\" 8443 \"/v2/users\" \"limit=10&offset=20\") ((\"limit\" . \"10\") (\"offset\" . \"20\"))) ((\"ftp\" \"files.host.net\" nil \"/pub/data.tar.gz\" nil) nil) ((\"http\" \"localhost\" 3000 \"/\" nil) nil) ((\"https\" \"example.com\" nil \"/\" nil) nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

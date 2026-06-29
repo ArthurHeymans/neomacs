@@ -25,12 +25,10 @@ fn oracle_define_prefix_command_installs_function_and_value_keymaps() {
     (fmakunbound command)
     (makunbound command)
     (makunbound mapvar)))"#;
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (neomacs--oracle-prefix-command t t nil neomacs--oracle-prefix-command t t (\"Menu\") t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (neomacs--oracle-prefix-command t t nil neomacs--oracle-prefix-command t t (\"Menu\") t)""#
+    ]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq(
         r#"(neomacs--oracle-prefix-command t t nil neomacs--oracle-prefix-command t t ("Menu") t)"#,
         &oracle,

@@ -10,10 +10,8 @@ use super::common::{ORACLE_PROP_CASES, assert_ok_eq, assert_oracle_parity, eval_
 fn oracle_prop_abs_positive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        "(abs 42)",
-        expect_test::expect![[r#""OK 42""#]],
-    );
+    let expect = expect_test::expect![[r#""OK 42""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect("(abs 42)", expect);
     assert_ok_eq("42", &o, &n);
 }
 
@@ -21,10 +19,8 @@ fn oracle_prop_abs_positive() {
 fn oracle_prop_abs_negative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        "(abs -42)",
-        expect_test::expect![[r#""OK 42""#]],
-    );
+    let expect = expect_test::expect![[r#""OK 42""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect("(abs -42)", expect);
     assert_ok_eq("42", &o, &n);
 }
 
@@ -32,8 +28,8 @@ fn oracle_prop_abs_negative() {
 fn oracle_prop_abs_zero() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect("(abs 0)", expect_test::expect![[r#""OK 0""#]]);
+    let expect = expect_test::expect![[r#""OK 0""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect("(abs 0)", expect);
     assert_ok_eq("0", &o, &n);
 }
 
@@ -41,8 +37,10 @@ fn oracle_prop_abs_zero() {
 fn oracle_prop_abs_float() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    crate::common::assert_oracle_parity_expect("(abs -3.14)", expect_test::expect![r#""OK 3.14""#]);
-    crate::common::assert_oracle_parity_expect("(abs 2.5)", expect_test::expect![r#""OK 2.5""#]);
+    let expect = expect_test::expect![r#""OK 3.14""#];
+    crate::common::assert_oracle_parity_expect("(abs -3.14)", expect);
+    let expect = expect_test::expect![r#""OK 2.5""#];
+    crate::common::assert_oracle_parity_expect("(abs 2.5)", expect);
 }
 
 proptest! {

@@ -50,13 +50,12 @@ fn oracle_prop_text_props_add_text_properties_comprehensive() {
          (get-text-property 9 'category s))
    ;; Return value of add-text-properties: t if any changed, nil if none
    (add-text-properties 0 1 '(category my-cat) s)    ;; already set => nil
-   (add-text-properties 9 10 '(face italic) s)))"#; // new => t
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((bold nil nil my-cat) (bold \"tip\" highlight my-cat) (nil \"tip\" highlight my-cat) (nil nil nil my-cat) nil t)""#
-        ]],
-    );
+   (add-text-properties 9 10 '(face italic) s)))"#;
+    let expect = expect_test::expect![[
+        r#""OK ((bold nil nil my-cat) (bold \"tip\" highlight my-cat) (nil \"tip\" highlight my-cat) (nil nil nil my-cat) nil t)""#
+    ]];
+    // new => t
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -89,11 +88,10 @@ fn oracle_prop_text_props_not_all_and_any() {
    (text-property-any 5 10 'help-echo s)           ;; 5
    (text-property-any 7 10 'help-echo s)           ;; nil (help-echo ends at 7)
    (text-property-any 0 10 'face s)                ;; 0
-   (text-property-any 8 10 'face s)))"#; // nil
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (args-out-of-range 0 10)""#]],
-    );
+   (text-property-any 8 10 'face s)))"#;
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 0 10)""#]];
+    // nil
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -131,10 +129,8 @@ fn oracle_prop_text_props_previous_property_changes() {
        (setq pos (previous-property-change pos s))
        (when pos (setq boundaries (cons pos boundaries))))
      boundaries)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (9 6 3 nil nil 10 9 9 9 6 3 nil (3 6 9))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (9 6 3 nil nil 10 9 9 9 6 3 nil (3 6 9))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -179,10 +175,8 @@ fn oracle_prop_text_props_next_single_property_change() {
        (setq pos (next-single-property-change pos 'face s))
        (when pos (setq boundaries (cons pos boundaries))))
      (nreverse boundaries))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 7 12 nil 5 10 nil 2 14 nil 2 3 3 (3 7 12))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 7 12 nil 5 10 nil 2 14 nil 2 3 3 (3 7 12))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -220,12 +214,10 @@ fn oracle_prop_text_props_remove_list_of_text_properties() {
               (get-text-property 6 'category s)
               (get-text-property 6 'keymap s))))
         (list before after-first after-partial)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (10 (nil nil highlight my-cat some-map) (nil nil some-map highlight my-cat some-map))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (10 (nil nil highlight my-cat some-map) (nil nil some-map highlight my-cat some-map))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -292,12 +284,10 @@ fn oracle_prop_text_props_property_interval_collection() {
                (setq ok nil))
              (setq prev-end (nth 1 interval)))
            ok))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((0 3 font-lock-keyword-face) (4 9 font-lock-variable-name-face) (10 15 font-lock-type-face) (16 19 font-lock-string-face) (20 25 font-lock-comment-face)) ((4 9 \"fast\") (16 19 \"animal\")) 5 2 5 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((0 3 font-lock-keyword-face) (4 9 font-lock-variable-name-face) (10 15 font-lock-type-face) (16 19 font-lock-string-face) (20 25 font-lock-comment-face)) ((4 9 \"fast\") (16 19 \"animal\")) 5 2 5 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -368,10 +358,8 @@ fn oracle_prop_text_props_syntax_highlight_full_simulation() {
          (text-property-not-all 0 (length highlighted) 'fontified t highlighted)))
     (fmakunbound 'neovm--tp-simple-search-all)
     (fmakunbound 'neovm--tp-highlight)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (args-out-of-range 0 26)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 0 26)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -451,12 +439,10 @@ fn oracle_prop_text_props_rich_text_builder() {
     (fmakunbound 'neovm--tp-concat-rich)
     (fmakunbound 'neovm--tp-span)
     (fmakunbound 'neovm--tp-get-all-props-at)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (bold 1 default nil italic high underline \"http://example.com\" (face level) (face priority) 4 (5 7 16 22))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (bold 1 default nil italic high underline \"http://example.com\" (face level) (face priority) 4 (5 7 16 22))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -487,10 +473,8 @@ fn oracle_prop_text_props_get_char_property_buffer() {
    (equal (get-char-property 0 'face s) (get-text-property 0 'face s))
    (equal (get-char-property 3 'custom s) (get-text-property 3 'custom s))
    (equal (get-char-property 6 'face s) (get-text-property 6 'face s))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (bold 1 italic 2 nil nil bold italic t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (bold 1 italic 2 nil nil bold italic t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -537,10 +521,8 @@ fn oracle_prop_text_props_remove_with_overlapping_regions() {
        (setq pos (next-property-change pos s))
        (when pos (setq count (1+ count))))
      count)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (bold bold nil nil bold bold nil \"tip\" \"tip\" nil nil \"tip\" \"tip\" nil highlight highlight 8)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (bold bold nil nil bold bold nil \"tip\" \"tip\" nil nil \"tip\" \"tip\" nil highlight highlight 8)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -17,10 +17,8 @@ fn oracle_prop_insert_multi_args() {
     let form = r#"(with-temp-buffer
                     (insert "hello" " " "world" "!")
                     (buffer-string))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK \"hello world!\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"hello world!\"""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -31,10 +29,8 @@ fn oracle_prop_insert_mixed_types() {
     let form = r#"(with-temp-buffer
                     (insert ?H "ello" ?\ ?W "orld")
                     (buffer-string))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK \"Hello World\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"Hello World\"""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -46,10 +42,8 @@ fn oracle_prop_insert_at_position() {
                     (goto-char 6)
                     (insert "beautiful ")
                     (list (buffer-string) (point)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"hellobeautiful  world\" 16)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"hellobeautiful  world\" 16)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -59,10 +53,8 @@ fn oracle_prop_insert_empty_string() {
     let form = r#"(with-temp-buffer
                     (insert "before" "" "after")
                     (buffer-string))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK \"beforeafter\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"beforeafter\"""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -86,10 +78,8 @@ fn oracle_prop_insert_before_markers() {
                         (list (buffer-string)
                               after-insert
                               (marker-position m)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"AyyxxB\" 2 4)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"AyyxxB\" 2 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -119,12 +109,10 @@ fn oracle_prop_insert_build_table() {
                       (insert (format "Total: %d records\n"
                                       (length data)))
                       (buffer-string)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK \"Name        Age City      \n----------------------------\nAlice        30 Boston    \nBob          25 NYC       \nCarol        35 London    \n----------------------------\nTotal: 3 records\n\"""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK \"Name        Age City      \n----------------------------\nAlice        30 Boston    \nBob          25 NYC       \nCarol        35 London    \n----------------------------\nTotal: 3 records\n\"""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -145,12 +133,10 @@ fn oracle_prop_insert_incremental_assembly() {
                         (insert "  " (prin1-to-string item) "\n"))
                       (insert ")")
                       (buffer-string)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK \"(progn\n  (defun add (a b) (+ a b))\n  (defun mul (a b) (* a b))\n  (defun sub (a b) (- a b))\n)\"""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK \"(progn\n  (defun add (a b) (+ a b))\n  (defun mul (a b) (* a b))\n  (defun sub (a b) (- a b))\n)\"""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -171,8 +157,6 @@ fn oracle_prop_insert_and_delete_interleaved() {
                         (insert "---")
                         (setq replacements (1+ replacements)))
                       (list (buffer-string) replacements)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"aa---bb---cc---dd\" 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"aa---bb---cc---dd\" 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -57,12 +57,10 @@ fn oracle_prop_pcase_literal_and_wildcard() {
       (:alpha :matched-alpha)
       (:beta :matched-beta)
       (_ :other))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:matched-42 :matched-hello :is-foo :matched-nil :matched-t :wildcard-catches-all (:one :two :three :other :other) :matched-alpha)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:matched-42 :matched-hello :is-foo :matched-nil :matched-t :wildcard-catches-all (:one :two :three :other :other) :matched-alpha)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -117,12 +115,10 @@ fn oracle_prop_pcase_pred_patterns() {
                 ((pred consp) :pair)
                 (_ :atom)))
             '(nil (1 2) 42 "str"))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:is-number :is-string :greater-than-10 :is-list (:integer :float :string :symbol :cons :unknown) (:negative :negative :zero :positive :positive) (:empty :pair :atom :atom))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:is-number :is-string :greater-than-10 :is-list (:integer :float :string :symbol :cons :unknown) (:negative :negative :zero :positive :positive) (:empty :pair :atom :atom))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -161,12 +157,10 @@ fn oracle_prop_pcase_guard_patterns() {
                 ((and x (guard (> (length x) 2))) :medium)
                 (_ :short)))
             '("hi" "hey" "hello" "greetings"))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:large 42) (1 2 :fizz 4 :buzz :fizz :fizz :buzz :fizzbuzz :fizzbuzz) (:pair-of-two 42 \"hello\") (:short :medium :medium :long))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:large 42) (1 2 :fizz 4 :buzz :fizz :fizz :buzz :fizzbuzz :fizzbuzz) (:pair-of-two 42 \"hello\") (:short :medium :medium :long))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -209,12 +203,10 @@ fn oracle_prop_pcase_app_patterns() {
                 ((app abs (and mag (guard (> mag 10)))) (list :big mag))
                 (_ :small)))
             '(5 -15 42 -200 3 150))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:five-elements :starts-with-hello (:downcased \"hello world\") (:parsed 42 84) (:empty :short-or-medium :short-or-medium :long) (:small (:big 15) (:big 42) (:huge 200) :small (:huge 150)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:five-elements :starts-with-hello (:downcased \"hello world\") (:parsed 42 84) (:empty :short-or-medium :short-or-medium :long) (:small (:big 15) (:big 42) (:huge 200) :small (:huge 150)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -262,12 +254,10 @@ fn oracle_prop_pcase_backquote_patterns() {
     (pcase '(fn alpha beta gamma)
       (`(fn . ,args) (list :fn-args args (length args)))
       (_ :not-fn))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:point-at 3 7) (:area 200) (:pair 1 2) (:defined foo (+ 1 2)) (7 7 30 5 :unknown-op) (:bindings ((x 10) (y 20)) :body (+ x y)) (:fn-args (alpha beta gamma) 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:point-at 3 7) (:area 200) (:pair 1 2) (:defined foo (+ 1 2)) (7 7 30 5 :unknown-op) (:bindings ((x 10) (y 20)) :body (+ x y)) (:fn-args (alpha beta gamma) 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -321,12 +311,10 @@ fn oracle_prop_pcase_and_or_combinators() {
                 ((pred numberp) :moderate)
                 (_ :not-number)))
             '(50 200 -150 "hi" 0 999))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:out-of-range :low :low :mid :high :high :out-of-range) ((:positive-int 5) (:non-positive-int -3) (:non-positive-int 0) :not-int (:positive-int 42)) (:message \"file not found\") (:even-and-big 42) (:moderate :extreme :extreme :not-number :moderate :extreme))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:out-of-range :low :low :mid :high :high :out-of-range) ((:positive-int 5) (:non-positive-int -3) (:non-positive-int 0) :not-int (:positive-int 42)) (:message \"file not found\") (:even-and-big 42) (:moderate :extreme :extreme :not-number :moderate :extreme))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -363,12 +351,10 @@ fn oracle_prop_pcase_let_patterns() {
             (let hyp (sqrt (+ (* a a) (* b b)))))
        (list :sides a b :hypotenuse hyp))
       (_ :not-a-pair))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:person \"Alice\" 30) (:even-number 100 :half 50) (:original \"hello world\" :length 11 :upper \"HELLO WORLD\") (:sides 3 4 :hypotenuse 5.0))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:person \"Alice\" 30) (:even-number 100 :half 50) (:original \"hello world\" :length 11 :upper \"HELLO WORLD\") (:sides 3 4 :hypotenuse 5.0))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -411,12 +397,10 @@ fn oracle_prop_pcase_let_star() {
                  (diagonal (sqrt (+ (* w w) (* h h)))))
       (list :width w :height h :area area
             :aspect aspect :diagonal diagonal))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:sum 60 :product 6000) (:key alpha :val 42) (:sum-xy 7 :sum-ab 11 :cross -2) (:a 10 :b 20 :sum 30 :diff -10) (:op + :args (1 2 3 4) :result 10) (:first a :second b :rest (c d e f)) (:width 640 :height 480 :area 307200 :aspect 1.3333333333333333 :diagonal 800.0))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:sum 60 :product 6000) (:key alpha :val 42) (:sum-xy 7 :sum-ab 11 :cross -2) (:a 10 :b 20 :sum 30 :diff -10) (:op + :args (1 2 3 4) :result 10) (:first a :second b :rest (c d e f)) (:width 640 :height 480 :area 307200 :aspect 1.3333333333333333 :diagonal 800.0))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -468,12 +452,10 @@ fn oracle_prop_pcase_dolist() {
             (push (list idx val) evens)
           (push (list idx val) odds)))
       (list :evens (nreverse evens) :odds (nreverse odds)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"Alice\" :honor-roll) (\"Carol\" :honor-roll)) 249 ((+ 3) (- 7) (* 20) (+ 300)) ((\"origin\" :dist 0.0) (\"unit-x\" :dist 1.0) (\"unit-y\" :dist 1.0) (\"diag\" :dist 1.4142135623730951)) (:evens ((0 10) (2 20) (4 30)) :odds ((1 15) (3 25) (5 35))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"Alice\" :honor-roll) (\"Carol\" :honor-roll)) 249 ((+ 3) (- 7) (* 20) (+ 300)) ((\"origin\" :dist 0.0) (\"unit-x\" :dist 1.0) (\"unit-y\" :dist 1.0) (\"diag\" :dist 1.4142135623730951)) (:evens ((0 10) (2 20) (4 30)) :odds ((1 15) (3 25) (5 35))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -508,12 +490,10 @@ fn oracle_prop_pcase_exhaustive() {
         (pcase-exhaustive 42
           ((pred stringp) :string))
       (error (list :caught (car err))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:integer (:int :str :sym :cons :other) (:color red :intensity 255) (:caught error))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:integer (:int :str :sym :cons :other) (:color red :intensity 255) (:caught error))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -578,8 +558,6 @@ fn oracle_prop_pcase_complex_nested() {
                   '(if0 1 (+ 100 x) (- x 100))
                   env)))
     (fmakunbound 'neovm--pcase-eval-expr)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (42 10 30 90 26 110 -90)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (42 10 30 90 26 110 -90)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -14,6 +14,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_cl_letf_marker_overlay_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     // cl-letf with function rebinding; markers/overlays track.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -49,7 +50,7 @@ fn combo_cl_letf_marker_overlay_textprop_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -57,6 +58,7 @@ fn combo_cl_letf_marker_overlay_textprop_undo() {
 fn combo_cl_letf_buffer_local_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     // cl-letf with buffer-local variable rebinding.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -93,7 +95,7 @@ fn combo_cl_letf_buffer_local_marker_overlay_undo() {
                                     (get-text-property 7 'word))))
               (kill-buffer buf)
               (list in-letf after-undo)))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -101,6 +103,7 @@ fn combo_cl_letf_buffer_local_marker_overlay_undo() {
 fn combo_cl_destructuring_bind_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     // cl-destructuring-bind with edit inside.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -139,7 +142,7 @@ fn combo_cl_destructuring_bind_marker_overlay_undo() {
                                 (get-text-property 16 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -147,6 +150,7 @@ fn combo_cl_destructuring_bind_marker_overlay_undo() {
 fn combo_cl_multiple_value_bind_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function values)""#]];
     // cl-multiple-value-bind with edit inside.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -184,7 +188,7 @@ fn combo_cl_multiple_value_bind_marker_overlay_undo() {
                                 (get-text-property 15 'part))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (void-function values)""#]],
+        expect,
     );
 }
 
@@ -192,6 +196,7 @@ fn combo_cl_multiple_value_bind_marker_overlay_undo() {
 fn combo_cl_letf_nested_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     // Nested cl-letf with edits.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -232,6 +237,6 @@ fn combo_cl_letf_nested_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }

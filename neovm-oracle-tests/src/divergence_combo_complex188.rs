@@ -9,6 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx188_next_property_change_text_only() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 8 12 18 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -21,13 +22,14 @@ fn div_cx188_next_property_change_text_only() {
         (next-property-change 12)
         (next-property-change 18)))
 "##,
-        expect_test::expect![[r#""OK (3 8 12 18 nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx188_previous_property_change_text_only() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (18 18 12 8 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -40,13 +42,14 @@ fn div_cx188_previous_property_change_text_only() {
         (previous-property-change 10)
         (previous-property-change 5)))
 "##,
-        expect_test::expect![[r#""OK (18 18 12 8 3)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx188_next_single_property_change_with_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 7 9 13 17)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -60,13 +63,14 @@ fn div_cx188_next_single_property_change_with_overlay() {
           (next-single-char-property-change 9 'face)
           (next-single-char-property-change 13 'face))))
 "##,
-        expect_test::expect![[r#""OK (3 7 9 13 17)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx188_text_property_any_with_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 15 nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -78,13 +82,14 @@ fn div_cx188_text_property_any_with_predicate() {
         (text-property-any 11 26 'p :one)
         (text-property-any 1 26 'p :missing)))
 "##,
-        expect_test::expect![[r#""OK (5 15 nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx188_text_property_not_all_with_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 5 nil 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -95,13 +100,14 @@ fn div_cx188_text_property_not_all_with_nil() {
         (text-property-not-all 11 15 'p nil)
         (text-property-not-all 1 26 'p :val)))
 "##,
-        expect_test::expect![[r#""OK (5 5 nil 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx188_text_property_search_forward_with_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil 13 17)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -119,13 +125,15 @@ fn div_cx188_text_property_search_forward_with_value() {
                 (and m2 (prop-match-end m2))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil 13 17)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx188_get_char_property_with_overlay_priority_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (bold italic underline underline italic bold bold)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -145,13 +153,15 @@ fn div_cx188_get_char_property_with_overlay_priority_chain() {
             (get-char-property 7 'face)
             (get-char-property 8 'face)))))
 "##,
-        expect_test::expect![[r#""OK (bold italic underline underline italic bold bold)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx188_set_text_properties_clear_then_re_add() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((face italic) (face italic) (face italic) nil 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -165,13 +175,16 @@ fn div_cx188_set_text_properties_clear_then_re_add() {
         (text-properties-at 6)
         (next-single-property-change 1 'face)))
 "##,
-        expect_test::expect![[r#""OK ((face italic) (face italic) (face italic) nil 6)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx188_sticky_props_after_insertion_at_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (#(\"abcdXefYghij\" 2 4 (p :core rear-nonsticky t front-sticky nil) 5 7 (p :core rear-nonsticky t front-sticky nil)) :core nil :core nil nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -190,15 +203,14 @@ fn div_cx188_sticky_props_after_insertion_at_boundary() {
         (get-text-property 8 'p)
         (get-text-property 9 'p)))
 "##,
-        expect_test::expect![[
-            r#""OK (#(\"abcdXefYghij\" 2 4 (p :core rear-nonsticky t front-sticky nil) 5 7 (p :core rear-nonsticky t front-sticky nil)) :core nil :core nil nil)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx188_text_prop_interval_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -228,6 +240,6 @@ fn div_cx188_text_prop_interval_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1)))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }

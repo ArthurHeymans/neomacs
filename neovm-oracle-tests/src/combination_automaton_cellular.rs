@@ -99,12 +99,10 @@ fn oracle_prop_cellular_elementary_multi_rule() {
     (fmakunbound 'neovm--ca-run-1d)
     (fmakunbound 'neovm--ca-population)
     (fmakunbound 'neovm--ca-to-string)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((30 \".##..#...###.....#.\" (1 3 3 6 4 9 5 12 7)) (90 \".#...............#.\" (1 2 2 4 2 4 4 8 2)) (110 \".#######.#.........\" (1 2 3 3 5 3 5 6 8)) (184 \".................#.\" (1 1 1 1 1 1 1 1 1))) ((0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0) (0 0 0 0 0 0 0 0 1 1 1 0 0 0 0 0 0 0 0) (0 0 0 0 0 0 0 1 1 0 0 1 0 0 0 0 0 0 0) (0 0 0 0 0 0 1 1 0 1 1 1 1 0 0 0 0 0 0) (0 0 0 0 0 1 1 0 0 1 0 0 0 1 0 0 0 0 0)) (t t t t t t t) (t 9))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((30 \".##..#...###.....#.\" (1 3 3 6 4 9 5 12 7)) (90 \".#...............#.\" (1 2 2 4 2 4 4 8 2)) (110 \".#######.#.........\" (1 2 3 3 5 3 5 6 8)) (184 \".................#.\" (1 1 1 1 1 1 1 1 1))) ((0 0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0) (0 0 0 0 0 0 0 0 1 1 1 0 0 0 0 0 0 0 0) (0 0 0 0 0 0 0 1 1 0 0 1 0 0 0 0 0 0 0) (0 0 0 0 0 0 1 1 0 1 1 1 1 0 0 0 0 0 0) (0 0 0 0 0 1 1 0 0 1 0 0 0 1 0 0 0 0 0)) (t t t t t t t) (t 9))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -202,10 +200,9 @@ fn oracle_prop_cellular_rule110_patterns() {
     (fmakunbound 'neovm--ca-population)
     (fmakunbound 'neovm--ca-is-fixed-point)
     (fmakunbound 'neovm--ca-find-period)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((2 3 3 5 3 5 6 8 5 6 8 8 8 11 11) nil (1 nil) (1 8) nil)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((2 3 3 5 3 5 6 8 5 6 8 8 8 11 11) nil (1 nil) (1 8) nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -322,12 +319,10 @@ fn oracle_prop_cellular_game_of_life_basic() {
     (fmakunbound 'neovm--gol-step)
     (fmakunbound 'neovm--gol-population)
     (fmakunbound 'neovm--gol-to-sorted-list)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((((0 1) (1 1) (2 1)) ((1 0) (1 1) (1 2)) ((0 1) (1 1) (2 1)) t) (t 4) ((5 5 5 5) 5 5) 0 0)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((((0 1) (1 1) (2 1)) ((1 0) (1 1) (1 2)) ((0 1) (1 1) (2 1)) t) (t 4) ((5 5 5 5) 5 5) 0 0)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -451,12 +446,10 @@ fn oracle_prop_cellular_gol_pattern_detection() {
     (fmakunbound 'neovm--gol-to-sorted-list)
     (fmakunbound 'neovm--gol-population)
     (fmakunbound 'neovm--gol-classify)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((still 1) (still 1) (still 1) (still 1) (oscillator 2) (oscillator 2) (oscillator 2) (2 0))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((still 1) (still 1) (still 1) (still 1) (oscillator 2) (oscillator 2) (oscillator 2) (2 0))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -553,12 +546,10 @@ fn oracle_prop_cellular_gol_generation_tracking() {
     (fmakunbound 'neovm--gol-step)
     (fmakunbound 'neovm--gol-population)
     (fmakunbound 'neovm--gol-bounding-box)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((5 6 7 9 8 9 12 11 18 11 11 10 13 16 19 19 23 25 35 25 32) ((0 0 2 2) (0 0 2 2) (-1 -1 2 2) (-1 -1 2 2) (-1 -1 2 2) (-1 -1 2 3) (-1 -1 2 3) (-2 -1 2 3) (-2 -2 3 3) (-3 -2 3 3) (-1 -3 4 1) (-1 -3 3 2) (-2 -4 3 2) (-2 -4 4 2) (-2 -5 4 2) (-2 -5 4 2) (-2 -6 4 2) (-3 -6 4 2) (-3 -7 4 3) (-4 -7 5 3) (-2 -8 5 3)) 5 32 t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((5 6 7 9 8 9 12 11 18 11 11 10 13 16 19 19 23 25 35 25 32) ((0 0 2 2) (0 0 2 2) (-1 -1 2 2) (-1 -1 2 2) (-1 -1 2 2) (-1 -1 2 3) (-1 -1 2 3) (-2 -1 2 3) (-2 -2 3 3) (-3 -2 3 3) (-1 -3 4 1) (-1 -3 3 2) (-2 -4 3 2) (-2 -4 4 2) (-2 -5 4 2) (-2 -5 4 2) (-2 -6 4 2) (-3 -6 4 2) (-3 -7 4 3) (-4 -7 5 3) (-2 -8 5 3)) 5 32 t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -685,12 +676,10 @@ fn oracle_prop_cellular_grid_operations() {
     (fmakunbound 'neovm--gol-reflect-h)
     (fmakunbound 'neovm--gol-reflect-v)
     (fmakunbound 'neovm--gol-same-pattern-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t nil t t ((0 1) (1 2) (2 0) (2 1) (2 2)) ((0 0) (1 0) (1 2) (2 0) (2 1)) (t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t nil t t ((0 1) (1 2) (2 0) (2 1) (2 2)) ((0 0) (1 0) (1 2) (2 0) (2 1)) (t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -795,10 +784,8 @@ fn oracle_prop_cellular_1d_spacetime_analysis() {
     (fmakunbound 'neovm--ca-activity)
     (fmakunbound 'neovm--ca-hamming)
     (fmakunbound 'neovm--ca-sensitivity)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((2 4 5 6 7 8 9 13 11 13) (1 0 0 0 0) (3 3 6 4 9 5 12 7 12 11) (0 0 0 0 0) ((3 3 6 4 9 5 12 7) (2 2 4 2 4 4 8 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((2 4 5 6 7 8 9 13 11 13) (1 0 0 0 0) (3 3 6 4 9 5 12 7 12 11) (0 0 0 0 0) ((3 3 6 4 9 5 12 7) (2 2 4 2 4 4 8 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

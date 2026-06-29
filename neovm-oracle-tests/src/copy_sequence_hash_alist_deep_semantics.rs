@@ -9,9 +9,10 @@ use super::common::{assert_ok_eq, assert_oracle_parity, eval_oracle_and_neovm};
 #[test]
 fn oracle_copy_sequence_vector_independent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 nil)""#]];
     let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (setq v [1 2 3]) (setq cp (copy-sequence v)) (aset v 0 99) (list (aref cp 0) (eq v cp)))"#,
-        expect_test::expect![[r#""OK (1 nil)""#]],
+        expect,
     );
     assert_ok_eq("(1 nil)", &o, &n);
 }
@@ -19,10 +20,8 @@ fn oracle_copy_sequence_vector_independent() {
 #[test]
 fn oracle_copy_sequence_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(copy-sequence "hello")"#,
-        expect_test::expect![[r#""OK \"hello\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"hello\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(copy-sequence "hello")"#, expect);
     assert_ok_eq("\"hello\"", &o, &n);
 }
 
@@ -57,21 +56,17 @@ fn oracle_copy_sequence_string_copies_intervals_shallowly() {
            (get-text-property 2 'payload copy)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil ((0 1 nil) (1 2 (face bold)) (2 4 (payload (mutated) face bold)) (4 5 (payload (mutated))) (5 6 nil)) ((0 1 nil) (1 2 (face italic)) (2 4 (payload (mutated) face italic)) (4 5 (payload (mutated))) (5 6 nil)) t (bold italic) ((mutated) (mutated)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil ((0 1 nil) (1 2 (face bold)) (2 4 (payload (mutated) face bold)) (4 5 (payload (mutated))) (5 6 nil)) ((0 1 nil) (1 2 (face italic)) (2 4 (payload (mutated) face italic)) (4 5 (payload (mutated))) (5 6 nil)) t (bold italic) ((mutated) (mutated)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
 fn oracle_copy_sequence_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(copy-sequence '(a b c))"#,
-        expect_test::expect![[r#""OK (a b c)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (a b c)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(copy-sequence '(a b c))"#, expect);
     assert_ok_eq("(a b c)", &o, &n);
 }
 
@@ -80,9 +75,10 @@ fn oracle_copy_sequence_list() {
 #[test]
 fn oracle_copy_hash_table_values_independent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 99 2)""#]];
     let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (setq ht (make-hash-table :test 'eq)) (puthash 'a 1 ht) (puthash 'b 2 ht) (setq cp (copy-hash-table ht)) (puthash 'a 99 ht) (list (gethash 'a cp) (gethash 'a ht) (hash-table-count cp)))"#,
-        expect_test::expect![[r#""OK (1 99 2)""#]],
+        expect,
     );
     assert_ok_eq("(1 99 2)", &o, &n);
 }
@@ -92,9 +88,10 @@ fn oracle_copy_hash_table_values_independent() {
 #[test]
 fn oracle_hash_table_size_after_inserts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 2""#]];
     let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (setq ht (make-hash-table)) (puthash 'a 1 ht) (puthash 'b 2 ht) (hash-table-count ht))"#,
-        expect_test::expect![[r#""OK 2""#]],
+        expect,
     );
     assert_ok_eq("2", &o, &n);
 }
@@ -104,9 +101,10 @@ fn oracle_hash_table_size_after_inserts() {
 #[test]
 fn oracle_hash_table_test_returns_eq() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK eq""#]];
     let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(hash-table-test (make-hash-table :test 'eq))"#,
-        expect_test::expect![[r#""OK eq""#]],
+        expect,
     );
     assert_ok_eq("eq", &o, &n);
 }
@@ -116,9 +114,10 @@ fn oracle_hash_table_test_returns_eq() {
 #[test]
 fn oracle_maphash_iterates_all_entries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 2""#]];
     let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (setq ht (make-hash-table :test 'eq)) (puthash 'a 1 ht) (puthash 'b 2 ht) (setq count 0) (maphash (lambda (k v) (setq count (+ count 1))) ht) count)"#,
-        expect_test::expect![[r#""OK 2""#]],
+        expect,
     );
     assert_ok_eq("2", &o, &n);
 }
@@ -128,9 +127,10 @@ fn oracle_maphash_iterates_all_entries() {
 #[test]
 fn oracle_hash_table_count_after_clrhash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 0""#]];
     let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (setq ht (make-hash-table :test 'eq)) (puthash 'a 1 ht) (puthash 'b 2 ht) (clrhash ht) (hash-table-count ht))"#,
-        expect_test::expect![[r#""OK 0""#]],
+        expect,
     );
     assert_ok_eq("0", &o, &n);
 }
@@ -140,9 +140,10 @@ fn oracle_hash_table_count_after_clrhash() {
 #[test]
 fn oracle_copy_alist_nested_independent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 (99))""#]];
     let (o, n) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn (setq orig '((a . 1) (b . 2))) (setq cp (copy-alist orig)) (setcdr (assq 'a orig) '(99)) (list (cdr (assq 'a cp)) (cdr (assq 'a orig))))"#,
-        expect_test::expect![[r#""OK (1 (99))""#]],
+        expect,
     );
     assert_ok_eq("(1 (99))", &o, &n);
 }

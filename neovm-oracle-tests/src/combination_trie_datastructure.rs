@@ -116,12 +116,10 @@ fn oracle_prop_trie_insert_and_search() {
     (fmakunbound 'neovm--trie-insert)
     (fmakunbound 'neovm--trie-search)
     (fmakunbound 'neovm--trie-starts-with)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t t t t t nil nil nil nil nil nil t t t t t nil nil t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t t t t t nil nil nil nil nil nil t t t t t nil nil t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -212,10 +210,8 @@ fn oracle_prop_trie_count_with_prefix() {
     (fmakunbound 'neovm--trie-find-node)
     (fmakunbound 'neovm--trie-count-from)
     (fmakunbound 'neovm--trie-count-prefix)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (10 6 4 3 5 4 4 0 0 19 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (10 6 4 3 5 4 4 0 0 19 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -305,12 +301,10 @@ fn oracle_prop_trie_autocomplete() {
     (fmakunbound 'neovm--trie-find-node)
     (fmakunbound 'neovm--trie-collect-words)
     (fmakunbound 'neovm--trie-autocomplete)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"car\" \"card\" \"care\" \"careful\" \"carefully\" \"cargo\" \"carry\" \"cart\") (\"care\" \"careful\" \"carefully\") (\"cast\") (\"car\" \"card\" \"care\" \"careful\" \"carefully\" \"cargo\" \"carry\" \"cart\" \"cast\" \"cat\") (\"cart\") nil 10 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"car\" \"card\" \"care\" \"careful\" \"carefully\" \"cargo\" \"carry\" \"cart\") (\"care\" \"careful\" \"carefully\") (\"cast\") (\"car\" \"card\" \"care\" \"careful\" \"carefully\" \"cargo\" \"carry\" \"cart\" \"cast\" \"cat\") (\"cart\") nil 10 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -431,7 +425,8 @@ Returns t if word was found and deleted, nil otherwise."
     (fmakunbound 'neovm--trie-find-node)
     (fmakunbound 'neovm--trie-count-from)
     (fmakunbound 'neovm--trie-count-prefix)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -538,12 +533,10 @@ fn oracle_prop_trie_word_frequency() {
     (fmakunbound 'neovm--ftrie-insert)
     (fmakunbound 'neovm--ftrie-frequency)
     (fmakunbound 'neovm--ftrie-top-words)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (6 3 4 2 3 2 1 0 ((\"the\" . 6) (\"a\" . 4) (\"and\" . 3)) ((\"the\" . 6) (\"this\" . 1)) (4 5 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (6 3 4 2 3 2 1 0 ((\"the\" . 6) (\"a\" . 4) (\"and\" . 3)) ((\"the\" . 6) (\"this\" . 1)) (4 5 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -667,10 +660,8 @@ fn oracle_prop_trie_realistic_dictionary() {
     (fmakunbound 'neovm--trie-collect-words)
     (fmakunbound 'neovm--trie-autocomplete)
     (fmakunbound 'neovm--trie-count-from)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (23 (\"def\" \"defclass\" \"defmacro\" \"defun\" \"defvar\") (\"let\" \"let*\") (\"set\" \"setf\" \"setq\") (\"do\" \"dolist\" \"dotimes\") (\"prog1\" \"prog2\" \"progn\") (\"while\") nil t nil nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (23 (\"def\" \"defclass\" \"defmacro\" \"defun\" \"defvar\") (\"let\" \"let*\") (\"set\" \"setf\" \"setq\") (\"do\" \"dolist\" \"dotimes\") (\"prog1\" \"prog2\" \"progn\") (\"while\") nil t nil nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

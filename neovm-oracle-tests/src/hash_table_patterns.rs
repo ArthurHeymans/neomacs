@@ -23,7 +23,8 @@ fn oracle_prop_hash_table_test_eq() {
                             (gethash 'foo h)
                             (gethash 'bar h)
                             (hash-table-test h))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (1 1 2 eq)""#]]);
+    let expect = expect_test::expect![[r#""OK (1 1 2 eq)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -38,10 +39,8 @@ fn oracle_prop_hash_table_test_eql() {
                           (gethash 1.0 h)
                           (gethash 2 h)
                           (hash-table-test h)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (one one-float two eql)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (one one-float two eql)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -57,10 +56,8 @@ fn oracle_prop_hash_table_test_equal() {
                           (gethash '(a b) h)
                           (gethash [1 2] h)
                           (hash-table-test h)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (val1 val1 val2 val3 equal)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (val1 val1 val2 val3 equal)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -82,7 +79,8 @@ fn oracle_prop_hash_table_size_and_count() {
                               after-count
                               (hash-table-count h)
                               (hash-table-p h)))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (0 3 2 t)""#]]);
+    let expect = expect_test::expect![[r#""OK (0 3 2 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -103,7 +101,8 @@ fn oracle_prop_hash_table_clrhash() {
                             (hash-table-count h)
                             (gethash 'a h)
                             (hash-table-p h))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (3 0 nil t)""#]]);
+    let expect = expect_test::expect![[r#""OK (3 0 nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -128,10 +127,8 @@ fn oracle_prop_hash_table_copy() {
                             (gethash "z" copy)
                             (hash-table-count orig)
                             (hash-table-count copy))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 99 nil 3 2 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 99 nil 3 2 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -155,10 +152,8 @@ fn oracle_prop_hash_table_maphash_collect() {
                       (list (sort keys #'string-lessp)
                             (sort vals #'<)
                             sum)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((a b c) (10 20 30) 60)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((a b c) (10 20 30) 60)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -185,12 +180,10 @@ fn oracle_prop_hash_table_frequency_counter() {
                                   (and (= (cdr a) (cdr b))
                                        (string< (symbol-name (car a))
                                                  (symbol-name (car b)))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((the . 5) (cat . 2) (mat . 2) (on . 2) (ate . 1) (rat . 1) (sat . 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((the . 5) (cat . 2) (mat . 2) (on . 2) (ate . 1) (rat . 1) (sat . 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -225,7 +218,8 @@ fn oracle_prop_hash_table_graph_bfs() {
                                     (append queue
                                             (list neighbor)))))))
                       (nreverse order)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (a b c d e)""#]]);
+    let expect = expect_test::expect![[r#""OK (a b c d e)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -261,10 +255,8 @@ fn oracle_prop_hash_table_bimap() {
                        ;; Missing
                        (funcall bimap-get-fwd "JP")
                        (funcall bimap-get-rev "Tokyo"))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"Washington\" \"Paris\" \"UK\" \"DE\" nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"Washington\" \"Paris\" \"UK\" \"DE\" nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -312,8 +304,7 @@ fn oracle_prop_hash_table_group_pivot() {
                             (lambda (a b)
                               (string< (symbol-name (car a))
                                        (symbol-name (car b)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((eng 3 91.0 carol) (ops 1 92.0 frank) (qa 2 82.5 bob))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((eng 3 91.0 carol) (ops 1 92.0 frank) (qa 2 82.5 bob))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

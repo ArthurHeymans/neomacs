@@ -9,30 +9,24 @@ use super::common::{assert_ok_eq, eval_oracle_and_neovm};
 #[test]
 fn oracle_format_string_and_integer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(format "%s=%d" "x" 42)"#,
-        expect_test::expect![[r#""OK \"x=42\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"x=42\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(format "%s=%d" "x" 42)"#, expect);
     assert_ok_eq("\"x=42\"", &o, &n);
 }
 
 #[test]
 fn oracle_format_zero_pad() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(format "%05d" 7)"#,
-        expect_test::expect![[r#""OK \"00007\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"00007\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(format "%05d" 7)"#, expect);
     assert_ok_eq("\"00007\"", &o, &n);
 }
 
 #[test]
 fn oracle_format_float() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(format "%.2f" 3.14159)"#,
-        expect_test::expect![[r#""OK \"3.14\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"3.14\"""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(format "%.2f" 3.14159)"#, expect);
     assert_ok_eq("\"3.14\"", &o, &n);
 }
 
@@ -41,30 +35,24 @@ fn oracle_format_float() {
 #[test]
 fn oracle_null_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(null nil)"#,
-        expect_test::expect![[r#""OK t""#]],
-    );
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(null nil)"#, expect);
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_null_empty_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(null '())"#,
-        expect_test::expect![[r#""OK t""#]],
-    );
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(null '())"#, expect);
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_null_non_nil_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(null t)"#,
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(null t)"#, expect);
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -73,30 +61,24 @@ fn oracle_null_non_nil_values() {
 #[test]
 fn oracle_atom_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(atom 'x)"#,
-        expect_test::expect![[r#""OK t""#]],
-    );
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(atom 'x)"#, expect);
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_atom_cons_is_not_atom() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(atom '(a))"#,
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(atom '(a))"#, expect);
     assert_ok_eq("nil", &o, &n);
 }
 
 #[test]
 fn oracle_atom_vector_is_atom() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(atom [1 2])"#,
-        expect_test::expect![[r#""OK t""#]],
-    );
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(atom [1 2])"#, expect);
     assert_ok_eq("t", &o, &n);
 }
 
@@ -105,30 +87,24 @@ fn oracle_atom_vector_is_atom() {
 #[test]
 fn oracle_listp_cons() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(listp '(a b))"#,
-        expect_test::expect![[r#""OK t""#]],
-    );
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(listp '(a b))"#, expect);
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_listp_nil_is_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(listp nil)"#,
-        expect_test::expect![[r#""OK t""#]],
-    );
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(listp nil)"#, expect);
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_listp_non_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(listp 42)"#,
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(listp 42)"#, expect);
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -137,20 +113,16 @@ fn oracle_listp_non_list() {
 #[test]
 fn oracle_consp_cons() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(consp '(a . b))"#,
-        expect_test::expect![[r#""OK t""#]],
-    );
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(consp '(a . b))"#, expect);
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_consp_nil_is_not_cons() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(consp nil)"#,
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(consp nil)"#, expect);
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -159,20 +131,16 @@ fn oracle_consp_nil_is_not_cons() {
 #[test]
 fn oracle_nlistp_not_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(nlistp 42)"#,
-        expect_test::expect![[r#""OK t""#]],
-    );
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(nlistp 42)"#, expect);
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_nlistp_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(nlistp '(a))"#,
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(nlistp '(a))"#, expect);
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -181,20 +149,17 @@ fn oracle_nlistp_list() {
 #[test]
 fn oracle_identity_returns_same() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(eq (identity 'foo) 'foo)"#,
-        expect_test::expect![[r#""OK t""#]],
-    );
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (o, n) =
+        crate::common::eval_oracle_and_neovm_expect(r#"(eq (identity 'foo) 'foo)"#, expect);
     assert_ok_eq("t", &o, &n);
 }
 
 #[test]
 fn oracle_identity_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(identity nil)"#,
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(r#"(identity nil)"#, expect);
     assert_ok_eq("nil", &o, &n);
 }
 
@@ -221,12 +186,10 @@ fn oracle_identity_ignore_always_strict_runtime_contract() {
    (condition-case err
        (identity 1 2)
      (error (list (car err) (cdr err))))))"#;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t nil nil t t (wrong-number-of-arguments (identity 0)) (wrong-number-of-arguments (identity 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t nil nil t t (wrong-number-of-arguments (identity 0)) (wrong-number-of-arguments (identity 2)))""#
+    ]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq(
         "(t t t nil nil t t (wrong-number-of-arguments (identity 0)) (wrong-number-of-arguments (identity 2)))",
         &o,

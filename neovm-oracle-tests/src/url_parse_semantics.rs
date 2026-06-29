@@ -30,12 +30,10 @@ fn oracle_prop_url_parse_full_authority_components() {
      (url-recreate-url u))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"http\" \"Bob\" \"Pass\" \"example.com\" 8080 8080 \"/a/b?q=1\" \"frag\" t (\"/a/b\" . \"q=1\") \"http://Bob:Pass@example.com:8080/a/b?q=1#frag\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"http\" \"Bob\" \"Pass\" \"example.com\" 8080 8080 \"/a/b?q=1\" \"frag\" t (\"/a/b\" . \"q=1\") \"http://Bob:Pass@example.com:8080/a/b?q=1#frag\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -59,12 +57,10 @@ fn oracle_prop_url_parse_default_ports_and_ipv6() {
      (list (url-host ipv6) (url-portspec ipv6) (url-recreate-url ipv6)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((80 80 nil \"http://example.com/path\") (443 443 nil \"https://example.com/path\") (81 81 81 \"http://example.com:81/path\") (\"[2001:db8::1]\" 8080 \"http://[2001:db8::1]:8080/index\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((80 80 nil \"http://example.com/path\") (443 443 nil \"https://example.com/path\") (81 81 81 \"http://example.com:81/path\") (\"[2001:db8::1]\" 8080 \"http://[2001:db8::1]:8080/index\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -91,12 +87,10 @@ fn oracle_prop_url_parse_relative_data_and_file_paths() {
            (url-recreate-url file)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((nil nil \"/local/path?x=1\" \"frag\" nil \"/local/path?x=1#frag\") (nil nil \"README\" nil nil \"README\") (\"data\" \"text/plain,a?b#c\" nil \"data:text/plain,a?b#c\") (\"file\" \"\" \"C:/Temp/file.txt\" \"file:///C:/Temp/file.txt\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((nil nil \"/local/path?x=1\" \"frag\" nil \"/local/path?x=1#frag\") (nil nil \"README\" nil nil \"README\") (\"data\" \"text/plain,a?b#c\" nil \"data:text/plain,a?b#c\") (\"file\" \"\" \"C:/Temp/file.txt\" \"file:///C:/Temp/file.txt\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -118,10 +112,8 @@ fn oracle_prop_url_parse_nil_empty_ports_and_host_unhex() {
      (list (url-host escaped-host) (url-recreate-url escaped-host)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((nil nil nil nil nil \"/\") (\"example.com\" nil 80 \"http://example.com/p\") (\"foo bar.example\" \"http://foo bar.example/path\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((nil nil nil nil nil \"/\") (\"example.com\" nil 80 \"http://example.com/p\") (\"foo bar.example\" \"http://foo bar.example/path\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

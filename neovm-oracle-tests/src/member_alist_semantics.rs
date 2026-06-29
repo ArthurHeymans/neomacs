@@ -28,12 +28,10 @@ fn oracle_member_family_dotted_tail_error_payloads() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-type-argument (listp (a b . c))) (wrong-type-argument (listp (\"a\" \"b\" . c))) (wrong-type-argument (listp (1.0 2.0 . c))) (wrong-type-argument (listp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-type-argument (listp (a b . c))) (wrong-type-argument (listp (\"a\" \"b\" . c))) (wrong-type-argument (listp (1.0 2.0 . c))) (wrong-type-argument (listp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -49,12 +47,10 @@ fn oracle_member_family_returns_tail_before_bad_tail() {
         '(1 1000000000000000000000001 . c)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((b . c) (\"b\" . c) (1.25 . c) (1000000000000000000000001 . c))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((b . c) (\"b\" . c) (1.25 . c) (1000000000000000000000001 . c))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -74,12 +70,10 @@ fn oracle_member_family_float_bignum_and_equal_edges() {
    (memql nan-a (list nan-b))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 2) (3)) nil (1.0 2.0) (1.0 2.0) (1000000000000000000000001) (-0.0e+NaN))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 2) (3)) nil (1.0 2.0) (1.0 2.0) (1000000000000000000000001) (-0.0e+NaN))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -102,12 +96,10 @@ fn oracle_member_family_circular_lists() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((b c a b c . #2) (circular-list ((c a b c a . #2))) (circular-list ((c a b c a . #2))) (circular-list ((c a b c a . #2))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((b c a b c . #2) (circular-list ((c a b c a . #2))) (circular-list ((c a b c a . #2))) (circular-list ((c a b c a . #2))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -134,12 +126,10 @@ fn oracle_alist_lookup_skips_non_cons_but_checks_tail() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((b . 2) (\"b\" . 2) (b . 2) (b . \"two\") (wrong-type-argument (listp (loose (a . 1) 42 . tail))) (wrong-type-argument (listp (loose (\"a\" . 1) 42 . tail))) (wrong-type-argument (listp (loose (a . 1) 42 . tail))) (wrong-type-argument (listp (loose (a . \"one\") 42 . tail))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((b . 2) (\"b\" . 2) (b . 2) (b . \"two\") (wrong-type-argument (listp (loose (a . 1) 42 . tail))) (wrong-type-argument (listp (loose (\"a\" . 1) 42 . tail))) (wrong-type-argument (listp (loose (a . 1) 42 . tail))) (wrong-type-argument (listp (loose (a . \"one\") 42 . tail))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -165,12 +155,10 @@ fn oracle_alist_lookup_leading_non_cons_improper_tail_payloads() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-type-argument (listp (loose . tail))) (wrong-type-argument (listp (loose . tail))) (wrong-type-argument (listp (loose . tail))) (wrong-type-argument (listp (loose . tail))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-type-argument (listp (loose . tail))) (wrong-type-argument (listp (loose . tail))) (wrong-type-argument (listp (loose . tail))) (wrong-type-argument (listp (loose . tail))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -195,12 +183,10 @@ fn oracle_assoc_testfn_argument_order_and_tail_validation() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((needle . 2) ((hay needle) (needle needle)) (wrong-type-argument (listp ((hay . 1) loose . bad-tail))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((needle . 2) ((hay needle) (needle needle)) (wrong-type-argument (listp ((hay . 1) loose . bad-tail))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -217,8 +203,6 @@ fn oracle_alist_lookup_circular_lists() {
    (rassoc 2 alist)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((b . 2) (b . 2) (b . 2) (b . 2))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((b . 2) (b . 2) (b . 2) (b . 2))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

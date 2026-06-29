@@ -117,10 +117,8 @@ fn oracle_prop_binomial_heap_core() {
     (fmakunbound 'neovm--bh-merge)
     (fmakunbound 'neovm--bh-insert)
     (fmakunbound 'neovm--bh-find-min)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 2 (0 2) (1 3))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 2 (0 2) (1 3))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -243,10 +241,8 @@ fn oracle_prop_binomial_heap_delete_min() {
     (fmakunbound 'neovm--bhd-find-min)
     (fmakunbound 'neovm--bhd-remove-min-tree)
     (fmakunbound 'neovm--bhd-delete-min)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 4 6 7 9 10) t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 2 4 6 7 9 10) t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -350,10 +346,8 @@ fn oracle_prop_binomial_heap_merge_property() {
     (fmakunbound 'neovm--bhm-merge)
     (fmakunbound 'neovm--bhm-insert)
     (fmakunbound 'neovm--bhm-find-min)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 1 10 1 1 t t 2 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 1 10 1 1 t t 2 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -492,10 +486,8 @@ fn oracle_prop_binomial_heap_priority_queue() {
     (fmakunbound 'neovm--bhq-find-min)
     (fmakunbound 'neovm--bhq-remove-min-tree)
     (fmakunbound 'neovm--bhq-delete-min)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (20 10 (5 30 40 50 60) t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (20 10 (5 30 40 50 60) t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -610,12 +602,10 @@ fn oracle_prop_binomial_heap_sort() {
     (fmakunbound 'neovm--bhs-remove-min-tree)
     (fmakunbound 'neovm--bhs-delete-min)
     (fmakunbound 'neovm--bhs-sort)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4 5 6 7 8 9) (1 2 3 4 5) (1 2 3 4 5) (42) nil (1 1 2 3 3 4 5 5 5 6 9) t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5 6 7 8 9) (1 2 3 4 5) (1 2 3 4 5) (42) nil (1 1 2 3 3 4 5 5 5 6 9) t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -727,10 +717,8 @@ fn oracle_prop_binomial_heap_structural_invariants() {
     (fmakunbound 'neovm--bhi-insert)
     (fmakunbound 'neovm--bhi-tree-size)
     (fmakunbound 'neovm--bhi-heap-ordered-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((0 1 2 3) (1 2 4 8) (t t t t) 15 (1 (4) 16))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((0 1 2 3) (1 2 4 8) (t t t t) 15 (1 (4) 16))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -829,8 +817,6 @@ fn oracle_prop_binomial_heap_empty_cases() {
     (fmakunbound 'neovm--bhe-merge)
     (fmakunbound 'neovm--bhe-insert)
     (fmakunbound 'neovm--bhe-find-min)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil t nil (42 42) (99 1 0) -10)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil t nil (42 42) (99 1 0) -10)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

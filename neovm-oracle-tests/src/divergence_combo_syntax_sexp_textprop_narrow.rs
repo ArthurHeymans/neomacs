@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_forward_sexp_across_syntax_property() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""(foo bar|baz quux)OK (5 13 18 t nil #(\"(foo bar|baz quux)\" 8 9 (syntax-table (1))) nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(foo bar|baz quux)")
@@ -22,9 +25,7 @@ fn divergence_forward_sexp_across_syntax_property() {
             (= p2 8)
             (buffer-string)
             (= (buffer-size) 17))))) "#,
-        expect_test::expect![[
-            r#""(foo bar|baz quux)OK (5 13 18 t nil #(\"(foo bar|baz quux)\" 8 9 (syntax-table (1))) nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -32,6 +33,8 @@ fn divergence_forward_sexp_across_syntax_property() {
 fn divergence_scan_lists_with_textprop_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r##""(a (b (c) d) e)ERR (invalid-read-syntax \"#\" 9 35)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(a (b (c) d) e)")
@@ -42,7 +45,7 @@ fn divergence_scan_lists_with_textprop_syntax() {
           (= p1 17)
           (buffer-string)
           (= (buffer-size) 15)))) #"#,
-        expect_test::expect![[r##""(a (b (c) d) e)ERR (invalid-read-syntax \"#\" 9 35)""##]],
+        expect,
     );
 }
 
@@ -50,6 +53,7 @@ fn divergence_scan_lists_with_textprop_syntax() {
 fn divergence_narrowed_forward_sexp_with_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(alpha (beta gamma) delta)")
@@ -67,7 +71,7 @@ fn divergence_narrowed_forward_sexp_with_overlays() {
               (overlay-start ov) (overlay-end ov)
               (overlay-get ov 'face)
               (= (buffer-size) 24))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -75,6 +79,7 @@ fn divergence_narrowed_forward_sexp_with_overlays() {
 fn divergence_backward_sexp_from_mid() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""(foo bar baz quux)OK (10 6 2 t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(foo bar baz quux)")
@@ -88,7 +93,7 @@ fn divergence_backward_sexp_from_mid() {
             (= p1 10)
             (= p2 6)
             (= (point) 2))))) "#,
-        expect_test::expect![[r#""(foo bar baz quux)OK (10 6 2 t t t)""#]],
+        expect,
     );
 }
 
@@ -96,6 +101,8 @@ fn divergence_backward_sexp_from_mid() {
 fn divergence_kill_sexp_with_undo_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""( beta gamma delta)ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(alpha beta gamma delta)")
@@ -113,7 +120,7 @@ fn divergence_kill_sexp_with_undo_markers() {
             (= (buffer-size) 24)
             (marker-position m1)
             (marker-position m2))))) "#,
-        expect_test::expect![[r#""( beta gamma delta)ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -121,6 +128,8 @@ fn divergence_kill_sexp_with_undo_markers() {
 fn divergence_transpose_sexps_with_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r##""(aaa ccc bbb ddd)ERR (invalid-read-syntax \"#\" 15 35)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(aaa bbb ccc ddd)")
@@ -137,7 +146,7 @@ fn divergence_transpose_sexps_with_overlays() {
           (eq (get-text-property 2 'group) 'aaa)
           (get-text-property 6 'group)
           (= (buffer-size) 19)))) #"#,
-        expect_test::expect![[r##""(aaa ccc bbb ddd)ERR (invalid-read-syntax \"#\" 15 35)""##]],
+        expect,
     );
 }
 
@@ -145,6 +154,8 @@ fn divergence_transpose_sexps_with_overlays() {
 fn divergence_mark_sexp_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""oneXXX two three four fivERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(one two three four five)")
@@ -162,7 +173,7 @@ fn divergence_mark_sexp_narrow_undo() {
             (buffer-string)
             (= (buffer-size) 26)
             (marker-position m))))) "#,
-        expect_test::expect![[r#""oneXXX two three four fivERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -170,6 +181,8 @@ fn divergence_mark_sexp_narrow_undo() {
 fn divergence_parse_partial_sexp_depth() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r##""(a (b (c (d) e) f) g)ERR (invalid-read-syntax \"#\" 10 35)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "(a (b (c (d) e) f) g)")
@@ -181,7 +194,7 @@ fn divergence_parse_partial_sexp_depth() {
           (>= (nth 0 p2) (nth 0 p1))
           (>= (nth 0 p3) (nth 0 p2))
           (= (buffer-size) 21)))) #"#,
-        expect_test::expect![[r##""(a (b (c (d) e) f) g)ERR (invalid-read-syntax \"#\" 10 35)""##]],
+        expect,
     );
 }
 
@@ -189,6 +202,9 @@ fn divergence_parse_partial_sexp_depth() {
 fn divergence_syntax_property_string_fence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r##""before\"quoted text\"afterERR (invalid-read-syntax \"#\" 12 33)""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "before\"quoted text\"after")
@@ -202,9 +218,7 @@ fn divergence_syntax_property_string_fence() {
             (= p1 20)
             (= p2 25)
             (buffer-string))))) #"#,
-        expect_test::expect![[
-            r##""before\"quoted text\"afterERR (invalid-read-syntax \"#\" 12 33)""##
-        ]],
+        expect,
     );
 }
 
@@ -212,6 +226,8 @@ fn divergence_syntax_property_string_fence() {
 fn divergence_insert_parentheses_balancing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r##""(alpha () beta) gammaERR (invalid-read-syntax \"#\" 14 51)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "alpha beta gamma")
@@ -227,6 +243,6 @@ fn divergence_insert_parentheses_balancing() {
           (= (char-after 1) 40)
           (char-after (1- (point-max)))
           (= (char-after (1- (point-max))) 41)))) #"#,
-        expect_test::expect![[r##""(alpha () beta) gammaERR (invalid-read-syntax \"#\" 14 51)""##]],
+        expect,
     );
 }

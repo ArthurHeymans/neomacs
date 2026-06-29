@@ -7,6 +7,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn eb_html_export_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil 368 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
@@ -17,13 +18,14 @@ fn eb_html_export_basic() {
     (list (string-match-p "<h1>" html)
           (string-match-p "Body text" html)
           (string-match-p "Test" html)))))"##,
-        expect_test::expect![[r#""OK (nil 368 nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_latex_export_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 41 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-latex)
@@ -34,13 +36,14 @@ fn eb_latex_export_basic() {
     (list (string-match-p "\\\\section" latex)
           (string-match-p "Body text" latex)
           (string-match-p "Test" latex)))))"##,
-        expect_test::expect![[r#""OK (0 41 nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_ascii_export_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 23 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-ascii)
@@ -51,13 +54,14 @@ fn eb_ascii_export_basic() {
     (list (string-match-p "Heading" ascii)
           (string-match-p "Body text" ascii)
           (string-match-p "Test" ascii)))))"##,
-        expect_test::expect![[r#""OK (2 23 nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_html_export_with_options() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil 283)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
@@ -68,13 +72,14 @@ fn eb_html_export_with_options() {
     (list (string-match-p "<h1>" html)
           (string-match-p "<h2>" html)
           (string-match-p "Body" html)))))"##,
-        expect_test::expect![[r#""OK (nil nil 283)""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_html_export_with_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
@@ -84,13 +89,14 @@ fn eb_html_export_with_attributes() {
   (let ((html (org-export-as 'html nil nil t)))
     (list (string-match-p "myid" html)
           (string-match-p "myclass" html))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_html_export_link_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
@@ -100,13 +106,14 @@ fn eb_html_export_link_types() {
   (let ((html (org-export-as 'html nil nil t)))
     (list (string-match-p "example.com" html)
           (string-match-p "test.png" html))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_html_export_inline_markup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
@@ -118,13 +125,14 @@ fn eb_html_export_inline_markup() {
           (string-match-p "<i>" html)
           (string-match-p "<code>" html)
           (string-match-p "<span" html))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_html_export_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
@@ -135,13 +143,14 @@ fn eb_html_export_table() {
     (list (string-match-p "<table" html)
           (string-match-p "<tr" html)
           (string-match-p "<td" html))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_html_export_src_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
@@ -151,13 +160,14 @@ fn eb_html_export_src_block() {
   (let ((html (org-export-as 'html nil nil t)))
     (list (string-match-p "<pre" html)
           (string-match-p "(+ 1 2)" html))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_html_export_footnote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
@@ -167,13 +177,14 @@ fn eb_html_export_footnote() {
   (let ((html (org-export-as 'html nil nil t)))
     (list (string-match-p "Footnote content" html)
           (string-match-p "fn" html))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_html_export_image() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
@@ -183,13 +194,14 @@ fn eb_html_export_image() {
   (let ((html (org-export-as 'html nil nil t)))
     (list (string-match-p "test.png" html)
           (string-match-p "My image" html))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_latex_export_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-latex)
@@ -199,13 +211,14 @@ fn eb_latex_export_table() {
   (let ((latex (org-export-as 'latex nil nil t)))
     (list (string-match-p "tabular" latex)
           (string-match-p "a" latex))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_latex_export_src_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-latex)
@@ -215,13 +228,14 @@ fn eb_latex_export_src_block() {
   (let ((latex (org-export-as 'latex nil nil t)))
     (list (string-match-p "verbatim" latex)
           (string-match-p "(+ 1 2)" latex))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_ascii_export_table() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-ascii)
@@ -231,25 +245,29 @@ fn eb_ascii_export_table() {
   (let ((ascii (org-export-as 'ascii nil nil t)))
     (list (string-match-p "a" ascii)
           (string-match-p "1" ascii))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_export_backend_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (html)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
   (let ((be (org-export-get-backend 'html)))
     (list (org-export-backend-name be))))"##,
-        expect_test::expect![[r#""OK (html)""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_export_with_filters() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((#(\"Test\" 0 4 (:parent (#(\"Test\" 0 4 (:parent #4)))))) (\"H1\" \"H2\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
@@ -261,15 +279,14 @@ fn eb_export_with_filters() {
          (headlines (org-element-map tree 'headline
                       (lambda (h) (org-element-property :raw-value h)))))
     (list (plist-get info :title) headlines))))"##,
-        expect_test::expect![[
-            r#""OK ((#(\"Test\" 0 4 (:parent (#(\"Test\" 0 4 (:parent #4)))))) (\"H1\" \"H2\"))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn eb_export_plist_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-html)
@@ -278,13 +295,16 @@ fn eb_export_plist_merge() {
   (insert "#+TITLE: Test\n* H\nBody")
   (let* ((info (org-export-get-environment nil)))
     (list (plist-get info :title))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_export_collect_all_options() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((#(\"T\" 0 1 (:parent (#(\"T\" 0 1 (:parent #4)))))) (#(\"A\" 0 1 (:parent (#(\"A\" 0 1 (:parent #4)))))) \"e\" (#(\"d\" 0 1 (:parent (#(\"d\" 0 1 (:parent #4)))))) \"en\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -295,15 +315,14 @@ fn eb_export_collect_all_options() {
           (plist-get info :email)
           (plist-get info :date)
           (plist-get info :language))))"##,
-        expect_test::expect![[
-            r#""OK ((#(\"T\" 0 1 (:parent (#(\"T\" 0 1 (:parent #4)))))) (#(\"A\" 0 1 (:parent (#(\"A\" 0 1 (:parent #4)))))) \"e\" (#(\"d\" 0 1 (:parent (#(\"d\" 0 1 (:parent #4)))))) \"en\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn eb_export_element_map_with_filter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"H1\" \"H2\" \"H3\") \"H1\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -315,13 +334,15 @@ fn eb_export_element_map_with_filter() {
                   (lambda (h) (org-element-property :raw-value h))
                   nil 'first-match)))
     (list all first)))"##,
-        expect_test::expect![[r#""OK ((\"H1\" \"H2\" \"H3\") \"H1\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_export_element_map_no_recurse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((\"H2a\" \"H3\" \"H2b\") (\"H2a\" \"H3\" \"H2b\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -334,13 +355,14 @@ fn eb_export_element_map_no_recurse() {
          (recursive (org-element-map (org-element-contents h1) 'headline
                       (lambda (h) (org-element-property :raw-value h)))))
     (list direct recursive)))"##,
-        expect_test::expect![[r#""OK ((\"H2a\" \"H3\" \"H2b\") (\"H2a\" \"H3\" \"H2b\"))""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_export_element_map_with_info() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -352,13 +374,14 @@ fn eb_export_element_map_with_info() {
                            (plist-get info :first-match)))
                    nil 'first-match)))
     result)"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn eb_export_element_map_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -366,13 +389,14 @@ fn eb_export_element_map_types() {
   (let* ((tree (org-element-parse-buffer))
          (types (org-element-map tree (lambda (el) (org-element-type el)))))
     types)"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn sb_export_element_contents() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -381,13 +405,14 @@ fn sb_export_element_contents() {
          (h (car (org-element-map tree 'headline (lambda (h) h))))
          (children (mapcar 'org-element-type (org-element-contents h))))
     children)"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn sb_export_element_parent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -399,13 +424,14 @@ fn sb_export_element_parent() {
     (list (org-element-type para)
           (org-element-type parent)
           (org-element-type grandparent)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn sb_export_element_type_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -419,13 +445,14 @@ fn sb_export_element_type_predicates() {
           (org-element-type-p p 'paragraph)
           (org-element-type-p p 'headline)
           (org-element-type-p pl 'plain-list)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn sb_export_element_property_inherited() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -436,13 +463,14 @@ fn sb_export_element_property_inherited() {
          (child (car (org-element-map tree 'headline
                        (lambda (h) (when (string= (org-element-property :raw-value h) "Child") h))))))
     (list (org-element-property :tags child)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn sb_export_element_ancestor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -457,13 +485,14 @@ fn sb_export_element_ancestor() {
           (org-element-type h3)
           (org-element-type h2)
           (org-element-type h1)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn sb_export_element_lineage() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -473,13 +502,14 @@ fn sb_export_element_lineage() {
   (let* ((para (org-element-at-point))
          (lineage (org-element-lineage para)))
     (mapcar 'org-element-type lineage))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn sb_export_element_path() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -489,6 +519,6 @@ fn sb_export_element_path() {
   (list (org-get-outline-path)
         (org-current-level)
         (org-get-heading t t t t))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

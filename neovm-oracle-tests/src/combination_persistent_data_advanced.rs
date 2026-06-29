@@ -109,12 +109,10 @@ fn oracle_prop_persistent_data_advanced_stack() {
     (fmakunbound 'neovm--pda-stk-concat)
     (fmakunbound 'neovm--pda-stk-map)
     (fmakunbound 'neovm--pda-stk-filter)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t nil 10 20 30 3 t t (30 20 10) (99 20 10) t t (b a d c) (60 40 20) (30 20) (10 20 30) (30 20 10))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t nil 10 20 30 3 t t (30 20 10) (99 20 10) t t (b a d c) (60 40 20) (30 20) (10 20 30) (30 20 10))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -267,12 +265,10 @@ fn oracle_prop_persistent_data_advanced_functional_map() {
     (fmakunbound 'neovm--pda-bst-insert)
     (fmakunbound 'neovm--pda-bst-lookup)
     (fmakunbound 'neovm--pda-bst-keys)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 3 4 5 6 7 9) \"five\" \"one\" \"nine\" nil \"FIVE\" \"five\" (1 2 3 5 7 9) \"two\" nil 3 (4 15))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 3 4 5 6 7 9) \"five\" \"one\" \"nine\" nil \"FIVE\" \"five\" (1 2 3 5 7 9) \"two\" nil 3 (4 15))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -334,10 +330,9 @@ fn oracle_prop_persistent_data_advanced_sharing_verification() {
        ;; Lengths verify no mutation
        (length base) (length v1) (length v3)
        (length m3) (length m3a) (length m3b)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t t t t t t t t (t t t) 5 6 7 3 3 3)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (t t t t t t t t t t t t t t (t t t) 5 6 7 3 3 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -452,12 +447,10 @@ fn oracle_prop_persistent_data_advanced_trie_vector() {
     (fmakunbound 'neovm--pda-tv-set)
     (fmakunbound 'neovm--pda-tv-to-list)
     (makunbound 'neovm--pda-tv-chunk)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 1 2 3 4 5 6 7 8 9 10 11) (99 1 2 3 4 5 6 7 8 9 10 11) (0 1 2 3 4 5 6 7 8 9 10 88) (0 1 2 3 4 55 6 7 8 9 10 11) 12 0 99 11 88 -1 -2 4 (100 1 2 3 200 5 6 7 300 9 10 11) t t t t t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 1 2 3 4 5 6 7 8 9 10 11) (99 1 2 3 4 5 6 7 8 9 10 11) (0 1 2 3 4 5 6 7 8 9 10 88) (0 1 2 3 4 55 6 7 8 9 10 11) 12 0 99 11 88 -1 -2 4 (100 1 2 3 200 5 6 7 300 9 10 11) t t t t t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -567,12 +560,10 @@ fn oracle_prop_persistent_data_advanced_version_history() {
     (fmakunbound 'neovm--pda-vh-parents)
     (fmakunbound 'neovm--pda-vh-ancestors)
     (fmakunbound 'neovm--pda-vh-common-ancestor)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:file \"initial\") (:file \"edit1\") (:file \"edit2\") (:file \"branch-edit1\") (:file \"branch-edit2\") (:file \"merged\") nil (1) (2 4) (0 1 2) (0 1 3 4) (0 1 2 3 4 5) 1 2 1 3 6 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:file \"initial\") (:file \"edit1\") (:file \"edit2\") (:file \"branch-edit1\") (:file \"branch-edit2\") (:file \"merged\") nil (1) (2 4) (0 1 2) (0 1 3 4) (0 1 2 3 4 5) 1 2 1 3 6 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -675,10 +666,8 @@ fn oracle_prop_persistent_data_advanced_transactions() {
     (fmakunbound 'neovm--pda-tx-commit)
     (fmakunbound 'neovm--pda-tx-rollback)
     (fmakunbound 'neovm--pda-tx-commit-if)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (100 \"Alice\" 150 nil 150 t 120 120 \"Alice\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (100 \"Alice\" 150 nil 150 t 120 120 \"Alice\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -786,10 +775,8 @@ fn oracle_prop_persistent_data_advanced_deque() {
     (fmakunbound 'neovm--pda-dq-pop-back)
     (fmakunbound 'neovm--pda-dq-to-list)
     (fmakunbound 'neovm--pda-dq-size)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t nil (1 2 3) (1 2 3 a b) 5 1 b (2 3 a b) (1 2 3 a) (1 2 3 a b) t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t nil (1 2 3) (1 2 3 a b) 5 1 b (2 3 a b) (1 2 3 a) (1 2 3 a b) t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

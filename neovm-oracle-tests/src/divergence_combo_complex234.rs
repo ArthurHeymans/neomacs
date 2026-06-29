@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx234_org_table_parsing_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (t 0 \"| Name | Age | City |\n|------+-----+------|\n| Bob  | 30  | NYC  |\n| Sue  | 25  | LA   |\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -21,15 +24,16 @@ fn div_cx234_org_table_parsing_basic() {
               (buffer-string))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (t 0 \"| Name | Age | City |\n|------+-----+------|\n| Bob  | 30  | NYC  |\n| Sue  | 25  | LA   |\n\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx234_org_table_formula_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (t \"| a | b | sum |\n|---+---+-----|\n| 1 | 2 |   3 |\n| 4 | 5 |   9 |\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -43,15 +47,16 @@ fn div_cx234_org_table_formula_eval() {
               (buffer-string))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (t \"| a | b | sum |\n|---+---+-----|\n| 1 | 2 |   3 |\n| 4 | 5 |   9 |\n\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx234_org_checkbox_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"* Tasks\n- [ ] Task one\n- [ ] Task two\n- [X] Task three\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -65,15 +70,14 @@ fn div_cx234_org_checkbox_toggle() {
         (list (buffer-string))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (\"* Tasks\n- [ ] Task one\n- [ ] Task two\n- [X] Task three\n\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx234_org_list_structure_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -87,13 +91,14 @@ fn div_cx234_org_list_structure_parsing() {
               (org-get-indentation))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t 0)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx234_org_footnote_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -104,13 +109,14 @@ fn div_cx234_org_footnote_availability() {
             (boundp 'org-footnote-section)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx234_org_property_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"0:30\" nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -125,13 +131,14 @@ fn div_cx234_org_property_search() {
               (org-entry-get (point) "Missing"))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"0:30\" nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx234_org_timestamp_parsing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"<2024-06-15 Sat>\" \"<2024-12-31 Tue>\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -145,13 +152,14 @@ fn div_cx234_org_timestamp_parsing() {
               (org-entry-get (point) "DEADLINE"))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"<2024-06-15 Sat>\" \"<2024-12-31 Tue>\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx234_org_tag_extraction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"alpha\" \"beta\") 0 (\"gamma\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -166,13 +174,14 @@ fn div_cx234_org_tag_extraction() {
               (org-get-tags))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK ((\"alpha\" \"beta\") 0 (\"gamma\"))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx234_org_heading_level_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 0 2 0 3 0 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -188,13 +197,14 @@ fn div_cx234_org_heading_level_query() {
               (forward-line 1) (org-current-level))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (1 0 2 0 3 0 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx234_org_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -223,6 +233,6 @@ fn div_cx234_org_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     );
 }

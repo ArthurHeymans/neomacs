@@ -5,6 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_occur_stacked_sparse_tree_visibility_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
@@ -42,7 +43,7 @@ fn org_occur_stacked_sparse_tree_visibility_combo() {
                          (overlay-get ov 'org-type)))
                  org-occur-highlights)
          (buffer-substring-no-properties (point-min) (point-max))))))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -50,6 +51,9 @@ fn org_occur_stacked_sparse_tree_visibility_combo() {
 fn org_tags_sparse_tree_property_archive_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (((\"Project\" nil) (\"Active\" nil) (\"Closed\" t) (\"Archived\" nil) (\"Old\" t) (\"Other\" nil) (\"Home\" nil)) \"* Project :work:\n** TODO Active :urgent:\n:PROPERTIES:\n:Owner: Ada\n:END:\n** DONE Closed :urgent:\n:PROPERTIES:\n:Owner: Ada\n:END:\n* Archived :work:ARCHIVE:\n** TODO Old :urgent:\n:PROPERTIES:\n:Owner: Ada\n:END:\n* Other :home:\n** TODO Home :urgent:\n:PROPERTIES:\n:Owner: Ada\n:END:\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
@@ -75,9 +79,7 @@ fn org_tags_sparse_tree_property_archive_combo() {
                    (list needle (not (null (org-invisible-p pos))))))
                '("Project" "Active" "Closed" "Archived" "Old" "Other" "Home"))
        (buffer-substring-no-properties (point-min) (point-max))))))"#,
-        expect_test::expect![[
-            r#""OK (((\"Project\" nil) (\"Active\" nil) (\"Closed\" t) (\"Archived\" nil) (\"Old\" t) (\"Other\" nil) (\"Home\" nil)) \"* Project :work:\n** TODO Active :urgent:\n:PROPERTIES:\n:Owner: Ada\n:END:\n** DONE Closed :urgent:\n:PROPERTIES:\n:Owner: Ada\n:END:\n* Archived :work:ARCHIVE:\n** TODO Old :urgent:\n:PROPERTIES:\n:Owner: Ada\n:END:\n* Other :home:\n** TODO Home :urgent:\n:PROPERTIES:\n:Owner: Ada\n:END:\n\")""#
-        ]],
+        expect,
     );
 }
 
@@ -85,6 +87,7 @@ fn org_tags_sparse_tree_property_archive_combo() {
 fn org_occur_highlight_removal_after_buffer_change_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'org)
@@ -107,7 +110,7 @@ fn org_occur_highlight_removal_after_buffer_change_combo() {
                 org-occur-parameters
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -115,6 +118,7 @@ fn org_occur_highlight_removal_after_buffer_change_combo() {
 fn org_sparse_todo_occur_navigation_highlight_lifecycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable snapshot)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -204,7 +208,7 @@ fn org_sparse_todo_occur_navigation_highlight_lifecycle_combo() {
                       (length org-occur-highlights)
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))"##,
-        expect_test::expect![[r#""ERR (void-variable snapshot)""#]],
+        expect,
     );
 }
 
@@ -212,6 +216,7 @@ fn org_sparse_todo_occur_navigation_highlight_lifecycle_combo() {
 fn org_sparse_date_type_range_visibility_matrix_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -305,7 +310,7 @@ fn org_sparse_date_type_range_visibility_matrix_combo() {
                     org-occur-parameters
                     (buffer-substring-no-properties
                      (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -313,6 +318,7 @@ fn org_sparse_date_type_range_visibility_matrix_combo() {
 fn org_sparse_tag_todo_deps_planning_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 63 41)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -377,7 +383,7 @@ fn org_sparse_tag_todo_deps_planning_combo() {
                       todo-vis
                       deadline-vis
                       final-buf))))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 63 41)""#]],
+        expect,
     );
 }
 
@@ -385,6 +391,9 @@ fn org_sparse_tag_todo_deps_planning_combo() {
 fn org_occur_highlight_count_visibility_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (0 \"3 matches for \\\"important\\\" in buffer:  *temp*\n      2:Alpha body with important keyword.\n      6:Sub B body with important note.\n     10:Sub C body with another important line.\n\" ((\"Alpha\" 1 nil (\"work\")) (\"Sub A\" 3 nil nil) (\"Sub B\" 5 nil (\"urgent\")) (\"Beta\" 7 nil (\"home\")) (\"Sub C\" 9 nil nil) (\"Gamma\" 11 nil nil)) ((\"Alpha\" 1 nil (\"work\")) (\"Sub A\" 3 nil nil) (\"Sub B\" 5 nil (\"urgent\")) (\"Beta\" 7 nil (\"home\")) (\"Sub C\" 9 nil nil) (\"Gamma\" 11 nil nil)) 0 \"* TODO Alpha :work:\nAlpha body with important keyword.\n** DONE Sub A\nSub A body.\n** TODO Sub B :urgent:\nSub B body with important note.\n* Beta :home:\nBeta body.\n** TODO Sub C\nSub C body with another important line.\n* DONE Gamma\nGamma body with keyword inside.\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -435,9 +444,7 @@ fn org_occur_highlight_count_visibility_deep_state_combo() {
                   highlights-after-remove
                   (buffer-substring-no-properties
                    (point-min) (point-max)))))))))"##,
-        expect_test::expect![[
-            r#""OK (0 \"3 matches for \\\"important\\\" in buffer:  *temp*\n      2:Alpha body with important keyword.\n      6:Sub B body with important note.\n     10:Sub C body with another important line.\n\" ((\"Alpha\" 1 nil (\"work\")) (\"Sub A\" 3 nil nil) (\"Sub B\" 5 nil (\"urgent\")) (\"Beta\" 7 nil (\"home\")) (\"Sub C\" 9 nil nil) (\"Gamma\" 11 nil nil)) ((\"Alpha\" 1 nil (\"work\")) (\"Sub A\" 3 nil nil) (\"Sub B\" 5 nil (\"urgent\")) (\"Beta\" 7 nil (\"home\")) (\"Sub C\" 9 nil nil) (\"Gamma\" 11 nil nil)) 0 \"* TODO Alpha :work:\nAlpha body with important keyword.\n** DONE Sub A\nSub A body.\n** TODO Sub B :urgent:\nSub B body with important note.\n* Beta :home:\nBeta body.\n** TODO Sub C\nSub C body with another important line.\n* DONE Gamma\nGamma body with keyword inside.\n\")""#
-        ]],
+        expect,
     );
 }
 
@@ -445,6 +452,9 @@ fn org_occur_highlight_count_visibility_deep_state_combo() {
 fn org_sparse_tree_tag_todo_match_edit_occur_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-occur\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -495,9 +505,7 @@ fn org_sparse_tree_tag_todo_match_edit_occur_combo() {
                   occur-text
                   (buffer-substring-no-properties
                    (point-min) (point-max))))))))))"##,
-        expect_test::expect![[
-            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-occur\")""#
-        ]],
+        expect,
     );
 }
 
@@ -505,6 +513,9 @@ fn org_sparse_tree_tag_todo_match_edit_occur_combo() {
 fn org_sparse_tree_todo_tag_edit_resparse_occur_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-occur\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -557,8 +568,6 @@ fn org_sparse_tree_todo_tag_edit_resparse_occur_deep() {
                       occur-count
                       (buffer-substring-no-properties
                        (point-min) (point-max))))))))))))"##,
-        expect_test::expect![[
-            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-occur\")""#
-        ]],
+        expect,
     );
 }

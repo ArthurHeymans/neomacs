@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx290_obarray_intern_soft_unintern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function make-obarray)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ob (make-obarray 31)))
@@ -23,13 +24,16 @@ fn div_cx290_obarray_intern_soft_unintern() {
             (intern-soft "beta" ob)
             (intern-soft "delta" ob)))))
 "##,
-        expect_test::expect![[r#""ERR (void-function make-obarray)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx290_mapatoms_collect_filtered() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"neo-cx290-sym-alpha\" \"neo-cx290-sym-beta\" \"neo-cx290-sym-gamma\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (intern "neo-cx290-sym-alpha")
@@ -41,15 +45,14 @@ fn div_cx290_mapatoms_collect_filtered() {
                 (push s collected))))
   (sort (mapcar #'symbol-name collected) #'string<))
 "##,
-        expect_test::expect![[
-            r#""OK (\"neo-cx290-sym-alpha\" \"neo-cx290-sym-beta\" \"neo-cx290-sym-gamma\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx290_symbol_plist_get_put_remprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments get 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((sym (intern "neo-cx290-plist-test")))
@@ -65,13 +68,16 @@ fn div_cx290_symbol_plist_get_put_remprop() {
         (remprop sym 'neo-cx290-custom)
         (get sym 'neo-cx290-custom)))
 "##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments get 3)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx290_fboundp_fmakunbound_defalias_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (t t t (closure (t) nil :orig) :orig neo-cx290-alias1 nil nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (defalias 'neo-cx290-orig (lambda () :orig))
@@ -86,15 +92,16 @@ fn div_cx290_fboundp_fmakunbound_defalias_chain() {
       (fboundp 'neo-cx290-alias1)
       (indirect-function 'neo-cx290-alias2))
 "##,
-        expect_test::expect![[
-            r#""OK (t t t (closure (t) nil :orig) :orig neo-cx290-alias1 nil nil)""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx290_symbol_function_vs_indirect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((closure (t) nil :fn1) (closure (t) nil :fn1) neo-cx290-a (closure (t) nil :fn1) t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((fn1 (lambda () :fn1))
@@ -107,15 +114,14 @@ fn div_cx290_symbol_function_vs_indirect() {
         (indirect-function 'neo-cx290-b)
         (eq (indirect-function 'neo-cx290-a) (indirect-function 'neo-cx290-b))))
 "##,
-        expect_test::expect![[
-            r#""OK ((closure (t) nil :fn1) (closure (t) nil :fn1) neo-cx290-a (closure (t) nil :fn1) t)""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx290_boundp_makunbound_void_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t 42 neo-cx290-bound-var nil :void)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (defvar neo-cx290-bound-var 42)
@@ -125,13 +131,16 @@ fn div_cx290_boundp_makunbound_void_check() {
       (boundp 'neo-cx290-bound-var)
       (condition-case e neo-cx290-bound-var (void-variable :void)))
 "##,
-        expect_test::expect![[r#""OK (t 42 neo-cx290-bound-var nil :void)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx290_function_get_put() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"docstring\" nil t \"Return the car of LIST.  If LIST is nil, return nil.\nError if LIST is not nil and not a cons cell.  See also ‘car-safe’.\n\nSee Info node ‘(elisp)Cons Cells’ for a discussion of related basic\nLisp concepts such as car, cdr, cons cell and list.\n\n(fn LIST)\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (defun neo-cx290-fn-doc () "docstring" :result)
@@ -140,15 +149,14 @@ fn div_cx290_function_get_put() {
       (fboundp 'car)
       (documentation 'car))
 "##,
-        expect_test::expect![[
-            r#""OK (\"docstring\" nil t \"Return the car of LIST.  If LIST is nil, return nil.\nError if LIST is not nil and not a cons cell.  See also ‘car-safe’.\n\nSee Info node ‘(elisp)Cons Cells’ for a discussion of related basic\nLisp concepts such as car, cdr, cons cell and list.\n\n(fn LIST)\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx290_obarray_hash_table_internals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function make-obarray)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ob (make-obarray 31)))
@@ -162,13 +170,15 @@ fn div_cx290_obarray_hash_table_internals() {
         (intern-soft "sym-19" ob)
         (intern-soft "sym-20" ob)))
 "##,
-        expect_test::expect![[r#""ERR (void-function make-obarray)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx290_default_boundp_setq_default_local_var() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (t :global :local t :new-default :local :new-default)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (setq-default neo-cx290-default :global)
@@ -183,13 +193,14 @@ fn div_cx290_default_boundp_setq_default_local_var() {
         (buffer-local-value 'neo-cx290-default buf)
         (default-value 'neo-cx290-default)))
 "##,
-        expect_test::expect![[r#""OK (t :global :local t :new-default :local :new-default)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx290_symbol_obarray_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function make-obarray)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ob (make-obarray 31))
@@ -221,6 +232,6 @@ fn div_cx290_symbol_obarray_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""ERR (void-function make-obarray)""#]],
+        expect,
     )
 }

@@ -38,12 +38,10 @@ fn oracle_bool_vector_constructor_truthiness_and_negative_length() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((nil t t t t) (t t t t) (t t nil) (wrong-type-argument (wholenump -1)))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((nil t t t t) (t t t t) (t t nil) (wrong-type-argument (wholenump -1)))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -79,12 +77,10 @@ fn oracle_bool_vector_binary_ops_signal_wrong_length_argument() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((wrong-length-argument (3 2)) (wrong-length-argument (3 2)) (wrong-length-argument (3 2)) (wrong-length-argument (3 2)) (wrong-length-argument (3 2 2)) (wrong-length-argument (3 3 2)) (wrong-length-argument (3 4)))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((wrong-length-argument (3 2)) (wrong-length-argument (3 2)) (wrong-length-argument (3 2)) (wrong-length-argument (3 2)) (wrong-length-argument (3 2 2)) (wrong-length-argument (3 3 2)) (wrong-length-argument (3 4)))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -117,12 +113,10 @@ fn oracle_bool_vector_destination_return_value_tracks_mutation() {
            (append dest nil)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (nil nil nil nil (t (t t t nil)) (t (nil t nil t)) (t (nil t nil t)))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (nil nil nil nil (t (t t t nil)) (t (nil t nil t)) (t (nil t nil t)))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -144,10 +138,9 @@ fn oracle_bool_vector_destination_can_alias_inputs() {
          (append e nil))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((t (t t t nil)) (t (nil nil t nil)) (t (nil t nil t)))""#],
-    );
+    let expect =
+        expect_test::expect![r#""OK ((t (t t t nil)) (t (nil nil t nil)) (t (nil t nil t)))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -170,10 +163,8 @@ fn oracle_bool_vector_count_consecutive_boundaries() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (0 0 (args-out-of-range (#&5\"\u{13}\" 6)) (wrong-type-argument (wholenump -1)) (wrong-type-argument (wholenump 1.5)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (0 0 (args-out-of-range (#&5\"\u{13}\" 6)) (wrong-type-argument (wholenump -1)) (wrong-type-argument (wholenump 1.5)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

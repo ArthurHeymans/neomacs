@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_diamond_inheritance_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defgeneric)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass base-a ()
@@ -76,7 +77,7 @@ fn combo_eieio_diamond_inheritance_dispatch() {
                 (buffer-string)
                 my-obj)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function defgeneric)""#]],
+        expect,
     );
 }
 
@@ -84,6 +85,7 @@ fn combo_eieio_diamond_inheritance_dispatch() {
 fn combo_eieio_multi_inherit_slot_merge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defgeneric)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass readable ()
@@ -147,7 +149,7 @@ fn combo_eieio_multi_inherit_slot_merge() {
                 (buffer-string)
                 rwobj)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function defgeneric)""#]],
+        expect,
     );
 }
 
@@ -155,6 +157,7 @@ fn combo_eieio_multi_inherit_slot_merge() {
 fn combo_eieio_c3_linearization_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defgeneric)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass animal-base ()
@@ -209,7 +212,7 @@ fn combo_eieio_c3_linearization_order() {
                 (buffer-string)
                 batobj)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function defgeneric)""#]],
+        expect,
     );
 }
 
@@ -217,6 +220,7 @@ fn combo_eieio_c3_linearization_order() {
 fn combo_eieio_multi_inherit_accessor_conflict() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tagged ()
@@ -284,7 +288,7 @@ fn combo_eieio_multi_inherit_accessor_conflict() {
                 (buffer-string)
                 items)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -292,6 +296,7 @@ fn combo_eieio_multi_inherit_accessor_conflict() {
 fn combo_eieio_deep_hierarchy_buffer_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 22 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ast-node ()
@@ -349,6 +354,6 @@ fn combo_eieio_deep_hierarchy_buffer_narrow() {
                 (buffer-string)
                 root-node)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 22 25)""#]],
+        expect,
     );
 }

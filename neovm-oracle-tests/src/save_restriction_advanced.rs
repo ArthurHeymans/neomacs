@@ -34,12 +34,10 @@ fn oracle_prop_save_restr_adv_narrow_widen_cycle() {
                       (widen)
                       (setq results (cons (list (point-min) (point-max) (buffer-string)) results))
                       (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 21 \"ABCDEFGHIJKLMNOPQRST\") (3 8 \"CDEFG\") (1 21 \"ABCDEFGHIJKLMNOPQRST\") (10 15 \"JKLMN\") (1 21 \"ABCDEFGHIJKLMNOPQRST\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 21 \"ABCDEFGHIJKLMNOPQRST\") (3 8 \"CDEFG\") (1 21 \"ABCDEFGHIJKLMNOPQRST\") (10 15 \"JKLMN\") (1 21 \"ABCDEFGHIJKLMNOPQRST\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -69,12 +67,10 @@ fn oracle_prop_save_restr_adv_preserves_state() {
                             (buffer-string)
                             (point-min)
                             (point-max))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"2345678\" \"0123456789ABCDEF\" \"456789A\" \"2345678\" 3 10)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"2345678\" \"0123456789ABCDEF\" \"456789A\" \"2345678\" 3 10)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -109,12 +105,10 @@ fn oracle_prop_save_restr_adv_deeply_nested() {
                       ;; Back to full buffer
                       (setq results (cons (buffer-string) results))
                       (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"ABCDEFGHIJKLMNOPQRS\" \"EFGHIJKLMN\" \"CDEFG\" \"ABCDEFGHIJKLMNOPQRSTUVWXYZ\" \"EFGHIJKLMN\" \"ABCDEFGHIJKLMNOPQRS\" \"ABCDEFGHIJKLMNOPQRSTUVWXYZ\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"ABCDEFGHIJKLMNOPQRS\" \"EFGHIJKLMN\" \"CDEFG\" \"ABCDEFGHIJKLMNOPQRSTUVWXYZ\" \"EFGHIJKLMN\" \"ABCDEFGHIJKLMNOPQRS\" \"ABCDEFGHIJKLMNOPQRSTUVWXYZ\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -144,10 +138,8 @@ fn oracle_prop_save_restr_adv_insert_delete_in_narrow() {
                                   narrow-after-delete)))))
                     ;; Full buffer after widen
                     (buffer-string))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK \"Hello, Beautiful ! Goodbye, World!\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"Hello, Beautiful ! Goodbye, World!\"""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -171,10 +163,8 @@ fn oracle_prop_save_restr_adv_search_in_narrow() {
                         (list count (buffer-string))))
                     ;; Full buffer: only the narrowed region was modified
                     (buffer-string))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK \"foo bar XXX bar foo bar\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"foo bar XXX bar foo bar\"""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -206,12 +196,10 @@ fn oracle_prop_save_restr_adv_point_bounds_tracking() {
                       (widen)
                       (setq r (cons (list 'widened (point-min) (point-max) (buffer-string)) r))
                       (nreverse r)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((full 1 21 20) (narrow1 5 15 10) (after-insert 5 18 13) (after-delete 5 15 10) (widened 1 21 \"0123789ABCDXYZEFGHIJ\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((full 1 21 20) (narrow1 5 15 10) (after-insert 5 18 13) (after-delete 5 15 10) (widened 1 21 \"0123789ABCDXYZEFGHIJ\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -244,10 +232,9 @@ fn oracle_prop_save_restr_adv_markers_under_narrow() {
                                 m1-after m2-after
                                 narrow-str
                                 (buffer-string))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (5 12 5 15 \"CD***EFGHIJKLM\" \"ABCD***EFGHIJKLMNOP\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (5 12 5 15 \"CD***EFGHIJKLM\" \"ABCD***EFGHIJKLMNOP\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -288,10 +275,9 @@ fn oracle_prop_save_restr_adv_section_processing() {
                                       (cons (list name line-count char-count)
                                             sections)))))))
                       (nreverse sections)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((\"HEADER\" 2 25) (\"BODY\" 3 48) (\"FOOTER\" 1 15))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((\"HEADER\" 2 25) (\"BODY\" 3 48) (\"FOOTER\" 1 15))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -333,10 +319,8 @@ fn oracle_prop_save_restr_adv_accumulate_from_regions() {
                             (nreverse scores)
                             total
                             (/ total count))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"Alice\" \"Bob\" \"Carol\" \"Dave\" \"Eve\") (85 92 78 95 88) 438 87)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"Alice\" \"Bob\" \"Carol\" \"Dave\" \"Eve\") (85 92 78 95 88) 438 87)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -13,6 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_thing_at_point_sexp_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     // sexp at point with markers/overlays; undo after edit.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -43,7 +44,7 @@ fn combo_thing_at_point_sexp_marker_overlay_undo() {
               (list sexp-before bounds-before
                     sexp-after bounds-after m1-after m2-after
                     sexp-restored bounds-restored m1-restored m2-restored)))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -51,6 +52,7 @@ fn combo_thing_at_point_sexp_marker_overlay_undo() {
 fn combo_thing_at_point_symbol_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 23 31)""#]];
     // symbol at point with markers/overlays; undo after edit.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -83,7 +85,7 @@ fn combo_thing_at_point_symbol_marker_overlay_undo() {
               (list sym-before bounds-before
                     sym-after bounds-after m1-after m2-after
                     sym-restored bounds-restored m1-restored m2-restored)))))))) "#,
-        expect_test::expect![[r#""ERR (args-out-of-range 23 31)""#]],
+        expect,
     );
 }
 
@@ -91,6 +93,7 @@ fn combo_thing_at_point_symbol_marker_overlay_undo() {
 fn combo_thing_at_point_word_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 27 35)""#]];
     // word at point with markers/overlays; undo after edit.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -125,7 +128,7 @@ fn combo_thing_at_point_word_marker_overlay_undo() {
               (list word-before bounds-before
                     word-after bounds-after m1-after m2-after
                     word-restored bounds-restored m1-restored m2-restored)))))))) "#,
-        expect_test::expect![[r#""ERR (args-out-of-range 27 35)""#]],
+        expect,
     );
 }
 
@@ -133,6 +136,7 @@ fn combo_thing_at_point_word_marker_overlay_undo() {
 fn combo_thing_at_point_line_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     // line at point with markers/overlays; undo after edit.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -165,7 +169,7 @@ fn combo_thing_at_point_line_marker_overlay_undo() {
               (list line-before bounds-before
                     line-after bounds-after m1-after m2-after
                     line-restored bounds-restored m1-restored m2-restored)))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -173,6 +177,7 @@ fn combo_thing_at_point_line_marker_overlay_undo() {
 fn combo_thing_at_point_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     // thing-at-point in narrowed buffer; undo after edit.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -208,6 +213,6 @@ fn combo_thing_at_point_narrow_marker_overlay_undo() {
               (list sexp-narrowed bounds-narrowed
                     sexp-after bounds-after m1-after m2-after
                     sexp-restored bounds-restored m1-restored m2-restored)))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }

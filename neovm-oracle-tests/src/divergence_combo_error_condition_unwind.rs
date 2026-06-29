@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_nested_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((caught args-out-of-range \"re-signaled\") (void void-variable))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list
@@ -23,9 +26,7 @@ fn divergence_nested_condition_case() {
       (list 'void (car e)))
      (error
       (list 'err (car e)))))) "#,
-        expect_test::expect![[
-            r#""OK ((caught args-out-of-range \"re-signaled\") (void void-variable))""#
-        ]],
+        expect,
     );
 }
 
@@ -33,6 +34,7 @@ fn divergence_nested_condition_case() {
 fn divergence_unwind_protify_cleanup_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (error)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-up-log-xxx nil)
@@ -46,7 +48,7 @@ fn divergence_unwind_protify_cleanup_order() {
   (let ((result (nreverse test-up-log-xxx)))
     (list result
           (equal result '(inner-body inner-cleanup outer-cleanup))))) "#,
-        expect_test::expect![[r#""ERR (error)""#]],
+        expect,
     );
 }
 
@@ -54,6 +56,9 @@ fn divergence_unwind_protify_cleanup_order() {
 fn divergence_error_propagates_through_closures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((caught \"from closure\") (caught-apply \"from closure\") (caught-map \"from closure\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((fn (lambda ()
@@ -70,9 +75,7 @@ fn divergence_error_propagates_through_closures() {
               (mapcar (lambda (_) (funcall fn)) '(1))
             (wrong-type-argument
              (list 'caught-map (cadr e))))))) "#,
-        expect_test::expect![[
-            r#""OK ((caught \"from closure\") (caught-apply \"from closure\") (caught-map \"from closure\"))""#
-        ]],
+        expect,
     );
 }
 
@@ -80,6 +83,7 @@ fn divergence_error_propagates_through_closures() {
 fn divergence_unwind_protect_insert_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""STARTOK (\"START\" t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "START")
@@ -97,7 +101,7 @@ fn divergence_unwind_protect_insert_undo() {
           (string= (buffer-string) "START")
           cleanup-done
           (= (buffer-size) 5)))) "#,
-        expect_test::expect![[r#""STARTOK (\"START\" t t t)""#]],
+        expect,
     );
 }
 
@@ -105,6 +109,7 @@ fn divergence_unwind_protect_insert_undo() {
 fn divergence_signal_user_data_preserved() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (error \"Invalid error symbol\" test-sig-xxx)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (condition-case e
@@ -117,7 +122,7 @@ fn divergence_signal_user_data_preserved() {
            (string= (caddr e) "hello")
            (cadddr e)
            (= (cadddr e) 42))))) "#,
-        expect_test::expect![[r#""ERR (error \"Invalid error symbol\" test-sig-xxx)""#]],
+        expect,
     );
 }
 
@@ -125,6 +130,7 @@ fn divergence_signal_user_data_preserved() {
 fn divergence_condition_case_no_error_val() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (3 30 t 10)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list
@@ -138,7 +144,7 @@ fn divergence_condition_case_no_error_val() {
    (condition-case e
        (let ((x 5)) (+ x x))
      (error 'caught)))) "#,
-        expect_test::expect![[r#""OK (3 30 t 10)""#]],
+        expect,
     );
 }
 
@@ -146,6 +152,7 @@ fn divergence_condition_case_no_error_val() {
 fn divergence_defining_condition_handlers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (5 t div-error t 0 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-safe-div-xxx (a b)
@@ -158,7 +165,7 @@ fn divergence_defining_condition_handlers() {
         (eq (test-safe-div-xxx 10 0) 'div-error)
         (test-safe-div-xxx 0 5)
         (= (test-safe-div-xxx 0 5) 0))) "#,
-        expect_test::expect![[r#""OK (5 t div-error t 0 t)""#]],
+        expect,
     );
 }
 
@@ -166,6 +173,7 @@ fn divergence_defining_condition_handlers() {
 fn divergence_unwind_after_buffer_modification() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""CCCCERR (error \"test\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA")
@@ -183,7 +191,7 @@ fn divergence_unwind_after_buffer_modification() {
     (list (nreverse saved)
           (string= (buffer-string) "CCCC")
           (equal (nreverse saved) '("BBBB" "BBBB" "CCCC"))))) "#,
-        expect_test::expect![[r#""CCCCERR (error \"test\")""#]],
+        expect,
     );
 }
 
@@ -191,6 +199,8 @@ fn divergence_unwind_after_buffer_modification() {
 fn divergence_error_while_narrowed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""-BBBB-CCCCOK (error \"narrowed error\" t t \"-BBBB-CCCC\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD")
@@ -204,7 +214,7 @@ fn divergence_error_while_narrowed() {
            (= (point-min) 5)
            (= (point-max) 15)
            (buffer-string))))) "#,
-        expect_test::expect![[r#""-BBBB-CCCCOK (error \"narrowed error\" t t \"-BBBB-CCCC\")""#]],
+        expect,
     );
 }
 
@@ -212,6 +222,7 @@ fn divergence_error_while_narrowed() {
 fn divergence_debugger_ignored_with_handler() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((before (handled \"test\")) nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-dbg-log-xxx nil)
@@ -226,6 +237,6 @@ fn divergence_debugger_ignored_with_handler() {
   (list (nreverse test-dbg-log-xxx)
         (equal (nreverse test-dbg-log-xxx)
                '(before (handled "test"))))) "#,
-        expect_test::expect![[r#""OK ((before (handled \"test\")) nil)""#]],
+        expect,
     );
 }

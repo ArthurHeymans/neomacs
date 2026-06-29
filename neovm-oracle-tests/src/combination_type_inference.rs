@@ -72,12 +72,10 @@ fn oracle_prop_type_infer_type_environment() {
     (fmakunbound 'neovm--ti-env-lookup)
     (fmakunbound 'neovm--ti-env-extend-many)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((int) (bool) (-> (int) (bool)) nil (string) (bool) (int) (bool) (string) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((int) (bool) (-> (int) (bool)) nil (string) (bool) (int) (bool) (string) nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -186,12 +184,10 @@ fn oracle_prop_type_infer_type_variables_and_substitution() {
     (fmakunbound 'neovm--ti-free-tvars)
     (makunbound 'neovm--ti-tvar-counter)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((tvar 1) (tvar 2) (tvar 3) (-> (int) (bool)) (tvar 3) (int) (-> (int) (-> (int) (bool))) (1 2) nil (2) (list-of (int)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((tvar 1) (tvar 2) (tvar 3) (-> (int) (bool)) (tvar 3) (int) (-> (int) (-> (int) (bool))) (1 2) nil (2) (list-of (int)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -320,12 +316,10 @@ fn oracle_prop_type_infer_unification() {
     (fmakunbound 'neovm--ti-u-compose)
     (fmakunbound 'neovm--ti-u-unify)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ok (1 int)) (ok) (error . \"cannot unify (int) with (bool)\") (ok (2 bool) (1 int)) (ok (2 int) (1 bool)) (error . \"occurs-check\") ((ok (2 int) (1 tvar 2)) (int) (int)) (ok (3 int)) (ok (5 bool) (4 int)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ok (1 int)) (ok) (error . \"cannot unify (int) with (bool)\") (ok (2 bool) (1 int)) (ok (2 int) (1 bool)) (error . \"occurs-check\") ((ok (2 int) (1 tvar 2)) (int) (int)) (ok (3 int)) (ok (5 bool) (4 int)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -511,10 +505,8 @@ fn oracle_prop_type_infer_type_checking_expressions() {
     (fmakunbound 'neovm--ti-tc-infer)
     (makunbound 'neovm--ti-tc-counter)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (setting-constant t)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (setting-constant t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -608,10 +600,8 @@ fn oracle_prop_type_infer_constraint_generation() {
     (fmakunbound 'neovm--ti-cg-generate)
     (makunbound 'neovm--ti-cg-counter)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (setting-constant t)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (setting-constant t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -733,12 +723,10 @@ fn oracle_prop_type_infer_constraint_solving() {
     (fmakunbound 'neovm--ti-cs-unify-one)
     (fmakunbound 'neovm--ti-cs-solve)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ok (int) (bool) (-> (int) (bool))) ((int) (int) (int)) error ((int) (bool)) (int) (ok))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ok (int) (bool) (-> (int) (bool))) ((int) (int) (int)) error ((int) (bool)) (int) (ok))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -863,10 +851,8 @@ fn oracle_prop_type_infer_polymorphism() {
     (fmakunbound 'neovm--ti-poly-instantiate)
     (makunbound 'neovm--ti-poly-counter)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((forall (100) (-> (tvar 100) (tvar 100))) (forall (101) (-> (tvar 100) (tvar 101))) (-> (tvar 1) (tvar 1)) ((-> (tvar 11) (tvar 12)) (-> (tvar 13) (tvar 14))) (int) (-> (int) (bool)) (2 1) (6 5))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((forall (100) (-> (tvar 100) (tvar 100))) (forall (101) (-> (tvar 100) (tvar 101))) (-> (tvar 1) (tvar 1)) ((-> (tvar 11) (tvar 12)) (-> (tvar 13) (tvar 14))) (int) (-> (int) (bool)) (2 1) (6 5))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

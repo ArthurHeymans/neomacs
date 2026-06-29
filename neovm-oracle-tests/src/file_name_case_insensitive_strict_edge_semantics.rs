@@ -46,12 +46,10 @@ fn oracle_file_name_case_insensitive_existing_and_missing_paths() {
     (ignore-errors (delete-directory root t))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil nil nil nil t t (wrong-number-of-arguments (file-name-case-insensitive-p 0)) (wrong-number-of-arguments (file-name-case-insensitive-p 2)) (wrong-type-argument (stringp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil nil nil nil t t (wrong-number-of-arguments (file-name-case-insensitive-p 0)) (wrong-number-of-arguments (file-name-case-insensitive-p 2)) (wrong-type-argument (stringp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -113,10 +111,8 @@ fn oracle_file_name_case_insensitive_handler_and_argument_order_edges() {
     (makunbound 'neomacs--oracle-case-fold-calls)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-number-of-arguments (file-name-case-insensitive-p 0)) nil nil (wrong-type-argument (stringp 42)) nil nil (error (\"Invalid handler in ‘file-name-handler-alist’\")) ((expand-file-name \"child\" \"/oracle-case-fold-root/\")) nil handled-case-fold ((file-name-case-insensitive-p \"/oracle-case-fold-root/child\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-number-of-arguments (file-name-case-insensitive-p 0)) nil nil (wrong-type-argument (stringp 42)) nil nil (error (\"Invalid handler in ‘file-name-handler-alist’\")) ((expand-file-name \"child\" \"/oracle-case-fold-root/\")) nil handled-case-fold ((file-name-case-insensitive-p \"/oracle-case-fold-root/child\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

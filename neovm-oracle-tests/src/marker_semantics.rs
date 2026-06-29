@@ -24,10 +24,9 @@ fn oracle_marker_set_clips_to_accessible_buffer_bounds() {
      (point-max))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (#<marker in no buffer> 1 #<marker in no buffer> 4 1 4)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (#<marker in no buffer> 1 #<marker in no buffer> 4 1 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -49,12 +48,10 @@ fn oracle_marker_detach_and_last_position_semantics() {
      (marker-insertion-type m))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (4 #<killed buffer> 4 #<marker (moves after insertion) in no buffer> nil nil 4 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (4 #<killed buffer> 4 #<marker (moves after insertion) in no buffer> nil nil 4 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -78,10 +75,8 @@ fn oracle_marker_dead_buffer_becomes_nowhere_but_keeps_last_position() {
    (marker-last-position marker)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (5 5 nil nil 5)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (5 5 nil nil 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -106,10 +101,8 @@ fn oracle_copy_marker_nil_number_marker_and_insertion_type() {
      (eq (marker-buffer copy) (current-buffer)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil nil 2 t 2 nil t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil nil 2 t 2 nil t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -131,7 +124,8 @@ fn oracle_copy_marker_number_clips_to_buffer_bounds_like_gnu() {
      (point-max))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (1 4 1 4)""#]]);
+    let expect = expect_test::expect![[r#""OK (1 4 1 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -150,10 +144,9 @@ fn oracle_set_marker_insertion_type_returns_requested_type() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (side t nil nil (wrong-type-argument (markerp 42)))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (side t nil nil (wrong-type-argument (markerp 42)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -184,8 +177,6 @@ fn oracle_set_marker_from_marker_in_other_buffer_recomputes_target_position() {
     (kill-buffer dst-buf)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (4 t 4 t 948)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (4 t 4 t 948)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

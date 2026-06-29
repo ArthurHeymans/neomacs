@@ -94,10 +94,8 @@ fn oracle_prop_toposort_basic_dag() {
                     ("f" . ()))))
         (funcall 'neovm--ts-toposort dag))
     (fmakunbound 'neovm--ts-toposort)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (ok \"a\" \"b\" \"c\" \"d\" \"e\" \"f\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (ok \"a\" \"b\" \"c\" \"d\" \"e\" \"f\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -176,12 +174,10 @@ fn oracle_prop_toposort_cycle_detection() {
                    ("c" . ("d"))
                    ("d" . ()))))
     (fmakunbound 'neovm--ts2-toposort)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((cycle \"a\" \"b\" \"c\") (cycle \"a\" \"b\" \"c\") (cycle \"a\") (ok \"a\" \"b\" \"c\" \"d\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((cycle \"a\" \"b\" \"c\") (cycle \"a\" \"b\" \"c\") (cycle \"a\") (ok \"a\" \"b\" \"c\" \"d\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -238,12 +234,10 @@ fn oracle_prop_toposort_in_degree_computation() {
                    ("m" . ("t"))
                    ("t" . ()))))
     (fmakunbound 'neovm--ts-in-degrees)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"a\" . 0) (\"b\" . 1) (\"c\" . 1) (\"d\" . 2)) ((\"center\" . 0) (\"r1\" . 1) (\"r2\" . 1) (\"r3\" . 1) (\"r4\" . 1) (\"r5\" . 1)) ((\"a\" . 0) (\"b\" . 1) (\"c\" . 1) (\"d\" . 1) (\"e\" . 1)) ((\"m\" . 3) (\"s1\" . 0) (\"s2\" . 0) (\"s3\" . 0) (\"t\" . 1)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"a\" . 0) (\"b\" . 1) (\"c\" . 1) (\"d\" . 2)) ((\"center\" . 0) (\"r1\" . 1) (\"r2\" . 1) (\"r3\" . 1) (\"r4\" . 1) (\"r5\" . 1)) ((\"a\" . 0) (\"b\" . 1) (\"c\" . 1) (\"d\" . 1) (\"e\" . 1)) ((\"m\" . 3) (\"s1\" . 0) (\"s2\" . 0) (\"s3\" . 0) (\"t\" . 1)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -356,12 +350,10 @@ fn oracle_prop_toposort_package_manager() {
                 (length order))))))
     (fmakunbound 'neovm--pkg-toposort)
     (fmakunbound 'neovm--pkg-build-order)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (ok (\"config\" \"logging\" \"http-lib\" \"sql-driver\" \"router\" \"database\" \"webapp\") (nil nil 7))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (ok (\"config\" \"logging\" \"http-lib\" \"sql-driver\" \"router\" \"database\" \"webapp\") (nil nil 7))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -479,12 +471,10 @@ fn oracle_prop_toposort_task_scheduling() {
         (funcall 'neovm--task-schedule tasks))
     (fmakunbound 'neovm--task-toposort)
     (fmakunbound 'neovm--task-schedule)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"design\" 0 3 3) (\"backend\" 3 4 7) (\"database\" 3 2 5) (\"frontend\" 3 5 8) (\"api\" 7 3 10) (\"testing\" 10 2 12) (\"deployment\" 12 1 13)) 13)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"design\" 0 3 3) (\"backend\" 3 4 7) (\"database\" 3 2 5) (\"frontend\" 3 5 8) (\"api\" 7 3 10) (\"testing\" 10 2 12) (\"deployment\" 12 1 13)) 13)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -595,12 +585,10 @@ fn oracle_prop_toposort_level_grouping() {
                    ("b" . ("c"))
                    ("c" . ("a")))))
     (fmakunbound 'neovm--ts-levels)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"a\") (\"b\" \"c\") (\"d\")) ((\"a\") (\"b\") (\"c\") (\"d\") (\"e\")) ((\"a\" \"b\" \"c\" \"d\") (\"e\")) ((\"a\" \"b\") (\"c\" \"d\") (\"e\") (\"f\")) cycle)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"a\") (\"b\" \"c\") (\"d\")) ((\"a\") (\"b\") (\"c\") (\"d\") (\"e\")) ((\"a\" \"b\" \"c\" \"d\") (\"e\")) ((\"a\" \"b\") (\"c\" \"d\") (\"e\") (\"f\")) cycle)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -677,10 +665,8 @@ fn oracle_prop_toposort_transitive_reduction() {
                    ("c" . ()))))
     (fmakunbound 'neovm--tr-reachable)
     (fmakunbound 'neovm--tr-reduce)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"a\" \"b\") (\"b\" \"c\") (\"c\")) ((\"a\" \"b\" \"c\") (\"b\" \"d\") (\"c\" \"d\") (\"d\")) ((\"a\" \"b\") (\"b\" \"c\") (\"c\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"a\" \"b\") (\"b\" \"c\") (\"c\")) ((\"a\" \"b\" \"c\") (\"b\" \"d\") (\"c\" \"d\") (\"d\")) ((\"a\" \"b\") (\"b\" \"c\") (\"c\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

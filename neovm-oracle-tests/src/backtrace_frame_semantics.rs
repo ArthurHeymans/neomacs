@@ -27,12 +27,10 @@ fn oracle_backtrace_frame_base_counts_from_nearest_activation() {
   (unwind-protect
       (neomacs--oracle-bt-target 3 4)
     (fmakunbound 'neomacs--oracle-bt-target)))"#;
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t neomacs--oracle-bt-target (3 4)) (nil unwind-protect) (t t neomacs--oracle-bt-target) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t neomacs--oracle-bt-target (3 4)) (nil unwind-protect) (t t neomacs--oracle-bt-target) nil)""#
+    ]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq(
         "((t neomacs--oracle-bt-target (3 4)) (nil unwind-protect) (t t neomacs--oracle-bt-target) nil)",
         &oracle,

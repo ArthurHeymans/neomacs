@@ -5,6 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_timer_insert_items_pause_continue_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -45,7 +46,7 @@ fn org_timer_insert_items_pause_continue_combo() {
               org-timer-countdown-timer
               (buffer-substring-no-properties
                (point-min) (point-max))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -53,6 +54,7 @@ fn org_timer_insert_items_pause_continue_combo() {
 fn org_timer_region_shift_negative_default_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -76,7 +78,7 @@ fn org_timer_region_shift_negative_default_combo() {
                       '("-0:00:15" "0:00:00" "1:01:43"))
               (mapcar #'org-timer-secs-to-hms
                       '(-15 0 3703))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -84,6 +86,7 @@ fn org_timer_region_shift_negative_default_combo() {
 fn org_timer_countdown_effort_title_mode_line_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -119,7 +122,7 @@ fn org_timer_countdown_effort_title_mode_line_combo() {
                   org-timer-start-time
                   org-timer-countdown-timer
                   global-mode-string))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -127,6 +130,7 @@ fn org_timer_countdown_effort_title_mode_line_combo() {
 fn org_timer_restart_offset_parse_item_error_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -191,7 +195,7 @@ fn org_timer_restart_offset_parse_item_error_combo() {
                             (nreverse events))
                     org-timer-start-time
                     org-timer-pause-time)))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -199,6 +203,7 @@ fn org_timer_restart_offset_parse_item_error_combo() {
 fn org_timer_list_region_countdown_element_lifecycle_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -317,7 +322,7 @@ fn org_timer_list_region_countdown_element_lifecycle_combo() {
                 global-mode-string
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -325,6 +330,7 @@ fn org_timer_list_region_countdown_element_lifecycle_combo() {
 fn org_timer_countdown_replace_done_display_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -436,7 +442,7 @@ fn org_timer_countdown_replace_done_display_combo() {
                   frame-title-format
                    (buffer-substring-no-properties
                     (point-min) (point-max))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -444,6 +450,9 @@ fn org_timer_countdown_replace_done_display_combo() {
 fn org_timer_hms_secs_parse_region_modify_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((300 5445 10 7200) (\"0:05:00\" \"1:30:45\" \"0:00:10\" \"2:00:00\") (\"0:00:05\" \"0:01:02\" \"1:02:03\" \"0:00:30\") \"00:05:00\n01:30:45\n00:00:10\n02:00:00\n\" \"00:06:00\n01:31:45\n00:01:10\n02:01:00\n\" \"00:05:00\n00:15:00\n00:25:00\n\" error \"* Task\n- item one\n- item two\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -489,8 +498,6 @@ fn org_timer_hms_secs_parse_region_modify_combo() {
                     item-timer
                     (buffer-substring-no-properties
                      (point-min) (point-max))))))))))"##,
-        expect_test::expect![[
-            r#""OK ((300 5445 10 7200) (\"0:05:00\" \"1:30:45\" \"0:00:10\" \"2:00:00\") (\"0:00:05\" \"0:01:02\" \"1:02:03\" \"0:00:30\") \"00:05:00\n01:30:45\n00:00:10\n02:00:00\n\" \"00:06:00\n01:31:45\n00:01:10\n02:01:00\n\" \"00:05:00\n00:15:00\n00:25:00\n\" error \"* Task\n- item one\n- item two\n\")""#
-        ]],
+        expect,
     );
 }

@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_cl_record_type_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 14 39)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-rec-xxx (:type list)) a b c)
@@ -22,7 +23,7 @@ fn divergence_cl_record_type_basic() {
           (= (test-rec-xxx-a r) 99)
           (test-rec-xxx-b r)
           (= (test-rec-xxx-b r) 2)))) #"#,
-        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 14 39)""##]],
+        expect,
     );
 }
 
@@ -30,6 +31,7 @@ fn divergence_cl_record_type_basic() {
 fn divergence_eval_defun_with_closure_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (0 t 200 nil 200 nil 200 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-edc-state-xxx 0)
@@ -45,7 +47,7 @@ fn divergence_eval_defun_with_closure_capture() {
             (= test-edc-state-xxx 0)
             (symbol-value 'test-edc-state-xxx)
             (= (symbol-value 'test-edc-state-xxx) 0))))) "#,
-        expect_test::expect![[r#""OK (0 t 200 nil 200 nil 200 nil)""#]],
+        expect,
     );
 }
 
@@ -53,6 +55,8 @@ fn divergence_eval_defun_with_closure_capture() {
 fn divergence_macro_expansion_nested_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p (1 2 3 4 5))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defmacro test-nme-xxx (op &rest args)
@@ -66,7 +70,7 @@ fn divergence_macro_expansion_nested_eval() {
                '(+ (list 10 20)))
         (eval (macroexpand '(test-nme-xxx + 10 20)))
         (= (eval (macroexpand '(test-nme-xxx + 10 20))) 30))) #"#,
-        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p (1 2 3 4 5))""#]],
+        expect,
     );
 }
 
@@ -74,6 +78,7 @@ fn divergence_macro_expansion_nested_eval() {
 fn divergence_lambda_in_eval_with_dynvar() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 14 39)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-led-xxx 'outer)
@@ -89,7 +94,7 @@ fn divergence_lambda_in_eval_with_dynvar() {
           (eq (funcall fn) 'outer)
           test-led-xxx
           (eq test-led-xxx 'outer)))) #"#,
-        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 14 39)""##]],
+        expect,
     );
 }
 
@@ -97,6 +102,7 @@ fn divergence_lambda_in_eval_with_dynvar() {
 fn divergence_closure_let_binding_evaluation_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 13 50)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-lbe-log-xxx nil)
@@ -111,7 +117,7 @@ fn divergence_closure_let_binding_evaluation_order() {
           (= (length test-lbe-log-xxx) 5)
           (= (car test-lbe-log-xxx) 5)
           (= (car (last test-lbe-log-xxx)) 1)))) #"#,
-        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 13 50)""##]],
+        expect,
     );
 }
 
@@ -119,6 +125,7 @@ fn divergence_closure_let_binding_evaluation_order() {
 fn divergence_record_vector_accessor_compatibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 12 59)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (cl-defstruct (test-rva-xxx (:type vector)) x y z)
@@ -132,7 +139,7 @@ fn divergence_record_vector_accessor_compatibility() {
           (aset r 1 99)
           (aref r 1) (= (aref r 1) 99)
           (test-rva-xxx-y r) (= (test-rva-xxx-y r) 99)))) #"#,
-        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 12 59)""##]],
+        expect,
     );
 }
 
@@ -140,6 +147,7 @@ fn divergence_record_vector_accessor_compatibility() {
 fn divergence_defalias_and_funcall() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 12 42)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-da-original-xxx (x) (+ x 1))
@@ -153,7 +161,7 @@ fn divergence_defalias_and_funcall() {
         (fboundp 'test-da-alias-xxx)
         (fboundp 'test-da-original-xxx)
         (functionp 'test-da-alias-xxx))) #"#,
-        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 12 42)""##]],
+        expect,
     );
 }
 
@@ -161,6 +169,7 @@ fn divergence_defalias_and_funcall() {
 fn divergence_advised_closure_in_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 15 39)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-acie-xxx (x) (* x 2))
@@ -177,7 +186,7 @@ fn divergence_advised_closure_in_eval() {
                           (lambda (r) (+ r 100)))
           (test-acie-xxx 5)
           (= (test-acie-xxx 5) 10)))) #"#,
-        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 15 39)""##]],
+        expect,
     );
 }
 
@@ -185,6 +194,7 @@ fn divergence_advised_closure_in_eval() {
 fn divergence_defvar_vs_defconst_eval() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function constantp)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-dvc-var-xxx 10)
@@ -199,7 +209,7 @@ fn divergence_defvar_vs_defconst_eval() {
         (constantp 'test-dvc-const-xxx)
         (special-variable-p 'test-dvc-var-xxx)
         (special-variable-p 'test-dvc-const-xxx))) #"#,
-        expect_test::expect![[r#""ERR (void-function constantp)""#]],
+        expect,
     );
 }
 
@@ -207,6 +217,7 @@ fn divergence_defvar_vs_defconst_eval() {
 fn divergence_function_interactive_spec() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 8 45)""##]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-fis-xxx (a b) (interactive "nA: \nnB: ") (+ a b))
@@ -216,6 +227,6 @@ fn divergence_function_interactive_spec() {
         (equal (interactive-form 'test-fis-xxx) '(interactive "nA: \nnB: "))
         (funcall 'test-fis-xxx 3 4)
         (= (funcall 'test-fis-xxx 3 4) 7))) #"#,
-        expect_test::expect![[r##""ERR (invalid-read-syntax \"#\" 8 45)""##]],
+        expect,
     );
 }

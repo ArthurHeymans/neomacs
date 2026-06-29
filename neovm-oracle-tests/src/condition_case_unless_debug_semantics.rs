@@ -20,12 +20,10 @@ fn oracle_condition_case_unless_debug_macroexpansion() {
     (:success value (list :ok value))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (condition-case err (error \"x\") ((debug file-error) :file) ((debug arith-error error) :num) (:success value (list :ok value)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (condition-case err (error \"x\") ((debug file-error) :file) ((debug arith-error error) :num) (:success value (list :ok value)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -46,10 +44,8 @@ fn oracle_condition_case_unless_debug_runtime_handler_binding() {
    (:success value (list :success value))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable value)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable value)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -81,10 +77,8 @@ fn oracle_condition_case_unless_debug_respects_debug_on_error() {
          debugger-called)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:caught error (\"normal\")) (:debugger (error (error \"debug\"))) (nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:caught error (\"normal\")) (:debugger (error (error \"debug\"))) (nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

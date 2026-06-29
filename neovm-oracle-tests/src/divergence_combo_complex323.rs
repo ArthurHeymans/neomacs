@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx323_run_hooks_with_global_and_buffer_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -24,13 +25,14 @@ fn div_cx323_run_hooks_with_global_and_buffer_local() {
         (list in-buf in-temp))))
   (remove-hook 'neo-cx323-hook (lambda () (push :global calls))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx323_run_hook_with_args_until_success() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:success (:h3 :h2))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -46,13 +48,14 @@ fn div_cx323_run_hook_with_args_until_success() {
         (remove-hook 'neo-cx323-succ-hook fn2)
         (remove-hook 'neo-cx323-succ-hook fn3)))))
 "##,
-        expect_test::expect![[r#""OK (:success (:h3 :h2))""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx323_run_hook_with_args_until_failure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil (:h3))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -68,13 +71,14 @@ fn div_cx323_run_hook_with_args_until_failure() {
         (remove-hook 'neo-cx323-fail-hook fn2)
         (remove-hook 'neo-cx323-fail-hook fn3)))))
 "##,
-        expect_test::expect![[r#""OK (nil (:h3))""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx323_run_hook_wrapped() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:wrap-enter :normal :wrap-exit)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -89,13 +93,14 @@ fn div_cx323_run_hook_wrapped() {
     (prog1 (nreverse calls)
       (remove-hook 'neo-cx323-wrap-hook fn))))
 "##,
-        expect_test::expect![[r#""OK (:wrap-enter :normal :wrap-exit)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx323_add_hook_with_depth_ordering() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:one :two :three)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -107,13 +112,14 @@ fn div_cx323_add_hook_with_depth_ordering() {
     (setq neo-cx323-depth-hook nil)
     result))
 "##,
-        expect_test::expect![[r#""OK (:one :two :three)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx323_hook_permanent_local_survives_kill_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:perm)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -128,13 +134,14 @@ fn div_cx323_hook_permanent_local_survives_kill_all() {
       (kill-buffer buf)
       result)))
 "##,
-        expect_test::expect![[r#""OK (:perm)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx323_hook_with_args_two_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:h2 :arg1 :arg2) (:h1 :arg1 :arg2))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -147,13 +154,14 @@ fn div_cx323_hook_with_args_two_args() {
       (remove-hook 'neo-cx323-2arg-hook fn1)
       (remove-hook 'neo-cx323-2arg-hook fn2))))
 "##,
-        expect_test::expect![[r#""OK ((:h2 :arg1 :arg2) (:h1 :arg1 :arg2))""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx323_hook_nil_and_empty_var_no_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((neo-cx323-empty-hook nil))
@@ -161,13 +169,14 @@ fn div_cx323_hook_nil_and_empty_var_no_error() {
         (run-hook-with-args-until-success 'neo-cx323-empty-hook :x)
         (run-hook-with-args-until-failure 'neo-cx323-empty-hook :x)))
 "##,
-        expect_test::expect![[r#""OK (nil nil t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx323_hook_symbol_and_function_combined() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:via-lambda :via-symbol)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -178,13 +187,14 @@ fn div_cx323_hook_symbol_and_function_combined() {
   (prog1 (nreverse calls)
     (remove-hook 'neo-cx323-mixed-hook 'neo-cx323-sym-fn)))
 "##,
-        expect_test::expect![[r#""OK (:via-lambda :via-symbol)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx323_hook_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -214,6 +224,6 @@ fn div_cx323_hook_with_marker_overlay_undo_narrow_mega() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     )
 }

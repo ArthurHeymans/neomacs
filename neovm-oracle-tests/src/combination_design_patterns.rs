@@ -53,12 +53,10 @@ fn oracle_prop_dp_strategy_pattern() {
           (let ((by-length (funcall make-sorter
                                     (lambda (a b) (< (length a) (length b))))))
             (funcall by-length '("elephant" "cat" "a" "dogs" "be"))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((-9 -1 -1 2 3 4 5 6) (6 5 4 3 2 -1 -1 -9) (-1 -1 2 3 4 5 6 -9) (\"a\" \"be\" \"cat\" \"dogs\" \"elephant\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((-9 -1 -1 2 3 4 5 6) (6 5 4 3 2 -1 -1 -9) (-1 -1 2 3 4 5 6 -9) (\"a\" \"be\" \"cat\" \"dogs\" \"elephant\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -116,12 +114,10 @@ fn oracle_prop_dp_chain_of_responsibility() {
           (funcall auth '(:type compute :data 21))
           ;; Unknown request (unhandled)
           (funcall auth '(:type unknown :data nil)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((authenticated \"auth\") (denied \"auth\") (valid \"validator\" 42) (invalid \"validator\" -5) (processed \"processor\" 42) (unhandled unknown))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((authenticated \"auth\") (denied \"auth\") (valid \"validator\" 42) (invalid \"validator\" -5) (processed \"processor\" 42) (unhandled unknown))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -187,12 +183,10 @@ fn oracle_prop_dp_builder_pattern() {
           (list result simple
                 ;; Original builder unchanged (immutable)
                 (funcall qb-build q1)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:select (\"name\" \"email\") :from \"users\" :where ((age > 18) (active = t)) :order-by \"name\" :limit 10) (:select (\"*\") :from \"logs\" :where nil :order-by nil :limit 100) (:select (\"*\") :from nil :where nil :order-by nil :limit nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:select (\"name\" \"email\") :from \"users\" :where ((age > 18) (active = t)) :order-by \"name\" :limit 10) (:select (\"*\") :from \"logs\" :where nil :order-by nil :limit 100) (:select (\"*\") :from nil :where nil :order-by nil :limit nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -262,12 +256,10 @@ fn oracle_prop_dp_visitor_pattern() {
           ;; Nested negation
           (funcall visit eval-visitor '(neg (neg (num 7))))
           (funcall visit print-visitor '(neg (neg (num 7)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (-49 \"((3 + 4) * (-(2 + 5)))\" 30 \"(10 + 20)\" 42 \"42\" 7 \"(-(-7))\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (-49 \"((3 + 4) * (-(2 + 5)))\" 30 \"(10 + 20)\" 42 \"42\" 7 \"(-(-7))\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -334,12 +326,10 @@ fn oracle_prop_dp_decorator_pattern() {
             (condition-case err
                 (funcall decorated-add "x" 1)
               (error (cadr err)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (7 30 7 ((call \"add\" (3 4)) (return \"add\" 7) (call \"add\" (10 20)) (return \"add\" 30) (call \"add\" (3 4)) (return \"add\" 7)) \"Not a number: \\\"x\\\"\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (7 30 7 ((call \"add\" (3 4)) (return \"add\" 7) (call \"add\" (10 20)) (return \"add\" 30) (call \"add\" (3 4)) (return \"add\" 7)) \"Not a number: \\\"x\\\"\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -423,8 +413,6 @@ fn oracle_prop_dp_memento_pattern() {
                       (let ((s8 (funcall editor-state)))
                         (list s1 s2 s3 s4 s5 s6 s7
                               (equal s7 s8))))))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable save-memento)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable save-memento)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

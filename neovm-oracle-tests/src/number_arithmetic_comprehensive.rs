@@ -50,12 +50,10 @@ fn oracle_prop_number_arith_comp_addition_all_arities() {
   (integerp (+ most-negative-fixnum -1))
   ;; Sum near boundary
   (+ most-positive-fixnum most-negative-fixnum))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (0 42 -17 3.14 7 7.0 7.0 -15 5 55 15.0 15.0 42 42 42 15000000 0 0 2305843009213693952 t -2305843009213693953 t -1)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (0 42 -17 3.14 7 7.0 7.0 -15 5 55 15.0 15.0 42 42 42 15000000 0 0 2305843009213693952 t -2305843009213693953 t -1)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -91,12 +89,10 @@ fn oracle_prop_number_arith_comp_subtraction_all_arities() {
   ;; Self-subtraction
   (- most-positive-fixnum most-positive-fixnum)
   (- most-negative-fixnum most-negative-fixnum))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (-42 42 0 -3.14 3.14 7 -7 7.0 7.0 5 40 0 40.0 -2305843009213693953 2305843009213693952 0 2305843009213693952 0 0)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (-42 42 0 -3.14 3.14 7 -7 7.0 7.0 5 40 0 40.0 -2305843009213693953 2305843009213693952 0 2305843009213693952 0 0)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -146,12 +142,10 @@ fn oracle_prop_number_arith_comp_multiplication_all_arities() {
   (* -1 most-negative-fixnum)
   (* -1 -1 -1 -1)
   (* -1 -1 -1))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (1 42 -7 3.14 42 -42 42 42.0 42.0 120 3628800 1024 42 42 42 0 0 0 7.0 -7.0 -7.0 4611686018427387902 t -4611686018427387904 t 0 2305843009213693952 1 -1)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (1 42 -7 3.14 42 -42 42 42.0 42.0 120 3628800 1024 42 42 42 0 0 0 7.0 -7.0 -7.0 4611686018427387902 t -4611686018427387904 t 0 2305843009213693952 1 -1)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -208,12 +202,10 @@ fn oracle_prop_number_arith_comp_division_comprehensive() {
   (/ 1.0 0.0)
   (/ -1.0 0.0)
   (isnan (/ 0.0 0.0)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (1 0 -1 0 3 -3 -3 3 3 -3 -3 3 10 -10 -10 10 3.5 3.5 -3.5 -3.5 0.3333333333333333 0.3333333333333333 10 1 1 1.0 0 0 0.0 0 0 1 1 0 1.0e+INF -1.0e+INF t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (1 0 -1 0 3 -3 -3 3 3 -3 -3 3 10 -10 -10 10 3.5 3.5 -3.5 -3.5 0.3333333333333333 0.3333333333333333 10 1 1 1.0 0 0 0.0 0 0 1 1 0 1.0e+INF -1.0e+INF t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -233,12 +225,10 @@ fn oracle_prop_number_arith_comp_division_by_zero_errors() {
   ;; Float division by zero does NOT error
   (floatp (/ 1.0 0.0))
   (floatp (/ -1.0 0.0)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (div-by-zero div-zero-zero neg-div-zero mod-by-zero emod-by-zero t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (div-by-zero div-zero-zero neg-div-zero mod-by-zero emod-by-zero t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -280,12 +270,10 @@ fn oracle_prop_number_arith_comp_one_plus_one_minus() {
   ;; Chain
   (1+ (1+ (1+ (1+ (1+ 0)))))
   (1- (1- (1- (1- (1- 10))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (1 2 0 43 -41 4.140000000000001 -2.14 1.0 2305843009213693952 t -1 0 -2 41 -43 2.14 -4.140000000000001 -1.0 -2305843009213693953 t t t t t 5 5)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (1 2 0 43 -41 4.140000000000001 -2.14 1.0 2305843009213693952 t -1 0 -2 41 -43 2.14 -4.140000000000001 -1.0 -2305843009213693953 t t t t t 5 5)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -326,12 +314,10 @@ fn oracle_prop_number_arith_comp_percent_mod_exhaustive() {
     (mod -7 3)
     (% 7 -3)
     (mod 7 -3)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((10 3 1 1 t t) (-10 3 -1 2 t t) (10 -3 1 -2 t t) (-10 -3 -1 -1 t t) (7 2 1 1 t t) (-7 2 -1 1 t t) (7 -2 1 -1 t t) (-7 -2 -1 -1 t t) (1 1 0 0 t t) (-1 1 0 0 t t) (1 -1 0 0 t t) (-1 -1 0 0 t t) (0 5 0 0 t t) (0 -5 0 0 t t) (13 5 3 3 t t) (-13 5 -3 2 t t) (13 -5 3 -2 t t) (-13 -5 -3 -3 t t) (100 7 2 2 t t) (-100 7 -2 5 t t) (100 -7 2 -5 t t) (-100 -7 -2 -2 t t) (1 1000 1 1 t t) (-1 1000 -1 999 t t) (999 1000 999 999 t t) (-999 1000 -999 1 t t)) 1.5 1.5 -1.5 -1.5 -1 2 1 -2)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((10 3 1 1 t t) (-10 3 -1 2 t t) (10 -3 1 -2 t t) (-10 -3 -1 -1 t t) (7 2 1 1 t t) (-7 2 -1 1 t t) (7 -2 1 -1 t t) (-7 -2 -1 -1 t t) (1 1 0 0 t t) (-1 1 0 0 t t) (1 -1 0 0 t t) (-1 -1 0 0 t t) (0 5 0 0 t t) (0 -5 0 0 t t) (13 5 3 3 t t) (-13 5 -3 2 t t) (13 -5 3 -2 t t) (-13 -5 -3 -3 t t) (100 7 2 2 t t) (-100 7 -2 5 t t) (100 -7 2 -5 t t) (-100 -7 -2 -2 t t) (1 1000 1 1 t t) (-1 1000 -1 999 t t) (999 1000 999 999 t t) (-999 1000 -999 1 t t)) 1.5 1.5 -1.5 -1.5 -1 2 1 -2)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -375,12 +361,10 @@ fn oracle_prop_number_arith_comp_ash_exhaustive() {
   (= (ash 1 0) 1)
   (= (ash 1 10) 1024)
   (= (ash 1 20) 1048576))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (1 2 4 256 65536 1073741824 40 4080 43008 128 16 1 0 0 0 127 -1 -2 -1024 -40 -672 -1 -1 -16 -1 -1 -50 -4 -2 -1 0 0 0 0 0 0 t t t t t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (1 2 4 256 65536 1073741824 40 4080 43008 128 16 1 0 0 0 127 -1 -2 -1024 -40 -672 -1 -1 -16 -1 -1 -50 -4 -2 -1 0 0 0 0 0 0 t t t t t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -440,12 +424,10 @@ fn oracle_prop_number_arith_comp_bitwise_large_negative() {
   (logcount 0) (logcount 1) (logcount 7) (logcount 255)
   (logcount -1) (logcount -2) (logcount -256)
   (logcount 1023))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (-1 255 15 43776 255 0 3 -1 0 0 0 255 255 0 273 -1 -1 0 0 0 255 0 255 255 12345 15 -1 0 0 -1 0 -2 1 -256 0 0 t t (t t) 0 1 3 8 0 1 8 10)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (-1 255 15 43776 255 0 3 -1 0 0 0 255 255 0 273 -1 -1 0 0 0 255 0 255 255 12345 15 -1 0 0 -1 0 -2 1 -256 0 0 t t (t t) 0 1 3 8 0 1 8 10)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -468,12 +450,10 @@ fn oracle_prop_number_arith_comp_rounding_one_arg_all_modes() {
                   (ceiling v)
                   (round v)))
           vals))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0.0 0 0 0 0) (0.1 0 0 1 0) (0.5 0 0 1 0) (0.9 0 0 1 1) (1.0 1 1 1 1) (1.1 1 1 2 1) (1.5 1 1 2 2) (1.9 1 1 2 2) (2.0 2 2 2 2) (2.3 2 2 3 2) (2.5 2 2 3 2) (2.7 2 2 3 3) (3.0 3 3 3 3) (3.5 3 3 4 4) (4.5 4 4 5 4) (5.5 5 5 6 6) (-0.1 0 -1 0 0) (-0.5 0 -1 0 0) (-0.9 0 -1 0 -1) (-1.0 -1 -1 -1 -1) (-1.5 -1 -2 -1 -2) (-2.0 -2 -2 -2 -2) (-2.3 -2 -3 -2 -2) (-2.5 -2 -3 -2 -2) (-2.7 -2 -3 -2 -3) (-3.5 -3 -4 -3 -4) (-4.5 -4 -5 -4 -4) (-5.5 -5 -6 -5 -6) (100.5 100 100 101 100) (-100.5 -100 -101 -100 -100) (999.999 999 999 1000 1000) (-999.999 -999 -1000 -999 -1000))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0.0 0 0 0 0) (0.1 0 0 1 0) (0.5 0 0 1 0) (0.9 0 0 1 1) (1.0 1 1 1 1) (1.1 1 1 2 1) (1.5 1 1 2 2) (1.9 1 1 2 2) (2.0 2 2 2 2) (2.3 2 2 3 2) (2.5 2 2 3 2) (2.7 2 2 3 3) (3.0 3 3 3 3) (3.5 3 3 4 4) (4.5 4 4 5 4) (5.5 5 5 6 6) (-0.1 0 -1 0 0) (-0.5 0 -1 0 0) (-0.9 0 -1 0 -1) (-1.0 -1 -1 -1 -1) (-1.5 -1 -2 -1 -2) (-2.0 -2 -2 -2 -2) (-2.3 -2 -3 -2 -2) (-2.5 -2 -3 -2 -2) (-2.7 -2 -3 -2 -3) (-3.5 -3 -4 -3 -4) (-4.5 -4 -5 -4 -4) (-5.5 -5 -6 -5 -6) (100.5 100 100 101 100) (-100.5 -100 -101 -100 -100) (999.999 999 999 1000 1000) (-999.999 -999 -1000 -999 -1000))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -497,12 +477,10 @@ fn oracle_prop_number_arith_comp_rounding_two_arg_comprehensive() {
              (ceiling n d)
              (round n d))))
    pairs))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((10 3 3 3 4 3) (-10 3 -3 -4 -3 -3) (10 -3 -3 -4 -3 -3) (-10 -3 3 3 4 3) (7 2 3 3 4 4) (-7 2 -3 -4 -3 -4) (7 -2 -3 -4 -3 -4) (-7 -2 3 3 4 4) (1 2 0 0 1 0) (-1 2 0 -1 0 0) (1 -2 0 -1 0 0) (-1 -2 0 0 1 0) (0 5 0 0 0 0) (15 5 3 3 3 3) (-15 5 -3 -3 -3 -3) (15 -5 -3 -3 -3 -3) (17 7 2 2 3 2) (-17 7 -2 -3 -2 -2) (17 -7 -2 -3 -2 -2) (-17 -7 2 2 3 2) (100 3 33 33 34 33) (-100 3 -33 -34 -33 -33) (100 -3 -33 -34 -33 -33) (5 2 2 2 3 2) (7 2 3 3 4 4) (9 2 4 4 5 4) (11 2 5 5 6 6) (-5 2 -2 -3 -2 -2) (-7 2 -3 -4 -3 -4) (-9 2 -4 -5 -4 -4) (-11 2 -5 -6 -5 -6))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((10 3 3 3 4 3) (-10 3 -3 -4 -3 -3) (10 -3 -3 -4 -3 -3) (-10 -3 3 3 4 3) (7 2 3 3 4 4) (-7 2 -3 -4 -3 -4) (7 -2 -3 -4 -3 -4) (-7 -2 3 3 4 4) (1 2 0 0 1 0) (-1 2 0 -1 0 0) (1 -2 0 -1 0 0) (-1 -2 0 0 1 0) (0 5 0 0 0 0) (15 5 3 3 3 3) (-15 5 -3 -3 -3 -3) (15 -5 -3 -3 -3 -3) (17 7 2 2 3 2) (-17 7 -2 -3 -2 -2) (17 -7 -2 -3 -2 -2) (-17 -7 2 2 3 2) (100 3 33 33 34 33) (-100 3 -33 -34 -33 -33) (100 -3 -33 -34 -33 -33) (5 2 2 2 3 2) (7 2 3 3 4 4) (9 2 4 4 5 4) (11 2 5 5 6 6) (-5 2 -2 -3 -2 -2) (-7 2 -3 -4 -3 -4) (-9 2 -4 -5 -4 -4) (-11 2 -5 -6 -5 -6))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -527,12 +505,10 @@ fn oracle_prop_number_arith_comp_rounding_float_divisor_mixed() {
   ;; Rounding with integer that divides evenly
   (truncate 12 4) (floor 12 4) (ceiling 12 4) (round 12 4)
   (truncate -12 4) (floor -12 4) (ceiling -12 4) (round -12 4))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (3 3 4 4 -3 -4 -3 -4 -3 -4 -3 -4 3 3 4 4 3 3 4 3 -3 -4 -3 -3 3 3 4 4 -3 -4 -3 -4 2 4 4 6 6 -2 -4 -4 -6 -6 3 3 3 3 -3 -3 -3 -3)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (3 3 4 4 -3 -4 -3 -4 -3 -4 -3 -4 3 3 4 4 3 3 4 3 -3 -4 -3 -3 3 3 4 4 -3 -4 -3 -4 2 4 4 6 6 -2 -4 -4 -6 -6 3 3 3 3 -3 -3 -3 -3)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -569,12 +545,10 @@ fn oracle_prop_number_arith_comp_expt_comprehensive() {
   ;; Large exponent
   (expt 2 30)
   (> (expt 2 40) (expt 2 30)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (1 2 1024 1048576 1 243 59049 1 -2 4 -8 16 -27 81 1 0 0 1 1 1 1 -1 1 -1 1 1 10 100000 1024.0 0.5 0.0009765625 0.25 2.0 4.0 1024.0 2.0 2.0 3.0 2.0 10.0 0.5 0.3333333333333333 0.1 0.01 0.5 0.01 0.037037037037037035 t t 1073741824 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (1 2 1024 1048576 1 243 59049 1 -2 4 -8 16 -27 81 1 0 0 1 1 1 1 -1 1 -1 1 1 10 100000 1024.0 0.5 0.0009765625 0.25 2.0 4.0 1024.0 2.0 2.0 3.0 2.0 10.0 0.5 0.3333333333333333 0.1 0.01 0.5 0.01 0.037037037037037035 t t 1073741824 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -621,12 +595,10 @@ fn oracle_prop_number_arith_comp_fixnum_boundary_chains() {
     (* -1 mpf)
     (* -1 mnf)
     (= (* -1 (* -1 mpf)) mpf)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (0 t 0 t 4611686018427387902 t 6917529027641081853 t 0 2305843009213693952 0 0 0 2305843009213693952 t t t t 2.305843009213694e+18 t -2.305843009213694e+18 t 0 2305843009213693952 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (0 t 0 t 4611686018427387902 t 6917529027641081853 t 0 2305843009213693952 0 0 0 2305843009213693952 t t t t 2.305843009213694e+18 t -2.305843009213694e+18 t 0 2305843009213693952 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -669,10 +641,9 @@ fn oracle_prop_number_arith_comp_type_promotion_tracking() {
   (= (truncate (float 42)) 42)
   (integerp (floor (float -7)))
   (= (floor (float -7)) -7))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t t t t t t t t t t t t t t t t t t t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (t t t t t t t t t t t t t t t t t t t t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -761,12 +732,10 @@ fn oracle_prop_number_arith_comp_combined_number_theory() {
     (fmakunbound 'neovm--nac-prime-p)
     (fmakunbound 'neovm--nac-sieve)
     (fmakunbound 'neovm--nac-totient)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil t nil t t nil t (2 3 5 7 11 13 17 19 23 29) 1 2 4 4 t t 81)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil t nil t t nil t (2 3 5 7 11 13 17 19 23 29) 1 2 4 4 t t 81)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -807,10 +776,8 @@ fn oracle_prop_number_arith_comp_float_rounding_functions() {
     (fceiling 5)
     (fround 5)
     (ftruncate 5)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (wrong-type-argument floatp 5)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument floatp 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -858,10 +825,8 @@ fn oracle_prop_number_arith_comp_abs_min_max_comprehensive() {
       (funcall clamp 15 0 10)
       (funcall clamp 0 0 10)
       (funcall clamp 10 0 10))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (0 1 1 42 42 0.0 3.14 3.14 0 2305843009213693952 t t 3 3 -5 1 1 1 3.0 3 0 5 5 5 5 5 9 5 5.0 0 (5 0 10 0 10))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (0 1 1 42 42 0.0 3.14 3.14 0 2305843009213693952 t t 3 3 -5 1 1 1 3.0 3 0 5 5 5 5 5 9 5 5.0 0 (5 0 10 0 10))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

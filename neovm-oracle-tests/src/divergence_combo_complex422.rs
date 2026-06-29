@@ -13,6 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx422_marker_insertion_type_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -28,7 +29,7 @@ fn div_cx422_marker_insertion_type_edit() {
     (list (marker-position m-before)
           (marker-position m-after))))
 "##,
-        expect_test::expect![[r#""OK (3 5)""#]],
+        expect,
     );
 }
 
@@ -36,6 +37,7 @@ fn div_cx422_marker_insertion_type_edit() {
 #[test]
 fn div_cx422_overlay_priority_same() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK italic""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -47,7 +49,7 @@ fn div_cx422_overlay_priority_same() {
     (overlay-put o2 'priority 5)
     (get-char-property 3 'face)))
 "##,
-        expect_test::expect![[r#""OK italic""#]],
+        expect,
     );
 }
 
@@ -55,6 +57,7 @@ fn div_cx422_overlay_priority_same() {
 #[test]
 fn div_cx422_text_prop_sticky_inherit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil italic)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -68,7 +71,7 @@ fn div_cx422_text_prop_sticky_inherit() {
   (list (get-text-property 3 'face)
         (get-text-property 4 'face)))
 "##,
-        expect_test::expect![[r#""OK (nil italic)""#]],
+        expect,
     );
 }
 
@@ -76,6 +79,7 @@ fn div_cx422_text_prop_sticky_inherit() {
 #[test]
 fn div_cx422_keymap_precedence_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK forward-char""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -87,7 +91,7 @@ fn div_cx422_keymap_precedence_order() {
     (let ((minor-mode-map-alist (list (cons (make-symbol "test") minor))))
       (key-binding "a"))))
 "##,
-        expect_test::expect![[r#""OK forward-char""#]],
+        expect,
     );
 }
 
@@ -95,6 +99,7 @@ fn div_cx422_keymap_precedence_order() {
 #[test]
 fn div_cx422_hash_weakness_all_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 1 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((k1 (cons 1 nil))
@@ -114,7 +119,7 @@ fn div_cx422_hash_weakness_all_types() {
           (hash-table-count ht-ko)
           (hash-table-count ht-ka))))
 "##,
-        expect_test::expect![[r#""OK (1 1 1 1)""#]],
+        expect,
     );
 }
 
@@ -122,6 +127,9 @@ fn div_cx422_hash_weakness_all_types() {
 #[test]
 fn div_cx422_syntax_pps_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((1 1 2 nil nil nil 0 nil nil (1) nil) (1 1 10 34 nil nil 0 nil 13 (1) nil) (1 1 10 34 nil nil 0 nil 13 (1) nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -131,9 +139,7 @@ fn div_cx422_syntax_pps_nested() {
         (parse-partial-sexp 1 18)
         (parse-partial-sexp 1 35)))
 "##,
-        expect_test::expect![[
-            r#""OK ((1 1 2 nil nil nil 0 nil nil (1) nil) (1 1 10 34 nil nil 0 nil 13 (1) nil) (1 1 10 34 nil nil 0 nil 13 (1) nil))""#
-        ]],
+        expect,
     );
 }
 
@@ -141,6 +147,7 @@ fn div_cx422_syntax_pps_nested() {
 #[test]
 fn div_cx422_regex_symbol_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"foo_bar\" \"foo_bar\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -151,7 +158,7 @@ fn div_cx422_regex_symbol_boundaries() {
       (push (match-string 0) results))
     (nreverse results)))
 "##,
-        expect_test::expect![[r#""OK (\"foo_bar\" \"foo_bar\")""#]],
+        expect,
     );
 }
 
@@ -159,6 +166,7 @@ fn div_cx422_regex_symbol_boundaries() {
 #[test]
 fn div_cx422_char_syntax_classes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 9 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (char-syntax ?a)
@@ -170,7 +178,7 @@ fn div_cx422_char_syntax_classes() {
       (char-syntax ?_)
       (char-syntax ?\()))
 "##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 9 25)""#]],
+        expect,
     );
 }
 
@@ -178,6 +186,7 @@ fn div_cx422_char_syntax_classes() {
 #[test]
 fn div_cx422_process_filter_modify_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"initial: hello\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *cx422-pfmb*")))
@@ -190,7 +199,7 @@ fn div_cx422_process_filter_modify_buffer() {
              (string-trim-right (buffer-string)))
       (kill-buffer buf))))
 "##,
-        expect_test::expect![[r#""OK \"initial: hello\"""#]],
+        expect,
     );
 }
 
@@ -198,6 +207,7 @@ fn div_cx422_process_filter_modify_buffer() {
 #[test]
 fn div_cx422_bidi_paragraph_direction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (left-to-right 17)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -207,7 +217,7 @@ fn div_cx422_bidi_paragraph_direction() {
                (forward-paragraph 1)
                (point))))
 "##,
-        expect_test::expect![[r#""OK (left-to-right 17)""#]],
+        expect,
     );
 }
 
@@ -215,6 +225,9 @@ fn div_cx422_bidi_paragraph_direction() {
 #[test]
 fn div_cx422_keymap_multi_level_inherit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (self-insert-command self-insert-command self-insert-command)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((base (make-sparse-keymap))
@@ -229,9 +242,7 @@ fn div_cx422_keymap_multi_level_inherit() {
         (key-binding "b" nil nil top)
         (key-binding "c" nil nil top)))
 "##,
-        expect_test::expect![[
-            r#""OK (self-insert-command self-insert-command self-insert-command)""#
-        ]],
+        expect,
     );
 }
 
@@ -239,6 +250,7 @@ fn div_cx422_keymap_multi_level_inherit() {
 #[test]
 fn div_cx422_text_prop_overlap_multiple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (bold underline underline bold)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -252,7 +264,7 @@ fn div_cx422_text_prop_overlap_multiple() {
         (get-text-property 5 'face)
         (get-text-property 7 'face)))
 "##,
-        expect_test::expect![[r#""OK (bold underline underline bold)""#]],
+        expect,
     );
 }
 
@@ -260,6 +272,7 @@ fn div_cx422_text_prop_overlap_multiple() {
 #[test]
 fn div_cx422_overlay_both_strings() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"abc\" 2 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -271,7 +284,7 @@ fn div_cx422_overlay_both_strings() {
           (overlay-start ov)
           (overlay-end ov))))
 "##,
-        expect_test::expect![[r#""OK (\"abc\" 2 3)""#]],
+        expect,
     );
 }
 
@@ -279,6 +292,7 @@ fn div_cx422_overlay_both_strings() {
 #[test]
 fn div_cx422_regex_optional_quantifier() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 \"ac\" 0 \"abc\" 0 \"ad\" 0 \"abcd\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-match "ab?c" "ac")
@@ -290,7 +304,7 @@ fn div_cx422_regex_optional_quantifier() {
       (string-match "a\\(bc\\)?d" "abcd")
       (match-string 0 "abcd"))
 "##,
-        expect_test::expect![[r#""OK (0 \"ac\" 0 \"abc\" 0 \"ad\" 0 \"abcd\")""#]],
+        expect,
     );
 }
 
@@ -298,13 +312,14 @@ fn div_cx422_regex_optional_quantifier() {
 #[test]
 fn div_cx422_float_nan_inf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (-0.0e+NaN 1.0e+INF -1.0e+INF)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case e (/ 0.0 0) (error (car e)))
       (condition-case e (/ 1.0 0) (error (car e)))
       (condition-case e (/ -1.0 0) (error (car e))))
 "##,
-        expect_test::expect![[r#""OK (-0.0e+NaN 1.0e+INF -1.0e+INF)""#]],
+        expect,
     );
 }
 
@@ -312,6 +327,9 @@ fn div_cx422_float_nan_inf() {
 #[test]
 fn div_cx422_format_scientific() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"3.141593e+00\" \"3.141593\" \"3.14159\" \"1.00e+06\" \"3.14\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((pi 3.141592653589793))
@@ -321,9 +339,7 @@ fn div_cx422_format_scientific() {
         (format "%.2e" 1000000.0)
         (format "%.2f" pi)))
 "##,
-        expect_test::expect![[
-            r#""OK (\"3.141593e+00\" \"3.141593\" \"3.14159\" \"1.00e+06\" \"3.14\")""#
-        ]],
+        expect,
     );
 }
 
@@ -331,6 +347,7 @@ fn div_cx422_format_scientific() {
 #[test]
 fn div_cx422_process_coding_std() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (utf-8-unix latin-1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "neo-cx422-pcs"
@@ -343,7 +360,7 @@ fn div_cx422_process_coding_std() {
     (delete-process proc)
     (list (car coding) (cdr coding))))
 "##,
-        expect_test::expect![[r#""OK (utf-8-unix latin-1)""#]],
+        expect,
     );
 }
 
@@ -351,6 +368,7 @@ fn div_cx422_process_coding_std() {
 #[test]
 fn div_cx422_char_after_before_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (97 98 99)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -360,7 +378,7 @@ fn div_cx422_char_after_before_display() {
         (char-after 2)
         (progn (goto-char 4) (char-before))))
 "##,
-        expect_test::expect![[r#""OK (97 98 99)""#]],
+        expect,
     );
 }
 
@@ -368,13 +386,14 @@ fn div_cx422_char_after_before_display() {
 #[test]
 fn div_cx422_dotted_pair_print() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"(a . b)\" \"(a b . c)\" \"(a b c)\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (prin1-to-string '(a . b))
       (prin1-to-string '(a b . c))
       (prin1-to-string '(a b c)))
 "##,
-        expect_test::expect![[r#""OK (\"(a . b)\" \"(a b . c)\" \"(a b c)\")""#]],
+        expect,
     );
 }
 
@@ -382,6 +401,7 @@ fn div_cx422_dotted_pair_print() {
 #[test]
 fn div_cx422_vector_ops_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ([1 99 3] [1 99 3 4 5] 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((v (vector 1 2 3)))
@@ -390,6 +410,6 @@ fn div_cx422_vector_ops_edge() {
         (vconcat v [4 5])
         (aref (vconcat [1] [2] [3]) 1)))
 "##,
-        expect_test::expect![[r#""OK ([1 99 3] [1 99 3 4 5] 2)""#]],
+        expect,
     );
 }

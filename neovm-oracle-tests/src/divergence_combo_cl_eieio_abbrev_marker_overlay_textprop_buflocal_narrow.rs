@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_abbrev_expansion_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass abbrev-snap ()
@@ -56,7 +57,7 @@ fn combo_eieio_abbrev_expansion_basic() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -64,6 +65,7 @@ fn combo_eieio_abbrev_expansion_basic() {
 fn combo_eieio_abbrev_multiple_expansions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass multi-abbr-snap ()
@@ -125,7 +127,7 @@ fn combo_eieio_abbrev_multiple_expansions() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -133,6 +135,7 @@ fn combo_eieio_abbrev_multiple_expansions() {
 fn combo_eieio_abbrev_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass abbr-prop-snap ()
@@ -181,7 +184,7 @@ fn combo_eieio_abbrev_with_props() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -189,6 +192,7 @@ fn combo_eieio_abbrev_with_props() {
 fn combo_eieio_abbrev_narrow_expand() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass abbr-narrow-snap ()
@@ -243,7 +247,7 @@ fn combo_eieio_abbrev_narrow_expand() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -251,6 +255,7 @@ fn combo_eieio_abbrev_narrow_expand() {
 fn combo_eieio_abbrev_undo_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass abbr-undo-snap ()
@@ -303,6 +308,6 @@ fn combo_eieio_abbrev_undo_marker() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

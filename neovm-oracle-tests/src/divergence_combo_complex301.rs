@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx301_winner_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -19,13 +20,14 @@ fn div_cx301_winner_mode_availability() {
             (boundp 'winner-ring-size)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx301_tab_bar_tab_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -37,13 +39,14 @@ fn div_cx301_tab_bar_tab_operations() {
           (boundp 'tab-bar-tabs-function))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx301_project_detection_with_git_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -63,13 +66,14 @@ fn div_cx301_project_detection_with_git_marker() {
                 (eq (car proj) 'transient))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx301_xref_backend_functions_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -82,13 +86,14 @@ fn div_cx301_xref_backend_functions_query() {
             (fboundp 'xref-make)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t nil t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx301_flymake_diagnostic_creation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -106,13 +111,14 @@ fn div_cx301_flymake_diagnostic_creation() {
                 (flymake--diag-text diag)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx301_compile_error_regexp_matching() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp absoft)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((test-lines '("file.el:42:10:Error: undefined variable"
@@ -129,13 +135,14 @@ fn div_cx301_compile_error_regexp_matching() {
               (list line result)))
           test-lines))
 "##,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp absoft)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx301_window_configuration_save_restore_via_winner() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 2 1 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((config (current-window-configuration))
@@ -147,13 +154,14 @@ fn div_cx301_window_configuration_save_restore_via_winner() {
       (list n-before n-after-split n-restored
             (= n-before n-restored)))))
 "##,
-        expect_test::expect![[r#""OK (1 2 1 t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx301_project_files_query_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -165,13 +173,14 @@ fn div_cx301_project_files_query_availability() {
             (boundp 'project-vc-extra-root-markers)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx301_flymake_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -184,13 +193,14 @@ fn div_cx301_flymake_mode_availability() {
             (boundp 'flymake-no-changes-timeout)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx301_project_flymake_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -222,6 +232,6 @@ fn div_cx301_project_flymake_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     )
 }

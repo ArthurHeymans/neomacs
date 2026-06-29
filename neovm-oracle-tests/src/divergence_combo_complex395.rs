@@ -9,6 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx395_write_region_append_multiple_times() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"firstsecondthird\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((path (make-temp-file "neo-cx395-app")))
@@ -21,13 +22,14 @@ fn div_cx395_write_region_append_multiple_times() {
     (delete-file path)
     content))
 "##,
-        expect_test::expect![[r#""OK \"firstsecondthird\"""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx395_insert_file_contents_partial_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"56789ABCDE\" 10)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((path (make-temp-file "neo-cx395-part")))
@@ -38,13 +40,14 @@ fn div_cx395_insert_file_contents_partial_range() {
     (delete-file path)
     (list content (length content))))
 "##,
-        expect_test::expect![[r#""OK (\"56789ABCDE\" 10)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx395_copy_file_with_permissions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (493 493 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((src (make-temp-file "neo-cx395-cp-src"))
@@ -57,13 +60,14 @@ fn div_cx395_copy_file_with_permissions() {
     (delete-file dst)
     (list src-modes dst-modes (= src-modes dst-modes))))
 "##,
-        expect_test::expect![[r#""OK (493 493 t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx395_rename_file_and_make_directory() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((src (make-temp-file "neo-cx395-rn-src"))
@@ -80,13 +84,16 @@ fn div_cx395_rename_file_and_make_directory() {
         (delete-directory base t)
         (append result (list created)))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx395_file_symlink_and_truename() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"/tmp/nix-shell.XcUf3d/neo-cx395-symvgWTH9/real.txt\" nil t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -103,15 +110,14 @@ fn div_cx395_file_symlink_and_truename() {
         (list link-target real-target (string= true-link true-real))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (\"/tmp/nix-shell.XcUf3d/neo-cx395-symvgWTH9/real.txt\" nil t)""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx395_directory_files_recursively() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 4 (\"a.txt\" \"c.txt\" \"d.txt\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((root (make-temp-file "neo-cx395-rec" t))
@@ -126,13 +132,14 @@ fn div_cx395_directory_files_recursively() {
     (list (length all-txt) (length all-files)
           (mapcar #'file-name-nondirectory all-txt))))
 "##,
-        expect_test::expect![[r#""OK (3 4 (\"a.txt\" \"c.txt\" \"d.txt\"))""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx395_file_attributes_full_destructuring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (10 \"-rw-------\" nil 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((path (make-temp-file "neo-cx395-attr")))
@@ -144,13 +151,16 @@ fn div_cx395_file_attributes_full_destructuring() {
           (file-attribute-type a)
           (file-attribute-link-number a))))
 "##,
-        expect_test::expect![[r#""OK (10 \"-rw-------\" nil 1)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx395_file_name_decomposition_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"/home/user/file.txt\" \"/home/user/\" \"file.txt\" \"txt\" \"file\") (\"/path/to/archive.tar.gz\" \"/path/to/\" \"archive.tar.gz\" \"gz\" \"archive.tar\") (\"simple\" nil \"simple\" nil \"simple\") (\"/dir/noext\" \"/dir/\" \"noext\" nil \"noext\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (path)
@@ -164,15 +174,14 @@ fn div_cx395_file_name_decomposition_matrix() {
           "simple"
           "/dir/noext"))
 "##,
-        expect_test::expect![[
-            r#""OK ((\"/home/user/file.txt\" \"/home/user/\" \"file.txt\" \"txt\" \"file\") (\"/path/to/archive.tar.gz\" \"/path/to/\" \"archive.tar.gz\" \"gz\" \"archive.tar\") (\"simple\" nil \"simple\" nil \"simple\") (\"/dir/noext\" \"/dir/\" \"noext\" nil \"noext\"))""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx395_set_file_modes_and_times() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((dir (make-temp-file "neo-cx395-modes" t))
@@ -188,13 +197,14 @@ fn div_cx395_set_file_modes_and_times() {
     (delete-directory dir t)
     newer))
 "##,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx395_file_io_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((path (make-temp-file "neo-cx395-mega"))
@@ -221,6 +231,6 @@ fn div_cx395_file_io_with_marker_overlay_undo_narrow_mega() {
           (delete-file path)
           (list state)))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     )
 }

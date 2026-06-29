@@ -36,12 +36,10 @@ fn oracle_prop_concat_arity_variations() {
       (concat "" "a" "" "b" "" "c" "")
       ;; all empty
       (concat "" "" "" ""))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"\" \"solo\" \"abcd\" \"abcde\" \"1234567890\" \"abcdefghijklmno\" 10 \"abc\" \"\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"\" \"solo\" \"abcd\" \"abcde\" \"1234567890\" \"abcdefghijklmno\" 10 \"abc\" \"\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -71,12 +69,10 @@ fn oracle_prop_concat_mixed_types() {
       (concat '(42))
       ;; empty list/vector
       (concat '() [] "test" '() []))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"hello\" \"world\" \"hello world\" \"foobar\" \"ABCDEF\" \"HI JK\" \"LMNO\" \"*\" \"test\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"hello\" \"world\" \"hello world\" \"foobar\" \"ABCDEF\" \"HI JK\" \"LMNO\" \"*\" \"test\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -95,12 +91,10 @@ fn oracle_prop_concat_bool_vector_rejected_as_sequence_like_gnu() {
    (vconcat bv)
    (append bv nil)))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-type-argument (sequencep #&3\"\u{5}\")) [t nil t] (t nil t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-type-argument (sequencep #&3\"\u{5}\")) [t nil t] (t nil t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -122,12 +116,10 @@ fn oracle_prop_char_table_is_not_sequence_for_concat_vconcat_append_like_gnu() {
        (append table nil)
      (error (list (car err) (cdr err))))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-type-argument (sequencep #^[nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil])) (wrong-type-argument (sequencep #^[nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil])) (wrong-type-argument (sequencep #^[nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil])))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-type-argument (sequencep #^[nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil])) (wrong-type-argument (sequencep #^[nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil])) (wrong-type-argument (sequencep #^[nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil])))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -164,12 +156,10 @@ fn oracle_prop_concat_vs_mapconcat() {
           nums-str wrapped
           (string-equal manual via-mapconcat)
           manual via-mapconcat))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"hello world foo bar baz\" \"hello, world, foo, bar, baz\" \"helloworldfoobarbaz\" \"hello-world-foo-bar-baz\" \"1+2+3+4+5\" \"[hello] [world] [foo] [bar] [baz]\" t \"hello:world:foo:bar:baz\" \"hello:world:foo:bar:baz\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"hello world foo bar baz\" \"hello, world, foo, bar, baz\" \"helloworldfoobarbaz\" \"hello-world-foo-bar-baz\" \"1+2+3+4+5\" \"[hello] [world] [foo] [bar] [baz]\" t \"hello:world:foo:bar:baz\" \"hello:world:foo:bar:baz\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -204,12 +194,10 @@ fn oracle_prop_incremental_vs_batch_building() {
              ;; Verify equivalence
              (eq-check (string-equal incremental batch)))
         (list incremental batch via-format char-by-char number-parts eq-check))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"the quick brown fox\" \"the quick brown fox\" \"the quick brown fox\" \"hello\" \"0 1 2 3 4 5 6 7 8 9 \" t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"the quick brown fox\" \"the quick brown fox\" \"the quick brown fox\" \"hello\" \"0 1 2 3 4 5 6 7 8 9 \" t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -243,10 +231,8 @@ fn oracle_prop_concat_identity_and_equality() {
           (stringp (concat "a"))
           (stringp (concat '(65)))
           (stringp (concat [65]))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -317,12 +303,10 @@ fn oracle_prop_string_builder_with_undo() {
     (fmakunbound 'neovm--test-sb-undo)
     (fmakunbound 'neovm--test-sb-value)
     (fmakunbound 'neovm--test-sb-history-count)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Hello\" \"Hello World\" 3 \"Hello \" \"Hello\" \">> Hello\" \"Hello\" \"abcd\" \"\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Hello\" \"Hello World\" 3 \"Hello \" \"Hello\" \">> Hello\" \"Hello\" \"abcd\" \"\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -391,12 +375,10 @@ fn oracle_prop_template_string_expansion() {
           (funcall 'neovm--test-tmpl-expand
             "{{name}} is {{name}} is {{name}}" env)))
     (fmakunbound 'neovm--test-tmpl-expand)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Hello, Alice!\" \"Hello, Alice! You are 30 from Wonderland.\" \"no placeholders here\" \"Alice {{unknown}}\" \"Alice30\" \"\" \"Dear Alice, welcome to Wonderland\n---\" \"Alice is Alice is Alice\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Hello, Alice!\" \"Hello, Alice! You are 30 from Wonderland.\" \"no placeholders here\" \"Alice {{unknown}}\" \"Alice30\" \"\" \"Dear Alice, welcome to Wonderland\n---\" \"Alice is Alice is Alice\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -482,10 +464,8 @@ fn oracle_prop_csv_builder_and_parser() {
     (fmakunbound 'neovm--test-csv-quote-field)
     (fmakunbound 'neovm--test-csv-row)
     (fmakunbound 'neovm--test-csv-parse-row)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Alice,30,New York\" \"Bob,25,\\\"San Francisco, CA\\\"\" \"Eve,35,\\\"She said \\\"\\\"hello\\\"\\\"\\\"\" \",,\" t t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Alice,30,New York\" \"Bob,25,\\\"San Francisco, CA\\\"\" \"Eve,35,\\\"She said \\\"\\\"hello\\\"\\\"\\\"\" \",,\" t t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

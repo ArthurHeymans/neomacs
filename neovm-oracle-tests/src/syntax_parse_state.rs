@@ -39,12 +39,10 @@ fn oracle_prop_parse_partial_sexp_lisp_string_comment_state() {
        (point)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 nil 1 nil nil nil 0 nil nil nil nil) (1 1 2 34 nil nil 0 nil 8 (1) nil) (1 1 nil nil t nil 1 nil 28 (1) nil) (2 45 46 nil nil nil 1 nil nil (1 45) nil) 50)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 nil 1 nil nil nil 0 nil nil nil nil) (1 1 2 34 nil nil 0 nil 8 (1) nil) (1 1 nil nil t nil 1 nil 28 (1) nil) (2 45 46 nil nil nil 1 nil nil (1 45) nil) 50)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -73,12 +71,10 @@ fn oracle_prop_parse_partial_sexp_targetdepth_stopbefore_commentstop() {
        (point)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 1 nil nil nil nil 0 nil nil (1) nil) 51 (0 nil nil nil nil nil 0 nil nil nil nil) 51 (1 1 8 nil t nil 0 nil 20 (1) nil) 51 (1 1 8 nil t nil 0 nil 20 (1) nil) 51)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 1 nil nil nil nil 0 nil nil (1) nil) 51 (0 nil nil nil nil nil 0 nil nil nil nil) 51 (1 1 8 nil t nil 0 nil 20 (1) nil) 51 (1 1 8 nil t nil 0 nil 20 (1) nil) 51)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -101,12 +97,10 @@ fn oracle_prop_syntax_ppss_cache_flush_after_buffer_mutation() {
               (syntax-ppss (point-max)))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 nil 1 nil nil nil 0 nil nil nil nil) (0 nil 20 nil nil nil 0 nil nil nil nil) (0 nil nil nil nil nil 0 nil nil nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 nil 1 nil nil nil 0 nil nil nil nil) (0 nil 20 nil nil nil 0 nil nil nil nil) (0 nil nil nil nil nil 0 nil nil nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -134,8 +128,6 @@ fn oracle_prop_scan_sexps_comments_and_unbalanced_errors() {
          (error (list (car err) (cadr err))))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (29 34 36 48)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (29 34 36 48)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

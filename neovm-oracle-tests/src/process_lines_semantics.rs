@@ -18,10 +18,9 @@ fn oracle_prop_gnu_process_lines_splits_trailing_newlines_like_temp_buffer() {
  (process-lines-ignore-status "sh" "-c" "printf 'kept\n'; exit 7"))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((\"alpha\" \"beta\") (\"alpha\" \"beta\") (\"kept\"))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((\"alpha\" \"beta\") (\"alpha\" \"beta\") (\"kept\"))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -45,12 +44,10 @@ fn oracle_prop_gnu_process_lines_status_handler_sees_output_buffer_before_collec
    handler-point))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"one\" \"two\" \"status=7\") \" *temp*\" \"one\ntwo\n\" 9)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"one\" \"two\" \"status=7\") \" *temp*\" \"one\ntwo\n\" 9)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -63,8 +60,6 @@ fn oracle_prop_gnu_process_lines_nil_status_handler_errors_after_output() {
   (error err))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (error \"sh exited with status 9\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (error \"sh exited with status 9\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

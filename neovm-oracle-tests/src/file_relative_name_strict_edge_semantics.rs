@@ -70,8 +70,6 @@ fn oracle_file_relative_name_local_remote_and_type_edges() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 56 44)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 56 44)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

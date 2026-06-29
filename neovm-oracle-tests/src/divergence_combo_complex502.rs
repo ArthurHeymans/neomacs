@@ -5,6 +5,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx502_multibyte_raw_trailing_ascii() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"\\310ABC\" 4 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-multibyte nil)
@@ -12,77 +13,83 @@ fn div_cx502_multibyte_raw_trailing_ascii() {
   (insert "ABC")
   (set-buffer-multibyte t)
   (list (buffer-string) (length (buffer-string)) (point-max)))"##,
-        expect_test::expect![[r#""OK (\"\\310ABC\" 4 5)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx502_multibyte_raw_only() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"\\310\\311\\312\" 3 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-multibyte nil)
   (insert (unibyte-string 200 201 202))
   (set-buffer-multibyte t)
   (list (buffer-string) (length (buffer-string)) (point-max)))"##,
-        expect_test::expect![[r#""OK (\"\\310\\311\\312\" 3 4)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx502_multibyte_ascii_only() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"ABCDE\" 5 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-multibyte nil)
   (insert "ABCDE")
   (set-buffer-multibyte t)
   (list (buffer-string) (length (buffer-string)) (point-max)))"##,
-        expect_test::expect![[r#""OK (\"ABCDE\" 5 6)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx502_multibyte_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"\" 0 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-multibyte nil)
   (set-buffer-multibyte t)
   (list (buffer-string) (length (buffer-string)) (point-max)))"##,
-        expect_test::expect![[r#""OK (\"\" 0 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx502_multibyte_interleaved() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"\\310A\\311B\\312C\" 6 7)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-multibyte nil)
   (insert (unibyte-string 200 65 201 66 202 67))
   (set-buffer-multibyte t)
   (list (buffer-string) (length (buffer-string)) (point-max)))"##,
-        expect_test::expect![[r#""OK (\"\\310A\\311B\\312C\" 6 7)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx502_multibyte_larger_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"\\310\\311\\312\\313\\314ABCDE\" 10 11)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-multibyte nil)
   (insert (unibyte-string 200 201 202 203 204 65 66 67 68 69))
   (set-buffer-multibyte t)
   (list (buffer-string) (length (buffer-string)) (point-max)))"##,
-        expect_test::expect![[r#""OK (\"\\310\\311\\312\\313\\314ABCDE\" 10 11)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx502_multibyte_marker_preserved() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 #<killed buffer>)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-multibyte nil)
@@ -90,13 +97,14 @@ fn div_cx502_multibyte_marker_preserved() {
   (let ((m (set-marker (make-marker) 2)))
     (set-buffer-multibyte t)
     (list (marker-position m) (marker-buffer m))))"##,
-        expect_test::expect![[r#""OK (2 #<killed buffer>)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx502_multibyte_insert_after_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"\\310\\311EXTRA\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-multibyte nil)
@@ -104,13 +112,15 @@ fn div_cx502_multibyte_insert_after_toggle() {
   (set-buffer-multibyte t)
   (insert "EXTRA")
   (buffer-string))"##,
-        expect_test::expect![[r#""OK \"\\310\\311EXTRA\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx502_multibyte_narrow_then_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (error \"Changing multibyteness in a narrowed buffer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-multibyte nil)
@@ -118,13 +128,14 @@ fn div_cx502_multibyte_narrow_then_toggle() {
   (narrow-to-region 2 4)
   (set-buffer-multibyte t)
   (list (buffer-string) (point-min) (point-max)))"##,
-        expect_test::expect![[r#""ERR (error \"Changing multibyteness in a narrowed buffer\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx502_multibyte_overlay_then_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable ov)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-multibyte nil)
@@ -133,13 +144,14 @@ fn div_cx502_multibyte_overlay_then_toggle() {
     (overlay-put ov 'face 'bold))
   (set-buffer-multibyte t)
   (list (overlay-start ov) (overlay-end ov) (overlay-live-p ov)))"##,
-        expect_test::expect![[r#""ERR (void-variable ov)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx502_multibyte_property_then_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK bold""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-multibyte nil)
@@ -147,13 +159,14 @@ fn div_cx502_multibyte_property_then_toggle() {
   (put-text-property 1 4 'face 'bold)
   (set-buffer-multibyte t)
   (get-text-property 1 'face))"##,
-        expect_test::expect![[r#""OK bold""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx502_multibyte_delete_then_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"\\311AB\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-multibyte nil)
@@ -161,13 +174,14 @@ fn div_cx502_multibyte_delete_then_toggle() {
   (delete-region 1 2)
   (set-buffer-multibyte t)
   (buffer-string))"##,
-        expect_test::expect![[r#""OK \"\\311AB\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx502_multibyte_region_then_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"\\310\\311ABC\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-multibyte nil)
@@ -176,13 +190,14 @@ fn div_cx502_multibyte_region_then_toggle() {
   (set-buffer-multibyte nil)
   (set-buffer-multibyte t)
   (buffer-string))"##,
-        expect_test::expect![[r#""OK \"\\310\\311ABC\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx502_multibyte_save_excursion_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"\\310\\311AB\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (set-buffer-multibyte nil)
@@ -190,13 +205,14 @@ fn div_cx502_multibyte_save_excursion_toggle() {
   (save-excursion
     (set-buffer-multibyte t))
   (buffer-string))"##,
-        expect_test::expect![[r#""OK \"\\310\\311AB\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx502_multibyte_two_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"\\310A\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((a (get-buffer-create " *cx502-a*"))
       (b (get-buffer-create " *cx502-b*")))
@@ -208,6 +224,6 @@ fn div_cx502_multibyte_two_buffers() {
     (insert (unibyte-string 201 66)))
   (set-buffer-multibyte t)
   (with-current-buffer a (buffer-string)))"##,
-        expect_test::expect![[r#""OK \"\\310A\"""#]],
+        expect,
     );
 }

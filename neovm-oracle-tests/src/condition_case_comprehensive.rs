@@ -38,12 +38,10 @@ fn oracle_prop_condition_case_comprehensive_multiple_handlers() {
       (funcall (lambda (a b) (+ a b)) 1 2 3)
     (wrong-number-of-args 'caught-wrong-num-args)
     (error 'too-general)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((caught-arith nil) (caught-void-var neovm--cctest-nonexistent-var-12345) (caught-wrong-type listp) too-general)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((caught-arith nil) (caught-void-var neovm--cctest-nonexistent-var-12345) (caught-wrong-type listp) too-general)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -72,10 +70,8 @@ fn oracle_prop_condition_case_comprehensive_handler_ordering() {
     (void-variable 'wrong)
     (arith-error 'correct)
     (error 'too-general)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (caught-by-error caught-by-arith correct)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (caught-by-error caught-by-arith correct)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -100,12 +96,10 @@ fn oracle_prop_condition_case_comprehensive_error_catchall() {
   (condition-case err
       (signal 'error '("custom message"))
     (error (list 'caught (cadr err)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((caught arith-error) (caught void-variable) (caught wrong-type-argument) (caught \"custom message\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((caught arith-error) (caught void-variable) (caught wrong-type-argument) (caught \"custom message\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -124,10 +118,8 @@ fn oracle_prop_condition_case_comprehensive_resignal() {
      ;; Re-signal as a generic error with additional context
      (signal 'error (list "wrapped" (car inner-err) (cdr inner-err)))))
   (error (list 'outer-caught (cdr outer-err))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (outer-caught (\"wrapped\" arith-error nil))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (outer-caught (\"wrapped\" arith-error nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -142,10 +134,8 @@ fn oracle_prop_condition_case_comprehensive_resignal_different_type() {
      (signal 'arith-error nil)))
   (arith-error 'retyped-to-arith)
   (error 'generic-catch))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK retyped-to-arith""#]],
-    );
+    let expect = expect_test::expect![[r#""OK retyped-to-arith""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -169,10 +159,8 @@ fn oracle_prop_condition_case_comprehensive_nested_deep() {
     ;; After mid-level catch, no error propagates
     )
   (error 'outer-catch))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (mid-caught arith-error)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (mid-caught arith-error)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -195,12 +183,10 @@ fn oracle_prop_condition_case_comprehensive_nested_independent_errors() {
           (signal 'error '("test"))
         (void-variable 'inner-no-match))
     (error (list 'outer-got-it (cadr e1)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((first inner-arith-handled after-inner) (outer-got-it \"test\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((first inner-arith-handled after-inner) (outer-got-it \"test\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -221,10 +207,8 @@ fn oracle_prop_condition_case_comprehensive_with_unwind_protect() {
               (setq cleanup-ran t))
           (arith-error (list 'caught cleanup-ran))))
   (list result cleanup-ran))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((caught t) t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((caught t) t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -242,10 +226,8 @@ fn oracle_prop_condition_case_comprehensive_unwind_protect_inside_handler() {
            (+ 1 2))
        (setq trace (cons 'handler-cleanup trace)))))
   (list (nreverse trace)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((handler-body handler-cleanup))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((handler-body handler-cleanup))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -275,12 +257,10 @@ fn oracle_prop_condition_case_comprehensive_error_data_extraction() {
      (list 'type (car err)
            'expected (nth 1 err)
            'got-type (type-of (nth 2 err))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((sym arith-error data nil) (len 4 first \"msg\" second extra1 third extra2 fourth 42) (type wrong-type-argument expected number-or-marker-p got-type string))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((sym arith-error data nil) (len 4 first \"msg\" second extra1 third extra2 fourth 42) (type wrong-type-argument expected number-or-marker-p got-type string))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -329,12 +309,10 @@ fn oracle_prop_condition_case_comprehensive_custom_errors() {
     (put 'neovm--cctest-child-error 'error-message nil)
     (put 'neovm--cctest-grandchild-error 'error-conditions nil)
     (put 'neovm--cctest-grandchild-error 'error-message nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((child-caught \"child data\") (base-caught \"child data\") (base-caught-gc \"gc data\") (generic-caught neovm--cctest-grandchild-error) (correct-base \"base data\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((child-caught \"child data\") (base-caught \"child data\") (base-caught-gc \"gc data\") (generic-caught neovm--cctest-grandchild-error) (correct-base \"base data\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -367,12 +345,10 @@ fn oracle_prop_condition_case_comprehensive_signal_complex_data() {
   (condition-case err
       (signal 'error (list [1 2 3] "after-vector"))
     (error (list (aref (cadr err) 1) (caddr err)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((a b c) (value value2) (sym arith-error data-nil t) \"just a message\" (2 \"after-vector\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((a b c) (value value2) (sym arith-error data-nil t) \"just a message\" (2 \"after-vector\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -406,10 +382,8 @@ fn oracle_prop_condition_case_comprehensive_no_error_passthrough() {
   (condition-case err
       (list 1 (cons 'a 'b) [3 4 5])
     (error 'never)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (6 6 (10) nil (1 (a . b) [3 4 5]))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (6 6 (10) nil (1 (a . b) [3 4 5]))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -430,10 +404,8 @@ fn oracle_prop_condition_case_comprehensive_handler_multi_forms() {
             (let ((err-type (car err)))
               (list 'handled err-type))))))
     (list result side-effect)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((handled arith-error) handler-ran)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((handled arith-error) handler-ran)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -462,8 +434,7 @@ fn oracle_prop_condition_case_comprehensive_var_binding_vs_nil() {
       (arith-error neovm--cctest-outer))
     ;; After condition-case, the let binding should be restored
     ))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((with-var arith-error) no-var-but-caught (arith-error))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((with-var arith-error) no-var-but-caught (arith-error))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

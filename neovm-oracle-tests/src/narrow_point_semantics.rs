@@ -23,10 +23,8 @@ fn oracle_narrow_to_region_swaps_reversed_bounds_and_widen_restores() {
       (list wide narrowed (point-min) (point-max) (point)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 11 5) (3 8 5 \"23456\") 1 11 5)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 11 5) (3 8 5 \"23456\") 1 11 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -47,7 +45,8 @@ fn oracle_narrow_to_region_clamps_point_to_new_bounds() {
     (list before after (point-min) (point-max))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (4 8 4 8)""#]]);
+    let expect = expect_test::expect![[r#""OK (4 8 4 8)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -69,12 +68,10 @@ fn oracle_narrow_to_region_out_of_range_error_payloads() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((args-out-of-range (0 2)) (args-out-of-range (1 99)) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((args-out-of-range (0 2)) (args-out-of-range (1 99)) nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -98,10 +95,8 @@ fn oracle_point_min_max_markers_reflect_current_restriction() {
      (marker-insertion-type max-marker))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 6 3 6 t t nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 6 3 6 t t nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -122,10 +117,8 @@ fn oracle_goto_char_clips_point_but_returns_requested_position() {
           (point-min) (point-max))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (-100 4 999 8 6 6 4 8)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (-100 4 999 8 6 6 4 8)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -149,10 +142,8 @@ fn oracle_goto_char_marker_uses_marker_position_and_type_checks() {
        (error (list (car err) (cdr err)))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t 6 t 4 (wrong-type-argument (integer-or-marker-p \"not-position\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t 6 t 4 (wrong-type-argument (integer-or-marker-p \"not-position\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

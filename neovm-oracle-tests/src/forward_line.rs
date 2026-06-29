@@ -12,15 +12,17 @@ use super::common::{
 fn oracle_prop_forward_line_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""a\nb\nc\nOK 0""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         "(progn (erase-buffer) (insert \"a\\nb\\nc\\n\") (goto-char 1) (forward-line 1))",
-        expect_test::expect![[r#""a\nb\nc\nOK 0""#]],
+        expect,
     );
     assert_ok_eq("0", &oracle, &neovm);
 
+    let expect = expect_test::expect![[r#""a\nb\nc\nOK 7""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn (erase-buffer) (insert \"a\\nb\\nc\\n\") (goto-char 1) (forward-line 10))",
-        expect_test::expect![[r#""a\nb\nc\nOK 7""#]],
+        expect,
     );
 }
 
@@ -28,10 +30,9 @@ fn oracle_prop_forward_line_basics() {
 fn oracle_prop_forward_line_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(forward-line "x")"#,
-        expect_test::expect![[r#""ERR (wrong-type-argument integerp \"x\")""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument integerp \"x\")""#]];
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(r#"(forward-line "x")"#, expect);
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 

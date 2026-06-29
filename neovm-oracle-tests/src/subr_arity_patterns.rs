@@ -61,12 +61,10 @@ fn oracle_prop_subr_arity_patterns_diverse_families() {
   (subr-arity (symbol-function 'remhash))
   (subr-arity (symbol-function 'maphash))
   (subr-arity (symbol-function 'hash-table-count)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 . 1) (1 . 1) (1 . 1) (1 . 1) (1 . 1) (1 . 1) (1 . 1) (1 . 1) (1 . 1) (1 . 1) (1 . 1) (1 . 1) (2 . 2) (2 . 2) (2 . 2) (2 . 2) (1 . 1) (1 . 1) (1 . 1) (0 . many) (0 . many) (0 . many) (0 . many) (1 . 3) (1 . 2) (1 . 1) (1 . 1) (1 . 1) (2 . 3) (3 . 3) (2 . 2) (2 . 2) (1 . 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 . 1) (1 . 1) (1 . 1) (1 . 1) (1 . 1) (1 . 1) (1 . 1) (1 . 1) (1 . 1) (1 . 1) (1 . 1) (1 . 1) (2 . 2) (2 . 2) (2 . 2) (2 . 2) (1 . 1) (1 . 1) (1 . 1) (0 . many) (0 . many) (0 . many) (0 . many) (1 . 3) (1 . 2) (1 . 1) (1 . 1) (1 . 1) (2 . 3) (3 . 3) (2 . 2) (2 . 2) (1 . 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -116,12 +114,10 @@ fn oracle_prop_subr_arity_patterns_return_value_decomposition() {
                 sort apply signal gethash puthash
                 format message aref aset))
     (fmakunbound 'neovm--sap-decompose)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((car t t t t t fixed nil 1 1) (cdr t t t t t fixed nil 1 1) (cons t t t t t fixed nil 2 2) (+ t t t t t variadic nil 0 many) (* t t t t t variadic nil 0 many) (list t t t t t variadic nil 0 many) (length t t t t t fixed nil 1 1) (concat t t t t t variadic nil 0 many) (substring t t t t t optional 2 1 3) (make-string t t t t t optional 1 2 3) (assoc t t t t t optional 1 2 3) (mapcar t t t t t fixed nil 2 2) (sort t t t t t variadic nil 1 many) (apply t t t t t variadic nil 1 many) (signal t t t t t optional 1 1 2) (gethash t t t t t optional 1 2 3) (puthash t t t t t fixed nil 3 3) (format t t t t t variadic nil 1 many) (message t t t t t variadic nil 1 many) (aref t t t t t fixed nil 2 2) (aset t t t t t fixed nil 3 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((car t t t t t fixed nil 1 1) (cdr t t t t t fixed nil 1 1) (cons t t t t t fixed nil 2 2) (+ t t t t t variadic nil 0 many) (* t t t t t variadic nil 0 many) (list t t t t t variadic nil 0 many) (length t t t t t fixed nil 1 1) (concat t t t t t variadic nil 0 many) (substring t t t t t optional 2 1 3) (make-string t t t t t optional 1 2 3) (assoc t t t t t optional 1 2 3) (mapcar t t t t t fixed nil 2 2) (sort t t t t t variadic nil 1 many) (apply t t t t t variadic nil 1 many) (signal t t t t t optional 1 1 2) (gethash t t t t t optional 1 2 3) (puthash t t t t t fixed nil 3 3) (format t t t t t variadic nil 1 many) (message t t t t t variadic nil 1 many) (aref t t t t t fixed nil 2 2) (aset t t t t t fixed nil 3 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -200,12 +196,10 @@ fn oracle_prop_subr_arity_patterns_fixed_vs_variadic() {
             all-ok)))
     (fmakunbound 'neovm--sap-categorize)
     (makunbound 'neovm--sap-fn-list)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((/= aref aset atom car cdr cons consp elt eq equal floatp hash-table-count integerp length listp make-list make-vector mapcar maphash mod nreverse nth nthcdr null numberp puthash remhash reverse setcar setcdr stringp symbolp) (gethash make-string prin1-to-string substring) (* + - / < <= = > >= append apply concat format list max message min nconc sort vector) (33 4 20) nil t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((/= aref aset atom car cdr cons consp elt eq equal floatp hash-table-count integerp length listp make-list make-vector mapcar maphash mod nreverse nth nthcdr null numberp puthash remhash reverse setcar setcdr stringp symbolp) (gethash make-string prin1-to-string substring) (* + - / < <= = > >= append apply concat format list max message min nconc sort vector) (33 4 20) nil t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -264,12 +258,10 @@ fn oracle_prop_subr_arity_patterns_subrp_interaction() {
           (nreverse results)))
     (fmakunbound 'neovm--sap-lambda-fn)
     (fmakunbound 'neovm--sap-test-mac)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((car t) (cdr t) (cons t) (+ t) (list t) (concat t) (mapcar t)) (nil nil nil nil nil nil nil nil nil nil) (caught wrong-type-argument) (caught wrong-type-argument) (caught wrong-type-argument) ((car 1 . 1) (cons 2 . 2) (+ 0 . many) (list 0 . many) (format 1 . many)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((car t) (cdr t) (cons t) (+ t) (list t) (concat t) (mapcar t)) (nil nil nil nil nil nil nil nil nil nil) (caught wrong-type-argument) (caught wrong-type-argument) (caught wrong-type-argument) ((car 1 . 1) (cons 2 . 2) (+ 0 . many) (list 0 . many) (format 1 . many)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -350,12 +342,10 @@ Return (ok), (error MIN MAX ARGC), or (error MIN many ARGC)."
         (funcall 'neovm--sap-valid-arg-range 'make-string))
     (fmakunbound 'neovm--sap-validate-call)
     (fmakunbound 'neovm--sap-valid-arg-range)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((too-few car 0 1 1) (ok car 1) (too-many car 2 1 1) (too-few cons 0 2 2) (too-few cons 1 2 2) (ok cons 2) (too-many cons 3 2 2) (ok + 0) (ok + 5) (ok + 100) (too-few substring 0 1 3) (ok substring 1) (ok substring 2) (ok substring 3) (too-many substring 4 1 3) (1) (2) (0 1 2 3 4 5 6 7 8 9 10) (1 2 3) (2 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((too-few car 0 1 1) (ok car 1) (too-many car 2 1 1) (too-few cons 0 2 2) (too-few cons 1 2 2) (ok cons 2) (too-many cons 3 2 2) (ok + 0) (ok + 5) (ok + 100) (too-few substring 0 1 3) (ok substring 1) (ok substring 2) (ok substring 3) (too-many substring 4 1 3) (1) (2) (0 1 2 3 4 5 6 7 8 9 10) (1 2 3) (2 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -430,12 +420,10 @@ Prefer fixed > optional > variadic. Among equal specificity, prefer lower max."
                   candidates)))
     (fmakunbound 'neovm--sap-find-matching-fns)
     (fmakunbound 'neovm--sap-best-match)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((car + list length substring append concat) (cons + list nth substring make-string mapcar append concat) (+ list substring make-string append concat) (+ list append concat) car cons + ((car 1 1) (cons 2 2) (+ 0 many) (list 0 many) (length 1 1) (nth 2 2) (substring 1 3) (make-string 2 3) (mapcar 2 2) (append 0 many) (concat 0 many)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((car + list length substring append concat) (cons + list nth substring make-string mapcar append concat) (+ list substring make-string append concat) (+ list append concat) car cons + ((car 1 1) (cons 2 2) (+ 0 many) (list 0 many) (length 1 1) (nth 2 2) (substring 1 3) (make-string 2 3) (mapcar 2 2) (append 0 many) (concat 0 many)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -505,8 +493,6 @@ fn oracle_prop_subr_arity_patterns_boundary_calls() {
               (list 'rest (length rest-fns))
               (list 'optional (length opt-fns))))))
     (fmakunbound 'neovm--sap-boundary-test)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (wrong-type-argument subrp null)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument subrp null)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

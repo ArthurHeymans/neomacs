@@ -11,6 +11,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_e4_print_length_level_circle_escape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"(a b c ...)\" \"(a (b ...))\" \"(#1=(1 2) #1#)\" \"\\\"a\\\\nb\tc\\\"\" \"(...)\" \"(... ... ...)\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (let ((print-length 3)) (prin1-to-string '(a b c d e f)))
@@ -21,15 +24,16 @@ fn div_e4_print_length_level_circle_escape() {
       (let ((print-length 0)) (prin1-to-string '(1 2 3)))
       (let ((print-level 1)) (prin1-to-string '((a) (b) (c)))))
 "##,
-        expect_test::expect![[
-            r#""OK (\"(a b c ...)\" \"(a (b ...))\" \"(#1=(1 2) #1#)\" \"\\\"a\\\\nb\tc\\\"\" \"(...)\" \"(... ... ...)\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_e4_prin1_multibyte_and_escape() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"\\\"plain\\\"\" \"\\\"with \\\\\\\"quote\\\\\\\"\\\"\" \"\\\"tab\there\\\"\" \"\\\"café\\\"\" \"\\\"日本\\\"\" \"\\\"a\\\\nb\\\"\" \"\\\"caf\\\\x00e9\\\"\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (prin1-to-string "plain")
@@ -40,15 +44,16 @@ fn div_e4_prin1_multibyte_and_escape() {
       (let ((print-escape-newlines t)) (prin1-to-string "a\nb"))
       (let ((print-escape-multibyte t)) (prin1-to-string "café")))
 "##,
-        expect_test::expect![[
-            r#""OK (\"\\\"plain\\\"\" \"\\\"with \\\\\\\"quote\\\\\\\"\\\"\" \"\\\"tab\there\\\"\" \"\\\"café\\\"\" \"\\\"日本\\\"\" \"\\\"a\\\\nb\\\"\" \"\\\"caf\\\\x00e9\\\"\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_e4_text_property_set_remove_returns() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (t (face bold) (face bold) t nil t (foo bar baz qux) t nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -63,15 +68,16 @@ fn div_e4_text_property_set_remove_returns() {
         (remove-list-of-text-properties 4 6 '(foo baz))
         (text-properties-at 4)))
 "##,
-        expect_test::expect![[
-            r#""OK (t (face bold) (face bold) t nil t (foo bar baz qux) t nil)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_e4_add_text_properties_multi_prop_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((c 3 b 2 a 1) (weight heavy face bold) (face bold weight heavy) (baz qux foo bar))""#
+    ]];
     // Parity lock: add-text-properties adds every property in the plist,
     // regardless of order or whether `face' is among them.
     crate::common::assert_oracle_parity_expect(
@@ -85,15 +91,16 @@ fn div_e4_add_text_properties_multi_prop_order() {
       (with-temp-buffer (insert "abcdef")
         (add-text-properties 1 4 '(foo bar baz qux)) (text-properties-at 1)))
 "##,
-        expect_test::expect![[
-            r#""OK ((c 3 b 2 a 1) (weight heavy face bold) (face bold weight heavy) (baz qux foo bar))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_e4_add_text_prop_after_disjoint_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((face bold) (face italic weight heavy) (face italic weight heavy) nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -105,15 +112,14 @@ fn div_e4_add_text_prop_after_disjoint_set() {
         (text-properties-at 5)
         (text-properties-at 6)))
 "##,
-        expect_test::expect![[
-            r#""OK ((face bold) (face italic weight heavy) (face italic weight heavy) nil)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_e4_keymap_inheritance_parent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (parent-a child-b t parent-a [97] t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((parent (make-keymap))
@@ -128,13 +134,14 @@ fn div_e4_keymap_inheritance_parent() {
         (where-is-internal 'parent-a child t)
         (keymapp parent)))
 "##,
-        expect_test::expect![[r#""OK (parent-a child-b t parent-a [97] t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_e4_frame_window_tree_traversal() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function window-root)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (windowp (frame-root-window))
@@ -144,13 +151,14 @@ fn div_e4_frame_window_tree_traversal() {
       (length (window-list nil 'nomini))
       (eq (frame-root-window) (window-root (frame-root-window))))
 "##,
-        expect_test::expect![[r#""ERR (void-function window-root)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_e4_encode_coding_various_lengths() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (4 10 4 \"ABC\" 3 6 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (length (encode-coding-string "日本" 'shift_jis))
@@ -161,13 +169,14 @@ fn div_e4_encode_coding_various_lengths() {
       (length (encode-coding-string "abc" 'utf-16be))
       (length (encode-coding-string "abc" 'utf-7)))
 "##,
-        expect_test::expect![[r#""OK (4 10 4 \"ABC\" 3 6 3)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_e4_current_active_maps() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t 1 t Control-X-prefix find-file)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (keymapp (current-local-map))
@@ -177,6 +186,6 @@ fn div_e4_current_active_maps() {
       (lookup-key (current-global-map) "\C-x")
       (lookup-key (current-global-map) [?\C-x ?\C-f]))
 "##,
-        expect_test::expect![[r#""OK (nil t 1 t Control-X-prefix find-file)""#]],
+        expect,
     );
 }

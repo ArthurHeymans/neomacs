@@ -80,12 +80,10 @@ fn oracle_prop_immutable_persistent_list() {
     (fmakunbound 'neovm--iml-remove-first)
     (fmakunbound 'neovm--iml-functional-append)
     (fmakunbound 'neovm--iml-take)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((3 4 5) (1 2 3 4 5) (10 20 3 4 5) (1 2 4 5) (3 4 5 6) (1 2) t t t t t 5 5 4 4 2)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((3 4 5) (1 2 3 4 5) (10 20 3 4 5) (1 2 4 5) (3 4 5 6) (1 2) t t t t t 5 5 4 4 2)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -180,12 +178,10 @@ fn oracle_prop_immutable_persistent_alist() {
     (fmakunbound 'neovm--ial-delete)
     (fmakunbound 'neovm--ial-keys)
     (fmakunbound 'neovm--ial-to-unique-alist)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Alice\" nil \"Alice\" 30 \"NYC\" 31 30 nil \"Alice\" (\"age\" \"city\" \"name\") ((\"age\" . 31) (\"city\" . \"NYC\") (\"name\" . \"Alice\")) t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Alice\" nil \"Alice\" 30 \"NYC\" 31 30 nil \"Alice\" (\"age\" \"city\" \"name\") ((\"age\" . 31) (\"city\" . \"NYC\") (\"name\" . \"Alice\")) t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -317,12 +313,10 @@ fn oracle_prop_immutable_persistent_vector() {
     (fmakunbound 'neovm--ipv-get)
     (fmakunbound 'neovm--ipv-set)
     (fmakunbound 'neovm--ipv-to-list)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 1 2 3 4 5 6 7 8 9) (0 1 2 99 4 5 6 7 8 9) (0 1 2 3 4 5 6 77 8 9) (-1 1 2 99 4 5 6 7 8 9) 10 10 3 99 77 -1 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 1 2 3 4 5 6 7 8 9) (0 1 2 99 4 5 6 7 8 9) (0 1 2 3 4 5 6 77 8 9) (-1 1 2 99 4 5 6 7 8 9) 10 10 3 99 77 -1 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -436,12 +430,10 @@ fn oracle_prop_immutable_undo_redo() {
     (fmakunbound 'neovm--iur-current)
     (fmakunbound 'neovm--iur-can-undo)
     (fmakunbound 'neovm--iur-can-redo)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((title . \"Final\") (body . \"Hello brave world\")) ((title . \"Final\") (body . \"Hello world\")) ((title . \"Draft\") (body . \"Hello world\")) ((title . \"Final\") (body . \"Hello world\")) ((title . \"Final\") (body . \"Hello brave world\")) ((title . \"Revised\") (body . \"New content\")) t nil t t nil t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((title . \"Final\") (body . \"Hello brave world\")) ((title . \"Final\") (body . \"Hello world\")) ((title . \"Draft\") (body . \"Hello world\")) ((title . \"Final\") (body . \"Hello world\")) ((title . \"Final\") (body . \"Hello brave world\")) ((title . \"Revised\") (body . \"New content\")) t nil t t nil t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -496,10 +488,8 @@ fn oracle_prop_immutable_structural_sharing_eq() {
         (equal list-d '(A b c d e f))
         ;; Lengths
         (length list-a) (length list-b) (length list-c) (length list-d)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t t t t t t t t 6 5 7 6)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t t t 6 5 7 6)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -624,5 +614,6 @@ fn oracle_prop_immutable_transaction_log() {
     (fmakunbound 'neovm--itl-restore)
     (fmakunbound 'neovm--itl-get)
     (fmakunbound 'neovm--itl-log-length)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

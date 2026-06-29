@@ -36,12 +36,10 @@ fn oracle_file_name_concat_filters_and_separator_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"\" \"\" \"\" \"a\" \"a/b\" \"a/b\" \"a/b/\" \"a/b/\" \"a/b\" \"/tmp/a/b\" \"/tmp//absolute/tail\" \"a//b/c\" \"a/./../b\" \"a/b/c\" (wrong-number-of-arguments (file-name-concat 0)) (wrong-type-argument (stringp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"\" \"\" \"\" \"a\" \"a/b\" \"a/b\" \"a/b/\" \"a/b/\" \"a/b\" \"/tmp/a/b\" \"/tmp//absolute/tail\" \"a//b/c\" \"a/./../b\" \"a/b/c\" (wrong-number-of-arguments (file-name-concat 0)) (wrong-type-argument (stringp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -69,8 +67,6 @@ fn oracle_file_name_concat_unibyte_multibyte_conversion_edges() {
           cases))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-function unibyte-string-p)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-function unibyte-string-p)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

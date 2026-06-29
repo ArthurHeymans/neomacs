@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_condition_case_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "ccm")))
@@ -35,7 +36,7 @@ fn combo_condition_case_marker_overlay_undo() {
                    (buffer-string)
                    (get-text-property 1 'seg)))))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -43,6 +44,7 @@ fn combo_condition_case_marker_overlay_undo() {
 fn combo_condition_case_narrow_marker_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "ccn")))
@@ -74,7 +76,7 @@ fn combo_condition_case_narrow_marker_undo() {
                    (marker-position m)
                    (buffer-string)))))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -82,6 +84,7 @@ fn combo_condition_case_narrow_marker_undo() {
 fn combo_condition_case_clone_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "ccc")))
@@ -113,7 +116,7 @@ fn combo_condition_case_clone_overlay_undo() {
                      (buffer-string)))))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -121,6 +124,7 @@ fn combo_condition_case_clone_overlay_undo() {
 fn combo_condition_case_textprop_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "cct")))
@@ -148,7 +152,7 @@ fn combo_condition_case_textprop_marker() {
              (list mp os oe k s
                    (marker-position m)))))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -156,6 +160,7 @@ fn combo_condition_case_textprop_marker() {
 fn combo_condition_case_multi_error_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "cce")))
@@ -203,6 +208,6 @@ fn combo_condition_case_multi_error_marker_overlay() {
                    results)))
           (nreverse results))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

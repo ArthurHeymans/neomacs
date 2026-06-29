@@ -36,12 +36,10 @@ fn oracle_prop_elt_polymorphic_access() {
                                    (integerp (elt my-str 0))  ;; char code
                                    (= (elt my-str 0) ?A))))
                         (list (nreverse results) type-checks))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((alpha gamma epsilon) (100 300 500) (65 67 69)) (t t t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((alpha gamma epsilon) (100 300 500) (65 67 69)) (t t t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -75,10 +73,8 @@ fn oracle_prop_aref_aset_bool_vector_sieve() {
                           (setq primes (cons i primes)))
                         (setq i (1+ i)))
                       (nreverse primes)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (2 3 5 7 11 13 17 19 23 29 31 37 41 43 47)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 3 5 7 11 13 17 19 23 29 31 37 41 43 47)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -122,12 +118,10 @@ fn oracle_prop_aref_aset_char_table_category_map() {
                                    (aref ct ?@)
                                    (aref ct ?#))))
                         (list (nreverse result) special-checks))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"H\" upper) (\"e\" lower) (\"l\" lower) (\"l\" lower) (\"o\" lower) (\" \" space) (\"W\" upper) (\"o\" lower) (\"r\" lower) (\"l\" lower) (\"d\" lower) (\" \" space) (\"4\" digit) (\"2\" digit) (\"_\" underscore) (\"f\" lower) (\"o\" lower) (\"o\" lower) (\"-\" hyphen) (\"b\" lower) (\"a\" lower) (\"r\" lower)) (nil nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"H\" upper) (\"e\" lower) (\"l\" lower) (\"l\" lower) (\"o\" lower) (\" \" space) (\"W\" upper) (\"o\" lower) (\"r\" lower) (\"l\" lower) (\"d\" lower) (\" \" space) (\"4\" digit) (\"2\" digit) (\"_\" underscore) (\"f\" lower) (\"o\" lower) (\"o\" lower) (\"-\" hyphen) (\"b\" lower) (\"a\" lower) (\"r\" lower)) (nil nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,10 +171,9 @@ fn oracle_prop_aref_aset_sparse_matrix_ops() {
                                       (list (aref dense 0) (aref dense 1)
                                             (aref dense 2) (aref dense 3)))
                               result))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (((2 3 0 0) (0 5 0 1) (4 0 6 0) (0 0 7 8)) [8 14 22 53])""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (((2 3 0 0) (0 5 0 1) (4 0 6 0) (0 0 7 8)) [8 14 22 53])""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -218,10 +211,8 @@ fn oracle_prop_elt_aset_frequency_table_with_sorting() {
                             (setq dist (cons (cons k (aref counts k)) dist)))
                           (setq k (1+ k)))
                         (list (nreverse dist) mode-len max-count))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (((3 . 7) (4 . 2) (5 . 3)) 3 7)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (((3 . 7) (4 . 2) (5 . 3)) 3 7)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -290,12 +281,10 @@ fn oracle_prop_aref_aset_game_of_life_step() {
                                    (nreverse cells)))))
                           (list (funcall collect-live grid)
                                 (funcall collect-live next))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 . 2) (2 . 3) (3 . 1) (3 . 2) (3 . 3)) ((2 . 1) (2 . 3) (3 . 2) (3 . 3) (4 . 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 . 2) (2 . 3) (3 . 1) (3 . 2) (3 . 3)) ((2 . 1) (2 . 3) (3 . 2) (3 . 3) (4 . 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -343,12 +332,10 @@ fn oracle_prop_aref_aset_string_caesar_rot13() {
                                                       (- 26 s))
                                              plain))
                                     shifts))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Wkh Txlfn Eurzq Ira Mxpsv Ryhu Wkh Odcb Grj\" t \"Gur Dhvpx Oebja Sbk Whzcf Bire Gur Ynml Qbt\" t (t t t t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Wkh Txlfn Eurzq Ira Mxpsv Ryhu Wkh Odcb Grj\" t \"Gur Dhvpx Oebja Sbk Whzcf Bire Gur Ynml Qbt\" t (t t t t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -391,10 +378,8 @@ fn oracle_prop_elt_nested_path_traversal() {
                        (dolist (p paths)
                          (setq leaves (cons (funcall path-get tree p) leaves)))
                        (nreverse leaves))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"c\" \"j\" (\"k\" \"l\" \"m\") \"n\" \"e\" 2 (\"a\" \"b\" \"c\" \"d\" \"e\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"c\" \"j\" (\"k\" \"l\" \"m\") \"n\" \"e\" 2 (\"a\" \"b\" \"c\" \"d\" \"e\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

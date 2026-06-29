@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_textprop_change_undo_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "tcu")))
@@ -37,7 +38,7 @@ fn combo_textprop_change_undo_marker_overlay() {
                 (get-text-property 6 'new-prop)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -45,6 +46,7 @@ fn combo_textprop_change_undo_marker_overlay() {
 fn combo_textprop_change_narrow_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "tcn")))
@@ -75,7 +77,7 @@ fn combo_textprop_change_narrow_marker() {
                 (get-text-property 6 'z)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -83,6 +85,7 @@ fn combo_textprop_change_narrow_marker() {
 fn combo_textprop_change_clone_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "tcc")))
@@ -114,7 +117,7 @@ fn combo_textprop_change_clone_overlay() {
                   (buffer-string)))))
       (kill-buffer clone)
       (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -122,6 +125,7 @@ fn combo_textprop_change_clone_overlay() {
 fn combo_textprop_change_multi_zone_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "tcm")))
@@ -156,7 +160,7 @@ fn combo_textprop_change_multi_zone_undo() {
                 (get-text-property 11 'z)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -164,6 +168,7 @@ fn combo_textprop_change_multi_zone_undo() {
 fn combo_textprop_change_overlay_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer "tco")))
@@ -194,6 +199,6 @@ fn combo_textprop_change_overlay_narrow_undo() {
                 (get-text-property 6 'z)
                 (buffer-string)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

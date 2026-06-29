@@ -7,6 +7,8 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_regexp_replace_propagated_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""fooNUMbarNUMbazNUMquxNUMERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "foo123bar456baz789qux000")
@@ -40,7 +42,7 @@ fn divergence_regexp_replace_propagated_props() {
             (get-text-property 19 'kind) (eq (get-text-property 19 'kind) 'word)
             (get-text-property 22 'kind) (eq (get-text-property 22 'kind) 'num)
             (overlay-get ov 'whole)))))) "#,
-        expect_test::expect![[r#""fooNUMbarNUMbazNUMquxNUMERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -48,6 +50,8 @@ fn divergence_regexp_replace_propagated_props() {
 fn divergence_string_match_data_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""alpha charlie echo foxtrotERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "alpha bravo charlie delta echo foxtrot")
@@ -83,7 +87,7 @@ fn divergence_string_match_data_with_undo() {
                 (get-text-property 21 'pos) (= (get-text-property 21 'pos) 4)
                 (get-text-property 27 'pos) (= (get-text-property 27 'pos) 5)
                 (overlay-get ov 'scope))))))) "#,
-        expect_test::expect![[r#""alpha charlie echo foxtrotERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -91,6 +95,7 @@ fn divergence_string_match_data_with_undo() {
 fn divergence_substring_props_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCDEFGHIJERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((s (propertize "ABCDEFGHIJ" 'idx 0)))
@@ -118,7 +123,7 @@ fn divergence_substring_props_with_undo() {
                 (get-text-property 5 'idx) (= (get-text-property 5 'idx) 4)
                 (get-text-property 8 'idx) (= (get-text-property 8 'idx) 7)
                 (overlay-get ov 'block))))))) "#,
-        expect_test::expect![[r#""ABCDEFGHIJERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -126,6 +131,7 @@ fn divergence_substring_props_with_undo() {
 fn divergence_insert_buffer_substring_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""SOURCE-TEXT-WITH-PROPSERR (args-out-of-range 19 24)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "SOURCE-TEXT-WITH-PROPS")
@@ -150,7 +156,7 @@ fn divergence_insert_buffer_substring_undo() {
             (get-text-property 1 'origin) (eq (get-text-property 1 'origin) 'src)
             (get-text-property 8 'origin) (eq (get-text-property 8 'origin) 'src)
             (overlay-get ov 'source)))))) "#,
-        expect_test::expect![[r#""SOURCE-TEXT-WITH-PROPSERR (args-out-of-range 19 24)""#]],
+        expect,
     );
 }
 
@@ -158,6 +164,9 @@ fn divergence_insert_buffer_substring_undo() {
 fn divergence_format_propertize_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""apple BLUEBERRY cherry DRAGONFRUIT elderberry ERR (wrong-type-argument listp t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((items '(("apple" . 1) ("banana" . 2) ("cherry" . 3)
@@ -183,9 +192,7 @@ fn divergence_format_propertize_undo() {
               (= (marker-position m) 1)
               (get-text-property 1 'val) (= (get-text-property 1 'val) 1)
               (overlay-get ov 'list)))))) "#,
-        expect_test::expect![[
-            r#""apple BLUEBERRY cherry DRAGONFRUIT elderberry ERR (wrong-type-argument listp t)""#
-        ]],
+        expect,
     );
 }
 
@@ -193,6 +200,8 @@ fn divergence_format_propertize_undo() {
 fn divergence_re_search_backward_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""AAA-BBB-YYY-DDD-XXX-FFF-GGGERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAA-BBB-CCC-DDD-EEE-FFF-GGG")
@@ -228,7 +237,7 @@ fn divergence_re_search_backward_undo() {
             (get-text-property 21 'g) (= (get-text-property 21 'g) 6)
             (get-text-property 25 'g) (= (get-text-property 25 'g) 7)
             (overlay-get ov 'chain)))))) "#,
-        expect_test::expect![[r#""AAA-BBB-YYY-DDD-XXX-FFF-GGGERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -236,6 +245,9 @@ fn divergence_re_search_backward_undo() {
 fn divergence_word_bounds_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""the slow red fox jumps over the energetic dogERR (wrong-type-argument listp t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "the quick brown fox jumps over the lazy dog")
@@ -271,9 +283,7 @@ fn divergence_word_bounds_replace_undo() {
             (get-text-property 5 'word-num) (= (get-text-property 5 'word-num) 1)
             (get-text-property 11 'word-num) (= (get-text-property 11 'word-num) 2)
             (overlay-get ov 'sentence)))))) "#,
-        expect_test::expect![[
-            r#""the slow red fox jumps over the energetic dogERR (wrong-type-argument listp t)""#
-        ]],
+        expect,
     );
 }
 
@@ -281,6 +291,9 @@ fn divergence_word_bounds_replace_undo() {
 fn divergence_split_string_join_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""one-two-three-four-five-six-sevenERR (wrong-type-argument listp t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "one,two,three,four,five,six,seven")
@@ -306,9 +319,7 @@ fn divergence_split_string_join_undo() {
               (get-text-property 5 'num) (= (get-text-property 5 'num) 1)
               (get-text-property 9 'num) (= (get-text-property 9 'num) 2)
               (overlay-get ov 'csv)))))) "#,
-        expect_test::expect![[
-            r#""one-two-three-four-five-six-sevenERR (wrong-type-argument listp t)""#
-        ]],
+        expect,
     );
 }
 
@@ -316,6 +327,9 @@ fn divergence_split_string_join_undo() {
 fn divergence_apply_maps_to_buffer_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""a=1 b=2 c=3 d=4 e=5 f=6 g=7 h=8 i=9 j=10ERR (wrong-type-argument listp t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "a1 b2 c3 d4 e5 f6 g7 h8 i9 j10")
@@ -343,9 +357,7 @@ fn divergence_apply_maps_to_buffer_undo() {
               (= (marker-position m) 1)
               (get-text-property 1 'idx) (= (get-text-property 1 'idx) 0)
               (overlay-get ov 'data)))))) "#,
-        expect_test::expect![[
-            r#""a=1 b=2 c=3 d=4 e=5 f=6 g=7 h=8 i=9 j=10ERR (wrong-type-argument listp t)""#
-        ]],
+        expect,
     );
 }
 
@@ -353,6 +365,9 @@ fn divergence_apply_maps_to_buffer_undo() {
 fn divergence_regexp_narrow_widen_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""AAA-XXX-CCC-DDD-EEE-FFF-GGG-YYY-III-JJJERR (wrong-type-argument listp t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAA-BBB-CCC-DDD-EEE-FFF-GGG-HHH-III-JJJ")
@@ -390,8 +405,6 @@ fn divergence_regexp_narrow_widen_undo() {
             (get-text-property 21 'block) (= (get-text-property 21 'block) 6)
             (get-text-property 25 'block) (= (get-text-property 25 'block) 7)
             (overlay-get ov 'all-blocks))))) "#,
-        expect_test::expect![[
-            r#""AAA-XXX-CCC-DDD-EEE-FFF-GGG-YYY-III-JJJERR (wrong-type-argument listp t)""#
-        ]],
+        expect,
     );
 }

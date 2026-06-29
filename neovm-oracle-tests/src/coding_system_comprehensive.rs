@@ -37,10 +37,8 @@ fn oracle_prop_coding_system_comprehensive_predicate() {
   (coding-system-p t)
   (coding-system-p 42)
   (coding-system-p "utf-8"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t t t t t t nil t nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t nil t nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -61,12 +59,10 @@ fn oracle_prop_coding_system_comprehensive_check_valid() {
   (check-coding-system 'undecided)
   ;; nil means no coding system, which is valid (returns nil)
   (check-coding-system nil))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (utf-8 utf-8-unix latin-1 raw-text no-conversion undecided nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (utf-8 utf-8-unix latin-1 raw-text no-conversion undecided nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -88,12 +84,10 @@ fn oracle_prop_coding_system_comprehensive_check_errors() {
       (check-coding-system "utf-8")
     (wrong-type-argument (list 'wrong-type-argument))
     (error (list 'other-error))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((coding-system-error neovm-bogus-coding-987) (wrong-type-argument) (wrong-type-argument))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((coding-system-error neovm-bogus-coding-987) (wrong-type-argument) (wrong-type-argument))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -125,12 +119,10 @@ fn oracle_prop_coding_system_comprehensive_base() {
   ;; undecided
   (coding-system-base 'undecided)
   (coding-system-base 'undecided-unix))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (utf-8 utf-8 utf-8 utf-8 t t iso-latin-1 iso-latin-1 iso-latin-1 raw-text raw-text no-conversion undecided undecided)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (utf-8 utf-8 utf-8 utf-8 t t iso-latin-1 iso-latin-1 iso-latin-1 raw-text raw-text no-conversion undecided undecided)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -161,10 +153,9 @@ fn oracle_prop_coding_system_comprehensive_eol_type() {
   (coding-system-eol-type 'no-conversion)
   ;; undecided
   (vectorp (coding-system-eol-type 'undecided)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 0 0 1 1 2 t (utf-8-unix utf-8-dos utf-8-mac) 0 t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (0 0 0 1 1 2 t (utf-8-unix utf-8-dos utf-8-mac) 0 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -198,10 +189,9 @@ fn oracle_prop_coding_system_comprehensive_aliases() {
         (unless (coding-system-p a)
           (setq all-valid nil)))
       all-valid)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t (utf-8 mule-utf-8 cp65001) t t (latin-1) t t t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (t (utf-8 mule-utf-8 cp65001) t t (latin-1) t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -230,10 +220,8 @@ fn oracle_prop_coding_system_comprehensive_plist() {
     (if mnemonic t t))  ;; just verify it doesn't error
   ;; coding-system-get with unknown property returns nil
   (coding-system-get 'utf-8 :neovm-nonexistent-prop))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -260,7 +248,8 @@ fn oracle_prop_coding_system_comprehensive_priority_list() {
   (not (null (memq 'utf-8 (coding-system-priority-list))))
   ;; Length should be reasonable (more than 1)
   (> (length (coding-system-priority-list)) 1))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t t)""#]]);
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -325,10 +314,8 @@ fn oracle_prop_coding_system_comprehensive_roundtrip() {
          (enc-dos (encode-coding-string s 'utf-8-dos)))
     (list (string-bytes enc-unix)
           (string-bytes enc-dos))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t (t 4 10) t t t t (t t t t) (3 4))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t (t 4 10) t t t t (t t t t) (3 4))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -367,12 +354,10 @@ fn oracle_prop_coding_system_comprehensive_byte_counts() {
           (funcall 'neovm--csc-byte-info s 'utf-8)    ;; 1+2+3 = 6 bytes
           (length s))))                                  ;; 3 chars
     (fmakunbound 'neovm--csc-byte-info)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((5 5) (5 5) (5 5) (1 2) (1 1) (2 6) (1 4) (3 6) ((3 6) 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((5 5) (5 5) (5 5) (1 2) (1 1) (2 6) (1 4) (3 6) ((3 6) 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -420,12 +405,10 @@ fn oracle_prop_coding_system_comprehensive_metadata() {
        (eq (coding-system-base 'latin-1-unix)
            (coding-system-base 'latin-1-dos)))
     (fmakunbound 'neovm--csc-describe)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((utf-8 vector-eol 3 t) (utf-8 0 3 t) (utf-8 1 3 t) (iso-latin-1 vector-eol 3 t) (iso-latin-1 0 3 t) (raw-text vector-eol 1 t) (no-conversion 0 2 t) (undecided vector-eol 1 t) t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((utf-8 vector-eol 3 t) (utf-8 0 3 t) (utf-8 1 3 t) (iso-latin-1 vector-eol 3 t) (iso-latin-1 0 3 t) (raw-text vector-eol 1 t) (no-conversion 0 2 t) (undecided vector-eol 1 t) t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -462,8 +445,6 @@ fn oracle_prop_coding_system_comprehensive_string_properties() {
   (let ((codings (find-coding-systems-string "\u00E9")))
     (list (not (null (memq 'utf-8 codings)))
           (not (null (memq 'latin-1 codings))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil t t t (nil nil t) (t t t) (t nil))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil t t t (nil nil t) (t t t) (t nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

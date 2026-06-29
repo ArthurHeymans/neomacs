@@ -47,10 +47,9 @@ fn oracle_prop_skip_syntax_adv_word_constituents() {
                                     (let ((t5 (buffer-substring p4 (point))))
                                       (list s1 t1 s2 s3 t3 s4 s5 t5
                                             p1 p2 p3 p4 p5)))))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (7 \"hello42\" 1 5 \"world\" 1 3 \"foo\" 8 9 14 15 18)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (7 \"hello42\" 1 5 \"world\" 1 3 \"foo\" 8 9 14 15 18)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -81,10 +80,8 @@ fn oracle_prop_skip_syntax_adv_whitespace() {
                           ;; Should be at end
                           (list s1 p1 s2 p2 s3 p3
                                 (= (point) (point-max)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (14 15 6 26 4 35 t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (14 15 6 26 4 35 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -120,10 +117,8 @@ fn oracle_prop_skip_syntax_adv_symbol_constituents() {
                               (let ((s4 (skip-syntax-forward "w"))
                                     (p4 (point)))
                                 (list s1 t1 s2 s3 s4 p1 p2 p3 p4))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (5 \"__$--\" 5 1 5 6 11 12 17)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (5 \"__$--\" 5 1 5 6 11 12 17)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -163,10 +158,8 @@ fn oracle_prop_skip_syntax_adv_mixed_classes() {
                                 (let ((t3 (buffer-substring start3 (point))))
                                   (list s1 t1 s2 s3 t3
                                         p1 p2 p3)))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (14 \"hello_world-v2\" 0 1 \"=\" 15 16 17)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (14 \"hello_world-v2\" 0 1 \"=\" 15 16 17)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -215,12 +208,10 @@ fn oracle_prop_skip_syntax_adv_backward_positions() {
                                               (let ((t6 (buffer-substring (point) end6)))
                                                 (list s1 t1 s2 s3 t3 s4 s5 t5 s6 t6
                                                       p1 p2 p3 p4 p5 p6))))))))))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (-5 \"delta\" -3 -5 \"gamma\" -1 -4 \"beta\" -5 \"alpha\" 20 17 12 11 7 1)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (-5 \"delta\" -3 -5 \"gamma\" -1 -4 \"beta\" -5 \"alpha\" 20 17 12 11 7 1)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -260,10 +251,8 @@ fn oracle_prop_skip_syntax_adv_return_values() {
                                           (> fwd-ws 0) (> fwd-w 0)
                                           (< bwd-ws 0) (< bwd-w 0)
                                           (= fwd-zero 0) (= bwd-zero 0)))))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 6 3 0 -3 -3 0 t t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 6 3 0 -3 -3 0 t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -338,12 +327,10 @@ fn oracle_prop_skip_syntax_adv_parse_expression() {
                           (goto-char (point-min))
                           (neovm--test-syntax-tokenize))
                       (fmakunbound 'neovm--test-syntax-tokenize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((word . \"result\") (sym . \"_\") (word . \"val\") (punct . \"=\") (word . \"max\") (open . \"(\") (word . \"x\") (punct . \"+\") (word . \"42\") (punct . \",\") (word . \"y\") (sym . \"_\") (word . \"coord\") (punct . \"*\") (word . \"3\") (close . \")\") (punct . \"-\") (word . \"offset\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((word . \"result\") (sym . \"_\") (word . \"val\") (punct . \"=\") (word . \"max\") (open . \"(\") (word . \"x\") (punct . \"+\") (word . \"42\") (punct . \",\") (word . \"y\") (sym . \"_\") (word . \"coord\") (punct . \"*\") (word . \"3\") (close . \")\") (punct . \"-\") (word . \"offset\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -398,8 +385,7 @@ fn oracle_prop_skip_syntax_adv_extract_words() {
                                  (sort repeated
                                        (lambda (a b) (string< (car a) (car b)))))))))
                       (makunbound 'neovm--test-syntax-words)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (17 ((\"brown\" 2) (\"dog\" 2) (\"fox\" 2) (\"the\" 4)))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (17 ((\"brown\" 2) (\"dog\" 2) (\"fox\" 2) (\"the\" 4)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

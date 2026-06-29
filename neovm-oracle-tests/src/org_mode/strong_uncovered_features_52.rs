@@ -11,6 +11,8 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn uf52_macro_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (error \"Undefined Org macro: greeting; aborting\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -18,7 +20,7 @@ fn uf52_macro_args() {
   (let ((raw (buffer-string)))
     (org-macro-replace-all org-macro-templates)
     (list raw (buffer-string))))"##,
-        expect_test::expect![[r#""ERR (error \"Undefined Org macro: greeting; aborting\")""#]],
+        expect,
     );
 }
 
@@ -29,9 +31,10 @@ fn uf52_macro_args() {
 #[test]
 fn uf52_macro_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-macro-accumulate-arguments)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(org-macro-accumulate-arguments "{{{macro(a, b(c), d)}}}" 0)"##,
-        expect_test::expect![[r#""ERR (void-function org-macro-accumulate-arguments)""#]],
+        expect,
     );
 }
 
@@ -42,6 +45,9 @@ fn uf52_macro_nested() {
 #[test]
 fn uf52_entity_multi() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"alpha\" \"\\\\alpha\" t \"&alpha;\" \"alpha\" \"alpha\" \"α\") (\"beta\" \"\\\\beta\" t \"&beta;\" \"beta\" \"beta\" \"β\") (\"gamma\" \"\\\\gamma\" t \"&gamma;\" \"gamma\" \"gamma\" \"γ\") (\"Agrave\" \"\\\\`{A}\" nil \"&Agrave;\" \"A\" \"À\" \"À\") (\"copy\" \"\\\\textcopyright{}\" nil \"&copy;\" \"(c)\" \"©\" \"©\") nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-entity-get "alpha")
         (org-entity-get "beta")
@@ -49,9 +55,7 @@ fn uf52_entity_multi() {
         (org-entity-get "Agrave")
         (org-entity-get "copy")
         (org-entity-get "nonexistent"))"##,
-        expect_test::expect![[
-            r#""OK ((\"alpha\" \"\\\\alpha\" t \"&alpha;\" \"alpha\" \"alpha\" \"α\") (\"beta\" \"\\\\beta\" t \"&beta;\" \"beta\" \"beta\" \"β\") (\"gamma\" \"\\\\gamma\" t \"&gamma;\" \"gamma\" \"gamma\" \"γ\") (\"Agrave\" \"\\\\`{A}\" nil \"&Agrave;\" \"A\" \"À\" \"À\") (\"copy\" \"\\\\textcopyright{}\" nil \"&copy;\" \"(c)\" \"©\" \"©\") nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -62,13 +66,14 @@ fn uf52_entity_multi() {
 #[test]
 fn uf52_entity_utf_multi() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-entity-get-utf-8)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (org-entity-get-utf-8 "alpha")
         (org-entity-get-utf-8 "beta")
         (org-entity-get-utf-8 "gamma")
         (org-entity-get-utf-8 "Agrave")
         (org-entity-get-utf-8 "copy"))"##,
-        expect_test::expect![[r#""ERR (void-function org-entity-get-utf-8)""#]],
+        expect,
     );
 }
 
@@ -79,6 +84,7 @@ fn uf52_entity_utf_multi() {
 #[test]
 fn uf52_footnote_new() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"Text[fn:1]\n\n* Footnotes\n\n[fn:1] \n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -88,7 +94,7 @@ fn uf52_footnote_new() {
       (org-footnote-new)
     (error nil))
   (buffer-string))"##,
-        expect_test::expect![[r#""OK \"Text[fn:1]\n\n* Footnotes\n\n[fn:1] \n\"""#]],
+        expect,
     );
 }
 
@@ -99,6 +105,7 @@ fn uf52_footnote_new() {
 #[test]
 fn uf52_footnote_action_ref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 19""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -109,7 +116,7 @@ fn uf52_footnote_action_ref() {
       (org-footnote-action)
     (error nil))
   (point))"##,
-        expect_test::expect![[r#""OK 19""#]],
+        expect,
     );
 }
 
@@ -120,6 +127,7 @@ fn uf52_footnote_action_ref() {
 #[test]
 fn uf52_footnote_action_def() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 5""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -130,7 +138,7 @@ fn uf52_footnote_action_def() {
       (org-footnote-action)
     (error nil))
   (point))"##,
-        expect_test::expect![[r#""OK 5""#]],
+        expect,
     );
 }
 
@@ -141,6 +149,7 @@ fn uf52_footnote_action_def() {
 #[test]
 fn uf52_footnote_goto() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"[fn:1] Def\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -150,7 +159,7 @@ fn uf52_footnote_goto() {
       (org-footnote-goto-definition "1")
     (error nil))
   (buffer-substring-no-properties (line-beginning-position) (line-end-position)))"##,
-        expect_test::expect![[r#""OK \"[fn:1] Def\"""#]],
+        expect,
     );
 }
 
@@ -161,6 +170,7 @@ fn uf52_footnote_goto() {
 #[test]
 fn uf52_footnote_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"Text\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -170,7 +180,7 @@ fn uf52_footnote_delete() {
       (org-footnote-delete "1")
     (error nil))
   (buffer-string))"##,
-        expect_test::expect![[r#""OK \"Text\n\"""#]],
+        expect,
     );
 }
 
@@ -181,6 +191,7 @@ fn uf52_footnote_delete() {
 #[test]
 fn uf52_footnote_normalize() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"Text[fn:1]\n\n* Footnotes\n\n[fn:1] Def\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -189,7 +200,7 @@ fn uf52_footnote_normalize() {
       (org-footnote-normalize)
     (error nil))
   (buffer-string))"##,
-        expect_test::expect![[r#""OK \"Text[fn:1]\n\n* Footnotes\n\n[fn:1] Def\n\"""#]],
+        expect,
     );
 }
 
@@ -200,6 +211,7 @@ fn uf52_footnote_normalize() {
 #[test]
 fn uf52_footnote_at_ref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:ref nil) (:def nil))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -211,7 +223,7 @@ fn uf52_footnote_at_ref() {
     (search-forward "[fn:1]")
     (push (list :def (org-footnote-at-reference-p)) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""OK ((:ref nil) (:def nil))""#]],
+        expect,
     );
 }
 
@@ -222,6 +234,7 @@ fn uf52_footnote_at_ref() {
 #[test]
 fn uf52_footnote_at_def() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:ref nil) (:def (\"1\" 13 23 \"Def\")))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -233,7 +246,7 @@ fn uf52_footnote_at_def() {
     (search-forward "[fn:1]")
     (push (list :def (org-footnote-at-definition-p)) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""OK ((:ref nil) (:def (\"1\" 13 23 \"Def\")))""#]],
+        expect,
     );
 }
 
@@ -244,12 +257,13 @@ fn uf52_footnote_at_def() {
 #[test]
 fn uf52_footnote_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-footnote-all-notes)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text[fn:1] more[fn:2]\n\n[fn:1] Def1\n[fn:2] Def2")
   (org-footnote-all-notes))"##,
-        expect_test::expect![[r#""ERR (void-function org-footnote-all-notes)""#]],
+        expect,
     );
 }
 
@@ -260,12 +274,13 @@ fn uf52_footnote_all() {
 #[test]
 fn uf52_footnote_unique() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"2\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text[fn:1]\n\n[fn:1] Def")
   (org-footnote-unique-label))"##,
-        expect_test::expect![[r#""OK \"2\"""#]],
+        expect,
     );
 }
 
@@ -276,13 +291,14 @@ fn uf52_footnote_unique() {
 #[test]
 fn uf52_map_footnote_ref() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"1\" \"2\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text[fn:1] more[fn:2]\n\n[fn:1] Def1\n[fn:2] Def2")
   (org-element-map (org-element-parse-buffer) 'footnote-reference
     (lambda (f) (org-element-property :label f))))"##,
-        expect_test::expect![[r#""OK (\"1\" \"2\")""#]],
+        expect,
     );
 }
 
@@ -293,6 +309,7 @@ fn uf52_map_footnote_ref() {
 #[test]
 fn uf52_map_footnote_def() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"1\" \"Def1\") (\"2\" \"Def2\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -302,7 +319,7 @@ fn uf52_map_footnote_def() {
                       (org-trim (buffer-substring-no-properties
                                   (org-element-property :contents-begin f)
                                   (org-element-property :contents-end f)))))))"##,
-        expect_test::expect![[r#""OK ((\"1\" \"Def1\") (\"2\" \"Def2\"))""#]],
+        expect,
     );
 }
 
@@ -313,6 +330,7 @@ fn uf52_map_footnote_def() {
 #[test]
 fn uf52_map_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"name\" \"{{{name}}}\" nil))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -321,7 +339,7 @@ fn uf52_map_macro() {
     (lambda (m) (list (org-element-property :key m)
                       (org-element-property :value m)
                       (org-element-property :args m)))))"##,
-        expect_test::expect![[r#""OK ((\"name\" \"{{{name}}}\" nil))""#]],
+        expect,
     );
 }
 
@@ -332,6 +350,8 @@ fn uf52_map_macro() {
 #[test]
 fn uf52_map_entity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((\"alpha\" \"α\") (\"beta\" \"β\") (\"gamma\" \"γ\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -339,7 +359,7 @@ fn uf52_map_entity() {
   (org-element-map (org-element-parse-buffer) 'entity
     (lambda (e) (list (org-element-property :name e)
                       (org-element-property :utf-8 e)))))"##,
-        expect_test::expect![[r#""OK ((\"alpha\" \"α\") (\"beta\" \"β\") (\"gamma\" \"γ\"))""#]],
+        expect,
     );
 }
 
@@ -350,13 +370,14 @@ fn uf52_map_entity() {
 #[test]
 fn uf52_map_latex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"$x^2$\" \"$$y=mx+b$$\" \"\\\\(z\\\\)\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "Text $x^2$ and $$y=mx+b$$ and \\(z\\)")
   (org-element-map (org-element-parse-buffer) 'latex-fragment
     (lambda (l) (org-element-property :value l))))"##,
-        expect_test::expect![[r#""OK (\"$x^2$\" \"$$y=mx+b$$\" \"\\\\(z\\\\)\")""#]],
+        expect,
     );
 }
 
@@ -367,6 +388,7 @@ fn uf52_map_latex() {
 #[test]
 fn uf52_map_stats() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"[1/2]\" 5))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -374,6 +396,6 @@ fn uf52_map_stats() {
   (org-element-map (org-element-parse-buffer) 'statistics-cookie
     (lambda (s) (list (org-element-property :value s)
                       (org-element-property :begin s)))))"##,
-        expect_test::expect![[r#""OK ((\"[1/2]\" 5))""#]],
+        expect,
     );
 }

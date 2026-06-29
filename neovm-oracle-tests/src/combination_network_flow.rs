@@ -62,10 +62,8 @@ fn oracle_prop_network_flow_graph_construction() {
          (hash-table-count cap)))
     (fmakunbound 'neovm--nf-edge-key)
     (fmakunbound 'neovm--nf-build-graph)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (10 8 7 10 0 0 2 3 16)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (10 8 7 10 0 0 2 3 16)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -129,10 +127,8 @@ fn oracle_prop_network_flow_bfs_augmenting_path() {
             'no-path)))
     (fmakunbound 'neovm--nf-ek)
     (fmakunbound 'neovm--nf-bfs)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (found (s b t) 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (found (s b t) 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +218,8 @@ fn oracle_prop_network_flow_edmonds_karp_simple() {
     (fmakunbound 'neovm--ek-key)
     (fmakunbound 'neovm--ek-bfs)
     (fmakunbound 'neovm--ek-maxflow)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 14""#]]);
+    let expect = expect_test::expect![[r#""OK 14""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -302,7 +299,8 @@ fn oracle_prop_network_flow_larger_network() {
     (fmakunbound 'neovm--ek2-key)
     (fmakunbound 'neovm--ek2-bfs)
     (fmakunbound 'neovm--ek2-maxflow)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK 23""#]]);
+    let expect = expect_test::expect![[r#""OK 23""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -404,12 +402,10 @@ fn oracle_prop_network_flow_residual_graph() {
     (fmakunbound 'neovm--nfr-key)
     (fmakunbound 'neovm--nfr-bfs)
     (fmakunbound 'neovm--nfr-maxflow-with-residual)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (14 t ((a b 0 5) (a c 7 7) (b d 7 10) (c d 0 6) (c t 7 10) (d t 7 7) (s a 7 10) (s b 7 8)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (14 t ((a b 0 5) (a c 7 7) (b d 7 10) (c d 0 6) (c t 7 10) (d t 7 7) (s a 7 10) (s b 7 8)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -520,10 +516,8 @@ fn oracle_prop_network_flow_min_cut() {
     (fmakunbound 'neovm--mc-bfs)
     (fmakunbound 'neovm--mc-reachable)
     (fmakunbound 'neovm--mc-compute)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (14 14 t (a b d s) (c t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (14 14 t (a b d s) (c t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -613,7 +607,8 @@ fn oracle_prop_network_flow_multi_source_sink() {
     (fmakunbound 'neovm--ms-key)
     (fmakunbound 'neovm--ms-bfs)
     (fmakunbound 'neovm--ms-maxflow)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (26 t)""#]]);
+    let expect = expect_test::expect![[r#""OK (26 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -711,5 +706,6 @@ fn oracle_prop_network_flow_bipartite_matching() {
     (fmakunbound 'neovm--bm-key)
     (fmakunbound 'neovm--bm-bfs)
     (fmakunbound 'neovm--bm-maxflow)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (3 t t)""#]]);
+    let expect = expect_test::expect![[r#""OK (3 t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

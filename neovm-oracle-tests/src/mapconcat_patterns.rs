@@ -37,12 +37,10 @@ fn oracle_prop_mapconcat_patterns_identity_separators() {
   (mapconcat #'identity '("solo") "XXXXX")
   ;; Two elements: separator appears once
   (mapconcat #'identity '("first" "second") "//"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"a,b,c\" \"x;y;z\" \"hello world\" \"alpha :: beta :: gamma\" \"one ==> two ==> three\" \"foo AND bar\" \"line1\nline2\nline3\" \"col1\tcol2\tcol3\" \"start---end\" \"A|||B|||C|||D\" \"left <========> right\" \"solo\" \"first//second\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"a,b,c\" \"x;y;z\" \"hello world\" \"alpha :: beta :: gamma\" \"one ==> two ==> three\" \"foo AND bar\" \"line1\nline2\nline3\" \"col1\tcol2\tcol3\" \"start---end\" \"A|||B|||C|||D\" \"left <========> right\" \"solo\" \"first//second\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -80,12 +78,10 @@ fn oracle_prop_mapconcat_patterns_transformations() {
   (mapconcat (lambda (n) (format "%03d" n)) '(1 22 333 4 55) " ")
   ;; Lambda: char-to-string on char codes
   (mapconcat #'char-to-string '(72 101 108 108 111) ""))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"HELLO WORLD TEST\" \"hello-world\" \"1,2,3,4,5,6,7,8,9,10\" \"foo/bar/baz/quux\" \"(a) (b) (c)\" \"hahaha-hohoho\" \"cba fed ihg\" \"1,2,3,4,5,6\" \"001 022 333 004 055\" \"Hello\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"HELLO WORLD TEST\" \"hello-world\" \"1,2,3,4,5,6,7,8,9,10\" \"foo/bar/baz/quux\" \"(a) (b) (c)\" \"hahaha-hohoho\" \"cba fed ihg\" \"1,2,3,4,5,6\" \"001 022 333 004 055\" \"Hello\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -121,12 +117,10 @@ fn oracle_prop_mapconcat_patterns_empty_separator() {
                  (setq counter (1+ counter))
                  (format "%d:%s" counter s))
                '("a" "b" "c") "")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"abcde\" \"12345\" \"HELLO\" \"Emacs\" \"alone\" \"\" \"abc\" t \"1:a2:b3:c\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"abcde\" \"12345\" \"HELLO\" \"Emacs\" \"alone\" \"\" \"abc\" t \"1:a2:b3:c\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -157,10 +151,9 @@ fn oracle_prop_mapconcat_patterns_empty_sequences() {
   ;; Compare empty list and empty vector results
   (equal (mapconcat #'identity nil ",")
          (mapconcat #'identity [] ",")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"\" \"\" \"\" \"\" \"\" \"\" \"\" \"\" \"\" t t t t)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (\"\" \"\" \"\" \"\" \"\" \"\" \"\" \"\" \"\" t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -196,10 +189,8 @@ fn oracle_prop_mapconcat_patterns_vectors() {
              "\n")
   ;; Vector with upcase transformation
   (mapconcat #'upcase ["hello" "world" "test" "data"] " "))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (wrong-type-argument symbolp 'alpha)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument symbolp 'alpha)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -282,12 +273,10 @@ fn oracle_prop_mapconcat_patterns_csv_tsv_builder() {
     (fmakunbound 'neovm--mc-csv-table)
     (fmakunbound 'neovm--mc-tsv-row)
     (fmakunbound 'neovm--mc-tsv-table)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Alice,30,NYC\" \"Bob,25,\\\"Los Angeles, CA\\\"\" \"Charlie,35,\\\"Said \\\"\\\"hello\\\"\\\"\\\"\" \"Name,Age,City\nAlice,30,NYC\nBob,25,\\\"LA, CA\\\"\nCharlie,35,Chicago\" \"Name\tAge\tCity\" \"ID\tValue\tStatus\n1\t100\tactive\n2\t200\tinactive\n3\t300\tactive\" \"\" \"H1,H2\n\" \"Only\nval1\nval2\nval3\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Alice,30,NYC\" \"Bob,25,\\\"Los Angeles, CA\\\"\" \"Charlie,35,\\\"Said \\\"\\\"hello\\\"\\\"\\\"\" \"Name,Age,City\nAlice,30,NYC\nBob,25,\\\"LA, CA\\\"\nCharlie,35,Chicago\" \"Name\tAge\tCity\" \"ID\tValue\tStatus\n1\t100\tactive\n2\t200\tinactive\n3\t300\tactive\" \"\" \"H1,H2\n\" \"Only\nval1\nval2\nval3\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -397,10 +386,8 @@ fn oracle_prop_mapconcat_patterns_nested_2d_formatting() {
     (fmakunbound 'neovm--mc-format-matrix)
     (fmakunbound 'neovm--mc-format-config)
     (fmakunbound 'neovm--mc-tree-to-string)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable max-w)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable max-w)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -441,10 +428,8 @@ fn oracle_prop_mapconcat_patterns_multibyte_complex() {
   ;; Verify length vs string-width for multi-byte results
   (let ((result (mapconcat #'identity '("\u4e16\u754c" "\u4f60\u597d") " ")))
     (list (length result) (string-width result))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"世界, 你好, 中文\" \"hello → world\" \"東京・大阪・京都\" \"「one」, 「two」, 「three」\" \"alpha • beta • gamma\" \"Name:张三 | Age:25 | City:北京\" \"100分, 200分, 300分\" \"été / café / naïve\" \"α + β + γ + δ\" \"文件/目录/名称\" (5 9))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"世界, 你好, 中文\" \"hello → world\" \"東京・大阪・京都\" \"「one」, 「two」, 「three」\" \"alpha • beta • gamma\" \"Name:张三 | Age:25 | City:北京\" \"100分, 200分, 300分\" \"été / café / naïve\" \"α + β + γ + δ\" \"文件/目录/名称\" (5 9))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -41,10 +41,8 @@ fn oracle_prop_gnu_subr_function_alias_p_and_readablep_contracts() {
           neovm-function-alias-a
           neovm-function-alias-b
           neovm-function-alias-subr)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 32 38)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 32 38)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -93,8 +91,6 @@ fn oracle_prop_define_obsolete_function_alias_metadata_edges() {
       (setplist sym nil))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 36 27)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 36 27)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -102,10 +102,8 @@ fn oracle_prop_deductive_db_fact_assertion_query() {
     (fmakunbound 'neovm--ddb-unify)
     (fmakunbound 'neovm--ddb-query)
     (fmakunbound 'neovm--ddb-binding-val)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 68 73)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 68 73)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -226,10 +224,8 @@ fn oracle_prop_deductive_db_rules_forward_chaining() {
     (fmakunbound 'neovm--ddb2-eval-body)
     (fmakunbound 'neovm--ddb2-apply-rule)
     (fmakunbound 'neovm--ddb2-forward-chain)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil iterations)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil iterations)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -351,10 +347,8 @@ fn oracle_prop_deductive_db_recursive_transitive_closure() {
     (fmakunbound 'neovm--ddb3-eval-body)
     (fmakunbound 'neovm--ddb3-apply-rule)
     (fmakunbound 'neovm--ddb3-fixpoint)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 nil nil nil t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 nil nil nil t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -479,12 +473,10 @@ fn oracle_prop_deductive_db_stratified_negation() {
     (fmakunbound 'neovm--ddb4-query-1)
     (fmakunbound 'neovm--ddb4-subst)
     (fmakunbound 'neovm--ddb4-exists-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"alice\" \"bob\") (\"alice\" \"bob\") (\"eve\") nil (\"math\" \"physics\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"alice\" \"bob\") (\"alice\" \"bob\") (\"eve\") nil (\"math\" \"physics\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -599,12 +591,10 @@ fn oracle_prop_deductive_db_magic_sets() {
     (fmakunbound 'neovm--ddb5-query-1)
     (fmakunbound 'neovm--ddb5-subst)
     (fmakunbound 'neovm--ddb5-magic-ancestor)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"alice\" \"bob\" \"charlie\" \"dave\" \"eve\" \"frank\" \"grace\") (\"alice->bob\" \"alice->charlie\" \"alice->dave\" \"alice->eve\" \"alice->frank\" \"alice->grace\" \"bob->charlie\" \"bob->dave\" \"bob->eve\" \"charlie->dave\" \"charlie->eve\" \"dave->eve\" \"frank->grace\") t t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"alice\" \"bob\" \"charlie\" \"dave\" \"eve\" \"frank\" \"grace\") (\"alice->bob\" \"alice->charlie\" \"alice->dave\" \"alice->eve\" \"alice->frank\" \"alice->grace\" \"bob->charlie\" \"bob->dave\" \"bob->eve\" \"charlie->dave\" \"charlie->eve\" \"dave->eve\" \"frank->grace\") t t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -739,10 +729,8 @@ fn oracle_prop_deductive_db_complex_query_bindings() {
     (fmakunbound 'neovm--ddb6-query-1)
     (fmakunbound 'neovm--ddb6-subst)
     (fmakunbound 'neovm--ddb6-join-query)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 69 43)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 69 43)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -835,8 +823,6 @@ fn oracle_prop_deductive_db_aggregation_grouping() {
     (fmakunbound 'neovm--ddb7-unify)
     (fmakunbound 'neovm--ddb7-query-1)
     (fmakunbound 'neovm--ddb7-group-by)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 48 59)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 48 59)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

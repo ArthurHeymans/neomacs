@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_marker_after_narrow_widen_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 7 7)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mnu\")))\n\
@@ -48,7 +49,7 @@ fn deficiency_marker_after_narrow_widen_undo_chain() {
          (get-text-property 1 'grp)\n\
          (get-text-property 7 'grp))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (args-out-of-range 7 7)""#]],
+        expect,
     );
 }
 
@@ -56,6 +57,7 @@ fn deficiency_marker_after_narrow_widen_undo_chain() {
 fn deficiency_marker_relocate_after_kill_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mrk\")))\n\
@@ -78,7 +80,7 @@ fn deficiency_marker_relocate_after_kill_undo() {
          (marker-position m2)\n\
          (marker-position m3))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -86,6 +88,7 @@ fn deficiency_marker_relocate_after_kill_undo() {
 fn deficiency_point_marker_after_replace_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"pmr\")))\n\
@@ -110,7 +113,7 @@ fn deficiency_point_marker_after_replace_undo() {
          (marker-position mp)\n\
          (get-text-property 23 'token))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -118,6 +121,7 @@ fn deficiency_point_marker_after_replace_undo() {
 fn deficiency_marker_in_visible_region_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mvr\")))\n\
@@ -147,7 +151,7 @@ fn deficiency_marker_in_visible_region_undo() {
          (get-text-property 6 'vis)\n\
          (get-text-property 11 'vis))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -155,6 +159,7 @@ fn deficiency_marker_in_visible_region_undo() {
 fn deficiency_multiple_markers_different_insert_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mmd\")))\n\
@@ -188,7 +193,7 @@ fn deficiency_multiple_markers_different_insert_types() {
          (marker-position m-nil2)\n\
          (marker-position m-t2))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -196,6 +201,7 @@ fn deficiency_multiple_markers_different_insert_types() {
 fn deficiency_marker_set_buffer_dead_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf1 (generate-new-buffer \"sb1\"))\n\
@@ -214,7 +220,7 @@ fn deficiency_marker_set_buffer_dead_marker() {
          (marker-position m))))\n\
          (kill-buffer buf1)\n\
          (kill-buffer buf2)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -222,6 +228,7 @@ fn deficiency_marker_set_buffer_dead_marker() {
 fn deficiency_region_narrow_marker_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rni\")))\n\
@@ -253,7 +260,7 @@ fn deficiency_region_narrow_marker_interaction() {
          (marker-position m2)\n\
          (get-text-property 5 'word)))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -261,6 +268,7 @@ fn deficiency_region_narrow_marker_interaction() {
 fn deficiency_marker_after_goto_char_insert_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mgu\")))\n\
@@ -281,7 +289,7 @@ fn deficiency_marker_after_goto_char_insert_undo() {
          (buffer-string)\n\
          (= (buffer-size) 10)))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -289,6 +297,7 @@ fn deficiency_marker_after_goto_char_insert_undo() {
 fn deficiency_point_max_after_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"pma\")))\n\
@@ -310,7 +319,7 @@ fn deficiency_point_max_after_undo() {
          (buffer-string)\n\
          (= (point-max) pm1)))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -318,6 +327,7 @@ fn deficiency_point_max_after_undo() {
 fn deficiency_marker_at_point_min_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mpm\")))\n\
@@ -341,6 +351,6 @@ fn deficiency_marker_at_point_min_undo() {
          (marker-position m2)\n\
          (= (point-min) 1)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

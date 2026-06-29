@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_adv2_before_after_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass adv2-ctx ()
@@ -89,7 +90,7 @@ fn combo_eieio_adv2_before_after_chain() {
               (overlay-start ov) (overlay-end ov)
               my-a2-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -97,6 +98,7 @@ fn combo_eieio_adv2_before_after_chain() {
 fn combo_eieio_adv2_around_wrapper() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass a2r-ctx ()
@@ -173,7 +175,7 @@ fn combo_eieio_adv2_around_wrapper() {
               (overlay-start ov) (overlay-end ov)
               my-a2r-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -181,6 +183,7 @@ fn combo_eieio_adv2_around_wrapper() {
 fn combo_eieio_adv2_override_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass a2o-ctx ()
@@ -245,7 +248,7 @@ fn combo_eieio_adv2_override_restore() {
               (overlay-start ov) (overlay-end ov)
               my-a2o-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -253,6 +256,7 @@ fn combo_eieio_adv2_override_restore() {
 fn combo_eieio_adv2_multi_fn_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass a2c-obj ()
@@ -335,7 +339,7 @@ fn combo_eieio_adv2_multi_fn_chain() {
               (overlay-start ov) (overlay-end ov)
               my-a2c-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -343,6 +347,7 @@ fn combo_eieio_adv2_multi_fn_chain() {
 fn combo_eieio_adv2_filter_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass a2f-ctx ()
@@ -416,6 +421,6 @@ fn combo_eieio_adv2_filter_args() {
               (overlay-start ov) (overlay-end ov)
               my-a2f-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }

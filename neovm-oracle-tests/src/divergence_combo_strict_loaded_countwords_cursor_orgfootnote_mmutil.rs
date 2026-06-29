@@ -11,6 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_o7_count_words_and_line_number() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (7 2 3 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -20,13 +21,15 @@ fn div_o7_count_words_and_line_number() {
         (line-number-at-pos (point-max))
         (line-number-at-pos 10)))
 "##,
-        expect_test::expect![[r#""OK (7 2 3 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_o7_what_cursor_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK \"Char: a (97, #o141, #x61) point=2 of 4 (25%) column=1\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -34,13 +37,14 @@ fn div_o7_what_cursor_position() {
   (goto-char 2)
   (what-cursor-position))
 "##,
-        expect_test::expect![[r#""OK \"Char: a (97, #o141, #x61) point=2 of 4 (25%) column=1\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_o7_org_footnote_labels() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"1\" \"mylabel\")""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
@@ -49,13 +53,14 @@ fn div_o7_org_footnote_labels() {
   (sort (org-footnote-all-labels) #'string<))
 "##,
         &["org/org.el", "org/org-footnote.el"],
-        expect_test::expect![[r#""OK (\"1\" \"mylabel\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_o7_mm_util_charset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function mm-find-mime-charset)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (mm-coding-system-p 'utf-8)
@@ -63,6 +68,6 @@ fn div_o7_mm_util_charset() {
       (length (mm-find-mime-charset "café" 1 4)))
 "##,
         &["gnus/mm-util.el"],
-        expect_test::expect![[r#""ERR (void-function mm-find-mime-charset)""#]],
+        expect,
     );
 }

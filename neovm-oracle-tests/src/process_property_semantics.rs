@@ -21,10 +21,8 @@ fn oracle_prop_process_live_p_non_processes_return_nil_like_gnu() {
  (process-live-p '(fake process)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil nil nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -50,12 +48,10 @@ fn oracle_prop_process_plist_get_put_contracts() {
       (ignore-errors (delete-process p)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t nil (alpha 1 :keyword (x y)) 1 (alpha 1 :keyword (x y)) (x y) nil (alpha 1 :keyword (x y)) (run open listen connect stop) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t nil (alpha 1 :keyword (x y)) 1 (alpha 1 :keyword (x y)) (x y) nil (alpha 1 :keyword (x y)) (run open listen connect stop) nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -72,10 +68,8 @@ fn oracle_prop_process_plist_accessors_signal_on_non_process() {
  (condition-case err (process-get "x" 'a) (error err)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-type-argument processp nil) (wrong-type-argument processp nil) (wrong-type-argument processp nil) (wrong-type-argument processp nil) (wrong-type-argument processp 42) (wrong-type-argument processp \"x\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-type-argument processp nil) (wrong-type-argument processp nil) (wrong-type-argument processp nil) (wrong-type-argument processp nil) (wrong-type-argument processp 42) (wrong-type-argument processp \"x\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

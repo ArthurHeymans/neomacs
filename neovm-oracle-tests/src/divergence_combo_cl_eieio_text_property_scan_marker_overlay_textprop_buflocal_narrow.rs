@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_text_property_any_scan() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass prop-scan-result ()
@@ -58,7 +59,7 @@ fn combo_eieio_text_property_any_scan() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -66,6 +67,7 @@ fn combo_eieio_text_property_any_scan() {
 fn combo_eieio_text_property_not_all_scan() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass notall-result ()
@@ -114,7 +116,7 @@ fn combo_eieio_text_property_not_all_scan() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -122,6 +124,7 @@ fn combo_eieio_text_property_not_all_scan() {
 fn combo_eieio_next_property_change_scan() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass change-point ()
@@ -171,7 +174,7 @@ fn combo_eieio_next_property_change_scan() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -179,6 +182,7 @@ fn combo_eieio_next_property_change_scan() {
 fn combo_eieio_property_scan_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass narrow-scan-result ()
@@ -233,7 +237,7 @@ fn combo_eieio_property_scan_narrow() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -241,6 +245,7 @@ fn combo_eieio_property_scan_narrow() {
 fn combo_eieio_property_scan_undo_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass edit-scan-snap ()
@@ -294,6 +299,6 @@ fn combo_eieio_property_scan_undo_edit() {
                 (overlay-start ov) (overlay-end ov)
                 (get-text-property 3 'zone)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

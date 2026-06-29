@@ -116,12 +116,10 @@ fn oracle_prop_minimax_advanced_game_tree_representation() {
     (fmakunbound 'neovm--mma-count-leaves)
     (fmakunbound 'neovm--mma-depth)
     (fmakunbound 'neovm--mma-leaf-values)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (7 9 7 4 6 4 2 2 3 (3 5 2 9) (1 4 7 2 5 8) (10 20 30 40) 1 0)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (7 9 7 4 6 4 2 2 3 (3 5 2 9) (1 4 7 2 5 8) (10 20 30 40) 1 0)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -222,10 +220,9 @@ fn oracle_prop_minimax_advanced_alpha_beta_counting() {
            (list (car c1) (car c2)))))
     (fmakunbound 'neovm--mma-mm-plain)
     (fmakunbound 'neovm--mma-mm-ab)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((8 8 t 15 12 t) (12 12 t 29 26 t) (15 13) (15 12))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((8 8 t 15 12 t) (12 12 t 29 26 t) (15 13) (15 12))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -358,12 +355,10 @@ fn oracle_prop_minimax_advanced_ttt_full_game() {
     (fmakunbound 'neovm--mma-ttt-ab)
     (fmakunbound 'neovm--mma-ttt-best-move)
     (fmakunbound 'neovm--mma-ttt-play-game)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (0 9 ((1 0) (2 4) (1 1) (2 2) (1 6) (2 3) (1 5) (2 7) (1 8)) 0 2 2)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (0 9 ((1 0) (2 4) (1 1) (2 2) (1 6) (2 3) (1 5) (2 7) (1 8)) 0 2 2)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -476,10 +471,8 @@ fn oracle_prop_minimax_advanced_move_ordering() {
     (fmakunbound 'neovm--mma-mo-order)
     (fmakunbound 'neovm--mma-mo-ab)
     (fmakunbound 'neovm--mma-mo-ab-unordered)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((9 9 t 15 17) (6 6) (15 15 t 11 15))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((9 9 t 15 17) (6 6) (15 15 t 11 15))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -560,12 +553,10 @@ fn oracle_prop_minimax_advanced_iterative_deepening() {
                   most-negative-fixnum most-positive-fixnum t)))
     (fmakunbound 'neovm--mma-id-ab)
     (fmakunbound 'neovm--mma-id-search)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (8 ((1 . 0) (2 . 5) (3 . 8) (4 . 8)) ((1 . 0) (2 . 6) (3 . 10) (4 . 10)) ((1 . 5) (2 . 3)) 0 8)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (8 ((1 . 0) (2 . 5) (3 . 8) (4 . 8)) ((1 . 0) (2 . 6) (3 . 10) (4 . 10)) ((1 . 5) (2 . 3)) 0 8)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -662,10 +653,8 @@ fn oracle_prop_minimax_advanced_negamax() {
     (fmakunbound 'neovm--mma-negamax)
     (fmakunbound 'neovm--mma-negamax-ab)
     (fmakunbound 'neovm--mma-std-mm)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((8 8 t) (8 8 t 15 12 t) (5 5 t) -3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((8 8 t) (8 8 t 15 12 t) (5 5 t) -3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -813,9 +802,7 @@ fn oracle_prop_minimax_advanced_connect_game() {
     (fmakunbound 'neovm--mma-c3-moves)
     (fmakunbound 'neovm--mma-c3-minimax)
     (fmakunbound 'neovm--mma-c3-best-col)))"#;
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (0 1 2 (0 1 2 3) (1 42) 2)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 1 2 (0 1 2 3) (1 42) 2)""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(0 1 2 (0 1 2 3) (1 42) 2)", &oracle, &neovm);
 }

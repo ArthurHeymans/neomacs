@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_kill_yank_with_text_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass kill-record ()
@@ -69,7 +70,7 @@ fn combo_eieio_kill_yank_with_text_props() {
                 (buffer-string)
                 records))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -77,6 +78,7 @@ fn combo_eieio_kill_yank_with_text_props() {
 fn combo_eieio_kill_yank_narrow_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass region-op ()
@@ -142,7 +144,7 @@ fn combo_eieio_kill_yank_narrow_overlay() {
                 (buffer-string)
                 ops))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -150,6 +152,7 @@ fn combo_eieio_kill_yank_narrow_overlay() {
 fn combo_eieio_kill_yank_multiple_yanks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 27 34)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass yank-tracker ()
@@ -213,7 +216,7 @@ fn combo_eieio_kill_yank_multiple_yanks() {
                 (buffer-string)
                 trackers))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 27 34)""#]],
+        expect,
     );
 }
 
@@ -221,6 +224,7 @@ fn combo_eieio_kill_yank_multiple_yanks() {
 fn combo_eieio_kill_yank_with_marker_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass anchor ()
@@ -273,7 +277,7 @@ fn combo_eieio_kill_yank_with_marker_types() {
                     (buffer-string)
                     anchors)))))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -281,6 +285,7 @@ fn combo_eieio_kill_yank_with_marker_types() {
 fn combo_eieio_kill_yank_undo_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable m)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass edit-step ()
@@ -333,6 +338,6 @@ fn combo_eieio_kill_yank_undo_chain() {
       (list (marker-position m) (overlay-start ov) (overlay-end ov) (buffer-string)
             steps))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-variable m)""#]],
+        expect,
     );
 }

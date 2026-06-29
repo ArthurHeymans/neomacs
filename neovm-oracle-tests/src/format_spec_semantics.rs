@@ -25,12 +25,10 @@ fn oracle_prop_format_spec_missing_and_quoted_percent_semantics() {
    (format-spec "missing=%z pct=%%" '((?a . "A")) 'keep-percent)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"known=A pct=%\" (error \"Invalid format character: ‘%z’\") \"missing=%z pct=%\" \"missing= pct=%\" \"missing=%z pct=%%\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"known=A pct=%\" (error \"Invalid format character: ‘%z’\") \"missing=%z pct=%\" \"missing= pct=%\" \"missing=%z pct=%%\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -52,12 +50,10 @@ fn oracle_prop_format_spec_flags_width_precision_and_case() {
    (format-spec "[%<06n]" '((?n . "abcdef")))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"[     abc]\" \"[abc     ]\" \"[00000042]\" \"[ABC]\" \"[abc]\" \"[abcd]\" \"[abcd]\" \"[cdef]\" \"[abcdef]\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"[     abc]\" \"[abc     ]\" \"[00000042]\" \"[ABC]\" \"[abc]\" \"[abcd]\" \"[abcd]\" \"[cdef]\" \"[abcdef]\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -80,12 +76,10 @@ fn oracle_prop_format_spec_split_and_lazy_functions() {
      (format-spec "x%ay%b" '((?a . "A") (?b . "B")) nil t))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"pre-A-mid-B-post\" 2 \"only-A\" 3 (\"x\" \"A\" \"y\" \"B\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"pre-A-mid-B-post\" 2 \"only-A\" 3 (\"x\" \"A\" \"y\" \"B\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -108,10 +102,8 @@ fn oracle_prop_format_spec_make_and_invalid_inputs() {
      (error (list (car err) (cadr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"A:B\" (error \"Invalid list of pairs\") (error \"Invalid format string\") (error \"Invalid format string\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"A:B\" (error \"Invalid list of pairs\") (error \"Invalid format string\") (error \"Invalid format string\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

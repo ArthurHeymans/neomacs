@@ -62,10 +62,8 @@ fn oracle_directory_files_recursively_order_predicate_symlink_and_error_edges() 
     (ignore-errors (delete-directory dir))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"a/a.el\" \"skip/skip.el\" \"root.el\") (\"a/a.el\" \"a\" \"alink\" \"b/b.txt\" \"b\" \"skip/skip.el\" \"skip\" \"root.el\") (\"a/a.el\" \"root.el\") (\"a/a.el\" \"alink/a.el\" \"skip/skip.el\" \"root.el\") (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)) (wrong-number-of-arguments ((2 . 5) 0)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"a/a.el\" \"skip/skip.el\" \"root.el\") (\"a/a.el\" \"a\" \"alink\" \"b/b.txt\" \"b\" \"skip/skip.el\" \"skip\" \"root.el\") (\"a/a.el\" \"root.el\") (\"a/a.el\" \"alink/a.el\" \"skip/skip.el\" \"root.el\") (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)) (wrong-number-of-arguments ((2 . 5) 0)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

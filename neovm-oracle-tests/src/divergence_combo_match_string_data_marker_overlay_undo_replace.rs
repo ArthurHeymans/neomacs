@@ -14,6 +14,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_match_string_groups_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     // Access match groups after re-search-forward; markers track.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -59,7 +60,7 @@ fn combo_match_string_groups_marker_overlay_undo() {
                                   (get-text-property 21 'grp))))
               (kill-buffer buf)
               (list after restored)))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -67,6 +68,7 @@ fn combo_match_string_groups_marker_overlay_undo() {
 fn combo_replace_match_backreference_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     // Replace with backreferences; markers/overlays track.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -101,7 +103,7 @@ fn combo_replace_match_backreference_marker_overlay_undo() {
                                 (get-text-property 23 'word))))
             (kill-buffer buf)
             (list after restored)))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -109,6 +111,7 @@ fn combo_replace_match_backreference_marker_overlay_undo() {
 fn combo_replace_match_fixedcase_literal_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     // Replace with fixedcase and literal flags; markers track.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -146,7 +149,7 @@ fn combo_replace_match_fixedcase_literal_marker_overlay_undo() {
                                 (get-text-property 31 'case))))
             (kill-buffer buf)
             (list after restored)))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -154,6 +157,7 @@ fn combo_replace_match_fixedcase_literal_marker_overlay_undo() {
 fn combo_match_data_save_restore_across_call_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     // Save/restore match-data across function calls.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -193,7 +197,7 @@ fn combo_match_data_save_restore_across_call_marker_overlay() {
                                       (get-text-property 17 'grp))))
                 (kill-buffer buf)
                 (list inner-match restored-match after after-undo))))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -201,6 +205,7 @@ fn combo_match_data_save_restore_across_call_marker_overlay() {
 fn combo_match_data_with_narrow_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 31 40)""#]];
     // Match data in narrowed buffer; markers track.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -247,6 +252,6 @@ fn combo_match_data_with_narrow_marker_overlay_undo() {
                                   (get-text-property 31 'grp))))
               (kill-buffer buf)
               (list after restored)))))))) "#,
-        expect_test::expect![[r#""ERR (args-out-of-range 31 40)""#]],
+        expect,
     );
 }

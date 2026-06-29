@@ -59,10 +59,8 @@ fn oracle_prop_church_booleans() {
                                 (funcall to-bool
                                          (funcall OR (funcall NOT p)
                                                   (funcall NOT q))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil t nil nil nil t t t nil nil t t yes no t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil t nil nil nil t t t nil nil t t yes no t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -126,10 +124,8 @@ fn oracle_prop_church_numerals_basic() {
                                   (funcall MULT
                                            (funcall PLUS TWO THREE)
                                            (funcall PLUS ONE ONE)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 1 2 3 5 5 4 10 6 12 0 5 10 10)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 1 2 3 5 5 4 10 6 12 0 5 10 10)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -197,10 +193,8 @@ fn oracle_prop_church_pred_iszero() {
                                       (funcall SND
                                                (funcall PAIR TWO FOUR))) ;; 4
                              )))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 55 36)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 55 36)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -273,12 +267,10 @@ fn oracle_prop_church_lists() {
                            ;; Map
                            (funcall to-list doubled)
                            (funcall SUM doubled))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((10 20 30) 10 t nil 60 3 (10 20 30 40 50) 5 150 (20 40 60) 120)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((10 20 30) 10 t nil 60 3 (10 20 30 40 50) 5 150 (20 40 60) 120)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -333,10 +325,8 @@ fn oracle_prop_y_combinator_recursion() {
                          (funcall sum-list '(1 2 3 4 5))
                          (funcall sum-list nil)
                          (funcall sum-list '(10 20 30))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 1 120 5040 0 1 8 55 15 0 60)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 1 120 5040 0 1 8 55 15 0 60)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -410,10 +400,8 @@ fn oracle_prop_church_exponentiation() {
                                     (funcall EXP
                                              (funcall PLUS THREE ONE)
                                              TWO))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 61 56)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 61 56)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -509,8 +497,6 @@ fn oracle_prop_lambda_calculus_evaluator() {
                 '(add (add (lit 1) (lit 2)) (add (lit 3) (lit 4)))))
     (fmakunbound 'neovm--test-lc-subst)
     (fmakunbound 'neovm--test-lc-eval)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (5 11 7 2 2 10)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (5 11 7 2 2 10)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

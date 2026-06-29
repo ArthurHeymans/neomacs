@@ -13,6 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_eo_defclass_make_instance_accessor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument symbol 'name slot)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -21,13 +22,14 @@ fn div_eo_defclass_make_instance_accessor() {
   (let ((a (neo-animal :name "rex")))
     (list (animal-name a) (oref a name) (oref-default 'neo-animal 'name))))
 "##,
-        expect_test::expect![[r#""ERR (wrong-type-argument symbol 'name slot)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_eo_initform_evaluation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument symbol 'count slot)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -35,13 +37,14 @@ fn div_eo_initform_evaluation() {
   (list (oref (neo-ifm) count)
         (oref-default 'neo-ifm 'count)))
 "##,
-        expect_test::expect![[r#""ERR (wrong-type-argument symbol 'count slot)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_eo_reader_writer_accessor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (cl-no-applicable-method set-s 9 #s(neo-rwa 5))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -51,13 +54,14 @@ fn div_eo_reader_writer_accessor() {
     (set-s 9 o)
     (list (get-s o) (acc-s o))))
 "##,
-        expect_test::expect![[r#""ERR (cl-no-applicable-method set-s 9 #s(neo-rwa 5))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_eo_slot_boundp_unbound() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -66,13 +70,14 @@ fn div_eo_slot_boundp_unbound() {
     (list (slot-boundp o 's)
           (progn (oset o s 7) (slot-boundp o 's)))))
 "##,
-        expect_test::expect![[r#""OK (nil t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_eo_slot_type_validation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (invalid-slot-type 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -80,7 +85,7 @@ fn div_eo_slot_type_validation() {
   (list (condition-case err (neo-ty :n "string") (error (car err)))
         (oref (neo-ty :n 3) n)))
 "##,
-        expect_test::expect![[r#""OK (invalid-slot-type 3)""#]],
+        expect,
     );
 }
 
@@ -89,6 +94,7 @@ fn div_eo_slot_type_validation() {
 #[test]
 fn div_eo_single_inheritance_slots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (10 20 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -99,13 +105,14 @@ fn div_eo_single_inheritance_slots() {
           (object-of-class-p o 'neo-base)
           (child-of-class-p 'neo-sub 'neo-base))))
 "##,
-        expect_test::expect![[r#""OK (10 20 t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_eo_multiple_inheritance_slots() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 2 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -117,13 +124,14 @@ fn div_eo_multiple_inheritance_slots() {
           (object-of-class-p o 'neo-m1)
           (object-of-class-p o 'neo-m2))))
 "##,
-        expect_test::expect![[r#""OK (1 2 t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_eo_initform_inheritance_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:parent :child)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -131,13 +139,14 @@ fn div_eo_initform_inheritance_override() {
   (defclass neo-ci (neo-pi) ((s :initarg :s :initform :child)))
   (list (oref (neo-pi) s) (oref (neo-ci) s)))
 "##,
-        expect_test::expect![[r#""OK (:parent :child)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_eo_class_identity_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -149,13 +158,14 @@ fn div_eo_class_identity_predicates() {
           (object-of-class-p o 'neo-id)
           (child-of-class-p 'neo-id2 'neo-id))))
 "##,
-        expect_test::expect![[r#""OK (t nil t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_eo_class_of_and_find_class() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (neo-co t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -164,7 +174,7 @@ fn div_eo_class_of_and_find_class() {
     (list (eieio-object-class o)
           (eq (eieio-object-class o) (eieio-object-class (neo-co))))))
 "##,
-        expect_test::expect![[r#""OK (neo-co t)""#]],
+        expect,
     );
 }
 
@@ -173,6 +183,7 @@ fn div_eo_class_of_and_find_class() {
 #[test]
 fn div_eo_method_primary_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (shape circle)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -183,13 +194,14 @@ fn div_eo_method_primary_dispatch() {
   (cl-defmethod neo-area ((obj neo-circle)) 'circle)
   (list (neo-area (neo-shape)) (neo-area (neo-circle))))
 "##,
-        expect_test::expect![[r#""OK (shape circle)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_eo_method_no_specializer_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (specialized unspecialized)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -199,13 +211,14 @@ fn div_eo_method_no_specializer_default() {
   (cl-defmethod neo-gn (obj) 'unspecialized)
   (list (neo-gn (neo-cd)) (neo-gn 42)))
 "##,
-        expect_test::expect![[r#""OK (specialized unspecialized)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_eo_method_before_after_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:before :primary :after)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -218,13 +231,14 @@ fn div_eo_method_before_after_order() {
     (neo-gba (neo-ba))
     (reverse order)))
 "##,
-        expect_test::expect![[r#""OK (:before :primary :after)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_eo_method_around_call_next_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:around primary)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -234,13 +248,14 @@ fn div_eo_method_around_call_next_method() {
   (cl-defmethod neo-gar :around ((obj neo-ar)) (list :around (cl-call-next-method)))
   (neo-gar (neo-ar)))
 "##,
-        expect_test::expect![[r#""OK (:around primary)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_eo_method_call_next_method_no_next() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function next-method-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -250,13 +265,14 @@ fn div_eo_method_call_next_method_no_next() {
     (list (next-method-p) (condition-case err (cl-call-next-method) (error (car err)))))
   (neo-gnn (neo-nn)))
 "##,
-        expect_test::expect![[r#""ERR (void-function next-method-p)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_eo_method_inherited_dispatch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK from-base""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -266,13 +282,14 @@ fn div_eo_method_inherited_dispatch() {
   (cl-defmethod neo-gm ((obj neo-mbase)) 'from-base)
   (neo-gm (neo-msub)))
 "##,
-        expect_test::expect![[r#""OK from-base""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_eo_method_around_only_no_primary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (cl-no-primary-method neo-gao #s(neo-ao))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -281,13 +298,14 @@ fn div_eo_method_around_only_no_primary() {
   (cl-defmethod neo-gao :around ((obj neo-ao)) (list :around (next-method-p)))
   (neo-gao (neo-ao)))
 "##,
-        expect_test::expect![[r#""ERR (cl-no-primary-method neo-gao #s(neo-ao))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_eo_static_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (cl-no-applicable-method neo-sm-doit neo-sm)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -297,13 +315,14 @@ fn div_eo_static_method() {
     (list (neo-sm-doit 'neo-sm)
           (neo-sm-doit o))))
 "##,
-        expect_test::expect![[r#""ERR (cl-no-applicable-method neo-sm-doit neo-sm)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_eo_eql_specializer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (class-eql instance)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -314,7 +333,7 @@ fn div_eo_eql_specializer() {
     (cl-defmethod neo-geql ((obj neo-eq)) 'instance)
     (list (neo-geql 'neo-eq) (neo-geql o))))
 "##,
-        expect_test::expect![[r#""OK (class-eql instance)""#]],
+        expect,
     );
 }
 
@@ -323,6 +342,7 @@ fn div_eo_eql_specializer() {
 #[test]
 fn div_eo_class_allocation_shared() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -332,13 +352,14 @@ fn div_eo_class_allocation_shared() {
     (oset o1 shared 5)
     (list (oref o1 shared) (oref o2 shared))))
 "##,
-        expect_test::expect![[r#""OK (5 5)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_eo_oset_default_changes_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument symbol 's slot)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -348,7 +369,7 @@ fn div_eo_oset_default_changes_default() {
     (let ((o2 (neo-od)))
       (list (oref o1 s) (oref o2 s)))))
 "##,
-        expect_test::expect![[r#""ERR (wrong-type-argument symbol 's slot)""#]],
+        expect,
     );
 }
 
@@ -357,6 +378,7 @@ fn div_eo_oset_default_changes_default() {
 #[test]
 fn div_eo_with_slots_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 3""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -364,13 +386,16 @@ fn div_eo_with_slots_macro() {
   (let ((o (neo-ws :a 1 :b 2)))
     (with-slots (a b) o (+ a b))))
 "##,
-        expect_test::expect![[r#""OK 3""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_eo_object_slots_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-type-argument symbolp #s(cl-slot-descriptor a 'eieio--unbound t nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -378,9 +403,7 @@ fn div_eo_object_slots_list() {
   (let ((o (neo-sl :a 1 :b 2)))
     (sort (mapcar #'symbol-name (eieio-class-slots 'neo-sl)) #'string<)))
 "##,
-        expect_test::expect![[
-            r#""ERR (wrong-type-argument symbolp #s(cl-slot-descriptor a 'eieio--unbound t nil))""#
-        ]],
+        expect,
     );
 }
 
@@ -389,6 +412,7 @@ fn div_eo_object_slots_list() {
 #[test]
 fn div_eo_qualified_methods_accumulate_subclass() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:base :sub-after)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn
@@ -401,6 +425,6 @@ fn div_eo_qualified_methods_accumulate_subclass() {
     (neo-gq (neo-q-sub))
     (reverse order)))
 "##,
-        expect_test::expect![[r#""OK (:base :sub-after)""#]],
+        expect,
     );
 }

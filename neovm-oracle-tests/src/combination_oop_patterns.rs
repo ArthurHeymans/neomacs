@@ -44,10 +44,8 @@ fn oracle_prop_oop_plist_objects() {
                          ;; Original p1 unchanged
                          (funcall point-x p1)             ;; 3
                          (plist-get p1 :type)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 4 25 13 24 3 point)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 4 25 13 24 3 point)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -91,12 +89,10 @@ fn oracle_prop_oop_closure_encapsulation() {
                         (list (funcall balance)
                               fail-result
                               (funcall history)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (320 (error \"insufficient funds\" 320) ((deposit 50 150) (withdraw 30 120) (deposit 200 320)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (320 (error \"insufficient funds\" 320) ((deposit 50 150) (withdraw 30 120) (deposit 200 320)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -161,12 +157,10 @@ fn oracle_prop_oop_prototype_chain() {
                        (let ((child2 (funcall obj-set child 'color "brown")))
                          (list (funcall obj-get child2 'color)
                                (funcall obj-get parent 'color))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Rex\" \"woof\" \"mammal\" 4 nil \"generic\" \"animal\" (\"brown\" nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Rex\" \"woof\" \"mammal\" 4 nil \"generic\" \"animal\" (\"brown\" nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -220,12 +214,10 @@ fn oracle_prop_oop_method_dispatch_table() {
                        (funcall dispatch whiskers 'describe)
                        (funcall dispatch rex 'greet whiskers)
                        (funcall dispatch whiskers 'greet rex))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"woof!\" \"meow!\" \"Rex the dog\" \"Whiskers the cat\" \"Rex greets Whiskers with woof!\" \"Whiskers greets Rex with meow!\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"woof!\" \"meow!\" \"Rex the dog\" \"Whiskers the cat\" \"Rex greets Whiskers with woof!\" \"Whiskers greets Rex with meow!\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -299,12 +291,10 @@ fn oracle_prop_oop_mixin_pattern() {
                                (funcall mixin-call task2 all-methods 'less-than task1)
                                (funcall mixin-call task1 all-methods 'equal-to task2)
                                (funcall mixin-call task1 all-methods 'serialize))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"[task: Build]\" \"[task: Test]\" nil t nil \":type=task,:name=\\\"Build\\\",:priority=2\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"[task: Build]\" \"[task: Test]\" nil t nil \":type=task,:name=\\\"Build\\\",:priority=2\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -374,10 +364,8 @@ fn oracle_prop_oop_event_emitter() {
                             (list r1 r2 r3 r4
                                   c1 c2 c3 r5
                                   (nreverse log)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((got 42) (doubled 84)) ((got 7) (doubled 14)) (handled) nil 2 1 0 nil ((listener1 42) (listener2 84) (listener1 7) (listener2 14) (error \"boom\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((got 42) (doubled 84)) ((got 7) (doubled 14)) (handled) nil 2 1 0 nil ((listener1 42) (listener2 84) (listener1 7) (listener2 14) (error \"boom\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

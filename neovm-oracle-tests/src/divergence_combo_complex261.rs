@@ -9,19 +9,21 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx261_run_hooks_with_nil_var() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK :ran-no-error""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((neo-cx261-hook nil))
   (run-hooks 'neo-cx261-hook)
   :ran-no-error)
 "##,
-        expect_test::expect![[r#""OK :ran-no-error""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx261_add_hook_with_depth() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:first :second :third)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -37,13 +39,14 @@ fn div_cx261_add_hook_with_depth() {
       (remove-hook 'neo-cx261-depth-hook fn2)
       (remove-hook 'neo-cx261-depth-hook fn3))))
 "##,
-        expect_test::expect![[r#""OK (:first :second :third)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx261_run_hook_with_args_until_success() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:success ((:h3 :arg) (:h2 :arg)))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -59,13 +62,14 @@ fn div_cx261_run_hook_with_args_until_success() {
         (remove-hook 'neo-cx261-succ-hook fn2)
         (remove-hook 'neo-cx261-succ-hook fn3)))))
 "##,
-        expect_test::expect![[r#""OK (:success ((:h3 :arg) (:h2 :arg)))""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx261_run_hook_with_args_until_failure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil ((:h3 :arg)))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -81,13 +85,14 @@ fn div_cx261_run_hook_with_args_until_failure() {
         (remove-hook 'neo-cx261-fail-hook fn2)
         (remove-hook 'neo-cx261-fail-hook fn3)))))
 "##,
-        expect_test::expect![[r#""OK (nil ((:h3 :arg)))""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx261_run_hook_wrapped() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:wrap-enter :normal :wrap-exit)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -102,13 +107,14 @@ fn div_cx261_run_hook_wrapped() {
     (prog1 (nreverse calls)
       (remove-hook 'neo-cx261-wrap-hook fn))))
 "##,
-        expect_test::expect![[r#""OK (:wrap-enter :normal :wrap-exit)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx261_hook_buffer_local_persistence() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -125,13 +131,14 @@ fn div_cx261_hook_buffer_local_persistence() {
         (list in-buf in-temp))))
   (setq neo-cx261-local-hook nil))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx261_hook_permanent_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:perm)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -146,13 +153,14 @@ fn div_cx261_hook_permanent_local() {
       (kill-buffer buf)
       result)))
 "##,
-        expect_test::expect![[r#""OK (:perm)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx261_hook_with_symbol_and_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:via-lambda :via-symbol)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -163,26 +171,28 @@ fn div_cx261_hook_with_symbol_and_function() {
   (prog1 (nreverse calls)
     (remove-hook 'neo-cx261-mixed-hook 'neo-cx261-hook-fn)))
 "##,
-        expect_test::expect![[r#""OK (:via-lambda :via-symbol)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx261_hook_nil_and_empty_hook_var() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (run-hook-with-args-until-success 'neo-cx261-empty-hook :x)
       (run-hook-with-args-until-failure 'neo-cx261-empty-hook :x)
       (run-hooks 'neo-cx261-empty-hook))
 "##,
-        expect_test::expect![[r#""OK (nil t nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx261_hook_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -212,6 +222,6 @@ fn div_cx261_hook_with_marker_overlay_undo_narrow_mega() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     )
 }

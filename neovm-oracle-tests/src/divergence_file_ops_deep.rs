@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_file_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t 12 t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((attrs (file-attributes ".")))
   (list (consp attrs)
@@ -14,7 +15,7 @@ fn divergence_file_attributes() {
         (file-directory-p ".")
         (file-symlink-p ".")
         (integerp (nth 7 attrs))))"#,
-        expect_test::expect![[r#""OK (t 12 t nil t)""#]],
+        expect,
     );
 }
 
@@ -22,6 +23,7 @@ fn divergence_file_attributes() {
 fn divergence_file_mtime_size() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let* ((tmp (make-temp-file "neovm-mtime-"))
           (attrs (file-attributes tmp)))
@@ -32,7 +34,7 @@ fn divergence_file_mtime_size() {
             (file-writable-p tmp)
             (file-readable-p tmp))
     (delete-file tmp)))"#,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
@@ -40,6 +42,9 @@ fn divergence_file_mtime_size() {
 fn divergence_expand_file_name_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (\"/home/exec/Projects/github.com/eval-exec/neomacs-main/foo/baz\" \"/home/exec/test\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/test\" \"/absolute/path\" t nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (expand-file-name "foo/bar/../baz")
@@ -48,9 +53,7 @@ fn divergence_expand_file_name_edge() {
   (expand-file-name "/absolute/path")
   (file-name-absolute-p "/foo")
   (file-name-absolute-p "foo"))"#,
-        expect_test::expect![[
-            r#""OK (\"/home/exec/Projects/github.com/eval-exec/neomacs-main/foo/baz\" \"/home/exec/test\" \"/home/exec/Projects/github.com/eval-exec/neomacs-main/test\" \"/absolute/path\" t nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -58,6 +61,8 @@ fn divergence_expand_file_name_edge() {
 fn divergence_file_name_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""OK (\"/a/b/\" \"c.txt\" \"el\" \"gz\" \"test\" \"test\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (file-name-directory "/a/b/c.txt")
@@ -66,7 +71,7 @@ fn divergence_file_name_operations() {
   (file-name-extension "test.tar.gz")
   (file-name-sans-extension "test.el")
   (file-name-base "test.el"))"#,
-        expect_test::expect![[r#""OK (\"/a/b/\" \"c.txt\" \"el\" \"gz\" \"test\" \"test\")""#]],
+        expect,
     );
 }
 
@@ -74,6 +79,7 @@ fn divergence_file_name_operations() {
 fn divergence_file_copy_rename() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t \"content\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((src (make-temp-file "neovm-copy-src-"))
         dst)
@@ -89,7 +95,7 @@ fn divergence_file_copy_rename() {
                 (buffer-string))))
     (when (file-exists-p src) (delete-file src))
     (when (file-exists-p dst) (delete-file dst))))"#,
-        expect_test::expect![[r#""OK (t t \"content\")""#]],
+        expect,
     );
 }
 
@@ -97,6 +103,7 @@ fn divergence_file_copy_rename() {
 fn divergence_make_directory() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t (\".\" \"..\") 2)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((dir (make-temp-file "neovm-mkdir-" t)))
   (unwind-protect
@@ -105,7 +112,7 @@ fn divergence_make_directory() {
             (directory-files dir)
             (length (directory-files dir)))
     (delete-directory dir t)))"#,
-        expect_test::expect![[r#""OK (t t (\".\" \"..\") 2)""#]],
+        expect,
     );
 }
 
@@ -113,13 +120,14 @@ fn divergence_make_directory() {
 fn divergence_path_separators() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable directory-sep-char)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (stringp path-separator)
   (string= path-separator ":")
   (stringp directory-sep-char)
   (= directory-sep-char ?/))"#,
-        expect_test::expect![[r#""ERR (void-variable directory-sep-char)""#]],
+        expect,
     );
 }
 
@@ -127,13 +135,14 @@ fn divergence_path_separators() {
 fn divergence_file_executable() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (nil t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (file-executable-p "/bin/ls")
   (file-executable-p "/bin/sh")
   (file-modes "/bin/ls")
   (integerp (file-modes "/bin/ls")))"#,
-        expect_test::expect![[r#""OK (nil t nil nil)""#]],
+        expect,
     );
 }
 
@@ -141,6 +150,7 @@ fn divergence_file_executable() {
 fn divergence_write_read_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (\"Hello World\" 11)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((tmp (make-temp-file "neovm-rw-")))
   (unwind-protect
@@ -151,7 +161,7 @@ fn divergence_write_read_region() {
                 (buffer-string))
               (file-attribute-size (file-attributes tmp))))
     (delete-file tmp)))"#,
-        expect_test::expect![[r#""OK (\"Hello World\" 11)""#]],
+        expect,
     );
 }
 
@@ -159,6 +169,7 @@ fn divergence_write_read_region() {
 fn divergence_insert_file_contents_partial() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK \"DEFG\"""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((tmp (make-temp-file "neovm-partial-")))
   (unwind-protect
@@ -168,6 +179,6 @@ fn divergence_insert_file_contents_partial() {
           (insert-file-contents tmp nil 3 7)
           (buffer-string)))
     (delete-file tmp)))"#,
-        expect_test::expect![[r#""OK \"DEFG\"""#]],
+        expect,
     );
 }

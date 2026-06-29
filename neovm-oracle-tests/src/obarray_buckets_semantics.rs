@@ -25,10 +25,8 @@ fn oracle_internal_obarray_buckets_shape_contents_and_errors() {
      (error (cons (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (2 ((\"alpha\" \"beta\") nil) (wrong-type-argument obarrayp [not-obarray]))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (2 ((\"alpha\" \"beta\") nil) (wrong-type-argument obarrayp [not-obarray]))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

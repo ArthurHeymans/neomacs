@@ -8,6 +8,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx90_advice_add_before_after_around() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (42 ((:around-enter 21) (:before 21) (:primary 21) (:after 21) (:around-exit 42)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -25,15 +28,14 @@ fn div_cx90_advice_add_before_after_around() {
                (nreverse calls))
     (advice-remove 'neo-cx90-target (advice--p (advice-member-p nil 'neo-cx90-target)))))
 "##,
-        expect_test::expect![[
-            r#""OK (42 ((:around-enter 21) (:before 21) (:primary 21) (:after 21) (:around-exit 42)))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx90_advice_override_completely_replaces() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (42 4100 4100)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (defun neo-cx90-orig (x) (+ x 1))
@@ -43,13 +45,14 @@ fn div_cx90_advice_override_completely_replaces() {
     (advice-remove 'neo-cx90-orig (advice--p (advice-member-p nil 'neo-cx90-orig)))
     (list before-orig after-advice (neo-cx90-orig 41))))
 "##,
-        expect_test::expect![[r#""OK (42 4100 4100)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx90_advice_filter_args_modifies_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 60""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (defun neo-cx90-sum (&rest args) (apply #'+ args))
@@ -59,13 +62,14 @@ fn div_cx90_advice_filter_args_modifies_args() {
   (advice-remove 'neo-cx90-sum (advice--p (advice-member-p nil 'neo-cx90-sum)))
   result)
 "##,
-        expect_test::expect![[r#""OK 60""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx90_advice_filter_return_modifies_return() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 200""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -78,13 +82,14 @@ fn div_cx90_advice_filter_return_modifies_return() {
         result))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK 200""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx90_advice_before_until_skips_primary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t (:bu))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -97,13 +102,14 @@ fn div_cx90_advice_before_until_skips_primary() {
         (list result (nreverse calls))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t (:bu))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx90_advice_after_while_runs_only_if_return_true() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil (:aw))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -116,13 +122,14 @@ fn div_cx90_advice_after_while_runs_only_if_return_true() {
         (list r1 (nreverse calls))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil (:aw))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx90_advice_multiple_ordering_named() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:r (:third :second :first :primary))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -136,13 +143,14 @@ fn div_cx90_advice_multiple_ordering_named() {
     (dolist (name '(:first :second :third))
       (advice-remove 'neo-cx90-multi name))))
 "##,
-        expect_test::expect![[r#""OK (:r (:third :second :first :primary))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx90_advice_member_p_and_advice_mapc() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((advice oclosure) 1 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (defun neo-cx90-check () :ok)
@@ -155,13 +163,14 @@ fn div_cx90_advice_member_p_and_advice_mapc() {
     (let ((members-after (advice--p (advice-member-p 'my-advice 'neo-cx90-check))))
       (list members-before count members-after))))
 "##,
-        expect_test::expect![[r#""OK ((advice oclosure) 1 nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx90_advice_chain_on_subr_builtin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 1 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -175,13 +184,14 @@ fn div_cx90_advice_chain_on_subr_builtin() {
         (list result num-calls (car '(4 5 6)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (1 1 4)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx90_advice_on_lambda_via_symbol() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (15 (:before :primary))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -191,13 +201,14 @@ fn div_cx90_advice_on_lambda_via_symbol() {
     (advice-remove 'neo-cx90-lam (advice--p (advice-member-p nil 'neo-cx90-lam)))
     (list r (nreverse calls))))
 "##,
-        expect_test::expect![[r#""OK (15 (:before :primary))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx90_define_advice_legacy_form() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 50""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -210,13 +221,14 @@ fn div_cx90_define_advice_legacy_form() {
         r))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK 50""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx90_advice_chain_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (calls)
@@ -252,6 +264,6 @@ fn div_cx90_advice_chain_with_marker_overlay_undo_narrow_mega() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }

@@ -20,12 +20,10 @@ fn oracle_prop_format_prompt_default_presence() {
    (format-prompt "Name" '(first second third))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Name (default alice): \" \"Name: \" \"Name: \" \"Name (default 42): \" \"Name (default first): \")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Name (default alice): \" \"Name: \" \"Name: \" \"Name (default 42): \" \"Name (default first): \")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -40,12 +38,10 @@ fn oracle_prop_format_prompt_prompt_format_arguments() {
    (format-prompt "%s/%s" '("main" "ignored") "branch" "remote")))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Open file [README.md]: \" \"Replace old with new [new]: \" \"branch/remote [main]: \")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Open file [README.md]: \" \"Replace old with new [new]: \" \"branch/remote [main]: \")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -62,12 +58,10 @@ fn oracle_prop_format_prompt_custom_default_prompt_format() {
    (format-prompt "No suffix" "x")))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Project {neomacs}: \" \"Value default=alpha: \" \"No suffix: \")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Project {neomacs}: \" \"Value default=alpha: \" \"No suffix: \")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -81,10 +75,8 @@ fn oracle_prop_format_prompt_substitute_command_keys() {
    (format-prompt "Command `%s'" "M-x" "compile")))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (#(\"Use C-x C-f (default ‘path’): \" 4 11 (face help-key-binding font-lock-face help-key-binding)) \"Command ‘compile’ (default ‘M-x’): \")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (#(\"Use C-x C-f (default ‘path’): \" 4 11 (face help-key-binding font-lock-face help-key-binding)) \"Command ‘compile’ (default ‘M-x’): \")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

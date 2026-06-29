@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_char_prop_vs_text_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass style ()
@@ -49,7 +50,7 @@ fn combo_eieio_char_prop_vs_text_prop() {
                 (buffer-string)
                 my-styles))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -57,6 +58,7 @@ fn combo_eieio_char_prop_vs_text_prop() {
 fn combo_eieio_char_prop_overlay_priority_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass priority-val ()
@@ -105,7 +107,7 @@ fn combo_eieio_char_prop_overlay_priority_order() {
                 (buffer-string)
                 my-pvs))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -113,6 +115,7 @@ fn combo_eieio_char_prop_overlay_priority_order() {
 fn combo_eieio_char_prop_narrow_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass zone-val ()
@@ -158,7 +161,7 @@ fn combo_eieio_char_prop_narrow_boundary() {
                 (buffer-string)
                 my-zvs))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -166,6 +169,7 @@ fn combo_eieio_char_prop_narrow_boundary() {
 fn combo_eieio_char_prop_multiple_overlays_same_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass tag ()
@@ -221,7 +225,7 @@ fn combo_eieio_char_prop_multiple_overlays_same_prop() {
                 (buffer-string)
                 my-tags))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -229,6 +233,7 @@ fn combo_eieio_char_prop_multiple_overlays_same_prop() {
 fn combo_eieio_char_prop_eq_identity_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass identity-tag ()
@@ -273,6 +278,6 @@ fn combo_eieio_char_prop_eq_identity_check() {
                 (buffer-string)
                 my-tags))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

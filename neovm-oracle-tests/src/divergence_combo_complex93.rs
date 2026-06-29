@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx93_char_table_parent_inheritance_and_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:child-a :default :default :parent-a t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((parent (make-char-table 'neo-cx93-parent :default))
@@ -23,13 +24,16 @@ fn div_cx93_char_table_parent_inheritance_and_override() {
         (char-table-p child)
         (eq (char-table-parent child) parent)))
 "##,
-        expect_test::expect![[r#""OK (:child-a :default :default :parent-a t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx93_char_table_range_chains() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:default :lower :upper :digit :underscore :default :lower)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'neo-cx93-range nil)))
@@ -46,15 +50,14 @@ fn div_cx93_char_table_range_chains() {
         (char-table-range ct ?!)
         (aref ct ?a)))
 "##,
-        expect_test::expect![[
-            r#""OK (:default :lower :upper :digit :underscore :default :lower)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx93_category_table_define_and_modify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -71,13 +74,16 @@ fn div_cx93_category_table_define_and_modify() {
             (category-set-mnemonics (char-category-set ?a ct))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx93_with_temp_buffer_window_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (t \"*My Temp Buffer*\" \"content in temp window\nsecond line\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -93,15 +99,14 @@ fn div_cx93_with_temp_buffer_window_display() {
           (when buf (kill-buffer buf)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (t \"*My Temp Buffer*\" \"content in temp window\nsecond line\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx93_with_help_window_isolated() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t \"\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -115,13 +120,15 @@ fn div_cx93_with_help_window_isolated() {
           (when help-buf (kill-buffer help-buf)))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t \"\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx93_char_table_map_collect_categories() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((:special . 1) (:vowel-or-low . 1) (:vowel-or-up . 1))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'neo-cx93-mapped nil)))
@@ -139,13 +146,14 @@ fn div_cx93_char_table_map_collect_categories() {
     (sort counts (lambda (a b)
                    (string< (symbol-name (car a)) (symbol-name (car b)))))))
 "##,
-        expect_test::expect![[r#""OK ((:special . 1) (:vowel-or-low . 1) (:vowel-or-up . 1))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx93_char_table_extra_slots_get_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -160,13 +168,14 @@ fn div_cx93_char_table_extra_slots_get_set() {
             (char-table-extra-slot ct 3)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored wrong-number-of-arguments)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx93_syntax_table_inheritance_and_per_buffer_switch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (119 46)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx93-st-a*"))
@@ -183,13 +192,14 @@ fn div_cx93_syntax_table_inheritance_and_per_buffer_switch() {
     (kill-buffer buf-b)
     (list at-a at-b)))
 "##,
-        expect_test::expect![[r#""OK (119 46)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx93_char_property_search_with_overlay_priority_zero() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (bold italic italic nil 3 8)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -207,13 +217,15 @@ fn div_cx93_char_property_search_with_overlay_priority_zero() {
                    (next-single-char-property-change 5 'face))
         (delete-overlay ov)))))
 "##,
-        expect_test::expect![[r#""OK (bold italic italic nil 3 8)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx93_char_table_default_value_via_aset_first_index() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (:override :initial :initial :initial :initial :initial)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'neo-cx93-default :initial)))
@@ -225,13 +237,14 @@ fn div_cx93_char_table_default_value_via_aset_first_index() {
         (aref ct ? )
         (char-table-range ct nil)))
 "##,
-        expect_test::expect![[r#""OK (:override :initial :initial :initial :initial :initial)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx93_window_text_pixel_dimensions_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function window-text-pixel-width)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
@@ -241,13 +254,16 @@ fn div_cx93_window_text_pixel_dimensions_query() {
         (window-body-width win 'pixels)
         (window-body-height win 'pixels)))
 "##,
-        expect_test::expect![[r#""ERR (void-function window-text-pixel-width)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx93_char_table_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Changes to be undone are outside visible portion of buffer\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (make-char-table 'neo-cx93-mega :default)))
@@ -278,8 +294,6 @@ fn div_cx93_char_table_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[
-            r#""ERR (error \"Changes to be undone are outside visible portion of buffer\")""#
-        ]],
+        expect,
     );
 }

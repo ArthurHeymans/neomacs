@@ -29,10 +29,8 @@ fn oracle_add_to_list_default_uses_equal_membership() {
    (equal first second)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""ERR (void-variable xs)""#],
-    );
+    let expect = expect_test::expect![r#""ERR (void-variable xs)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -50,10 +48,8 @@ fn oracle_add_to_list_append_adds_at_end_only_when_absent() {
    xs))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""ERR (void-variable xs)""#],
-    );
+    let expect = expect_test::expect![r#""ERR (void-variable xs)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -79,10 +75,8 @@ fn oracle_add_to_list_compare_function_selects_membership_semantics() {
    (length eql-xs)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""ERR (void-variable eq-xs)""#],
-    );
+    let expect = expect_test::expect![r#""ERR (void-variable eq-xs)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -114,10 +108,8 @@ fn oracle_add_to_list_custom_compare_argument_order_and_short_circuit() {
    (nreverse calls)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""ERR (void-variable xs)""#],
-    );
+    let expect = expect_test::expect![r#""ERR (void-variable xs)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -140,8 +132,6 @@ fn oracle_add_to_list_resolves_symbol_value_not_lexical_binding() {
      (makunbound 'neomacs--oracle-add-to-list-dynamic))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((void-variable (xs)) ((new old) (new old)))""#],
-    );
+    let expect = expect_test::expect![r#""OK ((void-variable (xs)) ((new old) (new old)))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

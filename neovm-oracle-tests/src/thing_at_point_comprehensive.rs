@@ -47,10 +47,8 @@ fn oracle_prop_thing_word_boundaries() {
                         (forward-word 1)
                         (let ((last-word (buffer-substring bw-start (point))))
                           (list w1 w2 w3a w3b last-word))))))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"hello\" \"world\" \"foo\" \"bar\" \"qux\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"hello\" \"world\" \"foo\" \"bar\" \"qux\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -80,10 +78,9 @@ fn oracle_prop_thing_symbol_via_skip_chars() {
                 (skip-chars-forward "a-zA-Z0-9_\\-.")
                 (let ((sym3 (buffer-substring s3 (point))))
                   (list sym1 sym2 sym3))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"my-variable-name\" \"another_symbol\" \"third.one\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (\"my-variable-name\" \"another_symbol\" \"third.one\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -125,10 +122,9 @@ fn oracle_prop_thing_skip_syntax_word_boundaries() {
           (skip-syntax-forward "w")
           (setq results (cons (buffer-substring s5 (point)) results)))
         (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"hello\" \"world\" \"test\" \"array\" \"block\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (\"hello\" \"world\" \"test\" \"array\" \"block\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -162,12 +158,10 @@ fn oracle_prop_thing_line_extraction() {
                     (cur-line-begin (line-beginning-position)))
                 (list line1 line2 line3 line4
                       prev-line-begin cur-line-begin next-line-begin)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"first line\" \"second line\" \"third line\" \"fourth line\" 12 24 35)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"first line\" \"second line\" \"third line\" \"fourth line\" 12 24 35)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -202,12 +196,10 @@ fn oracle_prop_thing_sexp_parsing() {
                       (forward-sexp 1)  ;; skip "(+ x y)"
                       (let ((body (buffer-substring p4 (point))))
                         (list whole-sexp name params body)))))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"(defun foo (x y) (+ x y))\" \"foo\" \"(x y)\" \"(+ x y)\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"(defun foo (x y) (+ x y))\" \"foo\" \"(x y)\" \"(+ x y)\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -248,10 +240,8 @@ fn oracle_prop_thing_backward_sexp() {
           (setq results (cons (buffer-substring p (point)) results))
           (goto-char p))
         results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"a\" \"(b c)\" \"(d (e f))\" \"g\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"a\" \"(b c)\" \"(d (e f))\" \"g\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -270,10 +260,8 @@ fn oracle_prop_thing_number_extraction() {
         (while (re-search-forward "[-+]?[0-9]+\\.?[0-9]*\\(?:e[0-9]+\\)?" nil t)
           (setq numbers (cons (match-string 0) numbers)))
         (nreverse numbers)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"42\" \"-17\" \"3.14\" \"1e5\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"42\" \"-17\" \"3.14\" \"1e5\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -301,10 +289,8 @@ fn oracle_prop_thing_sentence_navigation() {
         (backward-sentence 1)
         (setq positions (cons (point) positions))
         (nreverse positions)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (22 45 57 47 24)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (22 45 57 47 24)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -322,12 +308,10 @@ fn oracle_prop_thing_url_pattern_matching() {
         (while (re-search-forward "https?://[^ \t\n,;)]*" nil t)
           (setq urls (cons (match-string 0) urls)))
         (nreverse urls)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"https://example.com/path?q=1\" \"http://foo.bar/baz#frag\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"https://example.com/path?q=1\" \"http://foo.bar/baz#frag\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -356,12 +340,10 @@ fn oracle_prop_thing_paragraph_boundaries() {
         (backward-paragraph 1)
         (setq results (cons (list 'back-para-2 (point)) results))
         (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((after-para-1 53) (after-para-2 72) (after-para-3 114) (back-para-1 72) (back-para-2 53))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((after-para-1 53) (after-para-2 72) (after-para-3 114) (back-para-1 72) (back-para-2 53))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -387,10 +369,9 @@ fn oracle_prop_thing_defun_boundaries() {
         (end-of-defun 1)
         (setq results (cons (list 'foo-end (point)) results))
         (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((baz-start 61) (baz-end 82) (foo-start 35) (foo-end 60))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((baz-start 61) (baz-end 82) (foo-start 35) (foo-end 60))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -427,10 +408,8 @@ fn oracle_prop_thing_multi_extraction() {
                       first-line
                       line-count
                       word-count)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (57 \"(let ((x 42)\" 3 9)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (57 \"(let ((x 42)\" 3 9)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -448,10 +427,8 @@ fn oracle_prop_thing_email_pattern() {
         (while (re-search-forward "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]\\{2,\\}" nil t)
           (setq emails (cons (match-string 0) emails)))
         (list (nreverse emails) (length emails))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((\"foo@example.com\" \"bar.baz@test.org\") 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((\"foo@example.com\" \"bar.baz@test.org\") 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -473,10 +450,8 @@ fn oracle_prop_thing_whitespace_bounded() {
               (skip-chars-forward "^ \t\n")
               (setq things (cons (buffer-substring start (point)) things)))))
         (list (nreverse things) (length things))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((\"alpha\" \"beta\" \"gamma\" \"delta\") 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((\"alpha\" \"beta\" \"gamma\" \"delta\") 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -497,8 +472,6 @@ fn oracle_prop_thing_balanced_brackets() {
             (forward-sexp 1)
             (setq brackets (cons (buffer-substring start (point)) brackets))))
         (nreverse brackets)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"[1]\" \"[2]\" \"[3]\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"[1]\" \"[2]\" \"[3]\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

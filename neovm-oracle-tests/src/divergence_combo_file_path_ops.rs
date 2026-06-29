@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_file_name_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (\"/home/user/\" t \"file.txt\" t \"test\" t \"test\" t \"el\" t nil t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (file-name-directory "/home/user/file.txt")
@@ -21,9 +24,7 @@ fn divergence_file_name_operations() {
         (string= (file-name-extension "test.el") "el")
         (file-name-extension "test")
         (null (file-name-extension "test")))) "#,
-        expect_test::expect![[
-            r#""OK (\"/home/user/\" t \"file.txt\" t \"test\" t \"test\" t \"el\" t nil t)""#
-        ]],
+        expect,
     );
 }
 
@@ -31,6 +32,7 @@ fn divergence_file_name_operations() {
 fn divergence_expand_file_name_relative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((abs (expand-file-name "foo/bar.txt" "/home/user"))
@@ -43,7 +45,7 @@ fn divergence_expand_file_name_relative() {
           (file-name-absolute-p abs)
           (file-name-absolute-p abs2)
           (not (file-name-absolute-p "relative/path"))))) "#,
-        expect_test::expect![[r#""OK (t t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -51,6 +53,9 @@ fn divergence_expand_file_name_relative() {
 fn divergence_directory_file_name() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (\"/home/user\" t \"/home/user\" t \"/home/user/\" t \"/home/user/\" t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (directory-file-name "/home/user/")
@@ -61,9 +66,7 @@ fn divergence_directory_file_name() {
         (string= (file-name-as-directory "/home/user") "/home/user/")
         (file-name-as-directory "/home/user/")
         (string= (file-name-as-directory "/home/user/") "/home/user/"))) "#,
-        expect_test::expect![[
-            r#""OK (\"/home/user\" t \"/home/user\" t \"/home/user/\" t \"/home/user/\" t)""#
-        ]],
+        expect,
     );
 }
 
@@ -71,6 +74,9 @@ fn divergence_directory_file_name() {
 fn divergence_file_name_concat() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (\"/a/b/file.txt\" t \"/a/b/file.txt\" t \"/tmp/sub/file.txt\" t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (list (concat (file-name-directory "/a/b/") "file.txt")
@@ -79,9 +85,7 @@ fn divergence_file_name_concat() {
         (string= (expand-file-name "file.txt" "/a/b/") "/a/b/file.txt")
         (file-name-concat "/tmp" "sub" "file.txt")
         (string= (file-name-concat "/tmp" "sub" "file.txt") "/tmp/sub/file.txt"))) "#,
-        expect_test::expect![[
-            r#""OK (\"/a/b/file.txt\" t \"/a/b/file.txt\" t \"/tmp/sub/file.txt\" t)""#
-        ]],
+        expect,
     );
 }
 
@@ -89,6 +93,9 @@ fn divergence_file_name_concat() {
 fn divergence_path_split_components() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((\"home\" \"user\" \"docs\" \"file.txt\") t t \"file.txt\" t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((split (split-string "/home/user/docs/file.txt" "/" t)))
@@ -97,9 +104,7 @@ fn divergence_path_split_components() {
           (= (length split) 4)
           (car (last split))
           (string= (car (last split)) "file.txt")))) "#,
-        expect_test::expect![[
-            r#""OK ((\"home\" \"user\" \"docs\" \"file.txt\") t t \"file.txt\" t)""#
-        ]],
+        expect,
     );
 }
 
@@ -107,6 +112,7 @@ fn divergence_path_split_components() {
 fn divergence_file_truename_tilde() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t 0 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((expanded (expand-file-name "~")))
@@ -115,7 +121,7 @@ fn divergence_file_truename_tilde() {
           (string-match "^/" expanded)
           (= (string-match "^/" expanded) 0)
           (not (string= expanded "~"))))) "#,
-        expect_test::expect![[r#""OK (t t 0 t t)""#]],
+        expect,
     );
 }
 
@@ -123,6 +129,7 @@ fn divergence_file_truename_tilde() {
 fn divergence_file_attributes_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t 219 t 27540 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((attrs (file-attributes "/tmp")))
@@ -132,7 +139,7 @@ fn divergence_file_attributes_types() {
           (integerp (nth 1 attrs))
           (nth 7 attrs)
           (integerp (nth 7 attrs))))) "#,
-        expect_test::expect![[r#""OK (t t 219 t 27540 t)""#]],
+        expect,
     );
 }
 
@@ -140,6 +147,7 @@ fn divergence_file_attributes_types() {
 fn divergence_make_temp_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t 22 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((tmp (make-temp-file "test-div-")))
@@ -151,7 +159,7 @@ fn divergence_make_temp_file() {
               (file-writable-p tmp)
               (= (nth 7 (file-attributes tmp)) 0))
       (delete-file tmp)))) "#,
-        expect_test::expect![[r#""OK (t t t 22 t t)""#]],
+        expect,
     );
 }
 
@@ -159,6 +167,7 @@ fn divergence_make_temp_file() {
 fn divergence_make_directory() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((dir (make-temp-name "/tmp/test-dir-div-")))
@@ -169,7 +178,7 @@ fn divergence_make_directory() {
                 (file-exists-p dir)
                 (> (length dir) 0)))
       (delete-directory dir)))) "#,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
@@ -177,6 +186,7 @@ fn divergence_make_directory() {
 fn divergence_file_size_copy() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((src (make-temp-file "test-src-"))
@@ -195,6 +205,6 @@ fn divergence_file_size_copy() {
                         (> (nth 7 (file-attributes src)) 0)))
               (when (file-exists-p dst) (delete-file dst)))))
       (delete-file src)))) "#,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }

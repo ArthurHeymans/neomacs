@@ -62,12 +62,10 @@ fn oracle_prop_symbol_intern_vs_intern_soft_comprehensive() {
       ;; cleanup: we can't really unintern from the default obarray easily,
       ;; but the symbols are harmless with unique prefix
       nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil nil (t \"neovm--scp-ivis-alpha\" t t) nil (t t t t) t (t t) \"foo bar\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil nil (t \"neovm--scp-ivis-alpha\" t t) nil (t t t t) t (t t) \"foo bar\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,12 +112,10 @@ fn oracle_prop_symbol_make_symbol_full_lifecycle() {
     (symbol-plist s1)
     (symbol-plist s2)))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t \"lifecycle-test\" \"lifecycle-test\" nil nil nil nil nil nil 42 nil t 49 nil (red 10 t (color red size 10 active t)) nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t \"lifecycle-test\" \"lifecycle-test\" nil nil nil nil nil nil 42 nil t 49 nil (red 10 t (color red size 10 active t)) nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -152,12 +148,10 @@ fn oracle_prop_symbol_name_edge_cases() {
   ;; symbol-name returns string type
   (stringp (symbol-name 'anything)))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"regular-sym\" \":keyword-sym\" \"nil\" \"t\" \"+\" \"1+\" \"and\" \"or\" \"123\" \"\" \"uninterned-name\" 0 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"regular-sym\" \":keyword-sym\" \"nil\" \"t\" \"+\" \"1+\" \"and\" \"or\" \"123\" \"\" \"uninterned-name\" 0 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -200,10 +194,9 @@ fn oracle_prop_symbol_bound_unbound_lifecycle() {
                   (list r1 r2 r3 r4 r5)))))))
     (ignore-errors (makunbound 'neovm--scp-bul-var))
     (ignore-errors (fmakunbound 'neovm--scp-bul-var))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((t initial) (t 11) (nil t 21) (t rebound nil) (nil nil))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((t initial) (t 11) (nil t 21) (t rebound nil) (nil nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -242,12 +235,10 @@ fn oracle_prop_symbol_setplist_comprehensive() {
                               (get 'neovm--scp-sp-sym 'x))))
                 (list r1 r2 r3 r4))))))
     (setplist 'neovm--scp-sp-sym nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 (a 1 b 2 c 3)) (nil 10 20 (x 99 y 20 z 30)) (99 30) (nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 (a 1 b 2 c 3)) (nil 10 20 (x 99 y 20 z 30)) (99 30) (nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -292,10 +283,8 @@ fn oracle_prop_symbol_indirect_function_chain() {
     (fmakunbound 'neovm--scp-if-b)
     (fmakunbound 'neovm--scp-if-c)
     (fmakunbound 'neovm--scp-if-d)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t 42 t t 10)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t 42 t t 10)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -332,10 +321,8 @@ fn oracle_prop_symbol_equality_interned_vs_uninterned() {
     (eq :foo :foo)
     (eq (intern ":foo") :foo)))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil nil t nil nil t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil nil t nil nil t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -388,10 +375,9 @@ fn oracle_prop_symbol_custom_obarray() {
         (list (symbolp s-small) (symbolp s-large)
               (eq s-small s-large))))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((t t \"alpha\" \"beta\" t t (t t t)) (nil t) (t t nil))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((t t \"alpha\" \"beta\" t t (t t t)) (nil t) (t t nil))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -434,10 +420,8 @@ fn oracle_prop_symbol_memo_table_via_plist() {
           (/ (length (symbol-plist memo)) 2)))
     (fmakunbound 'neovm--scp-memo-fib)))
 "####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 1 5 55 610 6765 55 610 21)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 1 5 55 610 6765 55 610 21)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -510,8 +494,7 @@ fn oracle_prop_symbol_registry_with_inheritance() {
     (fmakunbound 'neovm--scp-rgi-dispatch)
     (setplist 'neovm--scp-rgi-base-class nil)
     (setplist 'neovm--scp-rgi-child-class nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"Object(base-1)\" \"Child(child-1, age=25)\" base nil)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (\"Object(base-1)\" \"Child(child-1, age=25)\" base nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

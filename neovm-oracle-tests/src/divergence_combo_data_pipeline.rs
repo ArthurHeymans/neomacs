@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_map_filter_sort_pipeline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((5 3 8 1 9 2 7 4 6 10) (25 9 64 1 81 4 49 16 36 100) (36 49 64 81 100) 330 nil nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(let* ((input '(5 3 8 1 9 2 7 4 6 10))
         (squared (mapcar (lambda (x) (* x x)) input))
@@ -16,9 +19,7 @@ fn divergence_map_filter_sort_pipeline() {
   (list input squared sorted total
         (= total 295)
         (= (length sorted) 7))) ",
-        expect_test::expect![[
-            r#""OK ((5 3 8 1 9 2 7 4 6 10) (25 9 64 1 81 4 49 16 36 100) (36 49 64 81 100) 330 nil nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -26,6 +27,7 @@ fn divergence_map_filter_sort_pipeline() {
 fn divergence_alist_to_hash_to_sorted_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((apple banana cherry date) (nil nil nil) 4 t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let* ((input '((banana . 3) (apple . 5) (cherry . 1) (date . 4)))
         (ht (make-hash-table :test 'equal)))
@@ -35,7 +37,7 @@ fn divergence_alist_to_hash_to_sorted_list() {
     (list keys vals
           (hash-table-count ht)
           (= (hash-table-count ht) 4)))) ",
-        expect_test::expect![[r#""OK ((apple banana cherry date) (nil nil nil) 4 t)""#]],
+        expect,
     );
 }
 
@@ -43,6 +45,7 @@ fn divergence_alist_to_hash_to_sorted_list() {
 fn divergence_group_by_partition_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((1 3 6) (2 5) (4) t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let* ((data '((a 1) (b 2) (a 3) (c 4) (b 5) (a 6)))
         (groups (make-hash-table :test 'eq)))
@@ -56,7 +59,7 @@ fn divergence_group_by_partition_data() {
         (gethash 'c groups)
         (= (hash-table-count groups) 3)
         (= (length (gethash 'a groups)) 3))) ",
-        expect_test::expect![[r#""OK ((1 3 6) (2 5) (4) t t)""#]],
+        expect,
     );
 }
 
@@ -64,6 +67,9 @@ fn divergence_group_by_partition_data() {
 fn divergence_string_split_join_transform() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((\"alice\" \"bob\" \"charlie\") (30 25 35) ((\"alice\" \"30\" \"engineer\") (\"bob\" \"25\" \"designer\") (\"charlie\" \"35\" \"manager\")) t t 3 t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(let* ((csv \"alice,30,engineer\\nbob,25,designer\\ncharlie,35,manager\")
         (lines (split-string csv \"\\n\" t))
@@ -78,9 +84,7 @@ fn divergence_string_split_join_transform() {
         (< avg 32.0)
         (length rows)
         (= (length ages) 3))) ",
-        expect_test::expect![[
-            r#""OK ((\"alice\" \"bob\" \"charlie\") (30 25 35) ((\"alice\" \"30\" \"engineer\") (\"bob\" \"25\" \"designer\") (\"charlie\" \"35\" \"manager\")) t t 3 t)""#
-        ]],
+        expect,
     );
 }
 
@@ -88,6 +92,9 @@ fn divergence_string_split_join_transform() {
 fn divergence_tree_transform_recursive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((2 (3 (4 5)) (6 (7 (8)))) (1 (4 (9 16)) (25 (36 (49)))) (\"a\" (\"b\" (\"c\" \"d\")) \"e\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (defun test-tree-map-xxx (fn tree)
@@ -100,9 +107,7 @@ fn divergence_tree_transform_recursive() {
     (list (test-tree-map-xxx #'1+ input)
           (test-tree-map-xxx (lambda (x) (* x x)) input)
           (test-tree-map-xxx #'symbol-name '(a (b (c d)) e))))) ",
-        expect_test::expect![[
-            r#""OK ((2 (3 (4 5)) (6 (7 (8)))) (1 (4 (9 16)) (25 (36 (49)))) (\"a\" (\"b\" (\"c\" \"d\")) \"e\"))""#
-        ]],
+        expect,
     );
 }
 
@@ -110,6 +115,7 @@ fn divergence_tree_transform_recursive() {
 fn divergence_plist_to_alist_to_sorted() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function nope)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let* ((pl '(:name \"Alice\" :age 30 :score 95))
         (alist nil))
@@ -126,7 +132,7 @@ fn divergence_plist_to_alist_to_sorted() {
           (eq (plist-get pl :missing 'nope) 'nope)
           sorted
           (= (length sorted) 3)))) ",
-        expect_test::expect![[r#""ERR (void-function nope)""#]],
+        expect,
     );
 }
 
@@ -134,6 +140,7 @@ fn divergence_plist_to_alist_to_sorted() {
 fn divergence_nested_map_reduce_composition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable col-sums)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let* ((matrix '((1 2 3) (4 5 6) (7 8 9)))
         (row-sums (mapcar (lambda (row) (seq-reduce #'+ row 0)) matrix))
@@ -148,7 +155,7 @@ fn divergence_nested_map_reduce_composition() {
         (= (nth 2 row-sums) 24)
         (= (nth 0 col-sums) 12)
         (= (nth 2 col-sums) 18))) ",
-        expect_test::expect![[r#""ERR (void-variable col-sums)""#]],
+        expect,
     );
 }
 
@@ -156,6 +163,9 @@ fn divergence_nested_map_reduce_composition() {
 fn divergence_string_transform_pipeline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (\"Hello World  FOO bar\" \"hello world  foo bar\" (\"hello\" \"world\" \"foo\" \"bar\") (\"bar\" \"foo\" \"hello\" \"world\") \"bar-foo-hello-world\" t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(let* ((input \"  Hello World  FOO bar  \")
         (trimmed (string-trim input))
@@ -165,9 +175,7 @@ fn divergence_string_transform_pipeline() {
         (joined (string-join sorted \"-\")))
   (list trimmed downcased words sorted joined
         (string= joined \"bar-foo-hello-world\"))) ",
-        expect_test::expect![[
-            r#""OK (\"Hello World  FOO bar\" \"hello world  foo bar\" (\"hello\" \"world\" \"foo\" \"bar\") (\"bar\" \"foo\" \"hello\" \"world\") \"bar-foo-hello-world\" t)""#
-        ]],
+        expect,
     );
 }
 
@@ -175,6 +183,7 @@ fn divergence_string_transform_pipeline() {
 fn divergence_assoc_chain_lookup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (\"Alice\" user 7 nil 3)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let* ((db '((user1 . ((name . \"Alice\") (role . admin) (level . 5)))
                       (user2 . ((name . \"Bob\") (role . user) (level . 3)))
@@ -186,7 +195,7 @@ fn divergence_assoc_chain_lookup() {
         (funcall lookup 'user3 'level)
         (funcall lookup 'user1 'missing)
         (length db))) ",
-        expect_test::expect![[r#""OK (\"Alice\" user 7 nil 3)""#]],
+        expect,
     );
 }
 
@@ -194,6 +203,7 @@ fn divergence_assoc_chain_lookup() {
 fn divergence_vector_matrix_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments mapcar 3)""#]];
     crate::common::assert_oracle_parity_expect(
         "(let ((v1 [1 2 3])
         (v2 [4 5 6]))
@@ -206,6 +216,6 @@ fn divergence_vector_matrix_operations() {
           (= cross-z -3)
           (vconcat v1 v2)
           (= (length (vconcat v1 v2)) 6)))) ",
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments mapcar 3)""#]],
+        expect,
     );
 }

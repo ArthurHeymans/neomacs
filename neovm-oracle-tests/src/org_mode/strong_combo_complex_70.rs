@@ -12,6 +12,9 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo70_publish_multi_project() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:project-keys (\"web\" \"pdf\" \"all\") :has-components nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox-publish)
@@ -25,15 +28,14 @@ fn combo70_publish_multi_project() {
      :project-keys (mapcar #'car sample)
      :has-components (assq :components (cddr (car (last sample))))))
   )"##,
-        expect_test::expect![[
-            r#""OK (:project-keys (\"web\" \"pdf\" \"all\") :has-components nil)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo70_babel_var_multi_named_tables() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((10 30))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -48,13 +50,16 @@ fn combo70_babel_var_multi_named_tables() {
       (goto-char (point-min)) (search-forward "#+begin_src emacs-lisp")
       (push (org-babel-execute-src-block) r)
       (nreverse r))))"##,
-        expect_test::expect![[r#""OK ((10 30))""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo70_agenda_get_progress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:get-progress-fbound t) (:after-stats \"* TODO Task [66%]\n- [X] a\n- [ ] b\n- [X] c\n\") (:checked 0))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -70,15 +75,16 @@ fn combo70_agenda_get_progress() {
     (push (list :checked (length (org-element-map (org-element-parse-buffer) 'item
                                   (lambda (i) (when (equal "X" (org-element-property :checkbox i)) i))))) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:get-progress-fbound t) (:after-stats \"* TODO Task [66%]\n- [X] a\n- [ ] b\n- [X] c\n\") (:checked 0))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo70_babel_session_sh() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"ob-sh\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -97,15 +103,14 @@ fn combo70_babel_session_sh() {
         (error (push (list :sh2-error (car e)) r)))
       (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (nreverse r))))"##,
-        expect_test::expect![[
-            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"ob-sh\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo70_element_interpret_individual_links() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 19 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -126,13 +131,16 @@ fn combo70_element_interpret_individual_links() {
      (org-element-create 'link
        '(:type "custom-id" :path "target" :raw-link "#target"))))
    )))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 19 6)""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo70_timer_set_timer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:set-timer-fbound t :timer-start-fbound t :timer-stop-fbound t :timer-countdown-fbound t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-timer)
@@ -142,15 +150,16 @@ fn combo70_timer_set_timer() {
    :timer-stop-fbound (fboundp 'org-timer-stop)
    :timer-countdown-fbound (boundp 'org-timer-default-timer)
    ))"##,
-        expect_test::expect![[
-            r#""OK (:set-timer-fbound t :timer-start-fbound t :timer-stop-fbound t :timer-countdown-fbound t)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo70_org_cycle_level() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:cycle-level-fbound t) (:after-shifttab nil) (:after-show 4))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -168,15 +177,14 @@ fn combo70_org_cycle_level() {
     (org-show-all)
     (push (list :after-show (length (org-element-map (org-element-parse-buffer) 'headline #'identity))) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:cycle-level-fbound t) (:after-shifttab nil) (:after-show 4))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo70_macro_replace_all_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:replace-error t))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -190,13 +198,14 @@ fn combo70_macro_replace_all_region() {
                (push (list :after-replace (buffer-string)) r))
       (error (push (list :replace-error t) r)))
     (nreverse r)))"##,
-        expect_test::expect![[r#""OK ((:replace-error t))""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo70_org_export_info_for_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 11 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -209,13 +218,16 @@ fn combo70_org_export_info_for_data() {
        :translate-alist-bound (when (plist-get info :translate-alist) t)
        :export-options (plist-get info :export-options)))))
   )"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 11 3)""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo70_org_element_at_point_no_context() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:h1-at headline) (:sub-at headline) (:no-ctx-fbound t) (:eob-narrow-at headline) (:eob-at headline))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -237,8 +249,6 @@ fn combo70_org_element_at_point_no_context() {
     (goto-char (point-max))
     (push (list :eob-at (org-element-type (org-element-at-point))) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:h1-at headline) (:sub-at headline) (:no-ctx-fbound t) (:eob-narrow-at headline) (:eob-at headline))""#
-        ]],
+        expect,
     );
 }

@@ -10,15 +10,17 @@ use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_goto_char_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""abcOK 2""#]];
     let (oracle_ret, neovm_ret) = crate::common::eval_oracle_and_neovm_expect(
         "(progn (erase-buffer) (insert \"abc\") (goto-char 2))",
-        expect_test::expect![[r#""abcOK 2""#]],
+        expect,
     );
     assert_ok_eq("2", &oracle_ret, &neovm_ret);
 
+    let expect = expect_test::expect![[r#""abcOK 2""#]];
     let (oracle_point, neovm_point) = crate::common::eval_oracle_and_neovm_expect(
         "(progn (erase-buffer) (insert \"abc\") (goto-char 2) (point))",
-        expect_test::expect![[r#""abcOK 2""#]],
+        expect,
     );
     assert_ok_eq("2", &oracle_point, &neovm_point);
 }
@@ -27,16 +29,14 @@ fn oracle_prop_goto_char_basics() {
 fn oracle_prop_goto_char_error_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (arity_oracle, arity_neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(goto-char)",
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments goto-char 0)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments goto-char 0)""#]];
+    let (arity_oracle, arity_neovm) =
+        crate::common::eval_oracle_and_neovm_expect("(goto-char)", expect);
     assert_err_kind(&arity_oracle, &arity_neovm, "wrong-number-of-arguments");
 
-    let (type_oracle, type_neovm) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(goto-char "x")"#,
-        expect_test::expect![[r#""ERR (wrong-type-argument integer-or-marker-p \"x\")""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument integer-or-marker-p \"x\")""#]];
+    let (type_oracle, type_neovm) =
+        crate::common::eval_oracle_and_neovm_expect(r#"(goto-char "x")"#, expect);
     assert_err_kind(&type_oracle, &type_neovm, "wrong-type-argument");
 }
 

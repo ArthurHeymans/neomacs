@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx124_event_basic_type_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (eventp ?a)
@@ -16,13 +17,16 @@ fn div_cx124_event_basic_type_predicates() {
       (eventp '(mouse-1))
       (eventp 'wrong-event-xyz))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx124_event_modifiers_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((97 nil) ((control 97) nil) ((meta 97) nil) ((control meta 97) nil) ((shift control 97) nil) ((hyper super 97) nil) (C-return (control)) (M-return (meta)) (C-M-return (meta control)) (mouse-1 (click)) (M-mouse-1 (meta click)) (C-down-mouse-1 (control down)) ((mouse-1) (click)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (e) (list e (event-modifiers e)))
@@ -40,15 +44,16 @@ fn div_cx124_event_modifiers_matrix() {
           C-down-mouse-1
           (mouse-1)))
 "##,
-        expect_test::expect![[
-            r#""OK ((97 nil) ((control 97) nil) ((meta 97) nil) ((control meta 97) nil) ((shift control 97) nil) ((hyper super 97) nil) (C-return (control)) (M-return (meta)) (C-M-return (meta control)) (mouse-1 (click)) (M-mouse-1 (meta click)) (C-down-mouse-1 (control down)) ((mouse-1) (click)))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx124_event_basic_type_resolution() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((97 97) (C-a nil) ((control 97) control) (M-a nil) (C-M-a nil) (return return) (C-return return) (M-return return) (mouse-1 mouse-1) (M-mouse-1 mouse-1) (C-down-mouse-1 mouse-1))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (e) (list e (event-basic-type e)))
@@ -64,15 +69,14 @@ fn div_cx124_event_basic_type_resolution() {
           M-mouse-1
           C-down-mouse-1))
 "##,
-        expect_test::expect![[
-            r#""OK ((97 97) (C-a nil) ((control 97) control) (M-a nil) (C-M-a nil) (return return) (C-return return) (M-return return) (mouse-1 mouse-1) (M-mouse-1 mouse-1) (C-down-mouse-1 mouse-1))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx124_event_convert_to_lost_focus() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 134217729 33554433 197132289)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -82,13 +86,14 @@ fn div_cx124_event_convert_to_lost_focus() {
           (event-convert-list '(control meta shift hyper super alt ?a)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (1 134217729 33554433 197132289)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx124_mouse_event_structure_decomposition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -104,13 +109,14 @@ fn div_cx124_mouse_event_structure_decomposition() {
             (posn-actual-col-row (event-start click-event))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx124_drag_event_decomposition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -123,13 +129,14 @@ fn div_cx124_drag_event_decomposition() {
             (posn-point (event-end drag-event))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx124_mouse_position_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t #<frame F1 0x555555b46708> nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -139,13 +146,14 @@ fn div_cx124_mouse_position_query() {
             (consp (cddr mp))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t #<frame F1 0x555555b46708> nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx124_menu_item_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -156,13 +164,14 @@ fn div_cx124_menu_item_availability() {
           (fboundp 'easy-menu-do-define))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t nil t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx124_tool_bar_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -172,13 +181,14 @@ fn div_cx124_tool_bar_availability() {
           (boundp 'tool-bar-mode))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx124_tab_bar_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -188,13 +198,14 @@ fn div_cx124_tab_bar_availability() {
           (boundp 'tab-bar-tab-name))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx124_mouse_wheel_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -204,13 +215,14 @@ fn div_cx124_mouse_wheel_availability() {
           (boundp 'mouse-wheel-follow-mouse))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx124_event_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function posn-make)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((event (list 'mouse-1
@@ -240,6 +252,6 @@ fn div_cx124_event_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""ERR (void-function posn-make)""#]],
+        expect,
     );
 }

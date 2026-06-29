@@ -91,10 +91,8 @@ fn oracle_prop_trie_adv_prefix_counting() {
     (fmakunbound 'neovm--ta-find-node)
     (fmakunbound 'neovm--ta-count-words)
     (fmakunbound 'neovm--ta-prefix-count)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (7 4 3 18 4 3 1 0 0 18)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (7 4 3 18 4 3 1 0 0 18)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -183,12 +181,10 @@ fn oracle_prop_trie_adv_wildcard_search() {
     (fmakunbound 'neovm--ta-insert)
     (fmakunbound 'neovm--ta-wildcard-search)
     (fmakunbound 'neovm--ta-wildcard)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"bat\") (\"bat\" \"cat\" \"hat\" \"rat\") (\"bad\" \"bag\" \"ban\" \"bar\" \"bat\") (\"bad\" \"bag\" \"ban\" \"bar\" \"bat\" \"cab\" \"can\" \"cap\" \"car\" \"cat\" \"had\" \"ham\" \"has\" \"hat\" \"ram\" \"ran\" \"rap\" \"rat\") 18 (\"cab\" \"can\" \"cap\" \"car\" \"cat\") nil nil (\"bat\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"bat\") (\"bat\" \"cat\" \"hat\" \"rat\") (\"bad\" \"bag\" \"ban\" \"bar\" \"bat\") (\"bad\" \"bag\" \"ban\" \"bar\" \"bat\" \"cab\" \"can\" \"cap\" \"car\" \"cat\" \"had\" \"ham\" \"has\" \"hat\" \"ram\" \"ran\" \"rap\" \"rat\") 18 (\"cab\" \"can\" \"cap\" \"car\" \"cat\") nil nil (\"bat\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -284,12 +280,10 @@ fn oracle_prop_trie_adv_autocomplete() {
     (fmakunbound 'neovm--ta-find-node)
     (fmakunbound 'neovm--ta-collect)
     (fmakunbound 'neovm--ta-autocomplete)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"edit\" \"editor\" \"element\" \"elisp\" \"else\") (\"eval\" \"evaluate\" \"event\") (\"edit\" \"editor\") (\"enable\" \"end\" \"engine\") (\"except\" \"execute\" \"exit\") (\"emacs\") nil (\"edit\") 20)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"edit\" \"editor\" \"element\" \"elisp\" \"else\") (\"eval\" \"evaluate\" \"event\") (\"edit\" \"editor\") (\"enable\" \"end\" \"engine\") (\"except\" \"execute\" \"exit\") (\"emacs\") nil (\"edit\") 20)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -377,10 +371,9 @@ fn oracle_prop_trie_adv_longest_common_prefix() {
     (fmakunbound 'neovm--ta-make)
     (fmakunbound 'neovm--ta-insert)
     (fmakunbound 'neovm--ta-longest-common-prefix)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"pro\" \"pre\" \"\" \"onlyone\" \"test\" \"same\" \"\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (\"pro\" \"pre\" \"\" \"onlyone\" \"test\" \"same\" \"\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -498,12 +491,10 @@ fn oracle_prop_trie_adv_frequency_counter() {
     (fmakunbound 'neovm--tf-top-n)
     (fmakunbound 'neovm--tf-unique-count)
     (fmakunbound 'neovm--tf-total-count)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (6 3 3 2 2 1 0 ((\"the\" . 6) (\"dog\" . 3) (\"fox\" . 3)) 13 24 (1 3 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (6 3 3 2 2 1 0 ((\"the\" . 6) (\"dog\" . 3) (\"fox\" . 3)) 13 24 (1 3 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -644,5 +635,6 @@ fn oracle_prop_trie_adv_path_compression() {
     (fmakunbound 'neovm--tc-node-count)
     (fmakunbound 'neovm--tc-raw-node-count)
     (fmakunbound 'neovm--tc-labels)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

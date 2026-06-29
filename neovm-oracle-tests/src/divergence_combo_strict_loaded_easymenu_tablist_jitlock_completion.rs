@@ -11,6 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_n1_easy_menu_define() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (let ((map (make-sparse-keymap)))
@@ -22,13 +23,16 @@ fn div_n1_easy_menu_define() {
         (keymapp (lookup-key map [menu-bar probe]))))
 "##,
         &["emacs-lisp/easymenu.el"],
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_n1_tabulated_list_print() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK #(\"1          one\n2          two\n\" 0 1 (tabulated-list-entry [\"1\" \"one\"] tabulated-list-id \"a\" tabulated-list-column-name \"A\" help-echo \"A: 1\") 1 2 (tabulated-list-entry [\"1\" \"one\"] tabulated-list-id \"a\" tabulated-list-column-name \"A\") 2 11 (tabulated-list-entry [\"1\" \"one\"] tabulated-list-id \"a\" tabulated-list-column-name \"A\" display (space :align-to 11)) 11 14 (tabulated-list-entry [\"1\" \"one\"] tabulated-list-id \"a\" tabulated-list-column-name \"B\" help-echo \"B: one\") 14 15 (tabulated-list-entry [\"1\" \"one\"] tabulated-list-id \"a\") 15 16 (tabulated-list-entry [\"2\" \"two\"] tabulated-list-id \"b\" tabulated-list-column-name \"A\" help-echo \"A: 2\") 16 17 (tabulated-list-entry [\"2\" \"two\"] tabulated-list-id \"b\" tabulated-list-column-name \"A\") 17 26 (tabulated-list-entry [\"2\" \"two\"] tabulated-list-id \"b\" tabulated-list-column-name \"A\" display (space :align-to 11)) 26 29 (tabulated-list-entry [\"2\" \"two\"] tabulated-list-id \"b\" tabulated-list-column-name \"B\" help-echo \"B: two\") 29 30 (tabulated-list-entry [\"2\" \"two\"] tabulated-list-id \"b\"))""#
+    ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
@@ -40,15 +44,14 @@ fn div_n1_tabulated_list_print() {
   (buffer-string))
 "##,
         &["emacs-lisp/tabulated-list.el"],
-        expect_test::expect![[
-            r#""OK #(\"1          one\n2          two\n\" 0 1 (tabulated-list-entry [\"1\" \"one\"] tabulated-list-id \"a\" tabulated-list-column-name \"A\" help-echo \"A: 1\") 1 2 (tabulated-list-entry [\"1\" \"one\"] tabulated-list-id \"a\" tabulated-list-column-name \"A\") 2 11 (tabulated-list-entry [\"1\" \"one\"] tabulated-list-id \"a\" tabulated-list-column-name \"A\" display (space :align-to 11)) 11 14 (tabulated-list-entry [\"1\" \"one\"] tabulated-list-id \"a\" tabulated-list-column-name \"B\" help-echo \"B: one\") 14 15 (tabulated-list-entry [\"1\" \"one\"] tabulated-list-id \"a\") 15 16 (tabulated-list-entry [\"2\" \"two\"] tabulated-list-id \"b\" tabulated-list-column-name \"A\" help-echo \"A: 2\") 16 17 (tabulated-list-entry [\"2\" \"two\"] tabulated-list-id \"b\" tabulated-list-column-name \"A\") 17 26 (tabulated-list-entry [\"2\" \"two\"] tabulated-list-id \"b\" tabulated-list-column-name \"A\" display (space :align-to 11)) 26 29 (tabulated-list-entry [\"2\" \"two\"] tabulated-list-id \"b\" tabulated-list-column-name \"B\" help-echo \"B: two\") 29 30 (tabulated-list-entry [\"2\" \"two\"] tabulated-list-id \"b\"))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_n1_jit_lock_fontify_now() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (bold bold bold)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
@@ -60,13 +63,14 @@ fn div_n1_jit_lock_fontify_now() {
         (get-text-property 9 'face)))
 "##,
         &["jit-lock.el"],
-        expect_test::expect![[r#""OK (bold bold bold)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_n1_completion_metadata_and_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"ab\" (\"abc\" \"abd\" \"abe\") (0 . 0))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((coll '("abc" "abd" "abe" "xyz")))
@@ -74,13 +78,14 @@ fn div_n1_completion_metadata_and_boundaries() {
         (all-completions "a" coll)
         (completion-boundaries "ab" coll nil "")))
 "##,
-        expect_test::expect![[r#""OK (\"ab\" (\"abc\" \"abd\" \"abe\") (0 . 0))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_n1_completion_table_substring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function completion-table-substring)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (let ((coll (completion-table-substring '("bar baz" "foo bar"))))
@@ -88,6 +93,6 @@ fn div_n1_completion_table_substring() {
         (all-completions "bar" coll)))
 "##,
         &["minibuffer.el"],
-        expect_test::expect![[r#""ERR (void-function completion-table-substring)""#]],
+        expect,
     );
 }

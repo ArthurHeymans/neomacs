@@ -79,12 +79,10 @@ fn oracle_prop_polynomial_representation() {
        (funcall 'neovm--poly-to-string nil))
     (fmakunbound 'neovm--poly-normalize)
     (fmakunbound 'neovm--poly-to-string)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((8 . 2) (2 . 1) (1 . 0)) ((1 . 0)) ((5 . 3) (3 . 2) (1 . 0)) nil ((7 . 4)) nil \"3x^2 + 2x + 1\" \"x^3 + -x\" \"0\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((8 . 2) (2 . 1) (1 . 0)) ((1 . 0)) ((5 . 3) (3 . 2) (1 . 0)) nil ((7 . 4)) nil \"3x^2 + 2x + 1\" \"x^3 + -x\" \"0\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -156,12 +154,10 @@ fn oracle_prop_polynomial_addition() {
     (fmakunbound 'neovm--poly-add)
     (fmakunbound 'neovm--poly-negate)
     (fmakunbound 'neovm--poly-sub)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((4 . 2) (5 . 1) (5 . 0)) ((5 . 3) (1 . 0)) ((2 . 1) (7 . 0)) nil ((1 . 5) (1 . 2) (1 . 0)) ((3 . 2) (2 . 1)) ((-3 . 2) (1 . 1) (-5 . 0)) ((1 . 3) (1 . 0)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((4 . 2) (5 . 1) (5 . 0)) ((5 . 3) (1 . 0)) ((2 . 1) (7 . 0)) nil ((1 . 5) (1 . 2) (1 . 0)) ((3 . 2) (2 . 1)) ((-3 . 2) (1 . 1) (-5 . 0)) ((1 . 3) (1 . 0)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -236,12 +232,10 @@ fn oracle_prop_polynomial_multiplication() {
     (fmakunbound 'neovm--poly-normalize)
     (fmakunbound 'neovm--poly-mul)
     (fmakunbound 'neovm--poly-scale)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 . 2) (-1 . 0)) ((1 . 2) (2 . 1) (1 . 0)) ((6 . 3)) nil ((3 . 2) (1 . 0)) ((1 . 3) (-1 . 0)) ((12 . 2) (4 . 1) (20 . 0)) ((8 . 3) (14 . 2) (7 . 1) (6 . 0)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 . 2) (-1 . 0)) ((1 . 2) (2 . 1) (1 . 0)) ((6 . 3)) nil ((3 . 2) (1 . 0)) ((1 . 3) (-1 . 0)) ((12 . 2) (4 . 1) (20 . 0)) ((8 . 3) (14 . 2) (7 . 1) (6 . 0)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -329,10 +323,8 @@ fn oracle_prop_polynomial_evaluation() {
     (fmakunbound 'neovm--poly-degree)
     (fmakunbound 'neovm--poly-coeff-at)
     (fmakunbound 'neovm--poly-eval-horner)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 6 17 34 2 1 6 17 5 4 6 9 1 0 1 0 2 3 0 0)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 6 17 34 2 1 6 17 5 4 6 9 1 0 1 0 2 3 0 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -423,12 +415,10 @@ fn oracle_prop_polynomial_differentiation() {
     (fmakunbound 'neovm--poly-deriv)
     (fmakunbound 'neovm--poly-nth-deriv)
     (fmakunbound 'neovm--poly-integrate)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((6 . 1) (2 . 0)) ((5 . 4)) nil nil ((1 . 0)) ((6 . 1) (2 . 0)) ((24 . 1)) nil ((20 . 3) (-9 . 2) (4 . 1) (-1 . 0)) ((6 . 2) (2 . 1)) ((5 . 1)) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((6 . 1) (2 . 0)) ((5 . 4)) nil nil ((1 . 0)) ((6 . 1) (2 . 0)) ((24 . 1)) nil ((20 . 3) (-9 . 2) (4 . 1) (-1 . 0)) ((6 . 2) (2 . 1)) ((5 . 1)) nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -598,10 +588,8 @@ fn oracle_prop_polynomial_gcd() {
     (fmakunbound 'neovm--poly-prem)
     (fmakunbound 'neovm--poly-gcd)
     (fmakunbound 'neovm--pgcd-int)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 . 1) (-1 . 0)) ((1 . 1) (1 . 0)) ((1 . 0)) ((3 . 2) (1 . 0)) ((1 . 1) (2 . 0)) ((1 . 2) (-1 . 0)) nil 4 1 5)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 . 1) (-1 . 0)) ((1 . 1) (1 . 0)) ((1 . 0)) ((3 . 2) (1 . 0)) ((1 . 1) (2 . 0)) ((1 . 2) (-1 . 0)) nil 4 1 5)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

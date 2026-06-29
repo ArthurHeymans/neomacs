@@ -35,10 +35,9 @@ fn oracle_prop_char_table_comprehensive_map_single_chars() {
   ;; Sort results by key for deterministic output
   (setq result (sort result (lambda (a b) (< (car a) (car b)))))
   (list (length result) result))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""ERR (wrong-type-argument number-or-marker-p (118 . 4194303))""#],
-    );
+    let expect =
+        expect_test::expect![r#""ERR (wrong-type-argument number-or-marker-p (118 . 4194303))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -67,10 +66,8 @@ fn oracle_prop_char_table_comprehensive_map_ranges() {
     (char-table-range ct ?Z)
     (char-table-range ct ?a)
     (length result)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (upper middle upper nil 3)""#],
-    );
+    let expect = expect_test::expect![r#""OK (upper middle upper nil 3)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -99,12 +96,10 @@ fn oracle_prop_char_table_comprehensive_extra_slots_multi() {
     ;; Verify others unchanged
     (char-table-extra-slot ct 1)
     (char-table-extra-slot ct 2)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""ERR (args-out-of-range #^[nil nil syntax-table nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] 0)""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""ERR (args-out-of-range #^[nil nil syntax-table nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil nil] 0)""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -152,10 +147,9 @@ fn oracle_prop_char_table_comprehensive_deep_parent_chain() {
     (progn
       (set-char-table-parent l2 root)
       (char-table-range l3 ?3))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (l3-x l3-five l1-digit l2-upper root-val t t t t root-val)""#],
-    );
+    let expect =
+        expect_test::expect![r#""OK (l3-x l3-five l1-digit l2-upper root-val t t t t root-val)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -184,10 +178,9 @@ fn oracle_prop_char_table_comprehensive_nil_inheritance_semantics() {
           ;; Unknown char gets parent default
           (v4 (char-table-range child ?z)))
       (list v1 v2 v3 v4))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (parent-default child-a parent-default parent-default)""#],
-    );
+    let expect =
+        expect_test::expect![r#""OK (parent-default child-a parent-default parent-default)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -216,10 +209,8 @@ fn oracle_prop_char_table_comprehensive_map_with_default() {
     (char-table-range ct ?x)
     (char-table-range ct ?5)
     (char-table-range ct ?A)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (t special-x digit base)""#],
-    );
+    let expect = expect_test::expect![r#""OK (t special-x digit base)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -245,10 +236,8 @@ fn oracle_prop_char_table_comprehensive_subtypes() {
   (let ((ct (make-char-table 'generic)))
     (set-char-table-range ct ?a 42)
     (char-table-subtype ct)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (generic syntax-table nil t nil nil nil t generic)""#],
-    );
+    let expect = expect_test::expect![r#""OK (generic syntax-table nil t nil nil nil t generic)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -296,10 +285,8 @@ fn oracle_prop_char_table_comprehensive_transliteration() {
         (list ciphered
               (concat (nreverse decrypted))
               (string= input (concat (nreverse decrypted))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"Khoor Zruog Abc\" \"Hello World Xyz\" nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"Khoor Zruog Abc\" \"Hello World Xyz\" nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -340,13 +327,12 @@ fn oracle_prop_char_table_comprehensive_unicode_ranges() {
     (char-table-range ct #x03B1)    ;; greek (alpha)
     (char-table-range ct #x4E2D)    ;; cjk (zhong)
     (char-table-range ct #x1F600)   ;; emoji
-    (char-table-range ct #x10000)))"#; // unknown
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (control control whitespace digit upper lower printable latin-ext greek cjk emoji unknown)""#
-        ],
-    );
+    (char-table-range ct #x10000)))"#;
+    let expect = expect_test::expect![
+        r#""OK (control control whitespace digit upper lower printable latin-ext greek cjk emoji unknown)""#
+    ];
+    // unknown
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -408,10 +394,8 @@ fn oracle_prop_char_table_comprehensive_scoring_function() {
             (list s1 s2 (> s1 s2)))))
     (fmakunbound 'neovm--ct-build-scores)
     (fmakunbound 'neovm--ct-score-word)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (8 22 29 12 1 0 (14 6 t))""#],
-    );
+    let expect = expect_test::expect![r#""OK (8 22 29 12 1 0 (14 6 t))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -449,8 +433,7 @@ fn oracle_prop_char_table_comprehensive_map_filter() {
         (setq first5 (cons (nth i consonants) first5))
         (setq i (1+ i)))
       (nreverse first5))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""ERR (wrong-type-argument number-or-marker-p (123 . 4194303))""#],
-    );
+    let expect =
+        expect_test::expect![r#""ERR (wrong-type-argument number-or-marker-p (123 . 4194303))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

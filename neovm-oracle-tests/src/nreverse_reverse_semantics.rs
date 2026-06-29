@@ -26,10 +26,8 @@ fn oracle_nreverse_mutates_list_spine_and_vector_storage() {
         (eq vec same-vec)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((c b a) nil (a) [4 3 2 1] [4 3 2 1] t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((c b a) nil (a) [4 3 2 1] [4 3 2 1] t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -51,10 +49,8 @@ fn oracle_nreverse_bool_vector_mutates_and_string_does_not() {
         (eq s rs)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t (t nil nil t nil t) \"abcd\" \"dcba\" nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t (t nil nil t nil t) \"abcd\" \"dcba\" nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -77,12 +73,10 @@ fn oracle_reverse_is_shallow_and_does_not_mutate_inputs() {
         (eq (aref vec 0) (aref rev-vec 2))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((a (cell) c) (c (cell) a) t [(cell) 2 3] [changed 2 (cell)] nil t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((a (cell) c) (c (cell) a) t [(cell) 2 3] [changed 2 (cell)] nil t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -102,12 +96,10 @@ fn oracle_reverse_string_properties_and_multibyte_order() {
         (text-properties-at 2 r)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (#(\"a中b\" 0 2 (face bold)) \"b中a\" \"b中a\" t nil nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (#(\"a中b\" 0 2 (face bold)) \"b中a\" \"b中a\" t nil nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -130,12 +122,10 @@ fn oracle_reverse_and_nreverse_error_payloads() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-type-argument (sequencep 42)) (wrong-type-argument (arrayp 42)) (wrong-type-argument (listp c)) (wrong-type-argument (listp (a))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-type-argument (sequencep 42)) (wrong-type-argument (arrayp 42)) (wrong-type-argument (listp c)) (wrong-type-argument (listp (a))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -166,8 +156,7 @@ fn oracle_reverse_and_nreverse_circular_list_errors() {
                     (car arg)))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((circular-list 1 nil t c) (circular-list 1 t t x))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((circular-list 1 nil t c) (circular-list 1 t t x))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

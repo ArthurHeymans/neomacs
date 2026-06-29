@@ -11,6 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx433_org_mode_activate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (org-mode org-mode t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer
@@ -18,7 +19,7 @@ fn div_cx433_org_mode_activate() {
     (list major-mode
           (derived-mode-p 'org-mode)
           (boundp 'org-mode-map))))"##,
-        expect_test::expect![[r#""OK (org-mode org-mode t)""#]],
+        expect,
     );
 }
 
@@ -26,6 +27,7 @@ fn div_cx433_org_mode_activate() {
 #[test]
 fn div_cx433_org_element_parse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (org-data t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-element)
   (with-temp-buffer
@@ -33,7 +35,7 @@ fn div_cx433_org_element_parse() {
     (let ((tree (org-element-parse-buffer)))
       (list (org-element-type tree)
             (> (length tree) 0)))))"##,
-        expect_test::expect![[r#""OK (org-data t)""#]],
+        expect,
     );
 }
 
@@ -41,13 +43,14 @@ fn div_cx433_org_element_parse() {
 #[test]
 fn div_cx433_org_export_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"1 Hello\n=======\n\n  World\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'ox)
   (with-temp-buffer
     (insert "* Hello\nWorld\n")
     (let ((org-export-with-toc nil))
       (org-export-as 'ascii nil nil t nil))))"##,
-        expect_test::expect![[r#""OK \"1 Hello\n=======\n\n  World\n\"""#]],
+        expect,
     );
 }
 
@@ -55,6 +58,7 @@ fn div_cx433_org_export_basic() {
 #[test]
 fn div_cx433_org_hide_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer
@@ -62,7 +66,7 @@ fn div_cx433_org_hide_ops() {
     (insert "* H1\n** H2\ntext\n")
     (outline-hide-subtree)
     (outline-invisible-p 1)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -70,6 +74,7 @@ fn div_cx433_org_hide_ops() {
 #[test]
 fn div_cx433_org_table_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \" 2 \"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-table)
   (with-temp-buffer
@@ -77,7 +82,7 @@ fn div_cx433_org_table_ops() {
     (insert "| a | b |\n| 1 | 2 |\n")
     (org-table-goto-line 2)
     (org-table-get-field 2)))"##,
-        expect_test::expect![[r#""OK \" 2 \"""#]],
+        expect,
     );
 }
 
@@ -85,6 +90,7 @@ fn div_cx433_org_table_ops() {
 #[test]
 fn div_cx433_org_link_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable org-link-any-regexp)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'ol)
   (with-temp-buffer
@@ -93,7 +99,7 @@ fn div_cx433_org_link_ops() {
     (beginning-of-line)
     (looking-at org-link-any-regexp)
     (match-string-no-properties 0)))"##,
-        expect_test::expect![[r#""ERR (void-variable org-link-any-regexp)""#]],
+        expect,
     );
 }
 
@@ -101,6 +107,7 @@ fn div_cx433_org_link_ops() {
 #[test]
 fn div_cx433_org_heading_todo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"TODO\" 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer
@@ -109,7 +116,7 @@ fn div_cx433_org_heading_todo() {
     (org-back-to-heading)
     (list (org-get-todo-state)
           (org-outline-level))))"##,
-        expect_test::expect![[r#""OK (\"TODO\" 1)""#]],
+        expect,
     );
 }
 
@@ -117,6 +124,7 @@ fn div_cx433_org_heading_todo() {
 #[test]
 fn div_cx433_org_tags_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"tag1\" \"tag2\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer
@@ -124,7 +132,7 @@ fn div_cx433_org_tags_ops() {
     (insert "* heading :tag1:tag2:\n")
     (org-back-to-heading)
     (org-get-tags)))"##,
-        expect_test::expect![[r#""OK (\"tag1\" \"tag2\")""#]],
+        expect,
     );
 }
 
@@ -132,6 +140,7 @@ fn div_cx433_org_tags_ops() {
 #[test]
 fn div_cx433_org_priority_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 2000""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org)
   (with-temp-buffer
@@ -139,7 +148,7 @@ fn div_cx433_org_priority_ops() {
     (insert "* [#A] high priority\n")
     (org-back-to-heading)
     (org-get-priority (thing-at-point 'line t))))"##,
-        expect_test::expect![[r#""OK 2000""#]],
+        expect,
     );
 }
 
@@ -147,6 +156,7 @@ fn div_cx433_org_priority_ops() {
 #[test]
 fn div_cx433_org_clock_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-clock)
   (with-temp-buffer
@@ -154,7 +164,7 @@ fn div_cx433_org_clock_ops() {
     (insert "* TODO task\n")
     (list (fboundp 'org-clock-in)
           (fboundp 'org-clock-out))))"##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
@@ -162,13 +172,14 @@ fn div_cx433_org_clock_ops() {
 #[test]
 fn div_cx433_org_src_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-src-in-org-buffer-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-src)
   (with-temp-buffer
     (org-mode)
     (insert "#+begin_src emacs-lisp\n(+ 1 2)\n#+end_src\n")
     (org-src-in-org-buffer-p)))"##,
-        expect_test::expect![[r#""ERR (void-function org-src-in-org-buffer-p)""#]],
+        expect,
     );
 }
 
@@ -176,6 +187,7 @@ fn div_cx433_org_src_ops() {
 #[test]
 fn div_cx433_org_babel_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (user-error \"No further code blocks\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'ob-core)
   (with-temp-buffer
@@ -186,7 +198,7 @@ fn div_cx433_org_babel_ops() {
     (condition-case e
         (org-babel-execute-src-block)
       (error (car e)))))"##,
-        expect_test::expect![[r#""ERR (user-error \"No further code blocks\")""#]],
+        expect,
     );
 }
 
@@ -194,6 +206,7 @@ fn div_cx433_org_babel_ops() {
 #[test]
 fn div_cx433_org_list_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-list)
   (with-temp-buffer
@@ -201,7 +214,7 @@ fn div_cx433_org_list_ops() {
     (insert "- item1\n- item2\n  - subitem\n")
     (let ((struct (org-list-struct)))
       (list (listp struct) (> (length struct) 0)))))"##,
-        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p nil)""#]],
+        expect,
     );
 }
 
@@ -209,6 +222,7 @@ fn div_cx433_org_list_ops() {
 #[test]
 fn div_cx433_org_footnote_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil (\"1\" 18 45 \"Footnote definition\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-footnote)
   (with-temp-buffer
@@ -216,7 +230,7 @@ fn div_cx433_org_footnote_ops() {
     (insert "Text[fn:1] more\n\n[fn:1] Footnote definition\n")
     (list (condition-case e (org-footnote-at-reference-p) (error (car e)))
           (condition-case e (org-footnote-at-definition-p) (error (car e))))))"##,
-        expect_test::expect![[r#""OK (nil (\"1\" 18 45 \"Footnote definition\"))""#]],
+        expect,
     );
 }
 
@@ -224,11 +238,12 @@ fn div_cx433_org_footnote_ops() {
 #[test]
 fn div_cx433_org_capture_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-capture)
   (list (boundp 'org-capture-templates)
         (fboundp 'org-capture)))"##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
@@ -236,10 +251,11 @@ fn div_cx433_org_capture_ops() {
 #[test]
 fn div_cx433_org_agenda_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'org-agenda)
   (list (boundp 'org-agenda-files)
         (fboundp 'org-agenda-list)))"##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }

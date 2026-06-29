@@ -9,6 +9,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn strict_table_eval_formula() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 12 41)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -22,13 +23,14 @@ fn strict_table_eval_formula() {
           (let ((result (org-table-eval-formula nil "$1*$2" nil nil nil)))
             (list :result result :buffer-after (buffer-string)))
         (error (list :eval-error t)))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 12 41)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_element_type_on_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 14 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -44,13 +46,14 @@ fn strict_element_type_on_all() {
          (org-element-type
           (org-element-create 'bold nil "test")))
    )))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 14 6)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_footnote_goto_definition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 15 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -67,13 +70,14 @@ fn strict_footnote_goto_definition() {
                    (push (list :point-after-goto (point)) r))
           (error (push (list :goto-error t) r)))
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 15 25)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_babel_calc_integration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:ob-calc-loaded t :ob-calc-execute-fbound t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -82,13 +86,15 @@ fn strict_babel_calc_integration() {
    :ob-calc-loaded (featurep 'ob-calc)
    :ob-calc-execute-fbound (fboundp 'org-babel-execute:calc)
    ))"##,
-        expect_test::expect![[r#""OK (:ob-calc-loaded t :ob-calc-execute-fbound t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_timestamp_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((:change-fbound t) (:after-day \"<2024-06-16 Sun>\n\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -103,13 +109,16 @@ fn strict_timestamp_change() {
                (push (list :after-day (buffer-string)) r))
       (error (push (list :change-error t) r)))
     (nreverse r)))"##,
-        expect_test::expect![[r#""OK ((:change-fbound t) (:after-day \"<2024-06-16 Sun>\n\"))""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_org_export_dictionary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:dictionary-fbound t :dictionary-keys (\"%e %n: %c\" \"Author\" \"Continued from previous page\" \"Continued on next page\" \"Created\" \"Date\" \"Equation\" \"Figure\" \"Figure %d:\" \"Footnotes\" \"List of Listings\" \"List of Tables\" \"Listing\" \"Listing %d:\" \"References\" \"See figure %s\" \"See listing %s\" \"See section %s\" \"See table %s\" \"Table\" \"Table %d:\" \"Table of Contents\" \"Unknown reference\") :translations-available t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'ox)
@@ -120,15 +129,15 @@ fn strict_org_export_dictionary() {
    :translations-available (when (boundp 'org-export-dictionary)
                              (> (length org-export-dictionary) 0))
    ))"##,
-        expect_test::expect![[
-            r#""OK (:dictionary-fbound t :dictionary-keys (\"%e %n: %c\" \"Author\" \"Continued from previous page\" \"Continued on next page\" \"Created\" \"Date\" \"Equation\" \"Figure\" \"Figure %d:\" \"Footnotes\" \"List of Listings\" \"List of Tables\" \"Listing\" \"Listing %d:\" \"References\" \"See figure %s\" \"See listing %s\" \"See section %s\" \"See table %s\" \"Table\" \"Table %d:\" \"Table of Contents\" \"Unknown reference\") :translations-available t)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn strict_habit_insert_graph() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (:graph-fbound t :parse-fbound t :habit-fbound t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-habit)
@@ -137,13 +146,16 @@ fn strict_habit_insert_graph() {
    :parse-fbound (fboundp 'org-habit-parse-todo)
    :habit-fbound (fboundp 'org-is-habit-p)
    ))"##,
-        expect_test::expect![[r#""OK (:graph-fbound t :parse-fbound t :habit-fbound t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_org_table_header_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:header-line-fbound t :toggle-coordinate-fbound t :toggle-formula-debugger-fbound t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -152,15 +164,16 @@ fn strict_org_table_header_line() {
    :toggle-coordinate-fbound (fboundp 'org-table-toggle-coordinate-overlays)
    :toggle-formula-debugger-fbound (fboundp 'org-table-toggle-formula-debugger)
    ))"##,
-        expect_test::expect![[
-            r#""OK (:header-line-fbound t :toggle-coordinate-fbound t :toggle-formula-debugger-fbound t)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn strict_refile_get_location() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:get-location-fbound t :refile-fbound t :targets-fbound t :target-verify-fbound t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-refile)
@@ -170,15 +183,16 @@ fn strict_refile_get_location() {
    :targets-fbound (fboundp 'org-refile-get-targets)
    :target-verify-fbound (boundp 'org-refile-target-verify-function)
    ))"##,
-        expect_test::expect![[
-            r#""OK (:get-location-fbound t :refile-fbound t :targets-fbound t :target-verify-fbound t)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn strict_org_src_fontify() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (:fontify-block-fbound t :fontify-natively-bound t :edit-src-fbound t :exit-src-fbound t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-src)
@@ -188,8 +202,6 @@ fn strict_org_src_fontify() {
    :edit-src-fbound (fboundp 'org-edit-src-code)
    :exit-src-fbound (fboundp 'org-edit-src-exit)
    ))"##,
-        expect_test::expect![[
-            r#""OK (:fontify-block-fbound t :fontify-natively-bound t :edit-src-fbound t :exit-src-fbound t)""#
-        ]],
+        expect,
     );
 }

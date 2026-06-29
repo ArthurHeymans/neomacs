@@ -23,12 +23,10 @@ fn oracle_prop_nthcdr_comprehensive() {
                           (nthcdr 100 lst) ;; way past end → nil
                           (nthcdr 0 nil)
                           (nthcdr 5 nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((a b c d e f g) (b c d e f g) (d e f g) (g) nil nil nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((a b c d e f g) (b c d e f g) (d e f g) (g) nil nil nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -46,10 +44,8 @@ fn oracle_prop_nth_comprehensive() {
                           (nth 5 lst)   ;; past end → nil
                           (nth 99 lst)
                           (nth 0 nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (alpha beta epsilon nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (alpha beta epsilon nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -70,12 +66,10 @@ fn oracle_prop_last_with_n() {
                           (last lst 0)
                           (last nil)
                           (last nil 3)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((e) (e) (d e) (c d e) (a b c d e) (a b c d e) nil nil nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((e) (e) (d e) (c d e) (a b c d e) (a b c d e) nil nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -95,10 +89,9 @@ fn oracle_prop_butlast_basic() {
                           (butlast lst 6)
                           (butlast nil)
                           (butlast '(solo))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3 4) (1 2 3 4) (1 2 3) (1) nil nil nil nil)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((1 2 3 4) (1 2 3 4) (1 2 3) (1) nil nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -112,10 +105,8 @@ fn oracle_prop_nbutlast_basic() {
                     (list (nbutlast l1)
                           (nbutlast l2 2)
                           (nbutlast l3 5)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3 4) (1 2 3) nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 2 3 4) (1 2 3) nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -133,10 +124,8 @@ fn oracle_prop_elt_list_and_vector() {
                         (elt [10 20 30 40 50] 4)
                         (elt "hello" 0)
                         (elt "hello" 4))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (a d 10 50 104 111)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (a d 10 50 104 111)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -160,12 +149,10 @@ fn oracle_prop_nthcdr_rotate() {
                           (funcall rotate '(1 2 3 4 5) 2)
                           (funcall rotate '(1 2 3 4 5) 4)
                           (funcall rotate '(1 2 3 4 5) 5)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4 5) (2 3 4 5 1) (3 4 5 1 2) (5 1 2 3 4) (1 2 3 4 5))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5) (2 3 4 5 1) (3 4 5 1 2) (5 1 2 3 4) (1 2 3 4 5))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -193,10 +180,8 @@ fn oracle_prop_nthcdr_sliding_window() {
                                       averages)))
                         (setq i (1+ i))))
                     (nreverse averages))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (20.0 30.0 40.0 50.0 60.0 70.0 80.0 90.0)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (20.0 30.0 40.0 50.0 60.0 70.0 80.0 90.0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -223,10 +208,9 @@ fn oracle_prop_nthcdr_chunk() {
                           (funcall chunk '(a b c d e) 2)
                           (funcall chunk '(x) 5)
                           (funcall chunk nil 3)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (((1 2 3) (4 5 6) (7 8 9)) ((a b) (c d) (e)) ((x)) nil)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (((1 2 3) (4 5 6) (7 8 9)) ((a b) (c d) (e)) ((x)) nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -252,8 +236,6 @@ fn oracle_prop_nthcdr_interleave() {
                           (funcall interleave '(a b c d) '(1 2))
                           (funcall interleave nil '(x y z))
                           (funcall interleave '(solo) nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3 4 5 6) (a 1 b 2 c d) (x y z) (solo))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 2 3 4 5 6) (a 1 b 2 c d) (x y z) (solo))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

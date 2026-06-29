@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_post_command_hook_point_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass command-snap ()
@@ -67,7 +68,7 @@ fn combo_eieio_post_command_hook_point_tracking() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -75,6 +76,7 @@ fn combo_eieio_post_command_hook_point_tracking() {
 fn combo_eieio_post_command_overlay_state() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ov-state-snap ()
@@ -137,7 +139,7 @@ fn combo_eieio_post_command_overlay_state() {
                 (overlay-start ov1) (overlay-end ov1)
                 (overlay-start ov2) (overlay-end ov2)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -145,6 +147,7 @@ fn combo_eieio_post_command_overlay_state() {
 fn combo_eieio_command_hook_narrow_save_excursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass excursion-snap ()
@@ -203,7 +206,7 @@ fn combo_eieio_command_hook_narrow_save_excursion() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -211,6 +214,7 @@ fn combo_eieio_command_hook_narrow_save_excursion() {
 fn combo_eieio_command_hook_textprop_changes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass prop-change-snap ()
@@ -263,7 +267,7 @@ fn combo_eieio_command_hook_textprop_changes() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -271,6 +275,7 @@ fn combo_eieio_command_hook_textprop_changes() {
 fn combo_eieio_command_hook_marker_relocation_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass marker-cmd-snap ()
@@ -327,6 +332,6 @@ fn combo_eieio_command_hook_marker_relocation_undo() {
                 (marker-position m2)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

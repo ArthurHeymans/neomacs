@@ -45,10 +45,8 @@ fn oracle_file_size_human_readable_flavors_rounding_units_and_errors() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"0\" \"1\" \"999\" \"1000\" \"1k\" \"1.5k\" \"1M\" \"1.5KiB\" \"1.5k\" \"1.5k\" \"1.5kB\" \"1.5 KiB\" \"1.5 KiB\" \"1k\" \"1.9k\" \"2k\" \"-1\" \"0 B\" \"042B\" (wrong-type-argument (number-or-marker-p \"1536\")) (wrong-type-argument (sequencep 42)) (wrong-type-argument (number-or-marker-p \"1536\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"0\" \"1\" \"999\" \"1000\" \"1k\" \"1.5k\" \"1M\" \"1.5KiB\" \"1.5k\" \"1.5k\" \"1.5kB\" \"1.5 KiB\" \"1.5 KiB\" \"1k\" \"1.9k\" \"2k\" \"-1\" \"0 B\" \"042B\" (wrong-type-argument (number-or-marker-p \"1536\")) (wrong-type-argument (sequencep 42)) (wrong-type-argument (number-or-marker-p \"1536\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

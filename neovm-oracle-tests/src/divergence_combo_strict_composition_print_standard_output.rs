@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_o2_compose_region_find_composition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((1 3 t) (1 3 t) nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -21,13 +22,14 @@ fn div_o2_compose_region_find_composition() {
         (not (null (get-text-property 1 'composition)))
         (null (get-text-property 4 'composition))))
 "##,
-        expect_test::expect![[r#""OK ((1 3 t) (1 3 t) nil t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_o2_compose_string_decompose() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s1 (compose-string "ab"))
@@ -38,13 +40,14 @@ fn div_o2_compose_string_decompose() {
         (stringp s2)
         (null (get-text-property 0 'composition s2))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_o2_print_to_standard_output_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"foo bar 42\n\nlist\n\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -56,13 +59,14 @@ fn div_o2_print_to_standard_output_buffer() {
     (print 'list))
   (buffer-string))
 "##,
-        expect_test::expect![[r#""OK \"foo bar 42\n\nlist\n\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_o2_compose_with_components() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument arrayp nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -72,6 +76,6 @@ fn div_o2_compose_with_components() {
         (not (null (get-text-property 1 'composition)))
         (char-to-string (aref (cdr (get-text-property 1 'composition)) 1))))
 "##,
-        expect_test::expect![[r#""ERR (wrong-type-argument arrayp nil)""#]],
+        expect,
     );
 }

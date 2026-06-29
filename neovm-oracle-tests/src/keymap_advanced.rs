@@ -34,10 +34,8 @@ fn oracle_prop_keymap_make_vs_sparse() {
                     (let ((sp (make-sparse-keymap \"My menu\")))
                       (list (keymapp sp)
                             (keymap-prompt sp)))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t nil (t \"My menu\"))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t nil (t \"My menu\"))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -66,10 +64,8 @@ fn oracle_prop_define_key_various_sequences() {
                       (keymapp (lookup-key m (kbd "C-x")))
                       ;; Full sequence
                       (lookup-key m (kbd "C-x C-f"))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (cmd-a cmd-b cmd-ctrl-c t find-file-cmd)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (cmd-a cmd-b cmd-ctrl-c t find-file-cmd)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -99,10 +95,8 @@ fn oracle_prop_lookup_key_return_types() {
                         (if (numberp result)
                             (list 'too-long result)
                           result))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (cmd-a t find-file-cmd nil (too-long 1))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (cmd-a t find-file-cmd nil (too-long 1))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -137,12 +131,10 @@ fn oracle_prop_keymap_parent_chain() {
                     (eq (keymap-parent child) parent)
                     (eq (keymap-parent parent) grandparent)
                     (keymap-parent grandparent)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (gp-cmd-a parent-cmd-b child-cmd-c gp-cmd-a parent-cmd-b gp-cmd-c t t nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (gp-cmd-a parent-cmd-b child-cmd-c gp-cmd-a parent-cmd-b gp-cmd-c t t nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -178,12 +170,10 @@ fn oracle_prop_copy_keymap_independence() {
                       ;; Both are keymaps
                       (keymapp orig)
                       (keymapp copy))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (new-cmd-a cmd-b cmd-c nil cmd-a copy-cmd-b nil cmd-d t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (new-cmd-a cmd-b cmd-c nil cmd-a copy-cmd-b nil cmd-d t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -218,12 +208,10 @@ fn oracle_prop_keymap_shadowing() {
                         ;; Parent unchanged
                         (lookup-key parent [?x])
                         (lookup-key parent [?y])))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (child-x child-y parent-z nil child-y parent-z parent-x parent-y)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (child-x child-y parent-z nil child-y parent-z parent-x parent-y)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -266,10 +254,9 @@ fn oracle_prop_keymap_prefix_hierarchy() {
                       ;; Unbound
                       (lookup-key root [24 ?z])
                       (lookup-key root [99])))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (find-file save-buffer compile quit-emacs t t nil nil)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (find-file save-buffer compile quit-emacs t t nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -301,8 +288,6 @@ fn oracle_prop_keymapp_various_objects() {
                     (let ((m (make-sparse-keymap)))
                       (define-key m (kbd "C-x C-f") 'find-file)
                       (keymapp (lookup-key m (kbd "C-x")))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t nil nil nil nil nil nil t t nil t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t nil nil nil nil nil nil t t nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

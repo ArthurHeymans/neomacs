@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_plist_manipulation_and_access() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (\"test\" t 5 t (a b c) t t (:active t :extra new) (:name \"test\" :count 5 :tags (a b c) :active t :extra new) new t nil t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((pl '(:name "test" :count 5 :tags (a b c) :active t)))
@@ -23,9 +26,7 @@ fn divergence_plist_manipulation_and_access() {
           (eq (plist-get (plist-put pl :extra 'new) :extra) 'new)
           (plist-get pl :nonexistent)
           (null (plist-get pl :nonexistent))))) "#,
-        expect_test::expect![[
-            r#""OK (\"test\" t 5 t (a b c) t t (:active t :extra new) (:name \"test\" :count 5 :tags (a b c) :active t :extra new) new t nil t)""#
-        ]],
+        expect,
     );
 }
 
@@ -33,6 +34,8 @@ fn divergence_plist_manipulation_and_access() {
 fn divergence_hash_table_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""OK (1 t 2 t 3 t nil t 3 t removed t 2 t cleared 0 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal :size 10)))
@@ -56,7 +59,7 @@ fn divergence_hash_table_operations() {
           (progn (clrhash ht) 'cleared)
           (hash-table-count ht)
           (= (hash-table-count ht) 0)))) "#,
-        expect_test::expect![[r#""OK (1 t 2 t 3 t nil t 3 t removed t 2 t cleared 0 t)""#]],
+        expect,
     );
 }
 
@@ -64,6 +67,7 @@ fn divergence_hash_table_operations() {
 fn divergence_hash_table_iteration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((x y z) t (10 20 30) t 3 t 20 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal))
@@ -87,7 +91,7 @@ fn divergence_hash_table_iteration() {
             (= (hash-table-count ht) 3)
             (gethash 'y ht)
             (= (gethash 'y ht) 20))))) "#,
-        expect_test::expect![[r#""OK ((x y z) t (10 20 30) t 3 t 20 t)""#]],
+        expect,
     );
 }
 
@@ -95,6 +99,9 @@ fn divergence_hash_table_iteration() {
 fn divergence_symbol_plist_vs_separate_plist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (val1 t val2 t val3 t nil t (prop1 val1 prop2 val2 prop3 val3) (prop1 val1 prop2 val2 prop3 val3) (prop2 val2 prop3 val3) \"test-spvs-xxx\" t test-spvs-xxx t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-spvs-xxx nil)
@@ -116,9 +123,7 @@ fn divergence_symbol_plist_vs_separate_plist() {
         (string= (symbol-name 'test-spvs-xxx) "test-spvs-xxx")
         (intern-soft "test-spvs-xxx")
         (eq (intern-soft "test-spvs-xxx") 'test-spvs-xxx))) "#,
-        expect_test::expect![[
-            r#""OK (val1 t val2 t val3 t nil t (prop1 val1 prop2 val2 prop3 val3) (prop1 val1 prop2 val2 prop3 val3) (prop2 val2 prop3 val3) \"test-spvs-xxx\" t test-spvs-xxx t)""#
-        ]],
+        expect,
     );
 }
 
@@ -126,6 +131,7 @@ fn divergence_symbol_plist_vs_separate_plist() {
 fn divergence_obarray_intern_unintern() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((sym-name "test-oiu-xxx"))
@@ -144,7 +150,7 @@ fn divergence_obarray_intern_unintern() {
                 (= v 42)
                 (let ((s4 (intern sym-name)))
                   (not (eq s4 s2))))))))) "#,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -152,6 +158,7 @@ fn divergence_obarray_intern_unintern() {
 fn divergence_eval_with_dynamic_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (10 t (20 t 20) 6 t (1 2 3) t \"abc\" t 10 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-ewdb-xxx 10)
@@ -169,7 +176,7 @@ fn divergence_eval_with_dynamic_binding() {
         (string= (eval '(concat "a" "b" "c")) "abc")
         test-ewdb-xxx
         (= test-ewdb-xxx 10))) "#,
-        expect_test::expect![[r#""OK (10 t (20 t 20) 6 t (1 2 3) t \"abc\" t 10 t)""#]],
+        expect,
     );
 }
 
@@ -177,6 +184,8 @@ fn divergence_eval_with_dynamic_binding() {
 fn divergence_hash_table_with_string_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""OK (value1 t value2 t nil t 3 t updated updated t 3 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal)))
@@ -196,7 +205,7 @@ fn divergence_hash_table_with_string_keys() {
           (eq (gethash "key1" ht) 'updated)
           (hash-table-count ht)
           (= (hash-table-count ht) 3)))) "#,
-        expect_test::expect![[r#""OK (value1 t value2 t nil t 3 t updated updated t 3 t)""#]],
+        expect,
     );
 }
 
@@ -204,6 +213,7 @@ fn divergence_hash_table_with_string_keys() {
 fn divergence_plist_lax_vs_strict() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (1 t 2 t 3 t 1 t 2 t 3 t (a 1 b 2 c 3 d 4) 4 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((strict-pl '(:a 1 :b 2 :c 3))
@@ -223,7 +233,7 @@ fn divergence_plist_lax_vs_strict() {
           (lax-plist-put lax-pl 'd 4)
           (lax-plist-get (lax-plist-put lax-pl 'd 4) 'd)
           (= (lax-plist-get (lax-plist-put lax-pl 'd 4) 'd) 4)))) "#,
-        expect_test::expect![[r#""OK (1 t 2 t 3 t 1 t 2 t 3 t (a 1 b 2 c 3 d 4) 4 t)""#]],
+        expect,
     );
 }
 
@@ -231,6 +241,7 @@ fn divergence_plist_lax_vs_strict() {
 fn divergence_symbol_function_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function advice--cdar)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defun test-sfb-xxx (x) (+ x 1))
@@ -248,7 +259,7 @@ fn divergence_symbol_function_binding() {
             (advice--cdar (advice--symbol-function 'test-sfb-xxx)))
           (funcall 'test-sfb-xxx 5)
           (= (funcall 'test-sfb-xxx 5) 6)))) "#,
-        expect_test::expect![[r#""ERR (void-function advice--cdar)""#]],
+        expect,
     );
 }
 
@@ -256,6 +267,7 @@ fn divergence_symbol_function_binding() {
 fn divergence_eval_with_backquote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable x)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((x 10)
@@ -273,6 +285,6 @@ fn divergence_eval_with_backquote() {
           (eq (eval '`,(car items)) 'a)
           (eval '`,(length items))
           (= (eval '`,(length items)) 3)))) "#,
-        expect_test::expect![[r#""ERR (void-variable x)""#]],
+        expect,
     );
 }

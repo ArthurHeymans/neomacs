@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_pb2_forward_scan() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass bsc2 ()
@@ -72,7 +73,7 @@ fn combo_eieio_pb2_forward_scan() {
               (overlay-start ov) (overlay-end ov)
               my-b2-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -80,6 +81,7 @@ fn combo_eieio_pb2_forward_scan() {
 fn combo_eieio_pb2_backward_scan() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass rsc2 ()
@@ -142,7 +144,7 @@ fn combo_eieio_pb2_backward_scan() {
               (overlay-start ov) (overlay-end ov)
               my-r2-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -150,6 +152,7 @@ fn combo_eieio_pb2_backward_scan() {
 fn combo_eieio_pb2_overlay_stack() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass pm2 ()
@@ -221,7 +224,7 @@ fn combo_eieio_pb2_overlay_stack() {
               (overlay-start ov3) (overlay-end ov3)
               my-p2-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -229,6 +232,7 @@ fn combo_eieio_pb2_overlay_stack() {
 fn combo_eieio_pb2_undo_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass usc2 ()
@@ -297,7 +301,7 @@ fn combo_eieio_pb2_undo_boundaries() {
               (overlay-start ov) (overlay-end ov)
               my-u2-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -305,6 +309,7 @@ fn combo_eieio_pb2_undo_boundaries() {
 fn combo_eieio_pb2_multi_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass mps2 ()
@@ -382,6 +387,6 @@ fn combo_eieio_pb2_multi_prop() {
               (overlay-start ov) (overlay-end ov)
               my-m2-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }

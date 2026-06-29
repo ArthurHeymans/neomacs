@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_buflocal_clone_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable clone)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"blc\")))\n\
@@ -43,7 +44,7 @@ fn combo_buflocal_clone_marker_overlay_undo() {
          (marker-position m)))))\n\
          (kill-buffer clone)\n\
          (kill-buffer buf))))",
-        expect_test::expect![[r#""ERR (void-variable clone)""#]],
+        expect,
     );
 }
 
@@ -51,6 +52,7 @@ fn combo_buflocal_clone_marker_overlay_undo() {
 fn combo_buflocal_narrow_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"bln\")))\n\
@@ -87,7 +89,7 @@ fn combo_buflocal_narrow_overlay_undo() {
          (overlay-start ov)\n\
          (overlay-end ov)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -95,6 +97,7 @@ fn combo_buflocal_narrow_overlay_undo() {
 fn combo_buflocal_multi_clone_shared_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"blm\")))\n\
@@ -135,7 +138,7 @@ fn combo_buflocal_multi_clone_shared_undo() {
          (kill-buffer c1)\n\
          (kill-buffer c2)\n\
          (kill-buffer buf))))",
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -143,6 +146,7 @@ fn combo_buflocal_multi_clone_shared_undo() {
 fn combo_buflocal_defvar_setq_marker_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (defvar bl-test-var 'default)\n\
@@ -174,7 +178,7 @@ fn combo_buflocal_defvar_setq_marker_undo() {
          (buffer-string)\n\
          (marker-position m)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -182,6 +186,9 @@ fn combo_buflocal_defvar_setq_marker_undo() {
 fn combo_buflocal_hook_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-number-of-arguments (closure (t) nil (setq my-log (cons (buffer-string) my-log))) 2)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"blh\"))\n\
@@ -213,8 +220,6 @@ fn combo_buflocal_hook_marker_overlay() {
          (buffer-string)\n\
          (marker-position m)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[
-            r#""ERR (wrong-number-of-arguments (closure (t) nil (setq my-log (cons (buffer-string) my-log))) 2)""#
-        ]],
+        expect,
     );
 }

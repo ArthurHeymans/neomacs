@@ -20,12 +20,10 @@ fn oracle_prop_add_text_properties_preserves_supplied_plist_order() {
         (text-properties-at 0 s)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (#(\"abc\" 0 3 (font-lock-face help-key-binding face help-key-binding)) (font-lock-face help-key-binding face help-key-binding))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (#(\"abc\" 0 3 (font-lock-face help-key-binding face help-key-binding)) (font-lock-face help-key-binding face help-key-binding))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -41,12 +39,10 @@ fn oracle_prop_propertize_preserves_supplied_plist_order() {
         (text-properties-at 0 s)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (#(\"abc\" 0 3 (face bold font-lock-face italic help-echo \"tip\")) (face bold font-lock-face italic help-echo \"tip\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (#(\"abc\" 0 3 (face bold font-lock-face italic help-echo \"tip\")) (face bold font-lock-face italic help-echo \"tip\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -60,10 +56,9 @@ fn oracle_prop_add_text_properties_replacement_keeps_existing_position() {
         (text-properties-at 0 s)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (#(\"abc\" 0 3 (d 4 a 1 b 20 c 3)) (d 4 a 1 b 20 c 3))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (#(\"abc\" 0 3 (d 4 a 1 b 20 c 3)) (d 4 a 1 b 20 c 3))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -77,8 +72,6 @@ fn oracle_prop_set_text_properties_uses_replacement_plist_order() {
         (text-properties-at 0 s)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (#(\"abc\" 0 3 (x 1 y 2 z 3)) (x 1 y 2 z 3))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (#(\"abc\" 0 3 (x 1 y 2 z 3)) (x 1 y 2 z 3))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

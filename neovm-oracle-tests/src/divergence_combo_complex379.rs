@@ -9,6 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx379_string_match_p_casefold_and_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (4 4 4 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-match-p "hello" "say hello world")
@@ -16,13 +17,14 @@ fn div_cx379_string_match_p_casefold_and_search() {
       (let ((case-fold-search t)) (string-match-p "HELLO" "say hello world"))
       (let ((case-fold-search nil)) (string-match-p "hello" "say Hello world")))
 "##,
-        expect_test::expect![[r#""OK (4 4 4 nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx379_compare_strings_edge_cases() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t -3 -4 3 t 1 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (compare-strings "abc" nil nil "abc" nil nil)
@@ -34,13 +36,14 @@ fn div_cx379_compare_strings_edge_cases() {
       (compare-strings "abc" 0 3 "xabc" 1 4)
       (compare-strings "abc" 0 2 "abx" 0 2))
 "##,
-        expect_test::expect![[r#""OK (t -3 -4 3 t 1 t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx379_string_distance_levenshtein_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 2 0 0 1 1 3 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-distance "kitten" "sitting")
@@ -52,13 +55,16 @@ fn div_cx379_string_distance_levenshtein_matrix() {
       (string-distance "abc" "xyz")
       (string-distance "café" "cafe"))
 "##,
-        expect_test::expect![[r#""OK (3 2 0 0 1 1 3 1)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx379_split_string_with_trim_and_join() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"hello\" \"world\") (\"a\" \"b\" \"c\") (\"\" \"hello\" \"world\" \"\") (\"\") (\"no delimiters here\") \"alpha,beta,gamma\" \"alpha -> beta -> gamma\" \"single\" \"\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (split-string "  hello  world  " "[ \t]+" t)
@@ -71,15 +77,14 @@ fn div_cx379_split_string_with_trim_and_join() {
       (string-join '("single"))
       (string-join '()))
 "##,
-        expect_test::expect![[
-            r#""OK ((\"hello\" \"world\") (\"a\" \"b\" \"c\") (\"\" \"hello\" \"world\" \"\") (\"\") (\"no delimiters here\") \"alpha,beta,gamma\" \"alpha -> beta -> gamma\" \"single\" \"\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx379_string_replace_and_subst_char() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-length-argument 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-replace "o" "0" "hello world foo")
@@ -90,13 +95,14 @@ fn div_cx379_string_replace_and_subst_char() {
       (replace-regexp-in-string "\\b\\w+\\b" (lambda (m) (upcase m)) "hello world")
       (subst-char-in-string ?a ?X "banana"))
 "##,
-        expect_test::expect![[r#""ERR (wrong-length-argument 0)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx379_string_prefix_suffix_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil t nil t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-prefix-p "hello" "hello world")
@@ -107,13 +113,14 @@ fn div_cx379_string_prefix_suffix_predicates() {
       (string-suffix-p "hello" "hello world")
       (string-suffix-p "WORLD" "hello world" t))
 "##,
-        expect_test::expect![[r#""OK (t nil t nil t nil t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx379_string_version_lessp_matrix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil t nil t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-version-lessp "file2.txt" "file10.txt")
@@ -125,13 +132,16 @@ fn div_cx379_string_version_lessp_matrix() {
       (string-version-lessp "v1.0.0" "v1.0.1")
       (string-version-lessp "v1.0.9" "v1.0.10"))
 "##,
-        expect_test::expect![[r#""OK (t nil t nil t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx379_string_trim_pad_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"hello\" \"hello\" \"hello\" \"hello\" \"hello\" \"hello     \" \"hello-----\" \"hello\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (string-trim "   hello   ")
@@ -143,15 +153,16 @@ fn div_cx379_string_trim_pad_lines() {
       (string-pad "hello" 10 ?-)
       (string-pad "hello" 3))
 "##,
-        expect_test::expect![[
-            r#""OK (\"hello\" \"hello\" \"hello\" \"hello\" \"hello\" \"hello     \" \"hello-----\" \"hello\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx379_concat_mapconcat_identity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"alphabetagamma\" \"\" \"a-b-c\" \"1,2,3\" \"10/20/30\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (concat "alpha" "beta" "gamma")
@@ -160,15 +171,14 @@ fn div_cx379_concat_mapconcat_identity() {
       (mapconcat (lambda (n) (number-to-string n)) '(1 2 3) ",")
       (mapconcat #'number-to-string [10 20 30] "/"))
 "##,
-        expect_test::expect![[
-            r#""OK (\"alphabetagamma\" \"\" \"a-b-c\" \"1,2,3\" \"10/20/30\")""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx379_string_ops_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((s1 "  hello world  ")
@@ -198,6 +208,6 @@ fn div_cx379_string_ops_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     )
 }

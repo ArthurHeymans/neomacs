@@ -43,10 +43,8 @@ fn oracle_prop_npc_patterns_position_arg() {
     (next-property-change 11 s)
     ;; From position 12 (at string length, past end)
     (next-property-change 12 s)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 3 3 6 6 9 9 nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 3 3 6 6 9 9 nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -97,12 +95,10 @@ fn oracle_prop_npc_patterns_object_arg() {
       (push (list :explicit-buffer (nreverse boundaries)) results)))
 
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:string-boundaries (2 4)) (:buffer-boundaries (3 5)) (:explicit-buffer (6 7)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:string-boundaries (2 4)) (:buffer-boundaries (3 5)) (:explicit-buffer (6 7)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -152,10 +148,8 @@ fn oracle_prop_npc_patterns_limit_arg() {
     (next-property-change 0 s nil)
     (next-property-change 4 s nil)
     (next-property-change 8 s nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (2 4 4 4 4 6 8 8 10 12 100 0 4 4 8 nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 4 4 4 4 6 8 8 10 12 100 0 4 4 8 nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -202,12 +196,10 @@ fn oracle_prop_npc_patterns_return_value() {
     (push (list :multi-prop-change (next-property-change 0 s)) results))
 
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:uniform-nil nil) (:plain-nil nil) (:returns-pos 2) (:returns-limit 3) (:past-all-nil nil) (:empty-nil nil) (:limit-past-end 100) (:multi-prop-change 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:uniform-nil nil) (:plain-nil nil) (:returns-pos 2) (:returns-limit 3) (:past-all-nil nil) (:empty-nil nil) (:limit-past-end 100) (:multi-prop-change 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -251,12 +243,10 @@ fn oracle_prop_npc_patterns_single_property() {
                              (let ((ok t))
                                (dolist (fb (mapcar #'car (nreverse face-bounds)) ok)
                                  (unless (memq fb all-sorted) (setq ok nil))))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:face-boundaries ((4) (6 . italic) (10)) :help-boundaries ((2 . \"info\") (8)) :all-boundaries (2 4 6 8 10) :face-subset t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:face-boundaries ((4) (6 . italic) (10)) :help-boundaries ((2 . \"info\") (8)) :all-boundaries (2 4 6 8 10) :face-subset t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -298,12 +288,10 @@ fn oracle_prop_npc_patterns_multiple_properties() {
                          (dolist (sp (nreverse spans) ok)
                            (unless (= (car sp) expected) (setq ok nil))
                            (setq expected (cadr sp)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:span-count 8 :spans ((0 2 bold nil nil) (2 4 bold \"h1\" nil) (4 6 nil \"h1\" t) (6 8 nil nil t) (8 10 italic nil nil) (10 12 italic \"h2\" nil) (12 14 nil \"h2\" nil) (14 16 nil nil nil)) :coverage-ok nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:span-count 8 :spans ((0 2 bold nil nil) (2 4 bold \"h1\" nil) (4 6 nil \"h1\" t) (6 8 nil nil t) (8 10 italic nil nil) (10 12 italic \"h2\" nil) (12 14 nil \"h2\" nil) (14 16 nil nil nil)) :coverage-ok nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -371,12 +359,10 @@ fn oracle_prop_npc_patterns_iterate_all_changes() {
                 :ends-at-length (= (cadr (car (last spans))) (length s)))))
     (fmakunbound 'neovm--test-collect-all-spans)
     (fmakunbound 'neovm--test-verify-spans)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:span-count 15 :spans ((0 3 face font-lock-keyword-face) (3 4) (4 9 help-echo \"speed\" face font-lock-type-face) (9 10) (10 15 face font-lock-string-face) (15 16) (16 19 mouse-face highlight) (19 20) (20 25 invisible t face bold) (25 31) (31 34 face italic) (34 35) (35 39 help-echo \"sleepy\") (39 40) (40 43 face underline)) :verified t :starts-at-0 t :ends-at-length t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:span-count 15 :spans ((0 3 face font-lock-keyword-face) (3 4) (4 9 help-echo \"speed\" face font-lock-type-face) (9 10) (10 15 face font-lock-string-face) (15 16) (16 19 mouse-face highlight) (19 20) (20 25 invisible t face bold) (25 31) (31 34 face italic) (34 35) (35 39 help-echo \"sleepy\") (39 40) (40 43 face underline)) :verified t :starts-at-0 t :ends-at-length t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -445,10 +431,8 @@ fn oracle_prop_npc_patterns_property_span_map() {
                     (unless (= (car sp) last-end) (setq ok nil))
                     (setq last-end (cadr sp)))))))
     (fmakunbound 'neovm--test-build-prop-map)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:prop-names (face help-echo) :face-spans ((0 4 bold) (4 5 italic) (5 8 italic) (8 10 bold) (10 12 bold) (12 15 italic) (15 16 italic) (16 20 bold)) :help-spans ((0 4 \"h0\") (4 5 \"h0\") (5 8 \"h1\") (8 10 \"h1\") (10 12 \"h2\") (12 15 \"h2\") (15 16 \"h3\") (16 20 \"h3\")) :face-coverage t :help-coverage t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:prop-names (face help-echo) :face-spans ((0 4 bold) (4 5 italic) (5 8 italic) (8 10 bold) (10 12 bold) (12 15 italic) (15 16 italic) (16 20 bold)) :help-spans ((0 4 \"h0\") (4 5 \"h0\") (5 8 \"h1\") (8 10 \"h1\") (10 12 \"h2\") (12 15 \"h2\") (15 16 \"h3\") (16 20 \"h3\")) :face-coverage t :help-coverage t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

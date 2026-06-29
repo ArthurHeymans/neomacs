@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx189_marker_creation_and_basic_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t 5 8 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -20,13 +21,14 @@ fn div_cx189_marker_creation_and_basic_query() {
           (eq (marker-buffer m1) (current-buffer))
           (eq (marker-buffer m2) (current-buffer)))))
 "##,
-        expect_test::expect![[r#""OK (t 5 8 t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx189_marker_adjusts_on_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (8 \"01XXX23456789\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -36,13 +38,14 @@ fn div_cx189_marker_adjusts_on_insert() {
     (insert "XXX")
     (list (marker-position m) (buffer-string))))
 "##,
-        expect_test::expect![[r#""OK (8 \"01XXX23456789\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx189_marker_adjusts_on_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (6 \"01456789\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -51,13 +54,14 @@ fn div_cx189_marker_adjusts_on_delete() {
     (delete-region 3 5)
     (list (marker-position m) (buffer-string))))
 "##,
-        expect_test::expect![[r#""OK (6 \"01456789\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx189_marker_insertion_type_front_vs_rear() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil 6 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -73,13 +77,14 @@ fn div_cx189_marker_insertion_type_front_vs_rear() {
           (marker-position m-front)
           (marker-position m-rear))))
 "##,
-        expect_test::expect![[r#""OK (t nil 6 5)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx189_copy_marker_independent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (8 5 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -91,13 +96,14 @@ fn div_cx189_copy_marker_independent() {
           (marker-position m2)
           (eq m1 m2))))
 "##,
-        expect_test::expect![[r#""OK (8 5 nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx189_marker_in_different_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf-a (get-buffer-create " *neo-cx189-mk-a*"))
@@ -112,13 +118,14 @@ fn div_cx189_marker_in_different_buffer() {
       (kill-buffer buf-b)
       (list pos (eq buf buf-b) (marker-buffer m))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx189_marker_after_kill_buffer_is_nil() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx189-kill*")))
@@ -129,13 +136,14 @@ fn div_cx189_marker_after_kill_buffer_is_nil() {
     (list (marker-buffer m)
           (marker-position m))))
 "##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx189_marker_buffer_narrowing_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (15 5 20 \"EFGHIJKLMNOPQRS\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -146,13 +154,14 @@ fn div_cx189_marker_buffer_narrowing_interaction() {
           (point-min) (point-max)
           (buffer-substring (point-min) (point-max)))))
 "##,
-        expect_test::expect![[r#""OK (15 5 20 \"EFGHIJKLMNOPQRS\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx189_multiple_markers_track_same_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 8 10)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -166,13 +175,14 @@ fn div_cx189_multiple_markers_track_same_insert() {
           (marker-position m2)
           (marker-position m3))))
 "##,
-        expect_test::expect![[r#""OK (3 8 10)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx189_marker_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable m2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -202,6 +212,6 @@ fn div_cx189_marker_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1)))))
 "##,
-        expect_test::expect![[r#""ERR (void-variable m2)""#]],
+        expect,
     );
 }

@@ -25,10 +25,8 @@ fn oracle_prop_unwind_protect_multiple_cleanup_forms() {
                       (setq log (cons 'clean2 log))
                       (setq log (cons 'clean3 log)))
                     (nreverse log))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (body clean1 clean2 clean3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (body clean1 clean2 clean3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -42,8 +40,8 @@ fn oracle_prop_unwind_protect_cleanup_values_discarded() {
                     (+ 1 2)
                     (+ 3 4)
                     (* 5 6))"#;
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 42""#]]);
+    let expect = expect_test::expect![[r#""OK 42""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("42", &o, &n);
 }
 
@@ -66,10 +64,8 @@ fn oracle_prop_unwind_protect_cleanup_on_throw() {
                         (setq log (cons 'cleanup-ran log))
                         (setq log (cons 'cleanup-2-ran log))))
                     (nreverse log))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (before-throw cleanup-ran cleanup-2-ran)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (before-throw cleanup-ran cleanup-2-ran)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -85,10 +81,8 @@ fn oracle_prop_unwind_protect_throw_preserves_value_through_cleanup() {
                                  (throw 'exit '(complex data 42))
                                (setq cleanup-ran t)))))
                       (list result cleanup-ran)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((complex data 42) t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((complex data 42) t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -112,10 +106,8 @@ fn oracle_prop_unwind_protect_cleanup_on_signal() {
                       (arith-error
                        (setq log (cons (list 'caught (car err)) log))))
                     (nreverse log))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (body cleanup-1 cleanup-2 (caught arith-error))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (body cleanup-1 cleanup-2 (caught arith-error))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -141,10 +133,8 @@ fn oracle_prop_unwind_protect_nested_lifo_ordering() {
                           (setq log (cons 'outer log)))
                       (error nil))
                     (nreverse log))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (body inner middle outer)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (body inner middle outer)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -164,10 +154,8 @@ fn oracle_prop_unwind_protect_nested_lifo_with_throw() {
                             (setq log (cons 'cleanup-2 log)))
                         (setq log (cons 'cleanup-1 log))))
                     (nreverse log))"#;
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (deepest cleanup-3 cleanup-2 cleanup-1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (deepest cleanup-3 cleanup-2 cleanup-1)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(deepest cleanup-3 cleanup-2 cleanup-1)", &o, &n);
 }
 
@@ -186,10 +174,8 @@ fn oracle_prop_unwind_protect_error_in_cleanup() {
                           'body-value
                         (error "cleanup exploded"))
                     (error (list 'caught (cadr err))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (caught \"cleanup exploded\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (caught \"cleanup exploded\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -203,10 +189,8 @@ fn oracle_prop_unwind_protect_error_in_cleanup_overrides_body_error() {
                           (error "body error")
                         (error "cleanup error"))
                     (error (cadr err)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK \"cleanup error\"""#]],
-    );
+    let expect = expect_test::expect![[r#""OK \"cleanup error\"""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -224,7 +208,8 @@ fn oracle_prop_unwind_protect_partial_cleanup_on_cleanup_error() {
                           (setq log (cons 'c3 log)))
                       (error nil))
                     (nreverse log))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (c1)""#]]);
+    let expect = expect_test::expect![[r#""OK (c1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -245,10 +230,8 @@ fn oracle_prop_unwind_protect_preserves_body_return_value() {
                                  (list 'computed counter))
                              (setq counter 999))))
                       (list result counter)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((computed 2) 999)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((computed 2) 999)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -262,10 +245,8 @@ fn oracle_prop_unwind_protect_preserves_nil_body_value() {
                                nil
                              (setq side 'cleaned))))
                       (list result side)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil cleaned)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil cleaned)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -304,12 +285,10 @@ fn oracle_prop_unwind_protect_raii_pattern() {
                               (funcall release 'db-conn)))
                         (error nil))
                       (list (nreverse operations) resources)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((acquired db-conn) (acquired file-handle) (acquired lock) (released lock) (released file-handle) (released db-conn)) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((acquired db-conn) (acquired file-handle) (acquired lock) (released lock) (released file-handle) (released db-conn)) nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -349,12 +328,10 @@ fn oracle_prop_unwind_protect_dynamic_binding_restoration() {
                           (funcall restore-state))
                         (setq log (cons (list 'final current-state) log))
                         (nreverse log))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((inside-1 modified-1) (inside-2 modified-2) (after-throw modified-1) (final initial))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((inside-1 modified-1) (inside-2 modified-2) (after-throw modified-1) (final initial))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -378,12 +355,10 @@ fn oracle_prop_unwind_protect_condition_case_interaction() {
                       (error
                        (setq log (cons (list 'caught-outer (cadr outer-err)) log))))
                     (nreverse log))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (body (caught-inner \"inner error\") outer-cleanup (caught-outer \"re-signaled from handler\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (body (caught-inner \"inner error\") outer-cleanup (caught-outer \"re-signaled from handler\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -403,10 +378,8 @@ fn oracle_prop_unwind_protect_loop_with_early_exit() {
                                   (throw 'done 'stopped-at-c)))
                             (setq log (cons (list 'cleanup item) log))))))
                     (nreverse log))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((process a) (cleanup a) (process b) (cleanup b) (process c) (cleanup c))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((process a) (cleanup a) (process b) (cleanup b) (process c) (cleanup c))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

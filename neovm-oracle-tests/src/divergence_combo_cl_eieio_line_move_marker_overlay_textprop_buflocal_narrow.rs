@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_forward_line_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 28 33)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass line-nav-snap ()
@@ -66,7 +67,7 @@ fn combo_eieio_forward_line_with_markers() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 28 33)""#]],
+        expect,
     );
 }
 
@@ -74,6 +75,7 @@ fn combo_eieio_forward_line_with_markers() {
 fn combo_eieio_line_move_invisible_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 38 46)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass invis-line-snap ()
@@ -136,7 +138,7 @@ fn combo_eieio_line_move_invisible_overlay() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 38 46)""#]],
+        expect,
     );
 }
 
@@ -144,6 +146,7 @@ fn combo_eieio_line_move_invisible_overlay() {
 fn combo_eieio_line_move_narrow_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 34 39)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass narrow-line-snap ()
@@ -201,7 +204,7 @@ fn combo_eieio_line_move_narrow_edit() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 34 39)""#]],
+        expect,
     );
 }
 
@@ -209,6 +212,7 @@ fn combo_eieio_line_move_narrow_edit() {
 fn combo_eieio_line_move_end_begin() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass line-end-snap ()
@@ -269,7 +273,7 @@ fn combo_eieio_line_move_end_begin() {
                 (marker-position m)
                 (overlay-start ov) (overlay-end ov)))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -277,6 +281,7 @@ fn combo_eieio_line_move_end_begin() {
 fn combo_eieio_line_move_undo_restore() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 21 27)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass line-undo-snap ()
@@ -332,6 +337,6 @@ fn combo_eieio_line_move_undo_restore() {
               (marker-position m)
               (overlay-start ov) (overlay-end ov))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 21 27)""#]],
+        expect,
     );
 }

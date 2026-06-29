@@ -11,6 +11,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_wdm_window_tree_and_selection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (t t #<window 1 on *scratch*> 2 2 t #<window 1 on *scratch*> t 1 (\" *probe-wts-a*\" \" *probe-wts-b*\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b1 (get-buffer-create " *probe-wts-a*"))
@@ -37,15 +40,14 @@ fn div_wdm_window_tree_and_selection() {
     (when (buffer-live-p b2) (kill-buffer b2))
     (delete-other-windows)))
 "##,
-        expect_test::expect![[
-            r#""OK (t t #<window 1 on *scratch*> 2 2 t #<window 1 on *scratch*> t 1 (\" *probe-wts-a*\" \" *probe-wts-b*\"))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_wdm_display_motion_and_screen_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 23 80 151 1)""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK (2 23 80 151 1)
     // Neomacs:   OK (1 23 1 1 1)
@@ -77,13 +79,14 @@ fn div_wdm_display_motion_and_screen_lines() {
     (when (buffer-live-p b) (kill-buffer b))
     (delete-other-windows)))
 "##,
-        expect_test::expect![[r#""OK (2 23 80 151 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_wdm_minibuffer_state_batch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t nil 0 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((mw (minibuffer-window)))
@@ -94,13 +97,16 @@ fn div_wdm_minibuffer_state_batch() {
         (minibuffer-depth)
         (windowp mw)))
 "##,
-        expect_test::expect![[r#""OK (t t t nil 0 t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_wdm_window_object_print_form() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r##""OK (\"#<window 1 on *scratch*>\" \"#<window 2 on  *Minibuf-0*>\" \"#<window 1 on *scratch*>\")""##
+    ]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK ("#<window 1 on *scratch*>" "#<window 2 on  *Minibuf-0*>" "#<window 1 on *scratch*>")
     // Neomacs:   OK ("#<window 1 on *scratch*>" "#<window 281479271677952 on  *Minibuf-0*>" "#<window 1 on *scratch*>")
@@ -113,15 +119,16 @@ fn div_wdm_window_object_print_form() {
       (format "%s" (minibuffer-window))
       (prin1-to-string (selected-window)))
 "##,
-        expect_test::expect![[
-            r##""OK (\"#<window 1 on *scratch*>\" \"#<window 2 on  *Minibuf-0*>\" \"#<window 1 on *scratch*>\")""##
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_wdm_faces_and_colors_batch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ([face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] nil (default) 0 1 t nil (65535 0 0) (0 0 0) (65535 65535 65535) (\"black\" \"red\" \"green\" \"yellow\" \"blue\" \"magenta\" \"cyan\" \"white\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (facep 'default)
@@ -137,15 +144,14 @@ fn div_wdm_faces_and_colors_batch() {
       (color-values "white")
       (defined-colors))
 "##,
-        expect_test::expect![[
-            r#""OK ([face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] nil (default) 0 1 t nil (65535 0 0) (0 0 0) (65535 65535 65535) (\"black\" \"red\" \"green\" \"yellow\" \"blue\" \"magenta\" \"cyan\" \"white\"))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_wdm_color_gray_p_named_grays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t nil)""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK (t t t t nil)
     // Neomacs:   OK (nil t nil t nil)
@@ -160,13 +166,14 @@ fn div_wdm_color_gray_p_named_grays() {
       (color-gray-p "black")
       (color-gray-p "red"))
 "##,
-        expect_test::expect![[r#""OK (t t t t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_wdm_markers_mark_and_exchange() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (7 5 5 5 3 t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -181,13 +188,14 @@ fn div_wdm_markers_mark_and_exchange() {
           (mark t)
           (markerp m))))
 "##,
-        expect_test::expect![[r#""OK (7 5 5 5 3 t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_wdm_search_looking_match_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t 1 4 (5 8 #<killed buffer>) 8 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -201,13 +209,14 @@ fn div_wdm_search_looking_match_data() {
         (looking-back "bar" 4)
         (looking-back "bar" 5)))
 "##,
-        expect_test::expect![[r#""OK (t 1 4 (5 8 #<killed buffer>) 8 t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_wdm_forward_comment() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 1 nil 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -219,13 +228,16 @@ fn div_wdm_forward_comment() {
     (forward-comment 1)
     (list p0 (point) (forward-comment (point-max)) (point))))
 "##,
-        expect_test::expect![[r#""OK (1 1 nil 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_wdm_plist_operations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (1 2 nil (:a 1 :b 2) nil (:a 1 :b 2 :c 3) 2 42 nil (foo 42 bar nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (plist-get '(:a 1 :b 2) :a)
@@ -241,15 +253,16 @@ fn div_wdm_plist_operations() {
       (progn (put 'probe-sym-x 'bar nil) (get 'probe-sym-x 'bar))
       (symbol-plist 'probe-sym-x))
 "##,
-        expect_test::expect![[
-            r#""OK (1 2 nil (:a 1 :b 2) nil (:a 1 :b 2 :c 3) 2 42 nil (foo 42 bar nil))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_wdm_sequence_and_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (3 3 3 2 2 97 [3 2 1] \"cba\" (3 2 1) nil t t t nil t t t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (length [1 2 3])
@@ -271,15 +284,14 @@ fn div_wdm_sequence_and_predicates() {
       (char-or-string-p "a")
       (wholenump 5))
 "##,
-        expect_test::expect![[
-            r#""OK (3 3 3 2 2 97 [3 2 1] \"cba\" (3 2 1) nil t t t nil t t t t)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_wdm_get_lru_largest_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t 2 12)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((b1 (get-buffer-create " *probe-lru-a*"))
@@ -298,6 +310,6 @@ fn div_wdm_get_lru_largest_window() {
     (when (buffer-live-p b2) (kill-buffer b2))
     (delete-other-windows)))
 "##,
-        expect_test::expect![[r#""OK (t t 2 12)""#]],
+        expect,
     );
 }

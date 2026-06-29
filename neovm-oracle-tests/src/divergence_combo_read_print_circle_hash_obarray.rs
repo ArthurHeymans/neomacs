@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_print_circle_shared_structure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t 2 1 t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
   (let ((shared (list 1 2 3)))\n\
@@ -19,7 +20,7 @@ fn divergence_print_circle_shared_structure() {
               (eq (car tree) (cadr tree))\n\
               (= (car (car tree)) 1)\n\
               (= (length (car tree)) 3)))))) ",
-        expect_test::expect![[r#""OK (t t 2 1 t t t)""#]],
+        expect,
     );
 }
 
@@ -27,6 +28,7 @@ fn divergence_print_circle_shared_structure() {
 fn divergence_hash_with_symbol_keys_obarray() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function hash-table-keys)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ht (make-hash-table :test 'eq)))
@@ -42,7 +44,7 @@ fn divergence_hash_with_symbol_keys_obarray() {
           (string= (gethash 'cons ht) "cons")
           (memq 'car (hash-table-keys ht))
           (memq 'cons (hash-table-keys ht))))) "#,
-        expect_test::expect![[r#""ERR (void-function hash-table-keys)""#]],
+        expect,
     );
 }
 
@@ -50,6 +52,7 @@ fn divergence_hash_with_symbol_keys_obarray() {
 fn divergence_read_print_preserves_circularity() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p a)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
   (let ((x (list 'a 'b)))\n\
@@ -63,7 +66,7 @@ fn divergence_read_print_preserves_circularity() {
             (> (length printed) 4)\n\
             (= (car x) 'a)\n\
             (= (cadr x) 'b))))) ",
-        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p a)""#]],
+        expect,
     );
 }
 
@@ -71,6 +74,7 @@ fn divergence_read_print_preserves_circularity() {
 fn divergence_gensym_obarray_interaction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable test-g-1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((g1 (gensym "test-g-"))
@@ -85,7 +89,7 @@ fn divergence_gensym_obarray_interaction() {
           (symbol-value g1)
           (= (symbol-value g1) 42)
           (null (symbol-value g2))))) "#,
-        expect_test::expect![[r#""ERR (void-variable test-g-1)""#]],
+        expect,
     );
 }
 
@@ -93,6 +97,7 @@ fn divergence_gensym_obarray_interaction() {
 fn divergence_hash_table_with_equal_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (2 t duplicate t string-dup t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal)))
@@ -108,7 +113,7 @@ fn divergence_hash_table_with_equal_keys() {
           (eq (gethash "hello" ht) 'string-dup)
           (null (gethash '(4 5 6) ht))
           (null (gethash "world" ht))))) "#,
-        expect_test::expect![[r#""OK (2 t duplicate t string-dup t t t)""#]],
+        expect,
     );
 }
 
@@ -116,6 +121,7 @@ fn divergence_hash_table_with_equal_keys() {
 fn divergence_obarray_intern_unintern_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (first t t t t second t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (intern "test-cycle-xxx")
@@ -134,7 +140,7 @@ fn divergence_obarray_intern_unintern_cycle() {
                 (not (eq s1 s3))
                 (symbol-value s3)
                 (eq (symbol-value s3) 'second))))))) "#,
-        expect_test::expect![[r#""OK (first t t t t second t)""#]],
+        expect,
     );
 }
 
@@ -142,6 +148,7 @@ fn divergence_obarray_intern_unintern_cycle() {
 fn divergence_print_gensym_read_back() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t 1 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
   (let ((g (gensym)))\n\
@@ -151,7 +158,7 @@ fn divergence_print_gensym_read_back() {
             (string-match \":\" printed)\n\
             (symbolp g)\n\
             (not (eq g (intern (symbol-name g)))))))) ",
-        expect_test::expect![[r#""OK (t t 1 t t)""#]],
+        expect,
     );
 }
 
@@ -159,6 +166,7 @@ fn divergence_print_gensym_read_back() {
 fn divergence_hash_table_nested_structure() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (1 t 2 t 1 t 2 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((outer (make-hash-table :test 'equal))
@@ -175,7 +183,7 @@ fn divergence_hash_table_nested_structure() {
           (hash-table-count inner)
           (= (hash-table-count inner) 2)
           (hash-table-p (gethash 'inner outer))))) "#,
-        expect_test::expect![[r#""OK (1 t 2 t 1 t 2 t t)""#]],
+        expect,
     );
 }
 
@@ -183,6 +191,7 @@ fn divergence_hash_table_nested_structure() {
 fn divergence_mapatoms_count_classes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (3 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((count 0)
@@ -195,7 +204,7 @@ fn divergence_mapatoms_count_classes() {
     (list count
           (>= count 2)
           (= (length names) count)))) "#,
-        expect_test::expect![[r#""OK (3 t t)""#]],
+        expect,
     );
 }
 
@@ -203,6 +212,7 @@ fn divergence_mapatoms_count_classes() {
 fn divergence_print_readability_lists_vectors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((data (list '(1 2 3) [4 5 6] '(a . b) '(nil) '() t nil)))
@@ -218,6 +228,6 @@ fn divergence_print_readability_lists_vectors() {
             (null (nth 4 data))
             (eq (nth 5 data) t)
             (null (nth 6 data)))))) "#,
-        expect_test::expect![[r#""OK (t t t t t t t t t t)""#]],
+        expect,
     );
 }

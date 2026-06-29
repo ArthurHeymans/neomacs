@@ -9,71 +9,55 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_color_val_black() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    crate::common::assert_oracle_parity_expect(
-        "(color-values black)",
-        expect_test::expect![[r#""ERR (void-variable black)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable black)""#]];
+    crate::common::assert_oracle_parity_expect("(color-values black)", expect);
 }
 
 #[test]
 fn div_color_val_blue() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    crate::common::assert_oracle_parity_expect(
-        "(color-values blue)",
-        expect_test::expect![[r#""ERR (void-variable blue)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable blue)""#]];
+    crate::common::assert_oracle_parity_expect("(color-values blue)", expect);
 }
 
 #[test]
 fn div_color_val_cyan() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    crate::common::assert_oracle_parity_expect(
-        "(color-values cyan)",
-        expect_test::expect![[r#""ERR (void-variable cyan)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable cyan)""#]];
+    crate::common::assert_oracle_parity_expect("(color-values cyan)", expect);
 }
 
 #[test]
 fn div_color_val_green() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    crate::common::assert_oracle_parity_expect(
-        "(color-values green)",
-        expect_test::expect![[r#""ERR (void-variable green)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable green)""#]];
+    crate::common::assert_oracle_parity_expect("(color-values green)", expect);
 }
 
 #[test]
 fn div_color_val_magenta() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    crate::common::assert_oracle_parity_expect(
-        "(color-values magenta)",
-        expect_test::expect![[r#""ERR (void-variable magenta)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable magenta)""#]];
+    crate::common::assert_oracle_parity_expect("(color-values magenta)", expect);
 }
 
 #[test]
 fn div_color_val_red() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    crate::common::assert_oracle_parity_expect(
-        "(color-values red)",
-        expect_test::expect![[r#""ERR (void-variable red)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable red)""#]];
+    crate::common::assert_oracle_parity_expect("(color-values red)", expect);
 }
 
 #[test]
 fn div_color_val_white() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    crate::common::assert_oracle_parity_expect(
-        "(color-values white)",
-        expect_test::expect![[r#""ERR (void-variable white)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable white)""#]];
+    crate::common::assert_oracle_parity_expect("(color-values white)", expect);
 }
 
 #[test]
 fn div_color_val_yellow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    crate::common::assert_oracle_parity_expect(
-        "(color-values yellow)",
-        expect_test::expect![[r#""ERR (void-variable yellow)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable yellow)""#]];
+    crate::common::assert_oracle_parity_expect("(color-values yellow)", expect);
 }

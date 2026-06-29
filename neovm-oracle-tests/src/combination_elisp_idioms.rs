@@ -27,10 +27,8 @@ fn oracle_prop_idiom_or_default_value() {
     ;; lang is missing from config, so default "en" is used
     ;; name and indent have values and are used as-is
     (list name theme indent lang)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"Alice\" \"light\" 4 \"en\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"Alice\" \"light\" 4 \"en\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -55,10 +53,8 @@ fn oracle_prop_idiom_and_short_circuit_guard() {
              (setq eligible
                    (cons (cdr (assq 'name info)) eligible)))))
     (nreverse eligible)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"Alice\" \"Dave\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"Alice\" \"Dave\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -95,12 +91,10 @@ fn oracle_prop_idiom_alist_crud() {
                         (mapcar #'car db))
                   log))
   (nreverse log))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((after-create 3) (read-bob (name \"Bob\" score 75)) (updated-bob (name \"Bob\" score 95)) (after-delete 2 (\"id3\" \"id2\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((after-create 3) (read-bob (name \"Bob\" score 75)) (updated-bob (name \"Bob\" score 95)) (after-delete 2 (\"id3\" \"id2\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -134,10 +128,8 @@ fn oracle_prop_idiom_plist_manipulation() {
             (plist-get cleaned :height)
             (plist-get cleaned :color)
             (plist-get cleaned :visible)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"widget\" 200 100 \"blue\" nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"widget\" 200 100 \"blue\" nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -162,12 +154,10 @@ fn oracle_prop_idiom_mapcar_pipeline() {
          ;; Join with separator
          (joined (mapconcat #'identity strings ", ")))
     (list squared evens strings joined)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 4 9 16 25 36 49 64 81 100) (4 16 36 64 100) (\"004\" \"016\" \"036\" \"064\" \"100\") \"004, 016, 036, 064, 100\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 4 9 16 25 36 49 64 81 100) (4 16 36 64 100) (\"004\" \"016\" \"036\" \"064\" \"100\") \"004, 016, 036, 064, 100\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -214,10 +204,8 @@ fn oracle_prop_idiom_buffer_local_simulation() {
      (list (funcall get-var "unknown.txt" 'indent-width)
            (funcall get-var "unknown.txt" 'tab-mode)
            (funcall get-var "unknown.txt" 'line-wrap)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((2 t t) (4 nil nil) (4 nil t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((2 t t) (4 nil nil) (4 nil t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -257,12 +245,10 @@ fn oracle_prop_idiom_while_multiple_accumulators() {
         (list 'neg neg-sum neg-count)
         (list 'range min-val max-val)
         (list 'running (nreverse running))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((pos 48 9) (neg -29 6) (range -9 9) (running (3 2 6 5 10 1 3 -3 2 5 0 8 17 10 19)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((pos 48 9) (neg -29 6) (range -9 9) (running (3 2 6 5 10 1 3 -3 2 5 0 8 17 10 19)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -304,12 +290,10 @@ fn oracle_prop_idiom_stack_push_pop() {
     (push (- a b) stack)
     (setq trace (cons (list '- a b (car stack)) trace)))
   (list (car stack) (nreverse trace)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (9 ((push 3 (3)) (push 4 (4 3)) (+ 3 4 7) (push 2 (2 7)) (* 7 2 14) (push 5 (5 14)) (- 14 5 9)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (9 ((push 3 (3)) (push 4 (4 3)) (+ 3 4 7) (push 2 (2 7)) (* 7 2 14) (push 5 (5 14)) (- 14 5 9)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -342,12 +326,10 @@ fn oracle_prop_idiom_mapconcat_format() {
     (mapconcat #'identity
                (list header separator rows separator summary)
                "\n")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK \"Name        Age  Role        \n------------------------------\nAlice        30  engineer    \nBob          25  designer    \nCarol        35  manager     \nDave         28  developer   \n------------------------------\nTotal: 4 people, avg age: 29.5\"""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK \"Name        Age  Role        \n------------------------------\nAlice        30  engineer    \nBob          25  designer    \nCarol        35  manager     \nDave         28  developer   \n------------------------------\nTotal: 4 people, avg age: 29.5\"""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -391,10 +373,8 @@ fn oracle_prop_idiom_full_pipeline() {
       (sort stats (lambda (a b)
                     (> (cdr (nth 2 a))
                        (cdr (nth 2 b))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"science\" (count . 3) (avg . 87.0) (max . 95) (min . 78)) (\"art\" (count . 3) (avg . 85.0) (max . 100) (min . 65)) (\"math\" (count . 3) (avg . 82.33333333333333) (max . 92) (min . 70)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"science\" (count . 3) (avg . 87.0) (max . 95) (min . 78)) (\"art\" (count . 3) (avg . 85.0) (max . 100) (min . 65)) (\"math\" (count . 3) (avg . 82.33333333333333) (max . 92) (min . 70)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

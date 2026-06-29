@@ -78,12 +78,10 @@ Returns a list of averaged values (shorter by window-size - 1)."
            (list mn mx))))
     (fmakunbound 'neovm--sp-moving-average)
     (makunbound 'neovm--sp-ma-state)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:ma3-length 18 :ma5-length 16 :ma1-is-identity t :ma3-first-3 (30.0 57.0 78.33333333333333) :ma5-first-3 (53.2 73.2 86.0) :ma-const-all-42 t :ma-ramp-first-3 (10.0 20.0 30.0) :ma3-range (-96.66666666666667 96.66666666666667) :raw-range (-100 100))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:ma3-length 18 :ma5-length 16 :ma1-is-identity t :ma3-first-3 (30.0 57.0 78.33333333333333) :ma5-first-3 (53.2 73.2 86.0) :ma-const-all-42 t :ma-ramp-first-3 (10.0 20.0 30.0) :ma3-range (-96.66666666666667 96.66666666666667) :raw-range (-100 100))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -151,12 +149,10 @@ ALPHA is in [0, 1]. Returns smoothed signal (same length)."
            ok)
          :step-smooth-last-3 (last step-smooth 3)))
     (fmakunbound 'neovm--sp-exp-smooth)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:length-preserved t :first-preserved t :alpha-1-identity t :alpha-0-constant t :smooth-02-last 22.683047976960005 :smooth-05-last 27.6796875 :smooth-09-last 29.75166166168 :step-monotonic t :step-smooth-last-3 (65.69999999999999 75.98999999999998 83.19299999999998))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:length-preserved t :first-preserved t :alpha-1-identity t :alpha-0-constant t :smooth-02-last 22.683047976960005 :smooth-05-last 27.6796875 :smooth-09-last 29.75166166168 :step-monotonic t :step-smooth-last-3 (65.69999999999999 75.98999999999998 83.19299999999998))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -257,12 +253,10 @@ Returns list of (index . value) pairs."
     (fmakunbound 'neovm--sp-find-peaks)
     (fmakunbound 'neovm--sp-find-valleys)
     (makunbound 'neovm--sp-peak-state)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:all-peaks ((2 . 10) (6 . 15) (11 . 20) (16 . 11)) :high-peaks ((6 . 15) (11 . 20) (16 . 11)) :valleys ((4 . 3) (9 . 2) (14 . 1)) :mono-peaks nil :const-peaks nil :alt-peaks ((1 . 10) (3 . 10) (5 . 10) (7 . 10)) :alt-peak-count 4 :peak-valley-pairs ((:peak (2 . 10) :valley (4 . 3) :amplitude 7) (:peak (6 . 15) :valley (4 . 3) :amplitude 12) (:peak (11 . 20) :valley (9 . 2) :amplitude 18) (:peak (16 . 11) :valley (14 . 1) :amplitude 10)) :total-peaks 4 :total-valleys 3)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:all-peaks ((2 . 10) (6 . 15) (11 . 20) (16 . 11)) :high-peaks ((6 . 15) (11 . 20) (16 . 11)) :valleys ((4 . 3) (9 . 2) (14 . 1)) :mono-peaks nil :const-peaks nil :alt-peaks ((1 . 10) (3 . 10) (5 . 10) (7 . 10)) :alt-peak-count 4 :peak-valley-pairs ((:peak (2 . 10) :valley (4 . 3) :amplitude 7) (:peak (6 . 15) :valley (4 . 3) :amplitude 12) (:peak (11 . 20) :valley (9 . 2) :amplitude 18) (:peak (16 . 11) :valley (14 . 1) :amplitude 10)) :total-peaks 4 :total-valleys 3)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -336,12 +330,10 @@ Returns list of floats."
              (setq prev v))
            ok)))
     (fmakunbound 'neovm--sp-normalize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:norm-01 (0.0 0.125 0.25 0.375 0.5 0.75 1.0) :norm-01-min 0.0 :norm-01-max 1.0 :norm-neg (-1.0 -0.75 -0.5 -0.25 0.0 0.5 1.0) :norm-pct (0.0 12.5 25.0 37.5 50.0 75.0 100.0) :norm-01-range-ok t :norm-neg-range-ok t :const-norm (0.5 0.5 0.5 0.5) :single-norm (0.5) :re-norm (0.0 0.25 0.5 0.75 1.0) :monotonic t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:norm-01 (0.0 0.125 0.25 0.375 0.5 0.75 1.0) :norm-01-min 0.0 :norm-01-max 1.0 :norm-neg (-1.0 -0.75 -0.5 -0.25 0.0 0.5 1.0) :norm-pct (0.0 12.5 25.0 37.5 50.0 75.0 100.0) :norm-01-range-ok t :norm-neg-range-ok t :const-norm (0.5 0.5 0.5 0.5) :single-norm (0.5) :re-norm (0.0 0.25 0.5 0.75 1.0) :monotonic t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -415,12 +407,10 @@ Output length = len(signal) + len(kernel) - 1."
          :gauss-last-3 (last gauss-conv 3)))
     (fmakunbound 'neovm--sp-convolve)
     (makunbound 'neovm--sp-conv-state)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:delta-len 11 :box-len 9 :edge-len 10 :gauss-len 14 :self-conv (1.0 2.0 3.0 2.0 1.0) :self-conv-expected t :edge-conv (0.0 0.0 0.0 0.0 -10.0 -10.0 0.0 0.0 10.0 10.0) :box-conv (0.0 0.0 0.0 3.33333 3.33333 3.33333 0.0 0.0 0.0) :gauss-first-3 (0.5 1.2 3.2) :gauss-last-3 (4.800000000000001 2.2 0.6000000000000001))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:delta-len 11 :box-len 9 :edge-len 10 :gauss-len 14 :self-conv (1.0 2.0 3.0 2.0 1.0) :self-conv-expected t :edge-conv (0.0 0.0 0.0 0.0 -10.0 -10.0 0.0 0.0 10.0 10.0) :box-conv (0.0 0.0 0.0 3.33333 3.33333 3.33333 0.0 0.0 0.0) :gauss-first-3 (0.5 1.2 3.2) :gauss-last-3 (4.800000000000001 2.2 0.6000000000000001))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -531,12 +521,10 @@ Inverse of differentiation."
     (fmakunbound 'neovm--sp-diff)
     (fmakunbound 'neovm--sp-diff2)
     (fmakunbound 'neovm--sp-integrate)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:d-linear (3 3 3 3 3 3 3 3 3) :d-linear-constant t :d-quad (1 3 5 7 9 11 13 15 17) :d2-quad (2 2 2 2 2 2 2 2) :d2-quad-constant t :d-step (0 0 0 10 0 0 0) :d-sine (31 28 22 14 5 -5 -14 -22 -28 -31) :d2-sine (-3 -6 -8 -9 -10 -9 -8 -6 -3) :roundtrip (0 3 6 9 12 15 18 21 24 27) :roundtrip-ok t :const-diff (0 0 0 0 0) :const-all-zero t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:d-linear (3 3 3 3 3 3 3 3 3) :d-linear-constant t :d-quad (1 3 5 7 9 11 13 15 17) :d2-quad (2 2 2 2 2 2 2 2) :d2-quad-constant t :d-step (0 0 0 10 0 0 0) :d-sine (31 28 22 14 5 -5 -14 -22 -28 -31) :d2-sine (-3 -6 -8 -9 -10 -9 -8 -6 -3) :roundtrip (0 3 6 9 12 15 18 21 24 27) :roundtrip-ok t :const-diff (0 0 0 0 0) :const-all-zero t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -649,8 +637,6 @@ fn oracle_prop_sigproc_full_pipeline() {
     (fmakunbound 'neovm--sp-norm)
     (fmakunbound 'neovm--sp-stats)
     (makunbound 'neovm--sp-pipeline-state)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable +)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable +)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

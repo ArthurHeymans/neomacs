@@ -28,10 +28,8 @@ fn oracle_buffer_hash_live_buffer_lookup_and_error_edges() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"a9993e364706816aba3e25717850c26c9cd0d89d\" \"a9993e364706816aba3e25717850c26c9cd0d89d\" \"a9993e364706816aba3e25717850c26c9cd0d89d\" (error (\"No buffer named  *missing-bh-oracle*\")) (wrong-type-argument (stringp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"a9993e364706816aba3e25717850c26c9cd0d89d\" \"a9993e364706816aba3e25717850c26c9cd0d89d\" \"a9993e364706816aba3e25717850c26c9cd0d89d\" (error (\"No buffer named  *missing-bh-oracle*\")) (wrong-type-argument (stringp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

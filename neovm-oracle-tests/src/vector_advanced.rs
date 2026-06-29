@@ -26,12 +26,10 @@ fn oracle_prop_vconcat_multi_heterogeneous() {
                       (vconcat nil v1 nil)
                       (vconcat '() [99] "Z" '(100))
                       (vconcat v1 v1 v1)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ([1 2 3 4 5 65 66 10 20] [1 2 3] [99 90 100] [1 2 3 1 2 3 1 2 3])""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ([1 2 3 4 5 65 66 10 20] [1 2 3] [99 90 100] [1 2 3 1 2 3 1 2 3])""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -56,10 +54,9 @@ fn oracle_prop_make_vector_edge_cases() {
                       (length v3) (aref v3 1)
                       (length v4)
                       v5))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 (a b) (a b) t 4 [1 2] 2 \"hello\" 0 [t t t t t])""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (3 (a b) (a b) t 4 [1 2] 2 \"hello\" 0 [t t t t t])""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -93,10 +90,8 @@ fn oracle_prop_nested_vectors_2d_array() {
                           (aref (aref matrix 0) 1)   ;; 0+1=1
                           (aref (aref matrix 2) 0)   ;; 2+0=2
                           (nreverse sums))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (10 20 30 1 2 (13 24 35))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (10 20 30 1 2 (13 24 35))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -123,10 +118,9 @@ fn oracle_prop_fillarray_vector_vs_string() {
                             ;; fillarray returns the array itself
                             (eq (fillarray (make-vector 2 0) 1)
                                 (fillarray (make-vector 2 0) 1)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ([x x x x x] \"ZZZZZ\" [42 42 42 42] x x 90 90 nil)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ([x x x x x] \"ZZZZZ\" [42 42 42 42] x x 90 90 nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -153,12 +147,10 @@ fn oracle_prop_vector_sort_custom_predicate() {
                     (list v1 v2
                           (append v3 nil)  ;; convert to list for easier comparison
                           v4 v5))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ([1 2 3 4 5] [5 4 3 2 1] (\"a\" \"hi\" \"foo\" \"hello\" \"world!\") [1 -1 2 -3 4 -5] [1 2 3 4 5])""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ([1 2 3 4 5] [5 4 3 2 1] (\"a\" \"hi\" \"foo\" \"hello\" \"world!\") [1 -1 2 -3 4 -5] [1 2 3 4 5])""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -202,10 +194,8 @@ fn oracle_prop_vector_as_stack() {
                               (funcall pop-fn)
                               (funcall pop-fn)
                               (funcall pop-fn))))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (4 d d c 3 e e b a)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (4 d d c 3 e e b a)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -266,12 +256,10 @@ fn oracle_prop_vector_circular_buffer() {
                               (funcall dequeue)
                               (funcall dequeue)
                               count)))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((10 20 30 40) (10 20 30 40) 10 20 4 (30 40 50 60) 30 40 50 60 0)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((10 20 30 40) (10 20 30 40) 10 20 4 (30 40 50 60) 30 40 50 60 0)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -303,12 +291,10 @@ fn oracle_prop_seq_operations_on_vectors() {
                     (seq-count (lambda (x) (= 1 (% x 2))) v)
                     ;; seq-uniq
                     (seq-uniq [1 2 2 3 3 3 4 4 4 4])))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 4 9 16 25 36 49 64 81 100) (2 4 6 8 10) 55 6 t nil t 5 (1 2 3 4))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 4 9 16 25 36 49 64 81 100) (2 4 6 8 10) 55 6 t nil t 5 (1 2 3 4))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -342,10 +328,8 @@ fn oracle_prop_vector_matrix_transpose() {
                         ;; Cross-check specific cells
                         (= (aref (aref mat 1) 2) (aref (aref trans 2) 1))
                         (= (aref (aref mat 2) 0) (aref (aref trans 0) 2))))))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ([0 1 2 3] [10 11 12 13] [20 21 22 23] [0 10 20] [1 11 21] [2 12 22] [3 13 23] t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ([0 1 2 3] [10 11 12 13] [20 21 22 23] [0 10 20] [1 11 21] [2 12 22] [3 13 23] t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

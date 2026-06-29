@@ -8,6 +8,8 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx92_kill_ring_push_yank_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((\"gamma\" \"beta\" \"alpha\" nil) \"gamma\" \"gamma\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((kill-ring nil))
@@ -23,13 +25,16 @@ fn div_cx92_kill_ring_push_yank_cycle() {
           (current-kill 0 t)
           (car kill-ring))))
 "##,
-        expect_test::expect![[r#""OK ((\"gamma\" \"beta\" \"alpha\" nil) \"gamma\" \"gamma\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx92_kill_line_then_yank_restores() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"\nline2\nline3\n\" \"line1\" \"line1\nline2\nline3\n\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((kill-ring nil))
@@ -43,15 +48,14 @@ fn div_cx92_kill_line_then_yank_restores() {
       (let ((after-yank (buffer-string)))
         (list after-kill killed after-yank)))))
 "##,
-        expect_test::expect![[
-            r#""OK (\"\nline2\nline3\n\" \"line1\" \"line1\nline2\nline3\n\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx92_kill_whole_line_with_multiple_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"line1\nline3\n\" \"line2\n\" 7)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((kill-ring nil))
@@ -62,13 +66,14 @@ fn div_cx92_kill_whole_line_with_multiple_lines() {
       (kill-whole-line))
     (list (buffer-string) (current-kill 0 t) (point))))
 "##,
-        expect_test::expect![[r#""OK (\"line1\nline3\n\" \"line2\n\" 7)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx92_kill_region_rectangle_yank_rectangle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -83,13 +88,14 @@ fn div_cx92_kill_region_rectangle_yank_rectangle() {
               (buffer-string))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored error)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx92_mark_ring_push_pop_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (25 4 25 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -105,13 +111,14 @@ fn div_cx92_mark_ring_push_pop_cycle() {
             (ring-after (length mark-ring)))
         (list current-mark ring-length after-pop ring-after)))))
 "##,
-        expect_test::expect![[r#""OK (25 4 25 4)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx92_append_next_kill_combines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"first third\" 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -127,13 +134,14 @@ fn div_cx92_append_next_kill_combines() {
             (length kill-ring)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (\"first third\" 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx92_yank_with_arg_multiple_times() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"AINSERTEDAA\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((kill-ring (list "INSERTED")))
@@ -144,13 +152,14 @@ fn div_cx92_yank_with_arg_multiple_times() {
       (yank 3))
     (buffer-string)))
 "##,
-        expect_test::expect![[r#""OK \"AINSERTEDAA\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx92_kill_ring_max_truncation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"kill-9\" \"kill-8\" \"kill-7\") 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((kill-ring nil)
@@ -161,13 +170,15 @@ fn div_cx92_kill_ring_max_truncation() {
       (setcdr (nthcdr (1- kill-ring-max) kill-ring) nil)))
   (list kill-ring (length kill-ring)))
 "##,
-        expect_test::expect![[r#""OK ((\"kill-9\" \"kill-8\" \"kill-7\") 3)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx92_kill_append_to_previous() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((\"first second third\") \"first second third\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((kill-ring (list "first")))
@@ -175,13 +186,14 @@ fn div_cx92_kill_append_to_previous() {
   (kill-append " third" nil)
   (list kill-ring (current-kill 0 t)))
 "##,
-        expect_test::expect![[r#""OK ((\"first second third\") \"first second third\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx92_kill_ring_save_no_modify_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"AAA BBB CCC\" \"BBB\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((kill-ring nil))
@@ -193,13 +205,14 @@ fn div_cx92_kill_ring_save_no_modify_buffer() {
           (modified (buffer-modified-p)))
       (list after killed modified))))
 "##,
-        expect_test::expect![[r#""OK (\"AAA BBB CCC\" \"BBB\" t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx92_clipboard_interaction_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -209,13 +222,14 @@ fn div_cx92_clipboard_interaction_predicates() {
           (eq selection-coding-system selection-coding-system))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx92_yank_rectangle_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (error \"Kill ring is empty\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((kill-ring nil))
@@ -241,6 +255,6 @@ fn div_cx92_yank_rectangle_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""ERR (error \"Kill ring is empty\")""#]],
+        expect,
     );
 }

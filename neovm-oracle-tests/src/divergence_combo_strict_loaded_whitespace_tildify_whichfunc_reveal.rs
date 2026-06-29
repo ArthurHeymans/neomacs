@@ -12,6 +12,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_i3_whitespace_mode_active_style() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
@@ -22,13 +23,14 @@ fn div_i3_whitespace_mode_active_style() {
         (boundp 'whitespace-active-style)))
 "##,
         &["whitespace.el"],
-        expect_test::expect![[r#""OK (nil t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_i3_tildify_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"hello world\"""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
@@ -37,13 +39,14 @@ fn div_i3_tildify_region() {
   (buffer-string))
 "##,
         &["textmodes/tildify.el"],
-        expect_test::expect![[r#""OK \"hello world\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_i3_which_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"foo\")""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
@@ -54,13 +57,14 @@ fn div_i3_which_function() {
   (list (which-function)))
 "##,
         &["progmodes/which-func.el"],
-        expect_test::expect![[r#""OK (\"foo\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_i3_reveal_over_outline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
@@ -73,13 +77,14 @@ fn div_i3_reveal_over_outline() {
         (next-single-property-change 1 'invisible)))
 "##,
         &["reveal.el", "outline.el"],
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_i3_whitespace_trailing_detection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil 0 nil)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
@@ -91,6 +96,6 @@ fn div_i3_whitespace_trailing_detection() {
         (get-text-property 3 'font-lock-face)))
 "##,
         &["whitespace.el"],
-        expect_test::expect![[r#""OK (nil 0 nil)""#]],
+        expect,
     );
 }

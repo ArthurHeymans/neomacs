@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_regex_replace_multibyte_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass unicode-node ()
@@ -48,7 +49,7 @@ fn combo_eieio_regex_replace_multibyte_objects() {
         (put-text-property (1- (point-max)) (point-max) 'match-log t)
         (list (marker-position m) (overlay-start ov) (overlay-end ov) (buffer-string))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -56,6 +57,7 @@ fn combo_eieio_regex_replace_multibyte_objects() {
 fn combo_eieio_regex_groups_object_capture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 76 85)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass match-result ()
@@ -119,7 +121,7 @@ fn combo_eieio_regex_groups_object_capture() {
                 (buffer-string)
                 results))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (args-out-of-range 76 85)""#]],
+        expect,
     );
 }
 
@@ -127,6 +129,7 @@ fn combo_eieio_regex_groups_object_capture() {
 fn combo_eieio_regex_replace_with_callback_object() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass replacer ()
@@ -163,7 +166,7 @@ fn combo_eieio_regex_replace_with_callback_object() {
         (set-marker m 8)
         (list (marker-position m) (overlay-start ov) (overlay-end ov))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -171,6 +174,7 @@ fn combo_eieio_regex_replace_with_callback_object() {
 fn combo_eieio_regex_narrow_search_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass search-zone ()
@@ -225,7 +229,7 @@ fn combo_eieio_regex_narrow_search_boundaries() {
                 (buffer-string)
                 zones))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -233,6 +237,7 @@ fn combo_eieio_regex_narrow_search_boundaries() {
 fn combo_eieio_regex_multibyte_replacement_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass string-op ()
@@ -287,6 +292,6 @@ fn combo_eieio_regex_multibyte_replacement_positions() {
                 (buffer-string)
                 ops))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

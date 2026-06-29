@@ -112,10 +112,8 @@ fn oracle_prop_bloom_filter_basic() {
     (fmakunbound 'neovm--bf-add)
     (fmakunbound 'neovm--bf-might-contain)
     (fmakunbound 'neovm--bf-bit-count)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t nil nil nil 14 64 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t nil nil nil 14 64 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -210,10 +208,8 @@ fn oracle_prop_bloom_filter_false_positive_rate() {
     (fmakunbound 'neovm--bfp-hash)
     (fmakunbound 'neovm--bfp-add)
     (fmakunbound 'neovm--bfp-check)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 0 40 40 t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 0 40 40 t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -320,12 +316,10 @@ fn oracle_prop_bloom_filter_membership_semantics() {
     (fmakunbound 'neovm--bfm-add)
     (fmakunbound 'neovm--bfm-check)
     (fmakunbound 'neovm--bfm-verify)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t (maybe-in maybe-in maybe-in maybe-in maybe-in maybe-in maybe-in maybe-in maybe-in maybe-in) 10 20)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t (maybe-in maybe-in maybe-in maybe-in maybe-in maybe-in maybe-in maybe-in maybe-in maybe-in) 10 20)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -431,10 +425,8 @@ fn oracle_prop_count_min_sketch() {
     (fmakunbound 'neovm--cms-hash)
     (fmakunbound 'neovm--cms-add)
     (fmakunbound 'neovm--cms-estimate)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (10 5 3 1 8 t t t t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (10 5 3 1 8 t t t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -560,10 +552,8 @@ fn oracle_prop_hyperloglog_cardinality() {
     (fmakunbound 'neovm--hll-leading-zeros)
     (fmakunbound 'neovm--hll-add)
     (fmakunbound 'neovm--hll-estimate)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable s)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable s)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -669,8 +659,6 @@ fn oracle_prop_bloom_filter_set_operations() {
     (fmakunbound 'neovm--bfs-check)
     (fmakunbound 'neovm--bfs-union)
     (fmakunbound 'neovm--bfs-bit-count)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil t nil t t t t t (15 15 24 t t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil t nil t t t t t (15 15 24 t t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

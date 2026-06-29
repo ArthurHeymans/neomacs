@@ -86,10 +86,9 @@ fn oracle_prop_priority_queue_min_heap_basic() {
     (fmakunbound 'neovm--pq-sift-down)
     (fmakunbound 'neovm--pq-insert)
     (fmakunbound 'neovm--pq-extract-min)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 15 (1 2 3 4 6 7 8 13 17 25 33 42 56 88 99) t 0)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (1 15 (1 2 3 4 6 7 8 13 17 25 33 42 56 88 99) t 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -163,10 +162,8 @@ fn oracle_prop_priority_queue_max_heap() {
     (fmakunbound 'neovm--mxh-sift-down)
     (fmakunbound 'neovm--mxh-insert)
     (fmakunbound 'neovm--mxh-extract-max)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (60 (60 50 40 35 30 25 20 15 10 5) t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (60 (60 50 40 35 30 25 20 15 10 5) t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -249,12 +246,10 @@ fn oracle_prop_priority_queue_heapify() {
     (fmakunbound 'neovm--hfy-build)
     (fmakunbound 'neovm--hfy-drain)
     (fmakunbound 'neovm--hfy-valid-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((5 10 20 30 40 50 60) (1 2 3 4 5 6 7) (1 2 3 4 5 6 7) (4 4 4 4 4) (99) (-3 -3 -1 0 2 5 5 7) t (1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((5 10 20 30 40 50 60) (1 2 3 4 5 6 7) (1 2 3 4 5 6 7) (4 4 4 4 4) (99) (-3 -3 -1 0 2 5 5 7) t (1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -320,12 +315,10 @@ fn oracle_prop_priority_queue_heap_sort() {
     (fmakunbound 'neovm--hst-swap)
     (fmakunbound 'neovm--hst-max-sift)
     (fmakunbound 'neovm--hst-sort)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((3 9 10 27 38 43 82) t (1 2 3 4 5) (1 2 3 4 5) (1 1 2 3 3 4 5 5 5 6 9) (-10 -8 -7 -5 -3 -1) (-9 -6 -5 -2 0 1 3 4 7 8) (42) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((3 9 10 27 38 43 82) t (1 2 3 4 5) (1 2 3 4 5) (1 1 2 3 3 4 5 5 5 6 9) (-10 -8 -7 -5 -3 -1) (-9 -6 -5 -2 0 1 3 4 7 8) (42) nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -414,10 +407,8 @@ fn oracle_prop_priority_queue_key_value_pairs() {
     (fmakunbound 'neovm--kvpq-down)
     (fmakunbound 'neovm--kvpq-push)
     (fmakunbound 'neovm--kvpq-pop)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (setting-constant t)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (setting-constant t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -512,12 +503,10 @@ fn oracle_prop_priority_queue_k_way_merge() {
     (fmakunbound 'neovm--kwm-push)
     (fmakunbound 'neovm--kwm-pop)
     (fmakunbound 'neovm--kwm-merge)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4 5 6 7 8 9 10 11 12) (1 2 3 4 5 6 50 100) (1 2 3 4 5) (10 20 30 40 50) (1 1 2 3 3 4 5 6 7) ((5 10 15 20 25 30 35 40 45 50 55 60 70 80) t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5 6 7 8 9 10 11 12) (1 2 3 4 5 6 50 100) (1 2 3 4 5) (10 20 30 40 50) (1 1 2 3 3 4 5 6 7) ((5 10 15 20 25 30 35 40 45 50 55 60 70 80) t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -597,10 +586,8 @@ fn oracle_prop_priority_queue_kth_smallest() {
     (fmakunbound 'neovm--kth-up-max)
     (fmakunbound 'neovm--kth-down-max)
     (fmakunbound 'neovm--kth-smallest)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 7 12 56 42 3 (t t t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 7 12 56 42 3 (t t t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -713,8 +700,6 @@ fn oracle_prop_priority_queue_running_median() {
     (fmakunbound 'neovm--med-push-max)
     (fmakunbound 'neovm--med-pop-max)
     (fmakunbound 'neovm--med-add)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (5 5 5 3 5 5 7 7 7 6)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (5 5 5 3 5 5 7 7 7 6)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

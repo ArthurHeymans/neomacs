@@ -13,8 +13,8 @@ fn oracle_prop_cl_incf_pattern() {
     let form = "(let ((x 5))
                   (setq x (+ x 3))
                   x)";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 8""#]]);
+    let expect = expect_test::expect![[r#""OK 8""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("8", &o, &n);
 }
 
@@ -25,8 +25,8 @@ fn oracle_prop_cl_decf_pattern() {
     let form = "(let ((x 10))
                   (setq x (- x 3))
                   x)";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 7""#]]);
+    let expect = expect_test::expect![[r#""OK 7""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("7", &o, &n);
 }
 
@@ -42,10 +42,8 @@ fn oracle_prop_push_pop_pattern() {
                   (let ((top (car stack)))
                     (setq stack (cdr stack))
                     (list top stack)))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (c (b a))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (c (b a))""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(c (b a))", &o, &n);
 }
 
@@ -58,10 +56,8 @@ fn oracle_prop_cl_loop_collect_pattern() {
                   (dotimes (i 5)
                     (setq result (cons (* i i) result)))
                   (nreverse result))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (0 1 4 9 16)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 1 4 9 16)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(0 1 4 9 16)", &o, &n);
 }
 
@@ -73,8 +69,8 @@ fn oracle_prop_cl_loop_sum_pattern() {
                   (dolist (x '(1 2 3 4 5))
                     (setq total (+ total x)))
                   total)";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 15""#]]);
+    let expect = expect_test::expect![[r#""OK 15""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("15", &o, &n);
 }
 
@@ -87,8 +83,8 @@ fn oracle_prop_cl_loop_count_pattern() {
                     (when (> x 0)
                       (setq count (1+ count))))
                   count)";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 3""#]]);
+    let expect = expect_test::expect![[r#""OK 3""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("3", &o, &n);
 }
 
@@ -101,8 +97,8 @@ fn oracle_prop_cl_loop_maximize_pattern() {
                     (when (or (null best) (> x best))
                       (setq best x)))
                   best)";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK 9""#]]);
+    let expect = expect_test::expect![[r#""OK 9""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("9", &o, &n);
 }
 
@@ -114,10 +110,8 @@ fn oracle_prop_cl_loop_append_pattern() {
                   (dolist (x '((1 2) (3 4) (5 6)))
                     (setq result (append result x)))
                   result)";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (1 2 3 4 5 6)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 2 3 4 5 6)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(1 2 3 4 5 6)", &o, &n);
 }
 
@@ -131,8 +125,8 @@ fn oracle_prop_cl_every_pattern() {
                     (unless (> x 0)
                       (setq all-positive nil)))
                   all-positive)";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK t""#]]);
+    let expect = expect_test::expect![[r#""OK t""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("t", &o, &n);
 }
 
@@ -146,8 +140,8 @@ fn oracle_prop_cl_some_pattern() {
                     (when (< x 0)
                       (throw 'found x)))
                   nil)";
-    let (o, n) =
-        crate::common::eval_oracle_and_neovm_expect(form, expect_test::expect![[r#""OK -2""#]]);
+    let expect = expect_test::expect![[r#""OK -2""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("-2", &o, &n);
 }
 
@@ -160,9 +154,7 @@ fn oracle_prop_cl_remove_if_pattern() {
                     (unless (< x 0)
                       (setq result (cons x result))))
                   (nreverse result))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (1 3 5)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 3 5)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(1 3 5)", &o, &n);
 }

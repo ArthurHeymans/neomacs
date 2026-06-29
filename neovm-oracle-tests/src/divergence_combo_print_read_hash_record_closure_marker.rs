@@ -13,6 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_print_read_hash_table_marker_overlay_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ht (make-hash-table :test 'equal))
@@ -37,7 +38,7 @@ fn combo_print_read_hash_table_marker_overlay_roundtrip() {
                 (gethash "key1" read-back)
                 (gethash "nested" read-back)
                 (equal sym-props sym-read)))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -45,6 +46,7 @@ fn combo_print_read_hash_table_marker_overlay_roundtrip() {
 fn combo_print_read_record_closure_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t my-tag (x y z) (1 2 3) t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar combo--record-type [cl-struct-my-record tag data nested])
@@ -62,7 +64,7 @@ fn combo_print_read_record_closure_roundtrip() {
           (aref read-back 3)
           (equal (funcall closure 'test)
                  (funcall closure-read 'test))))) "#,
-        expect_test::expect![[r#""OK (t my-tag (x y z) (1 2 3) t)""#]],
+        expect,
     );
 }
 
@@ -70,6 +72,7 @@ fn combo_print_read_record_closure_roundtrip() {
 fn combo_print_read_circular_structure_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((lst (list 1 2 3)))
@@ -81,7 +84,7 @@ fn combo_print_read_circular_structure_marker() {
             (= (cadr read-back) 2)
             (= (caddr read-back) 3)
             (= (car (cdddr read-back)) 1))))) "#,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (1 . 1) 0)""#]],
+        expect,
     );
 }
 
@@ -89,6 +92,7 @@ fn combo_print_read_circular_structure_marker() {
 fn combo_print_read_hash_table_nested_with_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ht (make-hash-table :test 'eq)))
@@ -100,7 +104,7 @@ fn combo_print_read_hash_table_nested_with_symbols() {
       (list (equal (gethash 'alpha ht) (gethash 'alpha read-back))
             (equal (gethash 'gamma ht) (gethash 'gamma read-back))
             (equal (gethash 'nested ht) (gethash 'nested read-back)))))) "#,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
@@ -108,6 +112,7 @@ fn combo_print_read_hash_table_nested_with_symbols() {
 fn combo_print_read_vector_with_text_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t 1 \"hello\" sym (a b) [x y z])""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((vec (vector 1 "hello" 'sym '(a b) [x y z])))
@@ -119,7 +124,7 @@ fn combo_print_read_vector_with_text_properties() {
             (aref read-back 2)
             (aref read-back 3)
             (aref read-back 4))))) "#,
-        expect_test::expect![[r#""OK (t 1 \"hello\" sym (a b) [x y z])""#]],
+        expect,
     );
 }
 
@@ -127,6 +132,7 @@ fn combo_print_read_vector_with_text_properties() {
 fn combo_print_read_bool_vector_special_syntax() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t 5 t nil t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((bv (bool-vector t nil t nil t)))
@@ -139,7 +145,7 @@ fn combo_print_read_bool_vector_special_syntax() {
             (aref read-back 2)
             (aref read-back 3)
             (aref read-back 4))))) "#,
-        expect_test::expect![[r#""OK (t 5 t nil t nil t)""#]],
+        expect,
     );
 }
 
@@ -147,6 +153,7 @@ fn combo_print_read_bool_vector_special_syntax() {
 fn combo_print_read_char_table_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((ct (make-char-table 'test-table nil)))
@@ -160,7 +167,7 @@ fn combo_print_read_char_table_roundtrip() {
             (eq (aref read-back ?A) 'upper)
             (eq (aref read-back ?0) 'digit)
             (eq (aref read-back ?z) nil))))) "#,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
@@ -168,6 +175,7 @@ fn combo_print_read_char_table_roundtrip() {
 fn combo_print_read_overlapping_hash_obarray_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((sym1 (intern "combo--print-test-sym-1"))
@@ -181,6 +189,6 @@ fn combo_print_read_overlapping_hash_obarray_symbols() {
             (eq (cadr read-back) sym2)
             (eq (caddr read-back) sym1)
             (equal (get (car read-back) 'data) '(1 2 3)))))) "#,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }

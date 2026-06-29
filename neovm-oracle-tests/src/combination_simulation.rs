@@ -61,12 +61,10 @@ fn oracle_prop_sim_cellular_automaton_rule30() {
     (fmakunbound 'neovm--test-rule30)
     (fmakunbound 'neovm--test-ca-step)
     (fmakunbound 'neovm--test-ca-to-string)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r###""OK (\"..........#..........\" \".........###.........\" \"........##..#........\" \".......##.####.......\" \"......##..#...#......\" \".....##.####.###.....\" \"....##..#....#..#....\" \"...##.####..######...\" \"..##..#...###.....#..\" \".##.####.##..#...###.\" \"##..#....#.####.##..#\")""###
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r###""OK (\"..........#..........\" \".........###.........\" \"........##..#........\" \".......##.####.......\" \"......##..#...#......\" \".....##.####.###.....\" \"....##..#....#..#....\" \"...##.####..######...\" \"..##..#...###.....#..\" \".##.####.##..#...###.\" \"##..#....#.####.##..#\")""###
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -146,10 +144,8 @@ fn oracle_prop_sim_bank_accounts() {
     (fmakunbound 'neovm--test-bank-withdraw)
     (fmakunbound 'neovm--test-bank-interest)
     (fmakunbound 'neovm--test-bank-transfer)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1000 7650 ok failed 5 4)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1000 7650 ok failed 5 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -231,12 +227,10 @@ fn oracle_prop_sim_inventory_management() {
     (fmakunbound 'neovm--test-inv-value)
     (fmakunbound 'neovm--test-inv-needs-reorder)
     (fmakunbound 'neovm--test-inv-report)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (2700 ok 850 insufficient nil (\"gadget\") ((\"doohickey\" 30 450) (\"gadget\" 5 125) (\"widget\" 215 2150)) 2725)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (2700 ok 850 insufficient nil (\"gadget\") ((\"doohickey\" 30 450) (\"gadget\" 5 125) (\"widget\" 215 2150)) 2725)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -309,10 +303,8 @@ fn oracle_prop_sim_projectile_motion() {
     (fmakunbound 'neovm--test-proj-create)
     (fmakunbound 'neovm--test-proj-step)
     (fmakunbound 'neovm--test-proj-simulate)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (2000 1000 2020 200 200 101 201 201 102 t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2000 1000 2020 200 200 101 201 201 102 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -415,12 +407,10 @@ fn oracle_prop_sim_weather_state_machine() {
     (fmakunbound 'neovm--test-lcg-next)
     (fmakunbound 'neovm--test-weather-transition)
     (fmakunbound 'neovm--test-weather-simulate)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (30 ((sunny . 16) (cloudy . 10) (rainy . 4) (stormy . 0)) (sunny cloudy cloudy rainy rainy cloudy rainy sunny cloudy sunny) 5 17)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (30 ((sunny . 16) (cloudy . 10) (rainy . 4) (stormy . 0)) (sunny cloudy cloudy rainy rainy cloudy rainy sunny cloudy sunny) 5 17)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -504,12 +494,10 @@ fn oracle_prop_sim_task_scheduler() {
     (fmakunbound 'neovm--test-sched-set-status)
     (fmakunbound 'neovm--test-sched-compare)
     (fmakunbound 'neovm--test-sched-run)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"urgent-fix\" \"backup\" \"compile\" \"review\" \"test\" \"deploy\" \"report\") ((\"urgent-fix\" t) (\"backup\" t) (\"compile\" t) (\"review\" t) (\"test\" nil) (\"deploy\" t) (\"report\" t)) (\"test\") 22 7)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"urgent-fix\" \"backup\" \"compile\" \"review\" \"test\" \"deploy\" \"report\") ((\"urgent-fix\" t) (\"backup\" t) (\"compile\" t) (\"review\" t) (\"test\" nil) (\"deploy\" t) (\"report\" t)) (\"test\") 22 7)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -571,10 +559,8 @@ fn oracle_prop_sim_cellular_automaton_rule110() {
     (fmakunbound 'neovm--test-rule110)
     (fmakunbound 'neovm--test-ca110-step)
     (fmakunbound 'neovm--test-ca-count-live)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"........................#\" \".......................##\" \"......................###\" \".....................##.#\" \"....................#####\" \"...................##...#\" \"..................###..##\" \".................##.#.###\" \"................#######.#\" \"...............##.....###\" \"..............###....##.#\" \".............##.#...#####\") (1 2 3 3 5 3 5 6 8 5 6 8) 8)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"........................#\" \".......................##\" \"......................###\" \".....................##.#\" \"....................#####\" \"...................##...#\" \"..................###..##\" \".................##.#.###\" \"................#######.#\" \"...............##.....###\" \"..............###....##.#\" \".............##.#...#####\") (1 2 3 3 5 3 5 6 8 5 6 8) 8)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

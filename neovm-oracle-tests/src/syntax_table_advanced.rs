@@ -40,10 +40,8 @@ fn oracle_prop_syntax_table_parent_inheritance() {
                                 (c-dollar (char-syntax ?$)))
                             (list p-at p-hash p-dollar
                                   c-at c-hash c-dollar))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (119 46 119 46 46 119)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (119 46 119 46 46 119)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -94,10 +92,8 @@ fn oracle_prop_syntax_table_all_classes() {
                        (char-syntax ?N)   ;; ! => 33
                        (char-syntax ?O))) ;; | => 124
                     )"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (32 119 95 46 40 41 34 92 47 36 39 60 62 33 124)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (32 119 95 46 40 41 34 92 47 36 39 60 62 33 124)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -121,7 +117,8 @@ fn oracle_prop_char_syntax_modified_table() {
                         (set-syntax-table st2)
                         (let ((r2 (char-syntax ?*)))
                           (list r1 r2 (not (= r1 r2)))))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (119 46 t)""#]]);
+    let expect = expect_test::expect![[r#""OK (119 46 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -150,10 +147,8 @@ fn oracle_prop_copy_syntax_table_independence() {
                           (list orig-at orig-hash
                                 copy-at copy-hash
                                 (not (= orig-at copy-at)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (119 46 46 95 t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (119 46 46 95 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,12 +172,10 @@ fn oracle_prop_syntax_roundtrip() {
                                   (cons (list i ch class-back (= class-back i))
                                         results))))))
                     (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 32 0 t) (1 46 1 t) (2 119 2 t) (3 95 3 t) (4 40 4 t) (5 41 5 t) (6 39 6 t) (7 34 7 t) (8 36 8 t) (9 92 9 t) (10 47 10 t) (11 60 11 t) (12 62 12 t) (14 33 14 t) (15 124 15 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 32 0 t) (1 46 1 t) (2 119 2 t) (3 95 3 t) (4 40 4 t) (5 41 5 t) (6 39 6 t) (7 34 7 t) (8 36 8 t) (9 92 9 t) (10 47 10 t) (11 60 11 t) (12 62 12 t) (14 33 14 t) (15 124 15 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -214,10 +207,8 @@ fn oracle_prop_matching_paren_custom() {
                        (matching-paren ?})
                        ;; Non-bracket char returns nil
                        (matching-paren ?a))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (41 40 62 60 125 123 nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (41 40 62 60 125 123 nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -249,10 +240,8 @@ fn oracle_prop_syntax_after_buffer_context() {
                         ;; pos 23: '4' => word (digit in standard)
                         (setq results (cons (syntax-after 23) results))
                         (nreverse results))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((2) (2) (11) (12) (2))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((2) (2) (11) (12) (2))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -311,8 +300,7 @@ fn oracle_prop_syntax_table_dsl_parsing() {
                           (skip-syntax-forward "w")
                           (setq tokens (cons (buffer-substring start (point)) tokens)))
                         (nreverse tokens))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"key_name\" \"=\" \"\\\"value\\\"\" \"next_key\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (\"key_name\" \"=\" \"\\\"value\\\"\" \"next_key\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

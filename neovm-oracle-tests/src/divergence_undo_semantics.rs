@@ -19,6 +19,8 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_undo_marker_position_restored_after_delete_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdefghij")
@@ -26,7 +28,7 @@ fn divergence_undo_marker_position_restored_after_delete_undo() {
     (delete-region 3 8)
     (undo)
     (marker-position m)))"#,
-        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]],
+        expect,
     );
 }
 
@@ -34,6 +36,8 @@ fn divergence_undo_marker_position_restored_after_delete_undo() {
 fn divergence_undo_marker_inside_deleted_region_restored() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "0123456789")
@@ -42,7 +46,7 @@ fn divergence_undo_marker_inside_deleted_region_restored() {
     (undo)
     (list (marker-position m)
           (buffer-substring 1 11))))"#,
-        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]],
+        expect,
     );
 }
 
@@ -50,6 +54,8 @@ fn divergence_undo_marker_inside_deleted_region_restored() {
 fn divergence_undo_multiple_markers_in_deleted_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdefghijklmno")
@@ -60,7 +66,7 @@ fn divergence_undo_multiple_markers_in_deleted_region() {
     (list (marker-position m1) (marker-position m2) (marker-position m3))
     (undo)
     (list (marker-position m1) (marker-position m2) (marker-position m3))))"#,
-        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]],
+        expect,
     );
 }
 
@@ -68,6 +74,8 @@ fn divergence_undo_multiple_markers_in_deleted_region() {
 fn divergence_undo_insertion_type_marker_restored() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcdefghij")
@@ -76,7 +84,7 @@ fn divergence_undo_insertion_type_marker_restored() {
     (delete-region 3 9)
     (undo)
     (list (marker-position m) (marker-insertion-type m))))"#,
-        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]],
+        expect,
     );
 }
 
@@ -84,13 +92,14 @@ fn divergence_undo_insertion_type_marker_restored() {
 fn divergence_undo_multibyte_char_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "ābcdef")  ;; ā is 2 bytes, 1 char
   (goto-char 1)
   (insert "x")
   (car buffer-undo-list))"#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -98,13 +107,14 @@ fn divergence_undo_multibyte_char_positions() {
 fn divergence_undo_multibyte_delete_char_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "ābcdef")  ;; ā is 2 bytes
   (goto-char 3)      ;; after ā (char pos 2), at 'b'
   (delete-region 3 6)
   (car buffer-undo-list))"#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -112,6 +122,8 @@ fn divergence_undo_multibyte_delete_char_positions() {
 fn divergence_undo_multibyte_delete_and_undo_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "ābcdef")
@@ -119,7 +131,7 @@ fn divergence_undo_multibyte_delete_and_undo_point() {
   (delete-region 2 5)  ;; delete "bcd" (chars 2-4)
   (undo)
   (point))"#,
-        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]],
+        expect,
     );
 }
 
@@ -127,6 +139,7 @@ fn divergence_undo_multibyte_delete_and_undo_point() {
 fn divergence_undo_backward_merge_not_in_gnu() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "ABCDE")
@@ -138,7 +151,7 @@ fn divergence_undo_backward_merge_not_in_gnu() {
     (if (consp undo-entry)
         (list (car undo-entry) (cdr undo-entry))
       undo-entry)))"#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -146,6 +159,7 @@ fn divergence_undo_backward_merge_not_in_gnu() {
 fn divergence_undo_first_change_sentinel_not_zero() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "hello")
@@ -157,7 +171,7 @@ fn divergence_undo_first_change_sentinel_not_zero() {
     (if (and (consp entry) (eq (car entry) t))
         (cdr entry)
       'no-first-change-entry)))"#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -165,6 +179,7 @@ fn divergence_undo_first_change_sentinel_not_zero() {
 fn divergence_undo_delete_point_at_end_negative_position() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "ābcd")  ;; ā=2bytes, total 5 bytes, 4 chars
@@ -175,7 +190,7 @@ fn divergence_undo_delete_point_at_end_negative_position() {
     (if (and (consp entry) (stringp (car entry)))
         (< (cdr entry) 0)  ;; position should be negative
       'unexpected-entry)))"#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -183,6 +198,8 @@ fn divergence_undo_delete_point_at_end_negative_position() {
 fn divergence_undo_boundary_separates_entries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "hello")
@@ -191,7 +208,7 @@ fn divergence_undo_boundary_separates_entries() {
   ;; First undo should remove "world" only
   (undo)
   (buffer-string))"#,
-        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]],
+        expect,
     );
 }
 
@@ -199,6 +216,8 @@ fn divergence_undo_boundary_separates_entries() {
 fn divergence_undo_full_cycle_insert_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "ABCDE")
@@ -206,7 +225,7 @@ fn divergence_undo_full_cycle_insert_delete() {
   (delete-region 3 5)  ;; delete "CD"
   (undo)
   (buffer-string))"#,
-        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]],
+        expect,
     );
 }
 
@@ -214,6 +233,8 @@ fn divergence_undo_full_cycle_insert_delete() {
 fn divergence_undo_marker_after_insert_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(with-temp-buffer
   (insert "abcde")
@@ -222,6 +243,6 @@ fn divergence_undo_marker_after_insert_undo() {
     (insert "XYZ")
     (undo)
     (list (marker-position m) (buffer-string))))"#,
-        expect_test::expect![[r#""ERR (user-error \"No undo information in this buffer\")""#]],
+        expect,
     );
 }

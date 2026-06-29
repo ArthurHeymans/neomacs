@@ -56,10 +56,8 @@ fn oracle_prop_copy_syntax_table_adv_independent_copy() {
            (= orig-tilde copy-tilde)
            ;; They are distinct objects
            (not (eq orig copy))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -113,10 +111,8 @@ fn oracle_prop_copy_syntax_table_adv_modify_copy_no_effect_on_original() {
             (char-syntax ?a)
             (char-syntax ?z)
             (char-syntax ?0))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t (46 119 119 95 46 124 60))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t (46 119 119 95 46 124 60))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -172,10 +168,8 @@ fn oracle_prop_copy_syntax_table_adv_make_with_parent() {
                ;; Verify grandparent unaffected by descendants
                (progn (set-syntax-table gp)
                       (= (char-syntax ?!) gp-bang))))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (119 95 46 95 46 95 46 119 46 95 46 95 60 t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (119 95 46 95 46 95 46 119 46 95 46 95 60 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -208,10 +202,8 @@ fn oracle_prop_copy_syntax_table_adv_syntax_table_p() {
   ;; Verify syntax-table returns a syntax table
   (with-temp-buffer
     (syntax-table-p (syntax-table))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t nil nil nil nil nil nil nil nil nil t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t nil nil nil nil nil nil nil nil nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -272,10 +264,8 @@ fn oracle_prop_copy_syntax_table_adv_set_syntax_table_switching() {
              ;; Cross-table differences
              (not (= lisp-semi c-semi))
              (not (= lisp-dash sql-dash)))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (60 95 39 46 119 46 46 119 60 t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (60 95 39 46 119 46 46 119 60 t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -386,12 +376,10 @@ fn oracle_prop_copy_syntax_table_adv_mini_language() {
              (length tokens-ml)
              (length tokens-var)))))
     (fmakunbound 'neovm--cst-tokenize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((word . \"let\") (word . \"foo_bar\") (punct . \"=\") (open . \"(\") (word . \"x\") (punct . \"+\") (word . \"42\") (close . \")\") (prefix . \"'\") (word . \"q\")) ((word . \"let\") (word . \"foo\") (symbol . \"_\") (word . \"bar\") (punct . \"=\") (open . \"(\") (word . \"x\") (punct . \"+\") (word . \"42\") (close . \")\") (prefix . \"'\") (word . \"q\")) t t t 10 12)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((word . \"let\") (word . \"foo_bar\") (punct . \"=\") (open . \"(\") (word . \"x\") (punct . \"+\") (word . \"42\") (close . \")\") (prefix . \"'\") (word . \"q\")) ((word . \"let\") (word . \"foo\") (symbol . \"_\") (word . \"bar\") (punct . \"=\") (open . \"(\") (word . \"x\") (punct . \"+\") (word . \"42\") (close . \")\") (prefix . \"'\") (word . \"q\")) t t t 10 12)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -433,8 +421,6 @@ fn oracle_prop_copy_syntax_table_adv_nil_copies_standard() {
              (= copy-a std-a)
              ;; After modification they differ
              (not (= modified-a std-a)))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t 119 32 40 41 34 46 119 t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t 119 32 40 41 34 46 119 t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -22,12 +22,10 @@ fn oracle_dlet_macroexpansion_shape() {
                  neovm--dl-z)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((let (_) (defvar neovm--dl-x) (defvar neovm--dl-y) (let ((neovm--dl-x 1) neovm--dl-y) (list neovm--dl-x neovm--dl-y))) (let (_) (defvar neovm--dl-z) (let (neovm--dl-z) neovm--dl-z)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((let (_) (defvar neovm--dl-x) (defvar neovm--dl-y) (let ((neovm--dl-x 1) neovm--dl-y) (list neovm--dl-x neovm--dl-y))) (let (_) (defvar neovm--dl-z) (let (neovm--dl-z) neovm--dl-z)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -51,12 +49,10 @@ fn oracle_dlet_temporarily_makes_lexical_variables_dynamic() {
      after)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (outer (dynamic outer outer (outer nested-lexical)) outer outer)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (outer (dynamic outer outer (outer nested-lexical)) outer outer)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -77,8 +73,6 @@ fn oracle_dlet_omitted_initializers_and_unwind_restore() {
    (funcall (lambda () x))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable x)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable x)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

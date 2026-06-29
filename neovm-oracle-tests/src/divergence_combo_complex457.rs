@@ -5,72 +5,76 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx457_shell_command_sync() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"hello\" \"wo rld\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (string-trim (shell-command-to-string "echo hello"))
       (string-trim (shell-command-to-string "printf 'wo rld'")))"##,
-        expect_test::expect![[r#""OK (\"hello\" \"wo rld\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx457_shell_command_to_string_exit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"test\n\" \"\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (list (shell-command-to-string "echo test")
         (shell-command-to-string "exit 0")))"##,
-        expect_test::expect![[r#""OK (\"test\n\" \"\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx457_call_process_exit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    crate::common::assert_oracle_parity_expect(
-        r##"(call-process "true" nil nil nil)"##,
-        expect_test::expect![[r#""OK 0""#]],
-    );
+    let expect = expect_test::expect![[r#""OK 0""#]];
+    crate::common::assert_oracle_parity_expect(r##"(call-process "true" nil nil nil)"##, expect);
 }
 
 #[test]
 fn div_cx457_call_process_to_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"hello\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (call-process "echo" nil t nil "hello")
   (string-trim-right (buffer-string)))"##,
-        expect_test::expect![[r#""OK \"hello\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx457_start_process_sync() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"test\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (start-process "cx457" (current-buffer) "echo" "test")
   (accept-process-output (get-process "cx457") 2)
   (string-trim-right (buffer-string)))"##,
-        expect_test::expect![[r#""OK \"test\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx457_delete_directory_recursive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((d (make-temp-file "neo-cx457-dir-" t)))
   (with-temp-file (expand-file-name "sub" d) (insert "x"))
   (unwind-protect
       (progn (delete-directory d t) t)
     (ignore-errors (delete-directory d t))))"##,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx457_copy_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"content\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((src (make-temp-file "neo-cx457-src-"))
       (dst (make-temp-file "neo-cx457-dst-")))
@@ -80,26 +84,28 @@ fn div_cx457_copy_file() {
              (with-temp-buffer (insert-file-contents dst) (buffer-string)))
     (delete-file src)
     (ignore-errors (delete-file dst))))"##,
-        expect_test::expect![[r#""OK \"content\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx457_rename_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((src (make-temp-file "neo-cx457-rn-")))
   (unwind-protect
       (progn (rename-file src "/tmp/neo-cx457-renamed" t)
              (file-exists-p "/tmp/neo-cx457-renamed"))
     (ignore-errors (delete-file "/tmp/neo-cx457-renamed"))))"##,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx457_add_name_to_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((f (make-temp-file "neo-cx457-an-")))
   (unwind-protect
@@ -107,26 +113,28 @@ fn div_cx457_add_name_to_file() {
              (file-exists-p "/tmp/neo-cx457-hardlink"))
     (delete-file f)
     (ignore-errors (delete-file "/tmp/neo-cx457-hardlink"))))"##,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx457_make_directory_change_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((d (expand-file-name "neo-cx457-mkdir" temporary-file-directory)))
   (make-directory d t)
   (unwind-protect
       (file-directory-p d)
     (delete-directory d t)))"##,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx457_insert_file_contents_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"new data\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((f (make-temp-file "neo-cx457-ifc-")))
   (with-temp-file f (insert "new data"))
@@ -136,13 +144,14 @@ fn div_cx457_insert_file_contents_replace() {
         (insert-file-contents f nil nil nil t)
         (buffer-string))
     (delete-file f)))"##,
-        expect_test::expect![[r#""OK \"new data\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx457_write_region_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"test data\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((f (make-temp-file "neo-cx457-wr-")))
   (write-region "test data" nil f nil 0)
@@ -150,39 +159,42 @@ fn div_cx457_write_region_string() {
            (insert-file-contents f)
            (string-trim-right (buffer-string)))
     (delete-file f)))"##,
-        expect_test::expect![[r#""OK \"test data\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx457_make_temp_file_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((f (make-temp-file "neo-cx457-mtf-")))
   (unwind-protect
       (file-exists-p f)
     (delete-file f)))"##,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx457_file_selinux_context() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((f (make-temp-file "neo-cx457-selinux-")))
   (unwind-protect
       (condition-case e (file-selinux-context f) (error (car e)))
     (delete-file f)))"##,
-        expect_test::expect![[r#""OK (nil nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx457_path_separator() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable directory-sep-char)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list path-separator directory-sep-char)"##,
-        expect_test::expect![[r#""ERR (void-variable directory-sep-char)""#]],
+        expect,
     );
 }

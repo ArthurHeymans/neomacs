@@ -8,6 +8,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx72_seq_map_filter_reduce_across_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((1 4 9 16) (1 4 9 16) (9409 9604 9801 10000) (3 4 5) (3 4 5) 15 (3 2 1))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -19,15 +22,16 @@ fn div_cx72_seq_map_filter_reduce_across_types() {
  (seq-reduce #'+ '(1 2 3 4 5) 0)
  (seq-reduce (lambda (acc x) (cons x acc)) '(1 2 3) nil))
 "##,
-        expect_test::expect![[
-            r#""OK ((1 4 9 16) (1 4 9 16) (9409 9604 9801 10000) (3 4 5) (3 4 5) 15 (3 2 1))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx72_seq_group_by_partition() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (((:odd 1 3 5 7 9) (:even 2 4 6 8 10)) ((1 2 3) (4 5 6) (7 8 9) (10)) ((1 2 3 4) (5 6 7 8) (9 10)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((data '(1 2 3 4 5 6 7 8 9 10)))
@@ -35,15 +39,15 @@ fn div_cx72_seq_group_by_partition() {
         (seq-partition data 3)
         (seq-partition data 4)))
 "##,
-        expect_test::expect![[
-            r#""OK (((:odd 1 3 5 7 9) (:even 2 4 6 8 10)) ((1 2 3) (4 5 6) (7 8 9) (10)) ((1 2 3 4) (5 6 7 8) (9 10)))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx72_seq_set_operations_unique_union_difference() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((1 2 3 4) (104 101 108 111) (1 2 3 4) (2 4) (1 3 5))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -53,13 +57,16 @@ fn div_cx72_seq_set_operations_unique_union_difference() {
  (seq-intersection '(1 2 3 4) '(2 4 6))
  (seq-difference '(1 2 3 4 5) '(2 4)))
 "##,
-        expect_test::expect![[r#""OK ((1 2 3 4) (104 101 108 111) (1 2 3 4) (2 4) (1 3 5))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx72_subseq_take_drop_nth() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((2 3 4 5) (2 3) (1 2 3 4) \"hello\" [3 4 5] (1 2 3) (3 4 5) (1 2 3) (4 5))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -73,15 +80,14 @@ fn div_cx72_subseq_take_drop_nth() {
  (seq-take-while (lambda (x) (< x 4)) '(1 2 3 4 5))
  (seq-drop-while (lambda (x) (< x 4)) '(1 2 3 4 5)))
 "##,
-        expect_test::expect![[
-            r#""OK ((2 3 4 5) (2 3) (1 2 3 4) \"hello\" [3 4 5] (1 2 3) (3 4 5) (1 2 3) (4 5))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx72_seq_sort_sort_by_min_max() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((1 1 2 3 4 5 6 9) (1 1 -3 -4 -5 9) 1 9 101 111)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -92,13 +98,14 @@ fn div_cx72_seq_sort_sort_by_min_max() {
  (seq-min "hello")
  (seq-max "hello"))
 "##,
-        expect_test::expect![[r#""OK ((1 1 2 3 4 5 6 9) (1 1 -3 -4 -5 9) 1 9 101 111)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx72_seq_find_position_contains_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (4 2 4 t nil nil 3)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -110,13 +117,14 @@ fn div_cx72_seq_find_position_contains_p() {
  (seq-contains-p '(1 2 3) 99)
  (seq-count (lambda (x) (evenp x)) '(1 2 3 4 5 6)))
 "##,
-        expect_test::expect![[r#""OK (4 2 4 t nil nil 3)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx72_seq_do_each_for_each_with_index() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((10 20 30) ((0 . 10) (1 . 20) (2 . 30)))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (acc)
@@ -126,13 +134,16 @@ fn div_cx72_seq_do_each_for_each_with_index() {
     (seq-do-indexed (lambda (x i) (push (cons i x) acc)) [10 20 30])
     (list after-list (nreverse acc))))
 "##,
-        expect_test::expect![[r#""OK ((10 20 30) ((0 . 10) (1 . 20) (2 . 30)))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx72_seq_concatenate_into_various_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 53 54) [1 2 3 4 53 54] \"ABcd\" [1 2 3] (1 2 3) (97 98 99))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -143,15 +154,16 @@ fn div_cx72_seq_concatenate_into_various_types() {
  (seq-into [1 2 3] 'list)
  (seq-into "abc" 'list))
 "##,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4 53 54) [1 2 3 4 53 54] \"ABcd\" [1 2 3] (1 2 3) (97 98 99))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx72_cl_loop_iterating_sequences_and_vectors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Expected a ‘for’ preposition, found in-string\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -161,15 +173,16 @@ fn div_cx72_cl_loop_iterating_sequences_and_vectors() {
  (cl-loop for x being the elements of [1 2 3] collect x)
  (cl-loop for x being the elements of "abcd" collect x))
 "##,
-        expect_test::expect![[
-            r#""ERR (error \"Expected a ‘for’ preposition, found in-string\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx72_cl_subseq_with_default_and_setf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ([2 3] \"he\" (3 4 5) [99 88] [1 99 88 4 5] \"XX\" \"XXllo\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((v (vector 1 2 3 4 5))
@@ -183,15 +196,16 @@ fn div_cx72_cl_subseq_with_default_and_setf() {
         (setf (cl-subseq s 0 2) "XX")
         s))
 "##,
-        expect_test::expect![[
-            r#""OK ([2 3] \"he\" (3 4 5) [99 88] [1 99 88 4 5] \"XX\" \"XXllo\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx72_cl_remove_remove_if_substitute_with_count() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((2 3 4) (2 3 1 4) (1 2 3 4) (1 3 5) (9 2 9 3 9 4) (9 2 9 3 1 4))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -202,15 +216,14 @@ fn div_cx72_cl_remove_remove_if_substitute_with_count() {
  (cl-substitute 9 1 '(1 2 1 3 1 4))
  (cl-substitute 9 1 '(1 2 1 3 1 4) :count 2))
 "##,
-        expect_test::expect![[
-            r#""OK ((2 3 4) (2 3 1 4) (1 2 3 4) (1 3 5) (9 2 9 3 9 4) (9 2 9 3 1 4))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx72_cl_position_find_count_member_if() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 2 nil 3 nil 3 (4 5))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list
@@ -222,13 +235,14 @@ fn div_cx72_cl_position_find_count_member_if() {
  (cl-count 1 '(1 2 1 3 1 4))
  (cl-member-if (lambda (x) (> x 3)) '(1 2 3 4 5)))
 "##,
-        expect_test::expect![[r#""OK (2 2 nil 3 nil 3 (4 5))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx72_sequence_copy_map_into_reverse_combinations_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function seq-unique)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((input '((1 . "a") (2 . "b") (3 . "c") (4 . "d")))
@@ -242,6 +256,6 @@ fn div_cx72_sequence_copy_map_into_reverse_combinations_mega() {
        (partitioned (seq-partition input 2)))
   (list keys vals copy-keys reversed sorted indexed unique partitioned))
 "##,
-        expect_test::expect![[r#""ERR (void-function seq-unique)""#]],
+        expect,
     );
 }

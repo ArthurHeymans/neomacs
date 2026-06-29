@@ -8,6 +8,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx94_file_truename_simple_no_symlinks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"/tmp/nix-shell.XcUf3d/neo-cx94-tnssPBC0/simple.txt\" t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((dir (make-temp-file "neo-cx94-tn" t))
@@ -19,15 +22,16 @@ fn div_cx94_file_truename_simple_no_symlinks() {
     (delete-directory dir t)
     (list true (string= true f) (file-name-absolute-p true))))
 "##,
-        expect_test::expect![[
-            r#""OK (\"/tmp/nix-shell.XcUf3d/neo-cx94-tnssPBC0/simple.txt\" t t)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx94_file_symlink_resolution_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"/tmp/nix-shell.XcUf3d/neo-cx94-symzdkWQi/real.txt\" \"/tmp/nix-shell.XcUf3d/neo-cx94-symzdkWQi/real.txt\" t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -45,15 +49,15 @@ fn div_cx94_file_symlink_resolution_round_trip() {
               (string= true-of-link true-of-real))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (\"/tmp/nix-shell.XcUf3d/neo-cx94-symzdkWQi/real.txt\" \"/tmp/nix-shell.XcUf3d/neo-cx94-symzdkWQi/real.txt\" t)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx94_directory_files_recursively_nested() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (4 (\"a1.txt\" \"a2.txt\" \"b1.txt\" \"g1.txt\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((root (make-temp-file "neo-cx94-rec" t))
@@ -75,13 +79,15 @@ fn div_cx94_directory_files_recursively_nested() {
     (delete-directory root t)
     (list (length all) names)))
 "##,
-        expect_test::expect![[r#""OK (4 (\"a1.txt\" \"a2.txt\" \"b1.txt\" \"g1.txt\"))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx94_locate_dominating_file_finds_in_parent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (\"/tmp/nix-shell.XcUf3d/neo-cx94-domFxnSim/\" \"\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((root (make-temp-file "neo-cx94-dom" t))
@@ -96,13 +102,16 @@ fn div_cx94_locate_dominating_file_finds_in_parent() {
           (and located (file-name-nondirectory located))
           (and located (file-exists-p (expand-file-name "MARKER" located))))))
 "##,
-        expect_test::expect![[r#""OK (\"/tmp/nix-shell.XcUf3d/neo-cx94-domFxnSim/\" \"\" nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx94_file_name_concat_chains() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"/home/user/doc/file.txt\" \"/home/user\" \"rel/path/to/file\" \"/trailing/path\" \"/trailing-slash/\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (file-name-concat "/home" "user" "doc" "file.txt")
@@ -111,15 +120,16 @@ fn div_cx94_file_name_concat_chains() {
       (file-name-concat "/trailing/" "path")
       (file-name-concat "/trailing-slash/" ""))
 "##,
-        expect_test::expect![[
-            r#""OK (\"/home/user/doc/file.txt\" \"/home/user\" \"rel/path/to/file\" \"/trailing/path\" \"/trailing-slash/\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx94_expand_file_name_with_dots_in_path() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"/home/user/foo\" \"/home/foo\" \"/foo\" \"/home/foo\" \"/home/user/foo/baz\" \"/home/user/foo/.bar\" \"/home/user/foo/bar./baz\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((default-directory "/home/user/"))
@@ -132,15 +142,16 @@ fn div_cx94_expand_file_name_with_dots_in_path() {
    (expand-file-name "foo/.bar")
    (expand-file-name "foo/bar./baz")))
 "##,
-        expect_test::expect![[
-            r#""OK (\"/home/user/foo\" \"/home/foo\" \"/foo\" \"/home/foo\" \"/home/user/foo/baz\" \"/home/user/foo/.bar\" \"/home/user/foo/bar./baz\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx94_directory_files_match_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"alpha.txt\" \"beta.txt\") (\"alpha.txt\" \"beta.txt\" \"delta.log\" \"gamma.dat\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((dir (make-temp-file "neo-cx94-pred" t))
@@ -153,15 +164,16 @@ fn div_cx94_directory_files_match_predicate() {
     (list (mapcar #'file-name-nondirectory txt)
           all)))
 "##,
-        expect_test::expect![[
-            r#""OK ((\"alpha.txt\" \"beta.txt\") (\"alpha.txt\" \"beta.txt\" \"delta.log\" \"gamma.dat\"))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx94_file_attributes_with_symlink() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (nil \"/tmp/nix-shell.XcUf3d/neo-cx94-attrWNQDSO/real.dat\" \"/tmp/nix-shell.XcUf3d/neo-cx94-attrWNQDSO/real.dat\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -179,15 +191,14 @@ fn div_cx94_file_attributes_with_symlink() {
               (file-attribute-type attr-link-no-follow))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK (nil \"/tmp/nix-shell.XcUf3d/neo-cx94-attrWNQDSO/real.dat\" \"/tmp/nix-shell.XcUf3d/neo-cx94-attrWNQDSO/real.dat\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx94_set_file_times_and_check_file_newer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((dir (make-temp-file "neo-cx94-times" t))
@@ -202,13 +213,14 @@ fn div_cx94_set_file_times_and_check_file_newer() {
     (delete-directory dir t)
     (list newer older)))
 "##,
-        expect_test::expect![[r#""OK (t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx94_copy_file_recursive_directory() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((src (make-temp-file "neo-cx94-cps" t))
@@ -225,13 +237,14 @@ fn div_cx94_copy_file_recursive_directory() {
       (list (> (length dst-listing) 0)
             (file-exists-p (expand-file-name (file-name-nondirectory src) dst))))))
 "##,
-        expect_test::expect![[r#""OK (t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx94_directory_empty_p_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((empty (make-temp-file "neo-cx94-empty" t))
@@ -244,13 +257,16 @@ fn div_cx94_directory_empty_p_predicates() {
     (delete-directory nonempty t)
     (list e1 e2)))
 "##,
-        expect_test::expect![[r#""OK (t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx94_directory_watcher_with_marker_overlay_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (error \"Changes to be undone are outside visible portion of buffer\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((dir (make-temp-file "neo-cx94-mega" t))
@@ -279,8 +295,6 @@ fn div_cx94_directory_watcher_with_marker_overlay_narrow_mega() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[
-            r#""ERR (error \"Changes to be undone are outside visible portion of buffer\")""#
-        ]],
+        expect,
     );
 }

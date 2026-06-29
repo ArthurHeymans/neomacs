@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_condition_case_nested_error_recovery() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass error-state ()
@@ -86,7 +87,7 @@ fn combo_eieio_condition_case_nested_error_recovery() {
                 (buffer-string)
                 states))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -94,6 +95,7 @@ fn combo_eieio_condition_case_nested_error_recovery() {
 fn combo_eieio_condition_case_buffer_bounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass bounds-checker ()
@@ -164,7 +166,7 @@ fn combo_eieio_condition_case_buffer_bounds() {
                 (buffer-string)
                 checkers))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -172,6 +174,7 @@ fn combo_eieio_condition_case_buffer_bounds() {
 fn combo_eieio_condition_case_user_signal_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (error \"Invalid error symbol\" my-error-b)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass signal-handler ()
@@ -242,7 +245,7 @@ fn combo_eieio_condition_case_user_signal_chain() {
                 (buffer-string)
                 handlers))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (error \"Invalid error symbol\" my-error-b)""#]],
+        expect,
     );
 }
 
@@ -250,6 +253,7 @@ fn combo_eieio_condition_case_user_signal_chain() {
 fn combo_eieio_condition_case_overlay_marker_recovery() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable m)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass recovery-point ()
@@ -304,7 +308,7 @@ fn combo_eieio_condition_case_overlay_marker_recovery() {
         (put-text-property (1- (point-max)) (point-max) 'recovery-log t))
       (list (marker-position m) (overlay-start ov) (overlay-end ov) (buffer-string)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-variable m)""#]],
+        expect,
     );
 }
 
@@ -312,6 +316,7 @@ fn combo_eieio_condition_case_overlay_marker_recovery() {
 fn combo_eieio_condition_case_text_prop_corruption_guard() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable m)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass prop-guard ()
@@ -365,6 +370,6 @@ fn combo_eieio_condition_case_text_prop_corruption_guard() {
         (put-text-property (1- (point-max)) (point-max) 'guard-log t))
       (list (marker-position m) (overlay-start ov) (overlay-end ov) (buffer-string)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-variable m)""#]],
+        expect,
     );
 }

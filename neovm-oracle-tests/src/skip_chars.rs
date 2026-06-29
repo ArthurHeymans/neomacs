@@ -19,7 +19,8 @@ fn oracle_prop_skip_chars_forward_alpha() {
                     (let ((skipped (skip-chars-forward "a-z")))
                       (list skipped (point)
                             (char-after (point)))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (6 7 32)""#]]);
+    let expect = expect_test::expect![[r#""OK (6 7 32)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -31,7 +32,8 @@ fn oracle_prop_skip_chars_forward_digits() {
                     (goto-char (point-min))
                     (let ((skipped (skip-chars-forward "0-9")))
                       (list skipped (point))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (5 6)""#]]);
+    let expect = expect_test::expect![[r#""OK (5 6)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -45,10 +47,8 @@ fn oracle_prop_skip_chars_forward_complement() {
                     (let ((skipped (skip-chars-forward "^ ")))
                       (list skipped (point)
                             (buffer-substring (point-min) (point)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (5 6 \"hello\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (5 6 \"hello\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -61,7 +61,8 @@ fn oracle_prop_skip_chars_forward_limit() {
                     (goto-char (point-min))
                     (let ((skipped (skip-chars-forward "a-z" 5)))
                       (list skipped (point))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (4 5)""#]]);
+    let expect = expect_test::expect![[r#""OK (4 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -75,10 +76,8 @@ fn oracle_prop_skip_chars_forward_mixed_charset() {
                     (let ((skipped (skip-chars-forward "a-zA-Z0-9_-")))
                       (list skipped (point)
                             (buffer-substring (point-min) (point)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (11 12 \"abc123XYZ_-\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (11 12 \"abc123XYZ_-\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -91,7 +90,8 @@ fn oracle_prop_skip_chars_forward_no_match() {
                     (goto-char (point-min))
                     (let ((skipped (skip-chars-forward "a-z")))
                       (list skipped (point))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (0 1)""#]]);
+    let expect = expect_test::expect![[r#""OK (0 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -108,10 +108,8 @@ fn oracle_prop_skip_chars_backward_basic() {
                     (let ((skipped (skip-chars-backward "a-z")))
                       (list skipped (point)
                             (buffer-substring (point) (point-max)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (-5 7 \"world\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (-5 7 \"world\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -124,7 +122,8 @@ fn oracle_prop_skip_chars_backward_limit() {
                     ;; LIM = 8, so don't skip past position 8
                     (let ((skipped (skip-chars-backward "a-z " 8)))
                       (list skipped (point))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (-4 8)""#]]);
+    let expect = expect_test::expect![[r#""OK (-4 8)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -136,7 +135,8 @@ fn oracle_prop_skip_chars_backward_complement() {
                     (goto-char (point-max))
                     (let ((skipped (skip-chars-backward "^h")))
                       (list skipped (point))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (-11 2)""#]]);
+    let expect = expect_test::expect![[r#""OK (-11 2)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -154,10 +154,8 @@ fn oracle_prop_skip_syntax_forward_word() {
                     (let ((skipped (skip-syntax-forward "w")))
                       (list skipped (point)
                             (buffer-substring (point-min) (point)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (5 6 \"hello\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (5 6 \"hello\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -170,7 +168,8 @@ fn oracle_prop_skip_syntax_forward_whitespace() {
                     (goto-char (point-min))
                     (let ((skipped (skip-syntax-forward " ")))
                       (list skipped (point))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (7 8)""#]]);
+    let expect = expect_test::expect![[r#""OK (7 8)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -182,7 +181,8 @@ fn oracle_prop_skip_syntax_forward_limit() {
                     (goto-char (point-min))
                     (let ((skipped (skip-syntax-forward "w" 4)))
                       (list skipped (point))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (3 4)""#]]);
+    let expect = expect_test::expect![[r#""OK (3 4)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -195,10 +195,8 @@ fn oracle_prop_skip_syntax_backward_word() {
                     (let ((skipped (skip-syntax-backward "w")))
                       (list skipped (point)
                             (buffer-substring (point) (point-max)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (-5 7 \"world\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (-5 7 \"world\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -243,12 +241,10 @@ fn oracle_prop_skip_chars_tokenizer() {
                                                 (buffer-substring start (point)))
                                           tokens)))))))
                       (nreverse tokens)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((word . \"foo\") (punct . \"=\") (num . \"42\") (punct . \"+\") (word . \"bar\") (punct . \"*\") (num . \"3\") (punct . \";\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((word . \"foo\") (punct . \"=\") (num . \"42\") (punct . \"+\") (word . \"bar\") (punct . \"*\") (num . \"3\") (punct . \";\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -274,12 +270,10 @@ fn oracle_prop_skip_chars_word_boundaries() {
                                               start (point))
                                         words)))))
                       (nreverse words)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"the\" 1 4) (\"quick\" 5 10) (\"brown\" 11 16) (\"fox\" 17 20) (\"jumps\" 21 26) (\"over\" 27 31) (\"the\" 32 35) (\"lazy\" 36 40) (\"dog\" 41 44))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"the\" 1 4) (\"quick\" 5 10) (\"brown\" 11 16) (\"fox\" 17 20) (\"jumps\" 21 26) (\"over\" 27 31) (\"the\" 32 35) (\"lazy\" 36 40) (\"dog\" 41 44))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -328,12 +322,10 @@ fn oracle_prop_skip_chars_csv_parser() {
                           (when (< (point) (point-max))
                             (forward-char 1))))
                       (nreverse rows)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"name\" \"age\" \"city\") (\"Alice\" \"30\" \"Boston\") (\"Bob\" \"25\" \"New York\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"name\" \"age\" \"city\") (\"Alice\" \"30\" \"Boston\") (\"Bob\" \"25\" \"New York\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -359,10 +351,8 @@ fn oracle_prop_skip_syntax_extract_identifiers() {
                                     (cons (buffer-substring start (point))
                                           ids))))))
                       (nreverse ids)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"defun\" \"calculate\" \"x\" \"y\" \"+\" \"*\" \"x\" \"x\" \"*\" \"y\" \"y\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"defun\" \"calculate\" \"x\" \"y\" \"+\" \"*\" \"x\" \"x\" \"*\" \"y\" \"y\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -105,12 +105,10 @@ fn oracle_prop_dataflow_flat_lattice_operations() {
     (fmakunbound 'neovm--fl-meet)
     (fmakunbound 'neovm--fl-env-join)
     (fmakunbound 'neovm--fl-env-meet)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (5 5 5 top top 5 5 5 bottom bottom ((x . 5) (y . top)) ((x . 5) (y . 3)) ((x . 5) (y . 3)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (5 5 5 top top 5 5 5 bottom bottom ((x . 5) (y . top)) ((x . 5) (y . 3)) ((x . 5) (y . 3)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -201,12 +199,10 @@ fn oracle_prop_dataflow_transfer_functions() {
     (fmakunbound 'neovm--tf-join)
     (fmakunbound 'neovm--tf-eval-expr)
     (fmakunbound 'neovm--tf-apply)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((x . 5) (y . 10)) ((x . 5) (y . 10) (z . 15)) ((x . 6)) ((x . 3) (y . 7) (z . 10)) ((x . 3) (y . top) (z . top)) ((a . 2) (b . 3) (c . 6) (d . 7) (e . 5)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((x . 5) (y . 10)) ((x . 5) (y . 10) (z . 15)) ((x . 6)) ((x . 3) (y . 7) (z . 10)) ((x . 3) (y . top) (z . top)) ((a . 2) (b . 3) (c . 6) (d . 7) (e . 5)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -330,12 +326,10 @@ fn oracle_prop_dataflow_worklist_algorithm() {
     (fmakunbound 'neovm--wl-set-union)
     (fmakunbound 'neovm--wl-set-diff)
     (fmakunbound 'neovm--wl-set-equal)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:processed 7 :results ((B1 :in nil :out ((B1 . x) (B1 . y))) (B2 :in ((B1 . x) (B1 . y) (B2 . z) (B3 . x) (B4 . w)) :out ((B1 . x) (B1 . y) (B2 . z) (B3 . x) (B4 . w))) (B3 :in ((B1 . x) (B1 . y)) :out ((B1 . y) (B3 . x))) (B4 :in ((B1 . x) (B1 . y) (B2 . z) (B3 . x) (B4 . w)) :out ((B1 . x) (B1 . y) (B2 . z) (B3 . x) (B4 . w))) (B5 :in ((B1 . x) (B1 . y) (B2 . z) (B3 . x) (B4 . w)) :out ((B1 . x) (B1 . y) (B2 . z) (B3 . x) (B4 . w)))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:processed 7 :results ((B1 :in nil :out ((B1 . x) (B1 . y))) (B2 :in ((B1 . x) (B1 . y) (B2 . z) (B3 . x) (B4 . w)) :out ((B1 . x) (B1 . y) (B2 . z) (B3 . x) (B4 . w))) (B3 :in ((B1 . x) (B1 . y)) :out ((B1 . y) (B3 . x))) (B4 :in ((B1 . x) (B1 . y) (B2 . z) (B3 . x) (B4 . w)) :out ((B1 . x) (B1 . y) (B2 . z) (B3 . x) (B4 . w))) (B5 :in ((B1 . x) (B1 . y) (B2 . z) (B3 . x) (B4 . w)) :out ((B1 . x) (B1 . y) (B2 . z) (B3 . x) (B4 . w)))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -468,12 +462,10 @@ fn oracle_prop_dataflow_constant_propagation() {
     (fmakunbound 'neovm--cp-eval)
     (fmakunbound 'neovm--cp-transfer)
     (fmakunbound 'neovm--cp-analyze)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:iterations 2 :results ((B1 :in ((w . bottom) (x . 5) (y . 3) (z . bottom)) :out ((w . bottom) (x . 5) (y . 3) (z . bottom))) (B2 :in ((w . bottom) (x . 5) (y . 3) (z . 8)) :out ((w . bottom) (x . 5) (y . 3) (z . 8))) (B3 :in ((w . bottom) (x . 5) (y . 3) (z . 10)) :out ((w . bottom) (x . 5) (y . 3) (z . 10))) (B4 :in ((w . top) (x . 5) (y . 3) (z . top)) :out ((w . top) (x . 5) (y . 3) (z . top)))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:iterations 2 :results ((B1 :in ((w . bottom) (x . 5) (y . 3) (z . bottom)) :out ((w . bottom) (x . 5) (y . 3) (z . bottom))) (B2 :in ((w . bottom) (x . 5) (y . 3) (z . 8)) :out ((w . bottom) (x . 5) (y . 3) (z . 8))) (B3 :in ((w . bottom) (x . 5) (y . 3) (z . 10)) :out ((w . bottom) (x . 5) (y . 3) (z . 10))) (B4 :in ((w . top) (x . 5) (y . 3) (z . top)) :out ((w . top) (x . 5) (y . 3) (z . top)))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -561,12 +553,10 @@ fn oracle_prop_dataflow_interval_analysis() {
     (fmakunbound 'neovm--ia-sub)
     (fmakunbound 'neovm--ia-mul)
     (fmakunbound 'neovm--ia-eval)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 8) (2 4) (2 4) (3 8) (2 9) (-8 12) (3 8) (-4 8) (13 28))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 8) (2 4) (2 4) (3 8) (2 9) (-8 12) (3 8) (-4 8) (13 28))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -700,12 +690,10 @@ fn oracle_prop_dataflow_forward_vs_backward() {
     (fmakunbound 'neovm--fb-equal)
     (fmakunbound 'neovm--fb-forward)
     (fmakunbound 'neovm--fb-backward)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:fwd-iters 2 :forward ((B1 :reaching ((B1 . x) (B1 . y))) (B2 :reaching ((B1 . x) (B1 . y) (B2 . z))) (B3 :reaching ((B1 . x) (B1 . y) (B3 . z))) (B4 :reaching ((B1 . x) (B1 . y) (B2 . z) (B3 . z))))) (:bwd-iters 2 :backward ((B1 :live nil) (B2 :live (x)) (B3 :live (x y)) (B4 :live (x z)))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:fwd-iters 2 :forward ((B1 :reaching ((B1 . x) (B1 . y))) (B2 :reaching ((B1 . x) (B1 . y) (B2 . z))) (B3 :reaching ((B1 . x) (B1 . y) (B3 . z))) (B4 :reaching ((B1 . x) (B1 . y) (B2 . z) (B3 . z))))) (:bwd-iters 2 :backward ((B1 :live nil) (B2 :live (x)) (B3 :live (x y)) (B4 :live (x z)))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -790,12 +778,10 @@ fn oracle_prop_dataflow_chaotic_iteration() {
     (fmakunbound 'neovm--ci-diff)
     (fmakunbound 'neovm--ci-equal)
     (fmakunbound 'neovm--ci-live-vars)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:forward-order (:iterations 4 :results ((B1 (w z)) (B2 (w x)) (B3 (y z)) (B4 (w z)))) :reverse-order (:iterations 2 :results ((B1 (w z)) (B2 (w x)) (B3 (y z)) (B4 (w z)))) :mixed-order (:iterations 3 :results ((B1 (w z)) (B2 (w x)) (B3 (y z)) (B4 (w z)))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:forward-order (:iterations 4 :results ((B1 (w z)) (B2 (w x)) (B3 (y z)) (B4 (w z)))) :reverse-order (:iterations 2 :results ((B1 (w z)) (B2 (w x)) (B3 (y z)) (B4 (w z)))) :mixed-order (:iterations 3 :results ((B1 (w z)) (B2 (w x)) (B3 (y z)) (B4 (w z)))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -929,12 +915,10 @@ fn oracle_prop_dataflow_very_busy_expressions() {
     (fmakunbound 'neovm--vb-equal)
     (fmakunbound 'neovm--vb-gen-kill)
     (fmakunbound 'neovm--vb-analyze)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:iterations 2 :results ((B1 :in ((+ a b)) :out ((+ a b))) (B2 :in ((+ a b)) :out nil) (B3 :in ((+ a b)) :out nil) (B4 :in nil :out ((+ a b))) (B5 :in ((+ a b)) :out nil)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:iterations 2 :results ((B1 :in ((+ a b)) :out ((+ a b))) (B2 :in ((+ a b)) :out nil) (B3 :in ((+ a b)) :out nil) (B4 :in nil :out ((+ a b))) (B5 :in ((+ a b)) :out nil)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -1055,8 +1039,7 @@ Return list of (instr live-before live-after is-dead)."
     (fmakunbound 'neovm--dc-equal)
     (fmakunbound 'neovm--dc-intra-block-liveness)
     (fmakunbound 'neovm--dc-analyze)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (:total-defs 4 :dead-defs ((B1 (def y)) (B2 (def w))))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (:total-defs 4 :dead-defs ((B1 (def y)) (B2 (def w))))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

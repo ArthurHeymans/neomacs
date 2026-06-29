@@ -12,6 +12,8 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_f6_coding_charset_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (utf-8-unix t (utf-8-unix . utf-8-unix) utf-8 utf-8 179)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (default-value 'buffer-file-coding-system)
@@ -21,13 +23,15 @@ fn div_f6_coding_charset_defaults() {
       (coding-system-base (cdr default-process-coding-system))
       (length (charset-priority-list)))
 "##,
-        expect_test::expect![[r#""OK (utf-8-unix t (utf-8-unix . utf-8-unix) utf-8 utf-8 179)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f6_search_replace_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (void-variable search-nonincremental-instead-forward)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list case-fold-search
@@ -37,13 +41,16 @@ fn div_f6_search_replace_defaults() {
       (default-value 'isearch-lazy-count)
       (default-value 'search-nonincremental-instead-forward))
 "##,
-        expect_test::expect![[r#""ERR (void-variable search-nonincremental-instead-forward)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f6_kill_ring_undo_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (120 0 gui-select-text gui-selection-value 160000 240000 nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list kill-ring-max
@@ -54,15 +61,14 @@ fn div_f6_kill_ring_undo_defaults() {
       undo-strong-limit
       (default-value 'undo-in-region))
 "##,
-        expect_test::expect![[
-            r#""OK (120 0 gui-select-text gui-selection-value 160000 240000 nil)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_f6_cursor_display_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t 0.5 nil t arrow)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (default-value 'cursor-type)
@@ -72,13 +78,14 @@ fn div_f6_cursor_display_defaults() {
       (default-value 'visible-cursor)
       (default-value 'void-text-area-pointer))
 "##,
-        expect_test::expect![[r#""OK (t t 0.5 nil t arrow)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f6_comment_syntax_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil \"\" 32 nil comment-indent-default nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list comment-start
@@ -88,13 +95,14 @@ fn div_f6_comment_syntax_defaults() {
       comment-indent-function
       (default-value 'comment-start-skip))
 "##,
-        expect_test::expect![[r#""OK (nil \"\" 32 nil comment-indent-default nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f6_fill_indent_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t 8 70 nil t \"[-–!|#%;>*·•‣⁃◦ \t]*\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list indent-tabs-mode
@@ -105,13 +113,14 @@ fn div_f6_fill_indent_defaults() {
       (default-value 'adaptive-fill-regexp)
       (default-value 'colon-double-space))
 "##,
-        expect_test::expect![[r#""OK (t 8 70 nil t \"[-–!|#%;>*·•‣⁃◦ \t]*\" nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f6_gc_read_eval_defaults() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (800000 1.0 t 4 12 read 1600)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list gc-cons-threshold
@@ -122,6 +131,6 @@ fn div_f6_gc_read_eval_defaults() {
       (default-value 'load-read-function)
       (default-value 'max-lisp-eval-depth))
 "##,
-        expect_test::expect![[r#""OK (800000 1.0 t 4 12 read 1600)""#]],
+        expect,
     );
 }

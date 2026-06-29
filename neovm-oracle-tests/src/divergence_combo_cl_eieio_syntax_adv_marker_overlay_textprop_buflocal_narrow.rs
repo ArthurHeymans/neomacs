@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_syntax_parse_with_overlay_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass syn-snap ()
@@ -70,7 +71,7 @@ fn combo_eieio_syntax_parse_with_overlay_edit() {
               (overlay-start ov) (overlay-end ov)
               my-syn-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -78,6 +79,7 @@ fn combo_eieio_syntax_parse_with_overlay_edit() {
 fn combo_eieio_syntax_scan_list_with_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass scan-snap ()
@@ -133,7 +135,7 @@ fn combo_eieio_syntax_scan_list_with_markers() {
               (overlay-start ov) (overlay-end ov)
               my-scan-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -141,6 +143,7 @@ fn combo_eieio_syntax_scan_list_with_markers() {
 fn combo_eieio_syntax_forward_comment_with_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass comment-snap ()
@@ -202,7 +205,7 @@ fn combo_eieio_syntax_forward_comment_with_narrow() {
               (overlay-start ov) (overlay-end ov)
               my-comm-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -210,6 +213,7 @@ fn combo_eieio_syntax_forward_comment_with_narrow() {
 fn combo_eieio_syntax_modify_syntax_table_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass modsyn-snap ()
@@ -267,7 +271,7 @@ fn combo_eieio_syntax_modify_syntax_table_with_undo() {
               (char-syntax ?&)
               my-modsyn-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -275,6 +279,7 @@ fn combo_eieio_syntax_modify_syntax_table_with_undo() {
 fn combo_eieio_syntax_ppss_with_textprop_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ppss-snap ()
@@ -336,6 +341,6 @@ fn combo_eieio_syntax_ppss_with_textprop_overlay() {
               (overlay-start ov) (overlay-end ov)
               my-ppss-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

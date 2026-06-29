@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx158_exwm_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -16,26 +17,28 @@ fn div_cx158_exwm_availability() {
           (boundp 'exwm-workspace-number))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx158_char_fold_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'char-fold-symmetric)
       (boundp 'search-default-mode)
       (fboundp 'char-fold-to-regexp))
 "##,
-        expect_test::expect![[r#""OK (nil t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx158_char_fold_search_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -48,13 +51,14 @@ fn div_cx158_char_fold_search_basic() {
               (search-forward "resume" nil t))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx158_latin1_display_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -64,13 +68,14 @@ fn div_cx158_latin1_display_availability() {
             (boundp 'latin1-display-cache)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx158_disp_table_buffer_local_override() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ([88] [89] nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -89,13 +94,14 @@ fn div_cx158_disp_table_buffer_local_override() {
         (list got-a got-b (eq got-a got-b))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK ([88] [89] nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx158_disp_table_standard_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -104,39 +110,42 @@ fn div_cx158_disp_table_standard_display() {
           (boundp 'glyph-table))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t nil t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx158_window_display_table_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((win (selected-window)))
   (list (fboundp 'set-window-display-table)
         (window-display-table win)))
 "##,
-        expect_test::expect![[r#""OK (t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx158_buffer_display_table_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (list (boundp 'buffer-display-table)
         buffer-display-table))
 "##,
-        expect_test::expect![[r#""OK (t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx158_char_fold_include_predicate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (char-fold-to-regexp nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -146,26 +155,28 @@ fn div_cx158_char_fold_include_predicate() {
             (boundp 'char-fold-table)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (char-fold-to-regexp nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx158_standard_display_table_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function standard-display-table)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((dt (standard-display-table)))
   (list (or (null dt) (char-table-p dt))
         (fboundp 'standard-display-table)))
 "##,
-        expect_test::expect![[r#""ERR (void-function standard-display-table)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx158_disp_table_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -193,6 +204,6 @@ fn div_cx158_disp_table_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     );
 }

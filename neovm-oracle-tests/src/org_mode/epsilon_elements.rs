@@ -10,6 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn epsilon_headline_todo_keyword() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"TODO\" \"DONE\" nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -19,13 +20,14 @@ fn epsilon_headline_todo_keyword() {
       (goto-char (point-min))
       (mapcar (lambda (h) (org-element-property :todo-keyword h))
               (org-element-map (org-element-parse-buffer) 'headline #'identity)))))"##,
-        expect_test::expect![[r#""OK (\"TODO\" \"DONE\" nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_headline_tags() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"tag1\" \"tag2\") (\"tag3\") nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -35,13 +37,14 @@ fn epsilon_headline_tags() {
       (goto-char (point-min))
       (mapcar (lambda (h) (org-element-property :tags h))
               (org-element-map (org-element-parse-buffer) 'headline #'identity)))))"##,
-        expect_test::expect![[r#""OK ((\"tag1\" \"tag2\") (\"tag3\") nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_headline_priority() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (65 66 67 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -51,13 +54,16 @@ fn epsilon_headline_priority() {
       (goto-char (point-min))
       (mapcar (lambda (h) (org-element-property :priority h))
               (org-element-map (org-element-parse-buffer) 'headline #'identity)))))"##,
-        expect_test::expect![[r#""OK (65 66 67 nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_headline_commented() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((\"Hidden\" nil) (\"Visible\" nil) (\"Also hidden\" nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -69,15 +75,16 @@ fn epsilon_headline_commented() {
                 (list (substring-no-properties (org-element-property :raw-value h))
                       (member "COMMENT" (org-element-property :tags h))))
               (org-element-map (org-element-parse-buffer) 'headline #'identity)))))"##,
-        expect_test::expect![[
-            r#""OK ((\"Hidden\" nil) (\"Visible\" nil) (\"Also hidden\" nil))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_headline_statistics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"Project [1/3]\" \"S1\" \"S2\" \"S3\" \"Progress [50%]\" \"Done\" \"Todo\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -87,9 +94,7 @@ fn epsilon_headline_statistics() {
       (goto-char (point-min))
       (mapcar (lambda (h) (substring-no-properties (org-element-property :raw-value h)))
               (org-element-map (org-element-parse-buffer) 'headline #'identity)))))"##,
-        expect_test::expect![[
-            r#""OK (\"Project [1/3]\" \"S1\" \"S2\" \"S3\" \"Progress [50%]\" \"Done\" \"Todo\")""#
-        ]],
+        expect,
     );
 }
 
@@ -100,6 +105,9 @@ fn epsilon_headline_statistics() {
 #[test]
 fn epsilon_planning_deadline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (timestamp (:standard-properties [15 nil nil nil 31 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2024-01-15 Mon>\" :year-start 2024 :month-start 1 :day-start 15 :hour-start nil :minute-start nil :year-end 2024 :month-end 1 :day-end 15 :hour-end nil :minute-end nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -110,15 +118,16 @@ fn epsilon_planning_deadline() {
       (let* ((tree (org-element-parse-buffer))
              (planning (car (org-element-map tree 'planning #'identity))))
         (org-element-property :deadline planning)))))"##,
-        expect_test::expect![[
-            r#""OK (timestamp (:standard-properties [15 nil nil nil 31 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2024-01-15 Mon>\" :year-start 2024 :month-start 1 :day-start 15 :hour-start nil :minute-start nil :year-end 2024 :month-end 1 :day-end 15 :hour-end nil :minute-end nil))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_planning_scheduled() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (timestamp (:standard-properties [16 nil nil nil 32 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2024-01-15 Mon>\" :year-start 2024 :month-start 1 :day-start 15 :hour-start nil :minute-start nil :year-end 2024 :month-end 1 :day-end 15 :hour-end nil :minute-end nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -129,15 +138,16 @@ fn epsilon_planning_scheduled() {
       (let* ((tree (org-element-parse-buffer))
              (planning (car (org-element-map tree 'planning #'identity))))
         (org-element-property :scheduled planning)))))"##,
-        expect_test::expect![[
-            r#""OK (timestamp (:standard-properties [16 nil nil nil 32 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2024-01-15 Mon>\" :year-start 2024 :month-start 1 :day-start 15 :hour-start nil :minute-start nil :year-end 2024 :month-end 1 :day-end 15 :hour-end nil :minute-end nil))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_planning_closed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (timestamp (:standard-properties [18 nil nil nil 34 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type inactive :range-type nil :raw-value \"[2024-01-14 Sun]\" :year-start 2024 :month-start 1 :day-start 14 :hour-start nil :minute-start nil :year-end 2024 :month-end 1 :day-end 14 :hour-end nil :minute-end nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -148,15 +158,16 @@ fn epsilon_planning_closed() {
       (let* ((tree (org-element-parse-buffer))
              (planning (car (org-element-map tree 'planning #'identity))))
         (org-element-property :closed planning)))))"##,
-        expect_test::expect![[
-            r#""OK (timestamp (:standard-properties [18 nil nil nil 34 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type inactive :range-type nil :raw-value \"[2024-01-14 Sun]\" :year-start 2024 :month-start 1 :day-start 14 :hour-start nil :minute-start nil :year-end 2024 :month-end 1 :day-end 14 :hour-end nil :minute-end nil))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_planning_all_three() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((timestamp (:standard-properties [15 nil nil nil 32 1 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2024-01-15 Mon>\" :year-start 2024 :month-start 1 :day-start 15 :hour-start nil :minute-start nil :year-end 2024 :month-end 1 :day-end 15 :hour-end nil :minute-end nil)) (timestamp (:standard-properties [43 nil nil nil 60 1 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2024-01-14 Sun>\" :year-start 2024 :month-start 1 :day-start 14 :hour-start nil :minute-start nil :year-end 2024 :month-end 1 :day-end 14 :hour-end nil :minute-end nil)) (timestamp (:standard-properties [68 nil nil nil 84 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type inactive :range-type nil :raw-value \"[2024-01-13 Sat]\" :year-start 2024 :month-start 1 :day-start 13 :hour-start nil :minute-start nil :year-end 2024 :month-end 1 :day-end 13 :hour-end nil :minute-end nil)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -169,15 +180,14 @@ fn epsilon_planning_all_three() {
         (list (org-element-property :deadline planning)
               (org-element-property :scheduled planning)
               (org-element-property :closed planning))))))"##,
-        expect_test::expect![[
-            r#""OK ((timestamp (:standard-properties [15 nil nil nil 32 1 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2024-01-15 Mon>\" :year-start 2024 :month-start 1 :day-start 15 :hour-start nil :minute-start nil :year-end 2024 :month-end 1 :day-end 15 :hour-end nil :minute-end nil)) (timestamp (:standard-properties [43 nil nil nil 60 1 nil nil nil nil nil nil nil nil nil nil nil nil] :type active :range-type nil :raw-value \"<2024-01-14 Sun>\" :year-start 2024 :month-start 1 :day-start 14 :hour-start nil :minute-start nil :year-end 2024 :month-end 1 :day-end 14 :hour-end nil :minute-end nil)) (timestamp (:standard-properties [68 nil nil nil 84 0 nil nil nil nil nil nil nil nil nil nil nil nil] :type inactive :range-type nil :raw-value \"[2024-01-13 Sat]\" :year-start 2024 :month-start 1 :day-start 13 :hour-start nil :minute-start nil :year-end 2024 :month-end 1 :day-end 13 :hour-end nil :minute-end nil)))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_planning_with_repeater() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (cumulate 1 week)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -191,13 +201,14 @@ fn epsilon_planning_with_repeater() {
         (list (org-element-property :repeater-type ts)
               (org-element-property :repeater-value ts)
               (org-element-property :repeater-unit ts))))))"##,
-        expect_test::expect![[r#""OK (cumulate 1 week)""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_planning_with_warning() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (all 3 day)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -211,7 +222,7 @@ fn epsilon_planning_with_warning() {
         (list (org-element-property :warning-type ts)
               (org-element-property :warning-value ts)
               (org-element-property :warning-unit ts))))))"##,
-        expect_test::expect![[r#""OK (all 3 day)""#]],
+        expect,
     );
 }
 
@@ -222,6 +233,7 @@ fn epsilon_planning_with_warning() {
 #[test]
 fn epsilon_property_drawer_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK property-drawer""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -232,13 +244,14 @@ fn epsilon_property_drawer_basic() {
       (let* ((tree (org-element-parse-buffer))
              (drawer (car (org-element-map tree 'property-drawer #'identity))))
         (org-element-type drawer)))))"##,
-        expect_test::expect![[r#""OK property-drawer""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_property_drawer_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK property-drawer""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -249,13 +262,14 @@ fn epsilon_property_drawer_empty() {
       (let* ((tree (org-element-parse-buffer))
              (drawer (car (org-element-map tree 'property-drawer #'identity))))
         (org-element-type drawer)))))"##,
-        expect_test::expect![[r#""OK property-drawer""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_property_drawer_with_extended() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"1 2 3\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -264,13 +278,14 @@ fn epsilon_property_drawer_with_extended() {
       (insert "* H\n:PROPERTIES:\n:A+: 2\n:A: 1\n:A+: 3\n:END:")
       (goto-char (point-min))
       (org-entry-get (point) "A"))))"##,
-        expect_test::expect![[r#""OK \"1 2 3\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_property_drawer_custom_id() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"myid\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -279,13 +294,14 @@ fn epsilon_property_drawer_custom_id() {
       (insert "* H\n:PROPERTIES:\n:CUSTOM_ID: myid\n:END:")
       (goto-char (point-min))
       (org-entry-get (point) "CUSTOM_ID"))))"##,
-        expect_test::expect![[r#""OK \"myid\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_property_drawer_effort() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"2:30\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -294,7 +310,7 @@ fn epsilon_property_drawer_effort() {
       (insert "* H\n:PROPERTIES:\n:EFFORT: 2:30\n:END:")
       (goto-char (point-min))
       (org-entry-get (point) "EFFORT"))))"##,
-        expect_test::expect![[r#""OK \"2:30\"""#]],
+        expect,
     );
 }
 
@@ -305,6 +321,7 @@ fn epsilon_property_drawer_effort() {
 #[test]
 fn epsilon_drawer_logbook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"LOGBOOK\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -315,13 +332,14 @@ fn epsilon_drawer_logbook() {
       (let* ((tree (org-element-parse-buffer))
              (drawer (car (org-element-map tree 'drawer #'identity))))
         (org-element-property :drawer-name drawer)))))"##,
-        expect_test::expect![[r#""OK \"LOGBOOK\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_drawer_custom() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"MYDRAWER\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -332,7 +350,7 @@ fn epsilon_drawer_custom() {
       (let* ((tree (org-element-parse-buffer))
              (drawer (car (org-element-map tree 'drawer #'identity))))
         (org-element-property :drawer-name drawer)))))"##,
-        expect_test::expect![[r#""OK \"MYDRAWER\"""#]],
+        expect,
     );
 }
 
@@ -343,6 +361,7 @@ fn epsilon_drawer_custom() {
 #[test]
 fn epsilon_clock_closed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (closed \"1:30\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -354,13 +373,14 @@ fn epsilon_clock_closed() {
              (clock (car (org-element-map tree 'clock #'identity))))
         (list (org-element-property :status clock)
               (org-element-property :duration clock))))))"##,
-        expect_test::expect![[r#""OK (closed \"1:30\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_clock_running() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK running""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -371,13 +391,14 @@ fn epsilon_clock_running() {
       (let* ((tree (org-element-parse-buffer))
              (clock (car (org-element-map tree 'clock #'identity))))
         (org-element-property :status clock)))))"##,
-        expect_test::expect![[r#""OK running""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_clock_in_logbook() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 1""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -388,7 +409,7 @@ fn epsilon_clock_in_logbook() {
       (let* ((tree (org-element-parse-buffer))
              (clocks (org-element-map tree 'clock #'identity)))
         (length clocks)))))"##,
-        expect_test::expect![[r#""OK 1""#]],
+        expect,
     );
 }
 
@@ -399,6 +420,7 @@ fn epsilon_clock_in_logbook() {
 #[test]
 fn epsilon_src_block_with_language() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"emacs-lisp\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -409,13 +431,14 @@ fn epsilon_src_block_with_language() {
       (let* ((tree (org-element-parse-buffer))
              (src (car (org-element-map tree 'src-block #'identity))))
         (org-element-property :language src)))))"##,
-        expect_test::expect![[r#""OK \"emacs-lisp\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_src_block_with_switches() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"-n -r\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -426,13 +449,14 @@ fn epsilon_src_block_with_switches() {
       (let* ((tree (org-element-parse-buffer))
              (src (car (org-element-map tree 'src-block #'identity))))
         (org-element-property :switches src)))))"##,
-        expect_test::expect![[r#""OK \"-n -r\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_src_block_with_parameters() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \":results output :exports code\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -443,13 +467,14 @@ fn epsilon_src_block_with_parameters() {
       (let* ((tree (org-element-parse-buffer))
              (src (car (org-element-map tree 'src-block #'identity))))
         (org-element-property :parameters src)))))"##,
-        expect_test::expect![[r#""OK \":results output :exports code\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_quote_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -459,13 +484,14 @@ fn epsilon_quote_block() {
       (goto-char (point-min))
       (let* ((tree (org-element-parse-buffer)))
         (length (org-element-map tree 'quote-block #'identity)))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_center_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -475,13 +501,14 @@ fn epsilon_center_block() {
       (goto-char (point-min))
       (let* ((tree (org-element-parse-buffer)))
         (length (org-element-map tree 'center-block #'identity)))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_example_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -491,13 +518,14 @@ fn epsilon_example_block() {
       (goto-char (point-min))
       (let* ((tree (org-element-parse-buffer)))
         (length (org-element-map tree 'example-block #'identity)))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_export_block_html() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"HTML\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -508,13 +536,14 @@ fn epsilon_export_block_html() {
       (let* ((tree (org-element-parse-buffer))
              (block (car (org-element-map tree 'export-block #'identity))))
         (org-element-property :type block)))))"##,
-        expect_test::expect![[r#""OK \"HTML\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_verse_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -524,13 +553,14 @@ fn epsilon_verse_block() {
       (goto-char (point-min))
       (let* ((tree (org-element-parse-buffer)))
         (length (org-element-map tree 'verse-block #'identity)))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_comment_block() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -540,7 +570,7 @@ fn epsilon_comment_block() {
       (goto-char (point-min))
       (let* ((tree (org-element-parse-buffer)))
         (length (org-element-map tree 'comment-block #'identity)))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -551,6 +581,7 @@ fn epsilon_comment_block() {
 #[test]
 fn epsilon_list_unordered() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -561,13 +592,14 @@ fn epsilon_list_unordered() {
       (let* ((tree (org-element-parse-buffer)))
         (list (length (org-element-map tree 'plain-list #'identity))
               (length (org-element-map tree 'item #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_list_ordered() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -578,13 +610,14 @@ fn epsilon_list_ordered() {
       (let* ((tree (org-element-parse-buffer))
              (lists (org-element-map tree 'plain-list #'identity)))
         (mapcar (lambda (l) (org-element-property :type l)) lists))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_list_description() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -598,13 +631,14 @@ fn epsilon_list_description() {
                   (substring-no-properties
                    (org-element-interpret-data (org-element-property :tag i))))
                 items))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_list_checkboxes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -615,7 +649,7 @@ fn epsilon_list_checkboxes() {
       (let* ((tree (org-element-parse-buffer))
              (items (org-element-map tree 'item #'identity)))
         (mapcar (lambda (i) (org-element-property :checkbox i)) items))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -626,6 +660,7 @@ fn epsilon_list_checkboxes() {
 #[test]
 fn epsilon_table_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -637,13 +672,14 @@ fn epsilon_table_basic() {
         (list (length (org-element-map tree 'table #'identity))
               (length (org-element-map tree 'table-row #'identity))
               (length (org-element-map tree 'table-cell #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_table_with_separator() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -654,13 +690,14 @@ fn epsilon_table_with_separator() {
       (let* ((tree (org-element-parse-buffer))
              (rows (org-element-map tree 'table-row #'identity)))
         (mapcar (lambda (r) (org-element-property :type r)) rows))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_table_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK org""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -671,7 +708,7 @@ fn epsilon_table_type() {
       (let* ((tree (org-element-parse-buffer))
              (table (car (org-element-map tree 'table #'identity))))
         (org-element-property :type table)))))"##,
-        expect_test::expect![[r#""OK org""#]],
+        expect,
     );
 }
 
@@ -682,6 +719,7 @@ fn epsilon_table_type() {
 #[test]
 fn epsilon_link_https() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"https\" \"//orgmode.org\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -693,13 +731,14 @@ fn epsilon_link_https() {
              (link (car (org-element-map tree 'link #'identity))))
         (list (org-element-property :type link)
               (org-element-property :path link))))))"##,
-        expect_test::expect![[r#""OK (\"https\" \"//orgmode.org\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_link_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"file\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -710,13 +749,14 @@ fn epsilon_link_file() {
       (let* ((tree (org-element-parse-buffer))
              (link (car (org-element-map tree 'link #'identity))))
         (org-element-property :type link)))))"##,
-        expect_test::expect![[r#""OK \"file\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_link_id() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"id\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -727,13 +767,14 @@ fn epsilon_link_id() {
       (let* ((tree (org-element-parse-buffer))
              (link (car (org-element-map tree 'link #'identity))))
         (org-element-property :type link)))))"##,
-        expect_test::expect![[r#""OK \"id\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_link_custom_id() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"custom-id\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -744,13 +785,14 @@ fn epsilon_link_custom_id() {
       (let* ((tree (org-element-parse-buffer))
              (link (car (org-element-map tree 'link #'identity))))
         (org-element-property :type link)))))"##,
-        expect_test::expect![[r#""OK \"custom-id\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_link_plain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -761,7 +803,7 @@ fn epsilon_link_plain() {
       (let* ((tree (org-element-parse-buffer))
              (links (org-element-map tree 'link #'identity)))
         (length links))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -772,6 +814,7 @@ fn epsilon_link_plain() {
 #[test]
 fn epsilon_timestamp_active() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -782,13 +825,14 @@ fn epsilon_timestamp_active() {
       (let* ((tree (org-element-parse-buffer))
              (ts (car (org-element-map tree 'timestamp #'identity))))
         (org-element-property :type ts))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_timestamp_inactive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -799,13 +843,14 @@ fn epsilon_timestamp_inactive() {
       (let* ((tree (org-element-parse-buffer))
              (ts (car (org-element-map tree 'timestamp #'identity))))
         (org-element-property :type ts))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_timestamp_with_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (14 30)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -817,13 +862,14 @@ fn epsilon_timestamp_with_time() {
              (ts (car (org-element-map tree 'timestamp #'identity))))
         (list (org-element-property :hour-start ts)
               (org-element-property :minute-start ts))))))"##,
-        expect_test::expect![[r#""OK (14 30)""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_timestamp_active_range() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (active-range 2024 2024)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -836,13 +882,14 @@ fn epsilon_timestamp_active_range() {
         (list (org-element-property :type ts)
               (org-element-property :year-start ts)
               (org-element-property :year-end ts))))))"##,
-        expect_test::expect![[r#""OK (active-range 2024 2024)""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_timestamp_timerange() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (14 30 15 30)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -856,13 +903,14 @@ fn epsilon_timestamp_timerange() {
               (org-element-property :minute-start ts)
               (org-element-property :hour-end ts)
               (org-element-property :minute-end ts))))))"##,
-        expect_test::expect![[r#""OK (14 30 15 30)""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_timestamp_with_repeater() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (cumulate 1 week)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -875,13 +923,14 @@ fn epsilon_timestamp_with_repeater() {
         (list (org-element-property :repeater-type ts)
               (org-element-property :repeater-value ts)
               (org-element-property :repeater-unit ts))))))"##,
-        expect_test::expect![[r#""OK (cumulate 1 week)""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_timestamp_with_warning() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (all 3 day)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -894,13 +943,14 @@ fn epsilon_timestamp_with_warning() {
         (list (org-element-property :warning-type ts)
               (org-element-property :warning-value ts)
               (org-element-property :warning-unit ts))))))"##,
-        expect_test::expect![[r#""OK (all 3 day)""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_timestamp_diary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -911,7 +961,7 @@ fn epsilon_timestamp_diary() {
       (let* ((tree (org-element-parse-buffer))
              (ts (car (org-element-map tree 'timestamp #'identity))))
         (org-element-property :type ts))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -922,6 +972,7 @@ fn epsilon_timestamp_diary() {
 #[test]
 fn epsilon_entity_alpha() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"alpha\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -932,13 +983,14 @@ fn epsilon_entity_alpha() {
       (let* ((tree (org-element-parse-buffer))
              (entity (car (org-element-map tree 'entity #'identity))))
         (org-element-property :name entity)))))"##,
-        expect_test::expect![[r#""OK \"alpha\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_entity_beta() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"beta\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -949,13 +1001,14 @@ fn epsilon_entity_beta() {
       (let* ((tree (org-element-parse-buffer))
              (entity (car (org-element-map tree 'entity #'identity))))
         (org-element-property :name entity)))))"##,
-        expect_test::expect![[r#""OK \"beta\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_entity_with_braces() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -966,7 +1019,7 @@ fn epsilon_entity_with_braces() {
       (let* ((tree (org-element-parse-buffer))
              (entities (org-element-map tree 'entity #'identity)))
         (length entities))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -977,6 +1030,7 @@ fn epsilon_entity_with_braces() {
 #[test]
 fn epsilon_latex_fragment_inline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -987,13 +1041,14 @@ fn epsilon_latex_fragment_inline() {
       (let* ((tree (org-element-parse-buffer))
              (fragments (org-element-map tree 'latex-fragment #'identity)))
         (length fragments))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_latex_fragment_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1004,13 +1059,14 @@ fn epsilon_latex_fragment_display() {
       (let* ((tree (org-element-parse-buffer))
              (fragments (org-element-map tree 'latex-fragment #'identity)))
         (length fragments))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_latex_environment_equation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1021,7 +1077,7 @@ fn epsilon_latex_environment_equation() {
       (let* ((tree (org-element-parse-buffer))
              (envs (org-element-map tree 'latex-environment #'identity)))
         (length envs))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -1032,6 +1088,7 @@ fn epsilon_latex_environment_equation() {
 #[test]
 fn epsilon_footnote_standard() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1042,13 +1099,14 @@ fn epsilon_footnote_standard() {
       (let* ((tree (org-element-parse-buffer)))
         (list (length (org-element-map tree 'footnote-reference #'identity))
               (length (org-element-map tree 'footnote-definition #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_footnote_inline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1059,13 +1117,14 @@ fn epsilon_footnote_inline() {
       (let* ((tree (org-element-parse-buffer))
              (refs (org-element-map tree 'footnote-reference #'identity)))
         (mapcar (lambda (r) (org-element-property :type r)) refs))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_footnote_anonymous() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1076,7 +1135,7 @@ fn epsilon_footnote_anonymous() {
       (let* ((tree (org-element-parse-buffer))
              (refs (org-element-map tree 'footnote-reference #'identity)))
         (mapcar (lambda (r) (org-element-property :type r)) refs))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -1087,6 +1146,7 @@ fn epsilon_footnote_anonymous() {
 #[test]
 fn epsilon_target_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1097,13 +1157,14 @@ fn epsilon_target_basic() {
       (let* ((tree (org-element-parse-buffer))
              (targets (org-element-map tree 'target #'identity)))
         (length targets))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_radio_target() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1114,7 +1175,7 @@ fn epsilon_radio_target() {
       (let* ((tree (org-element-parse-buffer))
              (targets (org-element-map tree 'radio-target #'identity)))
         (length targets))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -1125,6 +1186,7 @@ fn epsilon_radio_target() {
 #[test]
 fn epsilon_statistics_cookie_fraction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1135,13 +1197,14 @@ fn epsilon_statistics_cookie_fraction() {
       (let* ((tree (org-element-parse-buffer))
              (cookies (org-element-map tree 'statistics-cookie #'identity)))
         (mapcar (lambda (c) (org-element-property :value c)) cookies))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_statistics_cookie_percent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1152,7 +1215,7 @@ fn epsilon_statistics_cookie_percent() {
       (let* ((tree (org-element-parse-buffer))
              (cookies (org-element-map tree 'statistics-cookie #'identity)))
         (mapcar (lambda (c) (org-element-property :value c)) cookies))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -1163,6 +1226,7 @@ fn epsilon_statistics_cookie_percent() {
 #[test]
 fn epsilon_macro_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1173,13 +1237,14 @@ fn epsilon_macro_basic() {
       (let* ((tree (org-element-parse-buffer))
              (macros (org-element-map tree 'macro #'identity)))
         (length macros))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_macro_with_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1190,7 +1255,7 @@ fn epsilon_macro_with_args() {
       (let* ((tree (org-element-parse-buffer))
              (macros (org-element-map tree 'macro #'identity)))
         (mapcar (lambda (m) (org-element-property :value m)) macros))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -1201,6 +1266,7 @@ fn epsilon_macro_with_args() {
 #[test]
 fn epsilon_export_snippet_html() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1211,13 +1277,14 @@ fn epsilon_export_snippet_html() {
       (let* ((tree (org-element-parse-buffer))
              (snippets (org-element-map tree 'export-snippet #'identity)))
         (mapcar (lambda (s) (org-element-property :back-end s)) snippets))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn epsilon_export_snippet_latex() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1228,7 +1295,7 @@ fn epsilon_export_snippet_latex() {
       (let* ((tree (org-element-parse-buffer))
              (snippets (org-element-map tree 'export-snippet #'identity)))
         (mapcar (lambda (s) (org-element-property :back-end s)) snippets))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -1239,6 +1306,7 @@ fn epsilon_export_snippet_latex() {
 #[test]
 fn epsilon_inlinetask_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1251,7 +1319,7 @@ fn epsilon_inlinetask_basic() {
       (let* ((tree (org-element-parse-buffer))
              (tasks (org-element-map tree 'inlinetask #'identity)))
         (mapcar (lambda (t) (org-element-property :todo-keyword t)) tasks))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -1262,6 +1330,7 @@ fn epsilon_inlinetask_basic() {
 #[test]
 fn epsilon_diary_sexp_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1272,7 +1341,7 @@ fn epsilon_diary_sexp_basic() {
       (let* ((tree (org-element-parse-buffer))
              (sexps (org-element-map tree 'diary-sexp #'identity)))
         (length sexps))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -1283,6 +1352,7 @@ fn epsilon_diary_sexp_basic() {
 #[test]
 fn epsilon_horizontal_rule_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1293,7 +1363,7 @@ fn epsilon_horizontal_rule_basic() {
       (let* ((tree (org-element-parse-buffer))
              (rules (org-element-map tree 'horizontal-rule #'identity)))
         (length rules))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -1304,6 +1374,7 @@ fn epsilon_horizontal_rule_basic() {
 #[test]
 fn epsilon_line_break_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -1314,6 +1385,6 @@ fn epsilon_line_break_basic() {
       (let* ((tree (org-element-parse-buffer))
              (breaks (org-element-map tree 'line-break #'identity)))
         (length breaks))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

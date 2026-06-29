@@ -11,10 +11,9 @@ use super::common::{assert_err_kind, assert_ok_eq, eval_oracle_and_neovm};
 fn oracle_string_match_p_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(string-match-p "foo" "foobar")"#,
-        expect_test::expect![[r#""OK 0""#]],
-    );
+    let expect = expect_test::expect![[r#""OK 0""#]];
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(r#"(string-match-p "foo" "foobar")"#, expect);
     assert_ok_eq("0", &oracle, &neovm);
 }
 
@@ -22,10 +21,9 @@ fn oracle_string_match_p_basic() {
 fn oracle_string_match_p_no_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(string-match-p "xyz" "foobar")"#,
-        expect_test::expect![[r#""OK nil""#]],
-    );
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(r#"(string-match-p "xyz" "foobar")"#, expect);
     assert_ok_eq("nil", &oracle, &neovm);
 }
 
@@ -33,9 +31,10 @@ fn oracle_string_match_p_no_match() {
 fn oracle_string_match_p_with_start() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK 6""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(string-match-p "bar" "foobarbar" 6)"#,
-        expect_test::expect![[r#""OK 6""#]],
+        expect,
     );
     assert_ok_eq("6", &oracle, &neovm);
 }
@@ -44,10 +43,9 @@ fn oracle_string_match_p_with_start() {
 fn oracle_string_match_p_wrong_type() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(string-match-p 42 "foo")"#,
-        expect_test::expect![[r#""ERR (wrong-type-argument stringp 42)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument stringp 42)""#]];
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(r#"(string-match-p 42 "foo")"#, expect);
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
@@ -55,13 +53,14 @@ fn oracle_string_match_p_wrong_type() {
 fn oracle_string_match_p_does_not_modify_match_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
         r#"(progn
   (string-match "xxx" "---xxx---")
   (let ((before (match-data)))
     (string-match-p "yyy" "---xxx---")
     (equal before (match-data))))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
     assert_ok_eq("t", &oracle, &neovm);
 }

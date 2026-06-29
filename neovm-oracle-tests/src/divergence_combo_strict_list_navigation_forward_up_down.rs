@@ -9,6 +9,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_r1_list_navigation_forward_backward_up_down() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (scan-error \"Containing expression ends prematurely\" 15 16)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -23,15 +26,14 @@ fn div_r1_list_navigation_forward_backward_up_down() {
         (up-list 2)
         (list d1 f1 d2 (point))))))
 "##,
-        expect_test::expect![[
-            r#""ERR (scan-error \"Containing expression ends prematurely\" 15 16)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_r1_backward_list_and_up_list_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (15 15 scan-error)""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK (15 15 scan-error)
     // Neomacs:   ERR (wrong-type-argument symbolp (scan-error "Unbalanced parentheses" 15 1))
@@ -49,6 +51,6 @@ fn div_r1_backward_list_and_up_list_errors() {
     (list b1 (point)
           (condition-case err (up-list 99) (scan-error (car err))))))
 "##,
-        expect_test::expect![[r#""OK (15 15 scan-error)""#]],
+        expect,
     );
 }

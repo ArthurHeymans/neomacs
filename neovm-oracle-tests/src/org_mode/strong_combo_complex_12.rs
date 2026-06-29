@@ -11,6 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo12_heading_mods() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -57,7 +58,7 @@ fn combo12_heading_mods() {
     ;; verify buffer
     (push (list :content (buffer-string)) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
+        expect,
     );
 }
 
@@ -68,6 +69,7 @@ fn combo12_heading_mods() {
 #[test]
 fn combo12_table_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -97,7 +99,7 @@ fn combo12_table_ops() {
     (org-table-delete-column)
     (push (list :after-del-col (buffer-string)) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
+        expect,
     );
 }
 
@@ -108,6 +110,7 @@ fn combo12_table_ops() {
 #[test]
 fn combo12_list_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -147,7 +150,7 @@ fn combo12_list_ops() {
                                                               (org-element-property :contents-begin i)
                                                               (org-element-property :contents-end i))))))) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
+        expect,
     );
 }
 
@@ -158,6 +161,7 @@ fn combo12_list_ops() {
 #[test]
 fn combo12_src_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -180,7 +184,7 @@ fn combo12_src_ops() {
     (org-babel-execute-src-block)
     (push (list :after-exec (buffer-string)) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
+        expect,
     );
 }
 
@@ -191,6 +195,7 @@ fn combo12_src_ops() {
 #[test]
 fn combo12_visibility() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -226,7 +231,7 @@ fn combo12_visibility() {
     (push (list :narrowed (buffer-string)) r)
     (widen)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
+        expect,
     );
 }
 
@@ -237,6 +242,7 @@ fn combo12_visibility() {
 #[test]
 fn combo12_navigation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -266,7 +272,7 @@ fn combo12_navigation() {
                (push (list :next-block (buffer-substring-no-properties (line-beginning-position) (line-end-position))) r))
       (error nil))
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
+        expect,
     );
 }
 
@@ -277,6 +283,9 @@ fn combo12_navigation() {
 #[test]
 fn combo12_export() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:html-has-title 9) (:html-has-todo 167) (:html-has-bold 703) (:html-has-table 1023) (:latex-has-title nil) (:latex-has-section 0) (:latex-has-bold 86) (:latex-has-table 242) (:ascii-has-h 7) (:ascii-has-bold 92))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((src "#+TITLE: T\n* TODO [#A] H1 :t1:\nBody *bold* /italic/\n** H2\n- [X] a\n- [ ] b\n| x | y |\n| 1 | 2 |\n#+BEGIN_SRC emacs-lisp\n(+ 1)\n#+END_SRC\n* DONE H3\n:PROPERTIES:\n:A: 1\n:END:"))
   (let ((html (org-export-string-as src 'html t))
@@ -292,9 +301,7 @@ fn combo12_export() {
           (list :latex-has-table (string-match-p "\\\\begin{tabular}" latex))
           (list :ascii-has-h (string-match-p "H1" ascii))
           (list :ascii-has-bold (string-match-p "bold" ascii)))))"##,
-        expect_test::expect![[
-            r#""OK ((:html-has-title 9) (:html-has-todo 167) (:html-has-bold 703) (:html-has-table 1023) (:latex-has-title nil) (:latex-has-section 0) (:latex-has-bold 86) (:latex-has-table 242) (:ascii-has-h 7) (:ascii-has-bold 92))""#
-        ]],
+        expect,
     );
 }
 
@@ -305,6 +312,7 @@ fn combo12_export() {
 #[test]
 fn combo12_map_all() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -325,7 +333,7 @@ fn combo12_map_all() {
     (push (list :tables (length (org-element-map (org-element-parse-buffer) 'table 'identity))) r)
     (push (list :src-blocks (length (org-element-map (org-element-parse-buffer) 'src-block 'identity))) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
+        expect,
     );
 }
 
@@ -336,6 +344,7 @@ fn combo12_map_all() {
 #[test]
 fn combo12_clock() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -361,7 +370,7 @@ fn combo12_clock() {
     ;; clock string
     (push (list :clock-string (org-clock-get-clock-string)) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
+        expect,
     );
 }
 
@@ -372,6 +381,7 @@ fn combo12_clock() {
 #[test]
 fn combo12_footnotes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -390,6 +400,6 @@ fn combo12_footnotes() {
     (push (list :ref-count (length (org-element-map (org-element-parse-buffer) 'footnote-reference 'identity))) r)
     (push (list :def-count (length (org-element-map (org-element-parse-buffer) 'footnote-definition 'identity))) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 4 14)""#]],
+        expect,
     );
 }

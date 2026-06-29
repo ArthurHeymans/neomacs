@@ -23,12 +23,10 @@ fn oracle_prop_gnu_field_at_pos_boundary_semantics() {
                    (get-char-property p 'field)))
            (number-sequence 1 5))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((left left left boundary right) ((1 1 3 left) (2 1 3 left) (3 1 3 boundary) (4 3 4 right) (5 4 6 right)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((left left left boundary right) ((1 1 3 left) (2 1 3 left) (3 1 3 boundary) (4 3 4 right) (5 4 6 right)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -57,12 +55,10 @@ fn oracle_field_bounds_escape_and_limit_semantics() {
     (field-end 3 t 5)
     (field-end 3 t 8))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 1 1 3 3) (2 1 1 3 3) (3 1 1 3 6) (4 3 1 4 6) (5 4 4 6 6) (6 4 4 6 7) (7 6 6 7 9) (8 7 7 9 9) (9 7 7 9 9)) (4 4 3 5 6))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 1 1 3 3) (2 1 1 3 3) (3 1 1 3 6) (4 3 1 4 6) (5 4 4 6 6) (6 4 4 6 7) (7 6 6 7 9) (8 7 7 9 9) (9 7 7 9 9)) (4 4 3 5 6))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -91,12 +87,10 @@ fn oracle_field_string_and_delete_field_semantics() {
          (field-string 99)
        (error (list (car err) (cdr err)))))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (#(\"aa\" 0 2 (face bold field left)) (face bold field left) \"aa\" nil nil #(\"XbbZcc\" 0 1 (field boundary) 1 3 (field right) 4 6 (field tail)) (args-out-of-range (99)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (#(\"aa\" 0 2 (face bold field left)) (face bold field left) \"aa\" nil nil #(\"XbbZcc\" 0 1 (field boundary) 1 3 (field right) 4 6 (field tail)) (args-out-of-range (99)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -123,8 +117,6 @@ fn oracle_constrain_to_field_boundary_motion_semantics() {
        (constrain-to-field 8 2))
      (list (constrain-to-field nil 2) (point)))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 3 8 3 3 8 (3 3))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 3 8 3 3 8 (3 3))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

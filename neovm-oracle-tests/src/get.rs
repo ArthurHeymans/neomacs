@@ -10,15 +10,17 @@ use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_get_basics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK 12""#]];
     let (oracle_set, neovm_set) = crate::common::eval_oracle_and_neovm_expect(
         "(let ((s 'oracle-prop-get)) (put s 'k 12) (get s 'k))",
-        expect_test::expect![[r#""OK 12""#]],
+        expect,
     );
     assert_ok_eq("12", &oracle_set, &neovm_set);
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     let (oracle_missing, neovm_missing) = crate::common::eval_oracle_and_neovm_expect(
         "(let ((s 'oracle-prop-get-missing)) (get s 'k))",
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
     assert_ok_eq("nil", &oracle_missing, &neovm_missing);
 }
@@ -27,10 +29,8 @@ fn oracle_prop_get_basics() {
 fn oracle_prop_get_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(get 1 'k)",
-        expect_test::expect![[r#""ERR (wrong-type-argument symbolp 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument symbolp 1)""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect("(get 1 'k)", expect);
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
@@ -68,12 +68,10 @@ fn oracle_prop_get_overriding_plist_environment_edges() {
            (get s :k))))"#;
 
     let expected = "(:nil-override (:real :override) :put-through (:shadow :new :shadow (:k :new)) :malformed-env (:new nil) :wrong-key :new)";
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:nil-override (:real :override) :put-through (:shadow :new :shadow (:k :new)) :malformed-env (:new nil) :wrong-key :new)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:nil-override (:real :override) :put-through (:shadow :new :shadow (:k :new)) :malformed-env (:new nil) :wrong-key :new)""#
+    ]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq(expected, &oracle, &neovm);
 }
 

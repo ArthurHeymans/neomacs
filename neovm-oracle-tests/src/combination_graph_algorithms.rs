@@ -44,12 +44,10 @@ fn oracle_prop_graph_adjacency_list_construction() {
               (sort (nreverse in-degrees)
                     (lambda (a b) (string< (symbol-name (car a))
                                            (symbol-name (car b))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((a . 2) (b . 1) (c . 2) (d . 1) (e . 1)) ((a . 1) (b . 1) (c . 1) (d . 2) (e . 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((a . 2) (b . 1) (c . 2) (d . 1) (e . 1)) ((a . 1) (b . 1) (c . 1) (d . 2) (e . 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -102,10 +100,8 @@ fn oracle_prop_graph_bfs_path_tracking() {
                   path
                   (length path)
                   found)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((a c b f e d g) (a c f g) 4 t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((a c b f e d g) (a c f g) 4 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -165,7 +161,8 @@ fn oracle_prop_graph_dfs_cycle_detection() {
                     )))
         (fmakunbound 'neovm--test-dfs-cycle)
         (fmakunbound 'neovm--test-dfs-visit)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (nil t)""#]]);
+    let expect = expect_test::expect![[r#""OK (nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -199,10 +196,9 @@ fn oracle_prop_graph_shortest_path_bfs() {
         (let ((result nil))
           (maphash (lambda (k v) (setq result (cons (cons k v) result))) dist)
           (sort result (lambda (a b) (< (car a) (car b)))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 . 0) (2 . 1) (3 . 1) (4 . 2) (5 . 2) (6 . 3) (7 . 3))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((1 . 0) (2 . 1) (3 . 1) (4 . 2) (5 . 2) (6 . 3) (7 . 3))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -251,10 +247,8 @@ fn oracle_prop_graph_connected_components() {
                      (lambda (a b) (< (car a) (car b))))))
           (list (length sorted-components)
                 sorted-components))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 ((1 2 3 4) (5 6) (7 8 9)))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 ((1 2 3 4) (5 6) (7 8 9)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -316,10 +310,8 @@ fn oracle_prop_graph_transpose() {
                                            (symbol-name (car b)))))
               (= orig-edge-count trans-edge-count)
               orig-edge-count)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((a b c) (b d) (c d e) (d e) (e a)) ((a e) (b a) (c a) (d b c) (e c d)) t 7)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((a b c) (b d) (c d e) (d e) (e a)) ((a e) (b a) (c a) (d b c) (e c d)) t 7)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -7,32 +7,35 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn ec2_empty_buffer_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function insert-heading)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert-heading)
   (insert "First")
   (list (org-get-heading t t t t) (org-current-level)))"##,
-        expect_test::expect![[r#""ERR (void-function insert-heading)""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_empty_buffer_meta_return() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"* Item\" headline)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (org-meta-return)
   (insert "Item")
   (list (buffer-string) (org-element-type (org-element-at-point))))"##,
-        expect_test::expect![[r#""OK (\"* Item\" headline)""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_deep_nesting_promote_demote() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((3 \"H3\") (2 \"H3\") (4 \"H3\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -45,13 +48,14 @@ fn ec2_deep_nesting_promote_demote() {
       (org-demote)
       (org-demote)
       (list before after-p (list (org-current-level) (org-get-heading t t t t))))))"##,
-        expect_test::expect![[r#""OK ((3 \"H3\") (2 \"H3\") (4 \"H3\"))""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_unicode_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"値\" \"名前\" \"新しい値\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -59,13 +63,16 @@ fn ec2_unicode_properties() {
   (goto-char (point-min))
   (list (org-entry-get nil "VAR") (org-entry-get nil "NAME")
         (progn (org-entry-put nil "VAR" "新しい値") (org-entry-get nil "VAR"))))"##,
-        expect_test::expect![[r#""OK (\"値\" \"名前\" \"新しい値\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_table_empty_rows() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (((\"a\" \"b\") (\"\" \"\") (\"c\" \"d\")) ((#(\"a\" 0 1 (face org-table)) #(\"b\" 0 1 (face org-table))) (\"X\" \"\") (#(\"c\" 0 1 (face org-table)) #(\"d\" 0 1 (face org-table)))))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -75,15 +82,14 @@ fn ec2_table_empty_rows() {
     (org-table-next-row)
     (org-table-put 2 1 "X")
     (list d1 (org-table-to-lisp))))"##,
-        expect_test::expect![[
-            r#""OK (((\"a\" \"b\") (\"\" \"\") (\"c\" \"d\")) ((#(\"a\" 0 1 (face org-table)) #(\"b\" 0 1 (face org-table))) (\"X\" \"\") (#(\"c\" 0 1 (face org-table)) #(\"d\" 0 1 (face org-table)))))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_list_mixed_types() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((unordered 4))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -92,13 +98,14 @@ fn ec2_list_mixed_types() {
     (lambda (pl)
       (list (org-element-property :type pl)
             (length (org-element-contents pl))))))"##,
-        expect_test::expect![[r#""OK ((unordered 4))""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_footnote_inline() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"1\" inline)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -106,13 +113,14 @@ fn ec2_footnote_inline() {
   (let* ((tree (org-element-parse-buffer))
          (fn (car (org-element-map tree 'footnote-reference (lambda (f) f)))))
     (list (org-element-property :label fn) (org-element-property :type fn))))"##,
-        expect_test::expect![[r#""OK (\"1\" inline)""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_timestamp_active_inactive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -123,13 +131,14 @@ fn ec2_timestamp_active_inactive() {
                                  (org-element-property :year-start t)
                                  (org-element-property :day-start t))))))
     ts)"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_drawer_empty_content() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -137,13 +146,15 @@ fn ec2_drawer_empty_content() {
   (let* ((tree (org-element-parse-buffer))
          (drawer (car (org-element-map tree 'drawer (lambda (d) d)))))
     (org-element-property :drawer-name drawer))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_link_no_description() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (\"https\" \"//example.com\" \"https://example.com\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -153,65 +164,70 @@ fn ec2_link_no_description() {
     (list (org-element-property :type link)
           (org-element-property :path link)
           (org-element-property :raw-link link))))"##,
-        expect_test::expect![[r#""OK (\"https\" \"//example.com\" \"https://example.com\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_planning_deadline_only() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"<2026-01-20>\" nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO Task\nDEADLINE: <2026-01-20>")
   (goto-char (point-min))
   (list (org-entry-get nil "DEADLINE") (org-entry-get nil "SCHEDULED") (org-entry-get nil "CLOSED")))"##,
-        expect_test::expect![[r#""OK (\"<2026-01-20>\" nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_tag_no_tags() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Simple heading")
   (goto-char (point-min))
   (org-get-tags nil t))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_priority_default() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument stringp 42)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* TODO No priority")
   (goto-char (point-min))
   (org-get-priority (char-after)))"##,
-        expect_test::expect![[r#""ERR (wrong-type-argument stringp 42)""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_todo_no_keyword() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Just a heading")
   (goto-char (point-min))
   (org-get-todo-state))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_visibility_single() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -220,26 +236,29 @@ fn ec2_visibility_single() {
   (let ((hidden (get-char-property (point) 'invisible)))
     (org-cycle)
     (list hidden (get-char-property (point) 'invisible))))"##,
-        expect_test::expect![[r#""OK (nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_property_empty_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* T\n:PROPERTIES:\n:EMPTY: \n:END:")
   (goto-char (point-min))
   (org-entry-get nil "EMPTY"))"##,
-        expect_test::expect![[r#""OK \"\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_macro_no_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (error \"Undefined Org macro: greeting; aborting\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -247,13 +266,16 @@ fn ec2_macro_no_args() {
   (let ((raw (buffer-string)))
     (org-macro-replace-all org-macro-templates)
     (list raw (buffer-string))))"##,
-        expect_test::expect![[r#""ERR (error \"Undefined Org macro: greeting; aborting\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_dynamic_block_empty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r##""OK #(\"#+BEGIN: clocktable\n#+CAPTION: Clock summary at [FIXED-TIME]\n| Headline     | Time   |\n|--------------+--------|\n| *Total time* | *0:00* |\n#+END:\" 61 62 (face org-table) 62 63 (face org-table rear-nonsticky t display (space :relative-width 1)) 63 71 (face org-table) 71 75 (face org-table) 75 76 (face org-table display (space :relative-width 1.001)) 76 77 (face org-table) 77 78 (face org-table rear-nonsticky t display (space :relative-width 1)) 78 82 (face org-table) 82 84 (face org-table) 84 85 (face org-table display (space :relative-width 1.001)) 85 86 (face org-table) 86 87 (face org-table-row) 87 88 (face org-table) 88 112 (face org-table) 112 113 (face org-table-row) 113 114 (face org-table) 114 115 (face org-table rear-nonsticky t display (space :relative-width 1)) 115 127 (org-emphasis t font-lock-multiline t face (bold org-table)) 127 128 (face org-table display (space :relative-width 1.001)) 128 129 (face org-table) 129 130 (face org-table rear-nonsticky t display (space :relative-width 1)) 130 136 (org-emphasis t font-lock-multiline t face (bold org-table)) 136 137 (face org-table display (space :relative-width 1.001)) 137 138 (face org-table) 138 139 (face org-table-row))""##
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -261,15 +283,14 @@ fn ec2_dynamic_block_empty() {
   (goto-char (point-min))
   (org-dblock-update)
   (buffer-string))"##,
-        expect_test::expect![[
-            r##""OK #(\"#+BEGIN: clocktable\n#+CAPTION: Clock summary at [FIXED-TIME]\n| Headline     | Time   |\n|--------------+--------|\n| *Total time* | *0:00* |\n#+END:\" 61 62 (face org-table) 62 63 (face org-table rear-nonsticky t display (space :relative-width 1)) 63 71 (face org-table) 71 75 (face org-table) 75 76 (face org-table display (space :relative-width 1.001)) 76 77 (face org-table) 77 78 (face org-table rear-nonsticky t display (space :relative-width 1)) 78 82 (face org-table) 82 84 (face org-table) 84 85 (face org-table display (space :relative-width 1.001)) 85 86 (face org-table) 86 87 (face org-table-row) 87 88 (face org-table) 88 112 (face org-table) 112 113 (face org-table-row) 113 114 (face org-table) 114 115 (face org-table rear-nonsticky t display (space :relative-width 1)) 115 127 (org-emphasis t font-lock-multiline t face (bold org-table)) 127 128 (face org-table display (space :relative-width 1.001)) 128 129 (face org-table) 129 130 (face org-table rear-nonsticky t display (space :relative-width 1)) 130 136 (org-emphasis t font-lock-multiline t face (bold org-table)) 136 137 (face org-table display (space :relative-width 1.001)) 137 138 (face org-table) 138 139 (face org-table-row))""##
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_structure_template_various() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-try-structure-completion)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -280,26 +301,28 @@ fn ec2_structure_template_various() {
     (insert "<e")
     (org-try-structure-completion)
     (list s1 (buffer-string))))"##,
-        expect_test::expect![[r#""ERR (void-function org-try-structure-completion)""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_comment_single_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"Comment line\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "# Comment line")
   (org-element-map (org-element-parse-buffer) 'comment
     (lambda (c) (org-element-property :value c))))"##,
-        expect_test::expect![[r#""OK (\"Comment line\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_fixed_width_single() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -307,25 +330,27 @@ fn ec2_fixed_width_single() {
   (let* ((tree (org-element-parse-buffer))
          (fw (car (org-element-map tree 'fixed-width (lambda (f) f)))))
     (org-element-property :value fw))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_export_empty_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (let* ((info (org-export-get-environment nil)))
     (plist-get info :title)))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_element_buffer_start() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (headline 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -333,38 +358,41 @@ fn ec2_element_buffer_start() {
   (goto-char (point-min))
   (let* ((el (org-element-at-point)))
     (list (org-element-type el) (org-element-property :begin el))))"##,
-        expect_test::expect![[r#""OK (headline 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_element_buffer_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK paragraph""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Heading\nBody")
   (goto-char (point-max))
   (org-element-type (org-element-at-point)))"##,
-        expect_test::expect![[r#""OK paragraph""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_clock_no_clock() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-clocking-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "* Task with no clock")
   (org-clocking-p))"##,
-        expect_test::expect![[r#""ERR (void-function org-clocking-p)""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_statistics_no_cookies() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"* Task\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -372,13 +400,14 @@ fn ec2_statistics_no_cookies() {
   (goto-char (point-min))
   (org-update-statistics-cookies t)
   (buffer-substring-no-properties (line-beginning-position) (line-end-position)))"##,
-        expect_test::expect![[r#""OK \"* Task\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_statistics_all_checked() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"* Task [3/3]\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -386,13 +415,14 @@ fn ec2_statistics_all_checked() {
   (goto-char (point-min))
   (org-update-statistics-cookies t)
   (buffer-substring-no-properties (line-beginning-position) (line-end-position)))"##,
-        expect_test::expect![[r#""OK \"* Task [3/3]\"""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_sparse_tree_no_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"Task 1\" \"Task 2\") nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -407,30 +437,32 @@ fn ec2_sparse_tree_no_match() {
           (if (get-char-property (point) 'invisible) (push hd h) (push hd v))))
       (forward-line))
     (list (nreverse v) (nreverse h))))"##,
-        expect_test::expect![[r#""OK ((\"Task 1\" \"Task 2\") nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_table_single_row() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"a\" \"b\" \"c\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "| a | b | c |")
   (org-table-to-lisp))"##,
-        expect_test::expect![[r#""OK ((\"a\" \"b\" \"c\"))""#]],
+        expect,
     );
 }
 
 #[test]
 fn ec2_table_single_column() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((\"a\") (\"b\") (\"c\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
   (insert "| a |\n| b |\n| c |")
   (org-table-to-lisp))"##,
-        expect_test::expect![[r#""OK ((\"a\") (\"b\") (\"c\"))""#]],
+        expect,
     );
 }

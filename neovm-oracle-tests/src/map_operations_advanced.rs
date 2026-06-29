@@ -60,12 +60,10 @@ fn oracle_prop_map_adv_mapcan_flatmap() {
                         (t (list (format "%d" x)))))
                 '(3 0 -1 0 0 2 -5 0 4)))
     (fmakunbound 'neovm--map-adv-divisors)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4 5 6) (4 5 6 7 8) (1 10 100 2 20 200 3 30 300) ((2 1) (3 1) (4 1 2) (5 1) (6 1 2 3) (7 1) (8 1 2 4) (9 1 3) (10 1 2 5) (11 1) (12 1 2 3 4 6)) ((2 4 6 8 10)) (\"+3\" \"-1\" \"+2\" \"-5\" \"+4\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5 6) (4 5 6 7 8) (1 10 100 2 20 200 3 30 300) ((2 1) (3 1) (4 1 2) (5 1) (6 1 2 3) (7 1) (8 1 2 4) (9 1 3) (10 1 2 5) (11 1) (12 1 2 3 4 6)) ((2 4 6 8 10)) (\"+3\" \"-1\" \"+2\" \"-5\" \"+4\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -124,12 +122,10 @@ fn oracle_prop_map_adv_maphash_patterns() {
                   best-name best-avg
                   above-80
                   summary)))))))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"alice\" \"bob\" \"carol\" \"dave\" \"eve\") \"carol\" 97 4 ((\"alice\" 90 \"A\") (\"bob\" 81 \"B\") (\"carol\" 97 \"A\") (\"dave\" 62 \"D\") (\"eve\" 88 \"B\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"alice\" \"bob\" \"carol\" \"dave\" \"eve\") \"carol\" 97 4 ((\"alice\" 90 \"A\") (\"bob\" 81 \"B\") (\"carol\" 97 \"A\") (\"dave\" 62 \"D\") (\"eve\" 88 \"B\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -211,12 +207,10 @@ fn oracle_prop_map_adv_index_tracking() {
     (fmakunbound 'neovm--map-adv-enumerate)
     (fmakunbound 'neovm--map-adv-map-pairs)
     (fmakunbound 'neovm--map-adv-sliding-window)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r##""OK (((0 . a) (1 . b) (2 . c) (3 . d) (4 . e)) ((0 . \"hello\") (1 . \"world\") (2 . \"foo\")) (-3 2 -6 -3 5) (\"alpha-beta\" \"beta-gamma\" \"gamma-delta\") ((1 2 3) (2 3 4) (3 4 5) (4 5 6)) (20 30 40) (\"#0: first\" \"#1: second\" \"#2: third\"))""##
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r##""OK (((0 . a) (1 . b) (2 . c) (3 . d) (4 . e)) ((0 . \"hello\") (1 . \"world\") (2 . \"foo\")) (-3 2 -6 -3 5) (\"alpha-beta\" \"beta-gamma\" \"gamma-delta\") ((1 2 3) (2 3 4) (3 4 5) (4 5 6)) (20 30 40) (\"#0: first\" \"#1: second\" \"#2: third\"))""##
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -314,12 +308,10 @@ fn oracle_prop_map_adv_early_termination() {
     (fmakunbound 'neovm--map-adv-take-while)
     (fmakunbound 'neovm--map-adv-map-until)
     (fmakunbound 'neovm--map-adv-reduce-until)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (4 nil 2 (1 2 3 4) (1 2 3 4) nil (1 4 9 16 25 36 49 64) (overflow 100 40) (ok 15) ((7 -8 9) -8))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (4 nil 2 (1 2 3 4) (1 2 3 4) nil (1 4 9 16 25 36 49 64) (overflow 100 40) (ok 15) ((7 -8 9) -8))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -420,12 +412,10 @@ fn oracle_prop_map_adv_nested_maps() {
     (fmakunbound 'neovm--map-adv-transpose)
     (fmakunbound 'neovm--map-adv-mat-mul)
     (fmakunbound 'neovm--map-adv-group-by)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 4 7) (2 5 8) (3 6 9)) ((1 5) (2 6) (3 7) (4 8)) ((5 6) (7 8)) ((58 64) (139 154)) ((1 a) (1 b) (2 a) (2 b) (3 a) (3 b)) ((0 3 6 9 12) (1 1 4 7 10) (2 2 5 8 11)) ((1 \"a\") (2 \"hi\" \"be\" \"go\") (3 \"cat\" \"dog\" \"ant\") (4 \"fish\")) ((1 3 6 10) (10 30 60) (5 2 10 8 9)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 4 7) (2 5 8) (3 6 9)) ((1 5) (2 6) (3 7) (4 8)) ((5 6) (7 8)) ((58 64) (139 154)) ((1 a) (1 b) (2 a) (2 b) (3 a) (3 b)) ((0 3 6 9 12) (1 1 4 7 10) (2 2 5 8 11)) ((1 \"a\") (2 \"hi\" \"be\" \"go\") (3 \"cat\" \"dog\" \"ant\") (4 \"fish\")) ((1 3 6 10) (10 30 60) (5 2 10 8 9)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -474,12 +464,10 @@ fn oracle_prop_map_adv_mapc_return_and_accumulate() {
                                               result)))
                          adj)
                 (sort result (lambda (a b) (string< (car a) (car b))))))))))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t 15 120 (2 4) (1 3 5) (1 3 6 10 15) nil ((\"a\" \"b\" \"c\") (\"b\" \"a\" \"c\") (\"c\" \"a\" \"b\" \"d\") (\"d\" \"c\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t 15 120 (2 4) (1 3 5) (1 3 6 10 15) nil ((\"a\" \"b\" \"c\") (\"b\" \"a\" \"c\") (\"c\" \"a\" \"b\" \"d\") (\"d\" \"c\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -510,10 +498,8 @@ fn oracle_prop_map_adv_list_mutation_shortens_traversal_like_gnu() {
                   xs)
           (nreverse seen)
           xs)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (((1) (1) (1)) ((1) (1) (1)))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (((1) (1) (1)) ((1) (1) (1)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -554,12 +540,10 @@ fn oracle_prop_map_adv_list_mutation_replaces_tail_like_gnu() {
                      ",")
           (nreverse seen)
           xs)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 9 10 11) (1 9 10 11) (1 9 10 11)) ((1 9 10 11) (1 9 10 11) (1 9 10 11)) (\"1,9,10,11\" (1 9 10 11) (1 9 10 11)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 9 10 11) (1 9 10 11) (1 9 10 11)) ((1 9 10 11) (1 9 10 11) (1 9 10 11)) (\"1,9,10,11\" (1 9 10 11) (1 9 10 11)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -611,12 +595,10 @@ fn oracle_prop_map_adv_vector_mutation_reads_live_slots_like_gnu() {
                      ",")
           (nreverse seen)
           v)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 9 3 4) (1 9 3 4) [1 9 3 4]) ([1 9 3 4] (1 9 3 4) [1 9 3 4]) ((1 9 3 4) (1 9 3 4) [1 9 3 4]) (\"1,9,3,4\" (1 9 3 4) [1 9 3 4]))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 9 3 4) (1 9 3 4) [1 9 3 4]) ([1 9 3 4] (1 9 3 4) [1 9 3 4]) ((1 9 3 4) (1 9 3 4) [1 9 3 4]) (\"1,9,3,4\" (1 9 3 4) [1 9 3 4]))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -658,12 +640,10 @@ fn oracle_prop_map_adv_string_mutation_reads_live_chars_like_gnu() {
                      ",")
           (nreverse seen)
           s)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((97 122 99 100) (97 122 99 100) \"azcd\") (\"azcd\" (97 122 99 100) \"azcd\") (\"a,z,c,d\" (97 122 99 100) \"azcd\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((97 122 99 100) (97 122 99 100) \"azcd\") (\"azcd\" (97 122 99 100) \"azcd\") (\"a,z,c,d\" (97 122 99 100) \"azcd\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -707,12 +687,10 @@ fn oracle_prop_map_adv_bool_vector_maps_logical_bits_like_gnu() {
                      ",")
           (nreverse seen)
           bv)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((t t nil nil) (t t nil nil) #&4\"\u{3}\") (#&4\"\u{3}\" (t t nil nil) #&4\"\u{3}\") (\"t,t,nil,nil\" (t t nil nil) #&4\"\u{3}\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((t t nil nil) (t t nil nil) #&4\"\u{3}\") (#&4\"\u{3}\" (t t nil nil) #&4\"\u{3}\") (\"t,t,nil,nil\" (t t nil nil) #&4\"\u{3}\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -742,10 +720,9 @@ fn oracle_prop_map_adv_mapconcat_list_mutation_error_like_gnu() {
             (nreverse seen)
             xs)
     (error (list 'error (car err) (cdr err) (nreverse seen) xs))))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (error wrong-type-argument (sequencep 0) (1) (1))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (error wrong-type-argument (sequencep 0) (1) (1))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -807,12 +784,10 @@ fn oracle_prop_map_adv_mapconcat_complex() {
 
   ;; mapconcat on nil
   (mapconcat #'identity nil ","))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"name,city,age\nAlice,New York,30\nBob,\\\"San Francisco, CA\\\",25\nCarol,,35\" \"name=Alice%20Smith&age=30&city=NYC\" \"root\n  a\n    a1\n    a2\n      a2x\n  b\n  c\n    c1\n    c2\n    c3\" \"a - b + c - d + e\" \"ONLY\" \"\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"name,city,age\nAlice,New York,30\nBob,\\\"San Francisco, CA\\\",25\nCarol,,35\" \"name=Alice%20Smith&age=30&city=NYC\" \"root\n  a\n    a1\n    a2\n      a2x\n  b\n  c\n    c1\n    c2\n    c3\" \"a - b + c - d + e\" \"ONLY\" \"\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -886,10 +861,8 @@ fn oracle_prop_map_adv_etl_pipeline() {
                                by-level ", "))))))))
     (fmakunbound 'neovm--map-adv-parse-log)
     (fmakunbound 'neovm--map-adv-aggregate)))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (10 ((\"INFO\" . 4) (\"ERROR\" . 4) (\"WARN\" . 2)) ((\"web\" . 4) (\"auth\" . 3) (\"db\" . 3)) (\"connection timeout\" \"500 internal error\" \"deadlock detected\" \"invalid token\") \"INFO: 4, ERROR: 4, WARN: 2\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (10 ((\"INFO\" . 4) (\"ERROR\" . 4) (\"WARN\" . 2)) ((\"web\" . 4) (\"auth\" . 3) (\"db\" . 3)) (\"connection timeout\" \"500 internal error\" \"deadlock detected\" \"invalid token\") \"INFO: 4, ERROR: 4, WARN: 2\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

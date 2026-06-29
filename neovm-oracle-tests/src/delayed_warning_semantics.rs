@@ -21,12 +21,10 @@ fn oracle_prop_gnu_delay_warning_pushes_full_warning_records() {
    delayed-warnings-list))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((alpha \"one\" nil nil)) ((alpha \"one\" nil nil)) ((beta \"two\" :warning \"*buf*\") (alpha \"one\" nil nil)) ((beta \"two\" :warning \"*buf*\") (alpha \"one\" nil nil)) ((gamma \"three\" nil nil) (beta \"two\" :warning \"*buf*\") (alpha \"one\" nil nil)) ((gamma \"three\" nil nil) (beta \"two\" :warning \"*buf*\") (alpha \"one\" nil nil)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((alpha \"one\" nil nil)) ((alpha \"one\" nil nil)) ((beta \"two\" :warning \"*buf*\") (alpha \"one\" nil nil)) ((beta \"two\" :warning \"*buf*\") (alpha \"one\" nil nil)) ((gamma \"three\" nil nil) (beta \"two\" :warning \"*buf*\") (alpha \"one\" nil nil)) ((gamma \"three\" nil nil) (beta \"two\" :warning \"*buf*\") (alpha \"one\" nil nil)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -47,10 +45,8 @@ fn oracle_prop_gnu_collapse_delayed_warnings_only_merges_adjacent_duplicates() {
    delayed-warnings-list))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((alpha \"one [2 times]\" :warning nil) (beta \"two\" nil \"*buf*\") (alpha \"one\" :warning nil) (gamma \"three [3 times]\" nil nil)) ((alpha \"one [2 times]\" :warning nil) (beta \"two\" nil \"*buf*\") (alpha \"one\" :warning nil) (gamma \"three [3 times]\" nil nil)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((alpha \"one [2 times]\" :warning nil) (beta \"two\" nil \"*buf*\") (alpha \"one\" :warning nil) (gamma \"three [3 times]\" nil nil)) ((alpha \"one [2 times]\" :warning nil) (beta \"two\" nil \"*buf*\") (alpha \"one\" :warning nil) (gamma \"three [3 times]\" nil nil)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

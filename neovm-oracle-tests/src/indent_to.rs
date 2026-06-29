@@ -21,12 +21,10 @@ fn oracle_indent_to_respects_tab_width_and_indent_tabs_mode() {
                       (list (indent-to 6 2)
                             (current-column)
                             (append (buffer-string) nil))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((6 6 (9 32 32)) (6 6 (32 32 32 32 32 32)) (6 6 (97 98 9 32 32)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((6 6 (9 32 32)) (6 6 (32 32 32 32 32 32)) (6 6 (97 98 9 32 32)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -37,8 +35,6 @@ fn oracle_indent_to_honors_inhibit_read_only_binding() {
                       (list (indent-to 6 1)
                             (current-column)
                             (buffer-string))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (6 6 \"      \")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (6 6 \"      \")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

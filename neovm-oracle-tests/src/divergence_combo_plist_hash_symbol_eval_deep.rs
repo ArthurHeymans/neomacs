@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_plist_put_get_with_nonexistent_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (red large nil nil (color red size large) nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((pl '(color red size large)))\n\
@@ -17,7 +18,7 @@ fn deficiency_plist_put_get_with_nonexistent_keys() {
          (plist-get pl 'missing)\n\
          (plist-member pl 'color)\n\
          (plist-member pl 'missing))))",
-        expect_test::expect![[r#""OK (red large nil nil (color red size large) nil)""#]],
+        expect,
     );
 }
 
@@ -25,6 +26,8 @@ fn deficiency_plist_put_get_with_nonexistent_keys() {
 fn deficiency_plist_put_returns_new_list_not_mutated() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""OK ((a 99 b 2 c 3) (a 99 b 2 c 3) (a 99 b 2 c 3) 99 3 99)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((pl '(a 1 b 2)))\n\
@@ -34,7 +37,7 @@ fn deficiency_plist_put_returns_new_list_not_mutated() {
          (plist-get pl 'a)\n\
          (plist-get pl2 'c)\n\
          (plist-get pl3 'a)))))",
-        expect_test::expect![[r#""OK ((a 99 b 2 c 3) (a 99 b 2 c 3) (a 99 b 2 c 3) 99 3 99)""#]],
+        expect,
     );
 }
 
@@ -42,6 +45,7 @@ fn deficiency_plist_put_returns_new_list_not_mutated() {
 fn deficiency_hash_table_with_eql_test_and_float_keys() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (one-half two-half three-int nil 3 nil 2 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ht (make-hash-table :test 'eql)))\n\
@@ -56,7 +60,7 @@ fn deficiency_hash_table_with_eql_test_and_float_keys() {
          (remhash 1.5 ht)\n\
          (hash-table-count ht)\n\
          (gethash 1.5 ht))))",
-        expect_test::expect![[r#""OK (one-half two-half three-int nil 3 nil 2 nil)""#]],
+        expect,
     );
 }
 
@@ -64,6 +68,9 @@ fn deficiency_hash_table_with_eql_test_and_float_keys() {
 fn deficiency_symbol_plist_cross_symbol_access() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (container (a b c) element sym1 (a b c) (type container items (a b c)) (type element parent sym1))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((s1 (make-symbol \"sym1\"))\n\
@@ -79,9 +86,7 @@ fn deficiency_symbol_plist_cross_symbol_access() {
          (get (get s2 'parent) 'items)\n\
          (symbol-plist s1)\n\
          (symbol-plist s2))))",
-        expect_test::expect![[
-            r#""OK (container (a b c) element sym1 (a b c) (type container items (a b c)) (type element parent sym1))""#
-        ]],
+        expect,
     );
 }
 
@@ -89,6 +94,9 @@ fn deficiency_symbol_plist_cross_symbol_access() {
 fn deficiency_hash_table_iteration_with_maphash_and_collect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (((\"key-0\" . 0) (\"key-1\" . 1) (\"key-2\" . 4) (\"key-3\" . 9) (\"key-4\" . 16)) 5 4 16)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ht (make-hash-table :test 'equal)))\n\
@@ -101,9 +109,7 @@ fn deficiency_hash_table_iteration_with_maphash_and_collect() {
          (hash-table-count ht)\n\
          (gethash \"key-2\" ht)\n\
          (gethash \"key-4\" ht))))))",
-        expect_test::expect![[
-            r#""OK (((\"key-0\" . 0) (\"key-1\" . 1) (\"key-2\" . 4) (\"key-3\" . 9) (\"key-4\" . 16)) 5 4 16)""#
-        ]],
+        expect,
     );
 }
 
@@ -111,6 +117,7 @@ fn deficiency_hash_table_iteration_with_maphash_and_collect() {
 fn deficiency_nested_hash_table_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (10 20 nil 1 2 t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((outer (make-hash-table :test 'equal))\n\
@@ -125,7 +132,7 @@ fn deficiency_nested_hash_table_values() {
          (hash-table-count outer)\n\
          (hash-table-count retrieved)\n\
          (eq retrieved inner)))))",
-        expect_test::expect![[r#""OK (10 20 nil 1 2 t)""#]],
+        expect,
     );
 }
 
@@ -133,6 +140,8 @@ fn deficiency_nested_hash_table_values() {
 fn deficiency_plist_to_hash_table_conversion_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""OK (\\\"Alice\\\" 30 \\\"NYC\\\" 95 \\\"Alice\\\" 30)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((pl '(name \\\"Alice\\\" age 30 city \\\"NYC\\\" score 95)))\n\
@@ -148,7 +157,7 @@ fn deficiency_plist_to_hash_table_conversion_roundtrip() {
          (gethash 'score ht)\n\
          (plist-get pl2 'name)\n\
          (plist-get pl2 'age))))))",
-        expect_test::expect![[r#""OK (\\\"Alice\\\" 30 \\\"NYC\\\" 95 \\\"Alice\\\" 30)""#]],
+        expect,
     );
 }
 
@@ -156,6 +165,9 @@ fn deficiency_plist_to_hash_table_conversion_roundtrip() {
 fn deficiency_symbol_plist_with_lots_of_keys_stress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19) overwritten 19 nil 40)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((sym (make-symbol \"stress\")))\n\
@@ -169,9 +181,7 @@ fn deficiency_symbol_plist_with_lots_of_keys_stress() {
          (get sym 'prop-19)\n\
          (get sym 'prop-20)\n\
          (length (symbol-plist sym))))))",
-        expect_test::expect![[
-            r#""OK ((0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19) overwritten 19 nil 40)""#
-        ]],
+        expect,
     );
 }
 
@@ -179,6 +189,7 @@ fn deficiency_symbol_plist_with_lots_of_keys_stress() {
 fn deficiency_hash_table_clear_and_refill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (10 0 5 100 103 nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((ht (make-hash-table :test 'eql)))\n\
@@ -193,7 +204,7 @@ fn deficiency_hash_table_clear_and_refill() {
          (gethash 3 ht)\n\
          (gethash 5 ht)\n\
          (gethash 9 ht))))))",
-        expect_test::expect![[r#""OK (10 0 5 100 103 nil nil)""#]],
+        expect,
     );
 }
 
@@ -201,6 +212,7 @@ fn deficiency_hash_table_clear_and_refill() {
 fn deficiency_plist_member_vs_plist_get_for_nil_values() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (1 nil 3 nil nil (b nil c 3 d nil) (d nil) nil)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((pl '(a 1 b nil c 3 d nil)))\n\
@@ -212,6 +224,6 @@ fn deficiency_plist_member_vs_plist_get_for_nil_values() {
          (plist-member pl 'b)\n\
          (plist-member pl 'd)\n\
          (plist-member pl 'e))))",
-        expect_test::expect![[r#""OK (1 nil 3 nil nil (b nil c 3 d nil) (d nil) nil)""#]],
+        expect,
     );
 }

@@ -135,12 +135,10 @@ fn oracle_prop_tree_bst_operations() {
     (fmakunbound 'neovm--test-bst-inorder)
     (fmakunbound 'neovm--test-bst-min)
     (fmakunbound 'neovm--test-bst-delete)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4 5 6 7 8) t nil 1 (1 2 3 4 6 7 8) nil (1 3 4 6 7 8) (3 4 6 7 8))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5 6 7 8) t nil 1 (1 2 3 4 6 7 8) nil (1 3 4 6 7 8) (3 4 6 7 8))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -242,10 +240,8 @@ fn oracle_prop_tree_height_balance() {
     (fmakunbound 'neovm--test-tree-balanced-p)
     (fmakunbound 'neovm--test-tree-count)
     (fmakunbound 'neovm--test-tree-leaves)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 4 1 0 t nil t t 7 4 4 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 4 1 0 t nil t t 7 4 4 1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -338,10 +334,8 @@ fn oracle_prop_tree_lca() {
     (fmakunbound 'neovm--test-tree-contains)
     (fmakunbound 'neovm--test-tree-lca)
     (fmakunbound 'neovm--test-tree-path)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (2 2 1 3 5 1 (1 2 5 8) (1 3 7) nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (2 2 1 3 5 1 (1 2 5 8) (1 3 7) nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -432,12 +426,10 @@ fn oracle_prop_tree_serialize_deserialize() {
     (fmakunbound 'neovm--test-tree-deserialize)
     (fmakunbound 'neovm--test-tree-inorder)
     (fmakunbound 'neovm--test-tree-preorder)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 4 nil nil 5 nil nil 3 nil 6 nil nil) (10 nil nil) (nil) t t t t t (4 2 5 1 3 6) (1 2 4 5 3 6))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 4 nil nil 5 nil nil 3 nil 6 nil nil) (10 nil nil) (nil) t t t t t (4 2 5 1 3 6) (1 2 4 5 3 6))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -552,12 +544,10 @@ fn oracle_prop_tree_map_fold() {
     (fmakunbound 'neovm--test-tree-filter)
     (fmakunbound 'neovm--test-tree-zip)
     (fmakunbound 'neovm--test-tree-flatten)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((2 6 8 10 14 16 18) (1 9 16 25 49 64 81) 37 30240 9 7 (4 8) (5 7 8 9) (2 6 8 10 14 16 18) (1 3 4 5 7 8 9))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((2 6 8 10 14 16 18) (1 9 16 25 49 64 81) 37 30240 9 7 (4 8) (5 7 8 9) (2 6 8 10 14 16 18) (1 3 4 5 7 8 9))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -704,12 +694,10 @@ fn oracle_prop_tree_trie_string_lookup() {
     (fmakunbound 'neovm--test-trie-autocomplete)
     (fmakunbound 'neovm--test-trie-delete)
     (fmakunbound 'neovm--test-trie-count-words)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (9 t t nil nil t t nil (\"app\" \"apple\" \"application\" \"apply\") (\"ban\" \"banana\" \"band\" \"bandana\") nil nil t 8 (\"apple\" \"application\" \"apply\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (9 t t nil nil t t nil (\"app\" \"apple\" \"application\" \"apply\") (\"ban\" \"banana\" \"band\" \"bandana\") nil nil t 8 (\"apple\" \"application\" \"apply\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -797,10 +785,8 @@ fn oracle_prop_tree_level_order_and_mirror() {
     (fmakunbound 'neovm--test-tree-mirror)
     (fmakunbound 'neovm--test-tree-inorder2)
     (fmakunbound 'neovm--test-tree-same-shape)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1) (2 3) (4 5 6 7)) ((1) (3 2) (7 6 5 4)) (4 2 5 1 6 3 7) (7 3 6 1 5 2 4) t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1) (2 3) (4 5 6 7)) ((1) (3 2) (7 6 5 4)) (4 2 5 1 6 3 7) (7 3 6 1 5 2 4) t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

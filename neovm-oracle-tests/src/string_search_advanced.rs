@@ -38,10 +38,8 @@ fn oracle_prop_string_search_adv_start_pos_systematic() {
     (string-search "b" haystack 4)
     (string-search "b" haystack 5)
     (string-search "b" haystack 8)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 3 3 3 6 6 6 nil nil nil 1 1 4 4 7 nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 3 3 3 6 6 6 nil nil nil 1 1 4 4 7 nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -51,12 +49,10 @@ fn oracle_prop_string_search_adv_bignum_start_pos_error_like_gnu() {
     // GNU Emacs fns.c:Fstring_search validates START-POS with CHECK_FIXNUM,
     // so bignums signal `fixnump` before range checks.
     let form = r#"(string-search "x" "xyz" 1000000000000000000000000000000)"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""ERR (wrong-type-argument fixnump 1000000000000000000000000000000)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-type-argument fixnump 1000000000000000000000000000000)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -79,12 +75,10 @@ fn oracle_string_search_start_pos_range_signal_data_like_gnu() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((args-out-of-range (-1)) (args-out-of-range (-1)) (args-out-of-range (4)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((args-out-of-range (-1)) (args-out-of-range (-1)) (args-out-of-range (4)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -109,10 +103,8 @@ fn oracle_prop_string_search_text_properties_ignored() {
    (string-search empty haystack)
    (string-search empty haystack (length haystack))))"#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (6 6 0 11 nil 0 16)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (6 6 0 11 nil 0 16)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -144,10 +136,8 @@ fn oracle_prop_string_search_adv_case_sensitivity() {
   ;; Both bindings should return nil for string-search
   (let ((case-fold-search t))
     (string-search "HELLO" "HELLO WORLD")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 nil nil nil 3 0 6 nil nil nil 0)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 nil nil nil 3 0 6 nil nil nil 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -179,10 +169,8 @@ fn oracle_prop_string_search_adv_empty_strings() {
   (string-search "" "x" 1)
   (string-search "x" "x" 0)
   (string-search "x" "x" 1))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 0 3 5 0 0 nil nil 0 1 2 0 1 0 nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 0 3 5 0 0 nil nil 0 1 2 0 1 0 nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -207,10 +195,8 @@ fn oracle_prop_string_search_adv_raw_byte_multibyte_conversion_like_gnu() {
    (string-search "é" "xéy")
    (string-search (unibyte-string #xe9) "xéy")))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil t t nil 0 nil 0 1 nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil t t nil 0 nil 0 1 nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -251,12 +237,10 @@ fn oracle_prop_string_search_adv_find_all_occurrences() {
     (funcall find-all "," "one,two,,four,five")
     ;; Longer needle with multiple matches
     (funcall find-all "the" "the cat on the mat ate the rat")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 2 4 6 8) (3) nil (0 8) (0) (0 1 2 3) (3 7 8 13) (0 11 23))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 2 4 6 8) (3) nil (0 8) (0) (0 1 2 3) (3 7 8 13) (0 11 23))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -304,12 +288,10 @@ fn oracle_prop_string_search_adv_with_substring_extraction() {
            (host (substring host-port 0 colon-pos))
            (port (substring host-port (1+ colon-pos))))
       (list scheme host port path))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"a\" \"b\" \"c\" \"d\") (\"one\" \"two\" \"three\") (\"a\" \"\" \"b\" \"\" \"\" \"c\") (\"no semicolons here\") (\"\") (\"https\" \"example.com\" \"8080\" \"/api/v1/data\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"a\" \"b\" \"c\" \"d\") (\"one\" \"two\" \"three\") (\"a\" \"\" \"b\" \"\" \"\" \"c\") (\"no semicolons here\") (\"\") (\"https\" \"example.com\" \"8080\" \"/api/v1/data\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -353,12 +335,10 @@ fn oracle_prop_string_search_adv_vs_string_match() {
                     (string-match (regexp-quote word) text))
               results)))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (0 0 6 6 4 4 5 5 2 2 nil nil ((\"the\" 0 0) (\"fox\" 16 16) (\"dog\" 40 40) (\"over\" 26 26) (\"zzz\" nil nil)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (0 0 6 6 4 4 5 5 2 2 nil nil ((\"the\" 0 0) (\"fox\" 16 16) (\"dog\" 40 40) (\"over\" 26 26) (\"zzz\" nil nil)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -405,8 +385,6 @@ fn oracle_prop_string_search_adv_boundary_conditions() {
       (setq results (cons pos results))
       (setq pos (+ pos 2)))
     (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 3 0 nil 0 nil 5 nil 0 (3 6) (0 2))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 3 0 nil 0 nil 5 nil 0 (3 6) (0 2))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

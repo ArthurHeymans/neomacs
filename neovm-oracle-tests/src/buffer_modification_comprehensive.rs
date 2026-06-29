@@ -469,12 +469,10 @@ fn oracle_prop_buffer_mod_structured_document_building() {
           (insert "# Config file\n")
           (let ((r4 (buffer-string)))
             (list r1 r2 r3 r4)))))))"##;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r##""\n        OK (\"host = localhost\n        port = 8080\n        debug = true\n        timeout = 30\n        \" \"host = localhost\n        port = 9090\n        debug = true\n        timeout = 30\n        \" \"host = localhost\n        port = 9090\n        timeout = 30\n        \" \"# Config file\n        host = localhost\n        port = 9090\n        timeout = 30\n        \")""##
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r##""\n        OK (\"host = localhost\n        port = 8080\n        debug = true\n        timeout = 30\n        \" \"host = localhost\n        port = 9090\n        debug = true\n        timeout = 30\n        \" \"host = localhost\n        port = 9090\n        timeout = 30\n        \" \"# Config file\n        host = localhost\n        port = 9090\n        timeout = 30\n        \")""##
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -499,12 +497,10 @@ fn oracle_prop_buffer_mod_extract_multiple_regions() {
       (push (delete-and-extract-region start (point-max)) tokens))
     (list :tokens (nreverse tokens)
           :remaining (buffer-string))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:tokens (\"one\" \"two\" \"three\" \"four\" \"five\") :remaining \"\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:tokens (\"one\" \"two\" \"three\" \"four\" \"five\") :remaining \"\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -531,12 +527,10 @@ fn oracle_prop_buffer_mod_point_max_tracking() {
     (erase-buffer)
     (push (list :erased (point-min) (point-max) (point)) trace)
     (nreverse trace)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:empty 1 1 1) (:after-5 1 6 6) (:after-10 1 11 11) (:after-del 1 7 3) (:after-end 1 10 10) (:erased 1 1 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:empty 1 1 1) (:after-5 1 6 6) (:after-10 1 11 11) (:after-del 1 7 3) (:after-end 1 10 10) (:erased 1 1 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -561,10 +555,9 @@ fn oracle_prop_buffer_mod_save_excursion_with_mods() {
     (list :point-before p-before
           :point-after (point)
           :buffer (buffer-string))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (:point-before 5 :point-after 6 :buffer \">>ABCGHIJ<<\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (:point-before 5 :point-after 6 :buffer \">>ABCGHIJ<<\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -591,12 +584,10 @@ fn oracle_prop_buffer_mod_search_replace_complex() {
           (replace-match "AT")
           (setq count2 (1+ count2)))
         (list r1 :re-count count2 :buf2 (buffer-string))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:count 3 :buf \"THE cat sat on THE mat by THE hat\") :re-count 0 :buf2 \"THE cat sat on THE mat by THE hat\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:count 3 :buf \"THE cat sat on THE mat by THE hat\") :re-count 0 :buf2 \"THE cat sat on THE mat by THE hat\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -622,12 +613,10 @@ fn oracle_prop_buffer_mod_multibyte_operations() {
       (delete-char 1)
       (let ((r3 (list (buffer-string) (point))))
         (list r1 r2 r3)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"Hello World\" 12 11) (\"Hello Beautiful World\" 16) (\"AC\" 2))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"Hello World\" 12 11) (\"Hello Beautiful World\" 16) (\"AC\" 2))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -654,8 +643,7 @@ fn oracle_prop_buffer_mod_undo_list_tracking() {
       (list :has-undo has-undo-entries
             :first-insert-tracked after-insert-undo
             :buffer current-buf))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (:has-undo t :first-insert-tracked t :buffer \" World\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (:has-undo t :first-insert-tracked t :buffer \" World\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -79,8 +79,6 @@ fn oracle_default_toplevel_value_let_default_and_alias_edges() {
     (ignore-errors (makunbound plain))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 61 40)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 61 40)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -20,10 +20,8 @@ fn oracle_prop_zerop() {
                         (zerop -1)
                         (zerop 0.0e0)
                         (zerop -0.0))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t nil nil t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t nil nil t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -45,12 +43,10 @@ fn oracle_prop_gnu_subr_numeric_sign_and_parity_predicates() {
          (list -3 -2 -1 0 1 2 3 0.0 1.5 nil))
  (condition-case e (plusp nil)
    (error (list 'plusp-error (car e)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((-1 nil t) (0 nil nil) (1 t nil) (-0.0 nil nil) (0.0 nil nil) (0.5 t nil) (-0.5 nil t)) ((-3 t nil) (-2 nil t) (-1 t nil) (0 nil t) (1 t nil) (2 nil t) (3 t nil) (0.0 (error wrong-type-argument) (error wrong-type-argument)) (1.5 (error wrong-type-argument) (error wrong-type-argument)) (nil (error wrong-type-argument) (error wrong-type-argument))) (plusp-error wrong-type-argument))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((-1 nil t) (0 nil nil) (1 t nil) (-0.0 nil nil) (0.0 nil nil) (0.5 t nil) (-0.5 nil t)) ((-3 t nil) (-2 nil t) (-1 t nil) (0 nil t) (1 t nil) (2 nil t) (3 t nil) (0.0 (error wrong-type-argument) (error wrong-type-argument)) (1.5 (error wrong-type-argument) (error wrong-type-argument)) (nil (error wrong-type-argument) (error wrong-type-argument))) (plusp-error wrong-type-argument))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -68,10 +64,8 @@ fn oracle_prop_natnump() {
                         (natnump 0.0)
                         (natnump nil)
                         (natnump 'a))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t nil nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t nil nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -90,10 +84,8 @@ fn oracle_prop_fixnump() {
                         (fixnump 3.14)
                         (fixnump nil)
                         (fixnump "42"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -113,10 +105,8 @@ fn oracle_fixnump_bignump_are_lisp_predicates_with_boundary_contract() {
        (bignump (1+ most-positive-fixnum))
        (fixnump (1- most-negative-fixnum))
        (bignump (1- most-negative-fixnum))))"#;
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil t t (t nil nil t nil t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil t t (t nil nil t nil t))""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(nil nil t t (t nil nil t nil t))", &oracle, &neovm);
 }
 
@@ -137,12 +127,10 @@ fn oracle_prop_number_type_predicates() {
                              (integerp v)
                              (numberp v)))
                      values))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((0 nil t t) (42 nil t t) (-1 nil t t) (3.14 t nil t) (0.0 t nil t) (-2.5 t nil t) (nil nil nil nil) (t nil nil nil) (sym nil nil nil) (\"str\" nil nil nil) ((1 2) nil nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((0 nil t t) (42 nil t t) (-1 nil t t) (3.14 t nil t) (0.0 t nil t) (-2.5 t nil t) (nil nil nil nil) (t nil nil nil) (sym nil nil nil) (\"str\" nil nil nil) ((1 2) nil nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -159,10 +147,8 @@ fn oracle_prop_fixnum_bounds() {
                         (< most-negative-fixnum 0)
                         (fixnump most-positive-fixnum)
                         (fixnump most-negative-fixnum))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -190,12 +176,10 @@ fn oracle_prop_number_predicates_dispatch() {
                     (mapcar format-num
                             (list 0 42 -7 3.14159 0.0
                                   -2.5 0.0e+NaN nil 'sym)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"zero\" \"+42\" \"-7\" \"3.14\" \"0.00\" \"-2.50\" \"NaN\" \"NaN(nil)\" \"NaN(sym)\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"zero\" \"+42\" \"-7\" \"3.14\" \"0.00\" \"-2.50\" \"NaN\" \"NaN(nil)\" \"NaN(sym)\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -226,12 +210,10 @@ fn oracle_prop_number_predicates_safe_stats() {
                               (list 'min mn)
                               (list 'max mx)
                               (list 'rejected (length rejected))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((count 5) (sum 150) (mean 30.0) (min 10) (max 50) (rejected 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((count 5) (sum 150) (mean 30.0) (min 10) (max 50) (rejected 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -266,10 +248,9 @@ fn oracle_prop_number_predicates_base_convert() {
                      (funcall to-base 0 10)
                      (funcall to-base -42 16)
                      (funcall to-base 1000 36)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"11111111\" \"377\" \"ff\" \"0\" \"-2a\" \"rs\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (\"11111111\" \"377\" \"ff\" \"0\" \"-2a\" \"rs\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -315,10 +296,8 @@ fn oracle_prop_number_predicates_validator() {
                        (funcall validate
                                 '(name 42 age -5
                                   score 150 active "yes")))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (valid (invalid (name 42) (age -5) (score 150) (active \"yes\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (valid (invalid (name 42) (age -5) (score 150) (active \"yes\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

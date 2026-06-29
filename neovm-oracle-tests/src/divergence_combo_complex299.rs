@@ -8,19 +8,21 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx299_process_window_size_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'set-process-window-size)
       (fboundp 'window-size)
       (boundp 'process-adaptive-read-buffering))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx299_process_thread_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t #<thread 0x5555559c6020>)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -30,13 +32,16 @@ fn div_cx299_process_thread_query() {
               (process-thread p))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t #<thread 0x5555559c6020>)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx299_network_interface_info_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-type-argument stringp (\"Meta\" . [65152 0 0 0 14825 37298 63684 12398 0]))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -47,39 +52,40 @@ fn div_cx299_network_interface_info_query() {
                 (or (null info) (consp info)))))
   (error (list :errored (car e)))))
 "##,
-        expect_test::expect![[
-            r#""ERR (wrong-type-argument stringp (\"Meta\" . [65152 0 0 0 14825 37298 63684 12398 0]))""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx299_serial_process_configure_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'make-serial-process)
       (fboundp 'serial-process-configure))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx299_process_adaptive_read_buffering() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'process-adaptive-read-buffering)
       (boundp 'read-process-output-max))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx299_process_environment_override_with_multiple_vars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK \"Process neo-cx299-env finished\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -96,13 +102,14 @@ fn div_cx299_process_environment_override_with_multiple_vars() {
         content))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK \"Process neo-cx299-env finished\"""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx299_make_network_process_with_filter_and_sentinel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored file-error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -120,13 +127,14 @@ fn div_cx299_make_network_process_with_filter_and_sentinel() {
           (delete-process p))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored file-error)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx299_process_output_with_coding_system() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"世界\nProcess neo-cx299-cs finished\n\" 33)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx299-cs*"))
@@ -140,13 +148,15 @@ fn div_cx299_process_output_with_coding_system() {
     (kill-buffer buf)
     (list content (length content))))
 "##,
-        expect_test::expect![[r#""OK (\"世界\nProcess neo-cx299-cs finished\n\" 33)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx299_process_kill_after_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((run open listen connect stop) nil t nil signal)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((p (make-process :name "neo-cx299-kill"
@@ -157,13 +167,14 @@ fn div_cx299_process_kill_after_query() {
         (process-live-p p)
         (process-status p)))
 "##,
-        expect_test::expect![[r#""OK ((run open listen connect stop) nil t nil signal)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx299_process_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments widen 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((buf (get-buffer-create " *neo-cx299-mega*")))
@@ -193,6 +204,6 @@ fn div_cx299_process_with_marker_overlay_undo_narrow_mega() {
         (kill-buffer buf)
         (list state (buffer-string)))))))
 "##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments widen 1)""#]],
+        expect,
     )
 }

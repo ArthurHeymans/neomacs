@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_obarray_intern_with_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass sym-entry ()
@@ -69,7 +70,7 @@ fn combo_eieio_obarray_intern_with_edit() {
               (overlay-start ov) (overlay-end ov)
               my-ob-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -77,6 +78,7 @@ fn combo_eieio_obarray_intern_with_edit() {
 fn combo_eieio_obarray_unintern_with_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass ob-track ()
@@ -141,7 +143,7 @@ fn combo_eieio_obarray_unintern_with_objects() {
               (overlay-start ov) (overlay-end ov)
               my-ob2-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -149,6 +151,7 @@ fn combo_eieio_obarray_unintern_with_objects() {
 fn combo_eieio_obarray_mapatoms_collect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass map-sym ()
@@ -208,7 +211,7 @@ fn combo_eieio_obarray_mapatoms_collect() {
               (overlay-start ov) (overlay-end ov)
               my-map-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments (2 . 2) 1)""#]],
+        expect,
     );
 }
 
@@ -216,6 +219,7 @@ fn combo_eieio_obarray_mapatoms_collect() {
 fn combo_eieio_obarray_narrow_edit_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass narrow-sym ()
@@ -280,7 +284,7 @@ fn combo_eieio_obarray_narrow_edit_symbols() {
               (overlay-start ov) (overlay-end ov)
               my-ns-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -288,6 +292,7 @@ fn combo_eieio_obarray_narrow_edit_symbols() {
 fn combo_eieio_obarray_symbol_function_plist() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass sym-meta ()
@@ -338,6 +343,6 @@ fn combo_eieio_obarray_symbol_function_plist() {
               (overlay-start ov) (overlay-end ov)
               my-sm-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

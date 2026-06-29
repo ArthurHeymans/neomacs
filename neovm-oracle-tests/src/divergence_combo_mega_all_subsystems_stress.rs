@@ -17,6 +17,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn mega_combo_all_subsystems_stress() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 74 78)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'cl-lib)
@@ -137,7 +138,7 @@ fn mega_combo_all_subsystems_stress() {
                                    (thing-at-point 'defun))))
                 (kill-buffer buf)
                 (list state-3 state-2 state-1 state-0))))))))) "#,
-        expect_test::expect![[r#""ERR (args-out-of-range 74 78)""#]],
+        expect,
     );
 }
 
@@ -145,6 +146,7 @@ fn mega_combo_all_subsystems_stress() {
 fn mega_combo_marker_overlay_undo_regex_narrow_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " mega-moun")))
@@ -230,7 +232,7 @@ fn mega_combo_marker_overlay_undo_regex_narrow_textprop() {
                                  (get-text-property 41 'grp))))
               (kill-buffer buf)
               (list state-2 state-1 state-0)))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -238,6 +240,7 @@ fn mega_combo_marker_overlay_undo_regex_narrow_textprop() {
 fn mega_combo_cl_letf_pcase_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (require 'cl-lib)
@@ -289,7 +292,7 @@ fn mega_combo_cl_letf_pcase_marker_overlay_undo() {
                                 (get-text-property 16 'grp))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -297,6 +300,7 @@ fn mega_combo_cl_letf_pcase_marker_overlay_undo() {
 fn mega_combo_register_window_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 6 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " mega-regwin")))
@@ -345,7 +349,7 @@ fn mega_combo_register_window_marker_overlay_undo() {
                     (list after restored))))
             (delete-window win2)
             (kill-buffer buf))))))) "#,
-        expect_test::expect![[r#""ERR (args-out-of-range 6 6)""#]],
+        expect,
     );
 }
 
@@ -353,6 +357,7 @@ fn mega_combo_register_window_marker_overlay_undo() {
 fn mega_combo_coding_fontlock_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 37 46)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " mega-codfl")))
@@ -397,6 +402,6 @@ fn mega_combo_coding_fontlock_marker_overlay_undo() {
                                 (syntax-ppss 20))))
             (kill-buffer buf)
             (list after restored))))))) "#,
-        expect_test::expect![[r#""ERR (args-out-of-range 37 46)""#]],
+        expect,
     );
 }

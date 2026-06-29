@@ -141,12 +141,10 @@ fn oracle_prop_expr_tree_build_and_eval() {
     (fmakunbound 'neovm--et-parse)
     (fmakunbound 'neovm--et-eval)
     (makunbound 'neovm--et-tokens)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((+ 2 (* 3 4)) (* (+ 2 3) 4) (- (- 10 3) 2) (+ (+ (* x x) (* 2 x)) 1) 14 20 5 16)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((+ 2 (* 3 4)) (* (+ 2 3) 4) (- (- 10 3) 2) (+ (+ (* x x) (* 2 x)) 1) 14 20 5 16)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -205,12 +203,10 @@ fn oracle_prop_expr_tree_to_prefix() {
         (funcall 'neovm--et-to-prefix 'x))
     (fmakunbound 'neovm--et-to-prefix)
     (fmakunbound 'neovm--et-to-prefix-list)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"+ 2 * 3 4\" \"* + 2 3 4\" \"- - 10 3 2\" \"neg 5\" \"+ * x x + * 2 x 1\" (+ 2 * 3 4) (* + 2 3 4) (+ * x x + * 2 x 1) \"42\" \"x\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"+ 2 * 3 4\" \"* + 2 3 4\" \"- - 10 3 2\" \"neg 5\" \"+ * x x + * 2 x 1\" (+ 2 * 3 4) (* + 2 3 4) (+ * x x + * 2 x 1) \"42\" \"x\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -301,12 +297,10 @@ fn oracle_prop_expr_tree_to_postfix() {
     (fmakunbound 'neovm--et-to-postfix)
     (fmakunbound 'neovm--et-to-postfix-list)
     (fmakunbound 'neovm--et-eval-postfix)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"2 3 4 * +\" \"2 3 + 4 *\" \"10 3 - 2 -\" (2 3 4 * +) (2 3 + 4 *) (x x * 2 x * 1 + +) 14 20 5 -5 21 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"2 3 4 * +\" \"2 3 + 4 *\" \"10 3 - 2 -\" (2 3 4 * +) (2 3 + 4 *) (x x * 2 x * 1 + +) 14 20 5 -5 21 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -380,12 +374,10 @@ fn oracle_prop_expr_tree_differentiation() {
         ;; d/dx(x^2 + 3*x + 5)
         (funcall 'neovm--et-deriv '(+ (+ (expt x 2) (* 3 x)) 5) 'x))
     (fmakunbound 'neovm--et-deriv)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (0 1 0 (+ 1 0) (+ (* 1 x) (* x 1)) (+ (* 0 x) (* 3 1)) (neg 1) (* (* 3 (expt x (- 3 1))) 1) (/ (- (* 1 y) (* x 0)) (* y y)) (+ (+ (* (* 2 (expt x (- 2 1))) 1) (+ (* 0 x) (* 3 1))) 0))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (0 1 0 (+ 1 0) (+ (* 1 x) (* x 1)) (+ (* 0 x) (* 3 1)) (neg 1) (* (* 3 (expt x (- 3 1))) 1) (/ (- (* 1 y) (* x 0)) (* y y)) (+ (+ (* (* 2 (expt x (- 2 1))) 1) (+ (* 0 x) (* 3 1))) 0))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -505,10 +497,8 @@ fn oracle_prop_expr_tree_simplification() {
         (funcall 'neovm--et-simplify-fix '(+ x x)))
     (fmakunbound 'neovm--et-simplify)
     (fmakunbound 'neovm--et-simplify-fix)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (x x 0 x x x 0 x 1 x 1 x 7 12 3 x 3 (* 2 x))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (x x 0 x x x 0 x 1 x 1 x 7 12 3 x 3 (* 2 x))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -618,10 +608,8 @@ fn oracle_prop_expr_tree_deriv_simplify_pipeline() {
     (fmakunbound 'neovm--et2-simp)
     (fmakunbound 'neovm--et2-fix)
     (fmakunbound 'neovm--et2-d-simp)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 3 (+ x x) 0 (+ (* 2 x) 1) 5 1 -1)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 3 (+ x x) 0 (+ (* 2 x) 1) 5 1 -1)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -735,10 +723,8 @@ fn oracle_prop_expr_tree_properties_and_infix() {
     (fmakunbound 'neovm--et-leaf-count)
     (fmakunbound 'neovm--et-to-infix)
     (fmakunbound 'neovm--et-vars)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((2 2 3 0 0 2) (5 7 9 1 1 4) (3 4 5 1) (\"(2 + (3 * 4))\" \"((x + y) * (x - y))\" \"((x expt 2) + ((2 * x) + 1))\" \"42\" \"x\" \"(-(a + b))\") (nil (x y) (x) (a b)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((2 2 3 0 0 2) (5 7 9 1 1 4) (3 4 5 1) (\"(2 + (3 * 4))\" \"((x + y) * (x - y))\" \"((x expt 2) + ((2 * x) + 1))\" \"42\" \"x\" \"(-(a + b))\") (nil (x y) (x) (a b)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -11,6 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_f7_display_metrics_batch() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (80 25 nil nil 1 3 0 nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (display-pixel-width)
@@ -24,13 +25,16 @@ fn div_f7_display_metrics_batch() {
       (display-color-p)
       (display-grayscale-p))
 "##,
-        expect_test::expect![[r#""OK (80 25 nil nil 1 3 0 nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f7_fontset_and_default_font() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (1 \"-*-*-*-*-*-*-*-*-*-*-*-*-fontset-default\" unspecified \"default\" 1)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (length (fontset-list))
@@ -39,15 +43,14 @@ fn div_f7_fontset_and_default_font() {
       (face-attribute 'default :family nil 'default)
       (face-attribute 'default :height nil 'default))
 "##,
-        expect_test::expect![[
-            r#""OK (1 \"-*-*-*-*-*-*-*-*-*-*-*-*-fontset-default\" unspecified \"default\" 1)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_f7_face_box_underline_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil bold italic t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (face-attribute 'default :underline nil 'default)
@@ -59,13 +62,14 @@ fn div_f7_face_box_underline_attributes() {
       (face-attribute 'italic :slant nil 'default)
       (face-attribute 'underline :underline nil 'default))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil nil nil bold italic t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f7_image_type_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function image-types)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (image-type-available-p 'png)
@@ -76,13 +80,14 @@ fn div_f7_image_type_availability() {
       (image-type-available-p 'gif)
       (sort (delq nil (mapcar #'symbol-name (image-types))) #'string<))
 "##,
-        expect_test::expect![[r#""ERR (void-function image-types)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f7_x_display_introspection() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (error error error error)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (condition-case err (x-display-screens) (error (car err)))
@@ -90,13 +95,16 @@ fn div_f7_x_display_introspection() {
       (condition-case err (x-server-version) (error (car err)))
       (condition-case err (x-server-vendor) (error (car err))))
 "##,
-        expect_test::expect![[r#""OK (error error error error)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f7_category_table_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (t category-table \"ASCII\nASCII graphic characters 32-126 (ISO646 IRV:1983[4/0])\" \"a\" nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((ct (standard-category-table)))
@@ -107,8 +115,6 @@ fn div_f7_category_table_ops() {
         (condition-case err (modify-category-entry ?a ?a)
           (error (car err)))))
 "##,
-        expect_test::expect![[
-            r#""OK (t category-table \"ASCII\nASCII graphic characters 32-126 (ISO646 IRV:1983[4/0])\" \"a\" nil)""#
-        ]],
+        expect,
     );
 }

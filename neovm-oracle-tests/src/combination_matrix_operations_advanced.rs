@@ -94,10 +94,8 @@ fn oracle_prop_matrix_advanced_determinant() {
     (fmakunbound 'neovm--test-adv-det3)
     (fmakunbound 'neovm--test-adv-minor)
     (fmakunbound 'neovm--test-adv-det)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (-2 25 0 1 1 0 -306 t t 24 -1 t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (-2 25 0 1 1 0 -306 t t 24 -1 t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -156,12 +154,10 @@ fn oracle_prop_matrix_advanced_inverse_2x2() {
          matrices))
     (fmakunbound 'neovm--test-adv-inv2)
     (fmakunbound 'neovm--test-adv-mmul2)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((det -2 adj ((4 -2) (-3 1)) A*adj ((-2 0) (0 -2)) adj*A ((-2 0) (0 -2)) check-A*adj t check-adj*A t) (det 25 adj ((5 0) (0 5)) A*adj ((25 0) (0 25)) adj*A ((25 0) (0 25)) check-A*adj t check-adj*A t) (det 1 adj ((4 -1) (-7 2)) A*adj ((1 0) (0 1)) adj*A ((1 0) (0 1)) check-A*adj t check-adj*A t) (det 11 adj ((2 1) (-5 3)) A*adj ((11 0) (0 11)) adj*A ((11 0) (0 11)) check-A*adj t check-adj*A t) (det 1 adj ((-5 -7) (-2 -3)) A*adj ((1 0) (0 1)) adj*A ((1 0) (0 1)) check-A*adj t check-adj*A t) (det 1 adj ((1 0) (0 1)) A*adj ((1 0) (0 1)) adj*A ((1 0) (0 1)) check-A*adj t check-adj*A t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((det -2 adj ((4 -2) (-3 1)) A*adj ((-2 0) (0 -2)) adj*A ((-2 0) (0 -2)) check-A*adj t check-adj*A t) (det 25 adj ((5 0) (0 5)) A*adj ((25 0) (0 25)) adj*A ((25 0) (0 25)) check-A*adj t check-adj*A t) (det 1 adj ((4 -1) (-7 2)) A*adj ((1 0) (0 1)) adj*A ((1 0) (0 1)) check-A*adj t check-adj*A t) (det 11 adj ((2 1) (-5 3)) A*adj ((11 0) (0 11)) adj*A ((11 0) (0 11)) check-A*adj t check-adj*A t) (det 1 adj ((-5 -7) (-2 -3)) A*adj ((1 0) (0 1)) adj*A ((1 0) (0 1)) check-A*adj t check-adj*A t) (det 1 adj ((1 0) (0 1)) A*adj ((1 0) (0 1)) adj*A ((1 0) (0 1)) check-A*adj t check-adj*A t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -234,10 +230,8 @@ fn oracle_prop_matrix_advanced_trace() {
     (fmakunbound 'neovm--test-adv-trace)
     (fmakunbound 'neovm--test-adv-madd)
     (fmakunbound 'neovm--test-adv-mscale)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (15 15 3 50 42 17 t t t -5)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (15 15 3 50 42 17 t t t -5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -322,12 +316,10 @@ fn oracle_prop_matrix_advanced_row_echelon() {
     (fmakunbound 'neovm--test-adv-mget)
     (fmakunbound 'neovm--test-adv-mset)
     (fmakunbound 'neovm--test-adv-ref)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 2) (0 -2)) ((1 2 3) (0 -3 -6) (0 0 0)) ((1 2 3) (0 4 5) (0 0 6)) ((3 4 5) (0 1 2) (0 0 0)) ((2 1 5) (0 2 2)) (t t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 2) (0 -2)) ((1 2 3) (0 -3 -6) (0 0 0)) ((1 2 3) (0 4 5) (0 0 6)) ((3 4 5) (0 1 2) (0 0 0)) ((2 1 5) (0 2 2)) (t t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -421,12 +413,10 @@ fn oracle_prop_matrix_advanced_cramers_rule() {
     (fmakunbound 'neovm--test-adv-replace-col)
     (fmakunbound 'neovm--test-adv-cramer2)
     (fmakunbound 'neovm--test-adv-cramer3)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2) (2 1) singular (-2 5 3) ((-6 . -6) (12 . -6) (12 . -6)) (7 11 13))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2) (2 1) singular (-2 5 3) ((-6 . -6) (12 . -6) (12 . -6)) (7 11 13))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -543,12 +533,10 @@ fn oracle_prop_matrix_advanced_lu_decomposition() {
     (fmakunbound 'neovm--test-adv-mzeros)
     (fmakunbound 'neovm--test-adv-lu)
     (fmakunbound 'neovm--test-adv-mmul-lu)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((L ((1 0) (4 1)) U ((2 1) (0 2)) L*U ((2 1) (8 6)) U-upper t) (L ((1 0 0) (4 1 0) (7 -6 1)) U ((1 2 3) (0 -3 -6) (0 0 -3)) L*U ((1 2 3) (4 5 6) (7 32 54)) U-upper t) (L ((1 0 0) (6 1 0) (9 12 1)) U ((3 -1 2) (0 3 3) (0 0 -18)) L*U ((3 -1 2) (18 -3 15) (27 27 36)) U-upper t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((L ((1 0) (4 1)) U ((2 1) (0 2)) L*U ((2 1) (8 6)) U-upper t) (L ((1 0 0) (4 1 0) (7 -6 1)) U ((1 2 3) (0 -3 -6) (0 0 -3)) L*U ((1 2 3) (4 5 6) (7 32 54)) U-upper t) (L ((1 0 0) (6 1 0) (9 12 1)) U ((3 -1 2) (0 3 3) (0 0 -18)) L*U ((3 -1 2) (18 -3 15) (27 27 36)) U-upper t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -599,10 +587,8 @@ fn oracle_prop_matrix_advanced_eigenvalues_2x2() {
        (let ((info (funcall 'neovm--test-adv-eigen2 '((5 4) (1 2)))))
          (list (= (nth 1 info) 7) (= (nth 3 info) 6))))
     (fmakunbound 'neovm--test-adv-eigen2)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((trace 2 det 1 disc 0 disc-nonneg t vieta-sum 2 vieta-product 1) (trace 10 det 21 disc 16 disc-nonneg t vieta-sum 10 vieta-product 21) (trace 4 det 3 disc 4 disc-nonneg t vieta-sum 4 vieta-product 3) (trace 0 det 1 disc -4 disc-nonneg nil vieta-sum 0 vieta-product 1) (trace 7 det 6 disc 25 disc-nonneg t vieta-sum 7 vieta-product 6) (trace 0 det 0 disc 0 disc-nonneg t vieta-sum 0 vieta-product 0) (t t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((trace 2 det 1 disc 0 disc-nonneg t vieta-sum 2 vieta-product 1) (trace 10 det 21 disc 16 disc-nonneg t vieta-sum 10 vieta-product 21) (trace 4 det 3 disc 4 disc-nonneg t vieta-sum 4 vieta-product 3) (trace 0 det 1 disc -4 disc-nonneg nil vieta-sum 0 vieta-product 1) (trace 7 det 6 disc 25 disc-nonneg t vieta-sum 7 vieta-product 6) (trace 0 det 0 disc 0 disc-nonneg t vieta-sum 0 vieta-product 0) (t t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

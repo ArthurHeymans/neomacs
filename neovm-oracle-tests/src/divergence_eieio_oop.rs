@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_cl_defgeneric_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (10 \"HELLO\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(require 'eieio)
 (cl-defgeneric my-generic-test (x)
@@ -17,7 +18,7 @@ fn divergence_cl_defgeneric_basic() {
   (upcase x))
 (list (my-generic-test 5)
       (my-generic-test "hello"))"#,
-        expect_test::expect![[r#""OK (10 \"HELLO\")""#]],
+        expect,
     );
 }
 
@@ -25,6 +26,7 @@ fn divergence_cl_defgeneric_basic() {
 fn divergence_cl_defmethod_specializers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK ((integer 42) (float 3.14) (other \"hi\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(require 'eieio)
 (cl-defgeneric my-spec-test (x)
@@ -38,7 +40,7 @@ fn divergence_cl_defmethod_specializers() {
 (list (my-spec-test 42)
       (my-spec-test 3.14)
       (my-spec-test "hi"))"#,
-        expect_test::expect![[r#""OK ((integer 42) (float 3.14) (other \"hi\"))""#]],
+        expect,
     );
 }
 
@@ -46,6 +48,7 @@ fn divergence_cl_defmethod_specializers() {
 fn divergence_cl_defclass_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defclass)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(require 'eieio)
 (cl-defclass my-test-class ()
@@ -56,7 +59,7 @@ fn divergence_cl_defclass_basic() {
         (slot-value obj 'value)
         (object-of-class-p obj 'my-test-class)
         (eieio-object-p obj)))"#,
-        expect_test::expect![[r#""ERR (void-function cl-defclass)""#]],
+        expect,
     );
 }
 
@@ -64,6 +67,7 @@ fn divergence_cl_defclass_basic() {
 fn divergence_cl_defclass_inheritance() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defclass)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(require 'eieio)
 (cl-defclass my-base-class ()
@@ -75,7 +79,7 @@ fn divergence_cl_defclass_inheritance() {
         (slot-value obj 'derived-slot)
         (child-of-class-p (eieio-object-class obj) 'my-base-class)
         (object-of-class-p obj 'my-base-class)))"#,
-        expect_test::expect![[r#""ERR (void-function cl-defclass)""#]],
+        expect,
     );
 }
 
@@ -83,6 +87,7 @@ fn divergence_cl_defclass_inheritance() {
 fn divergence_eieio_generic_call_next() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (zero nonzero)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(require 'eieio)
 (cl-defgeneric my-next-test (x))
@@ -90,7 +95,7 @@ fn divergence_eieio_generic_call_next() {
   (if (= x 0) 'zero 'nonzero))
 (list (my-next-test 0)
       (my-next-test 5))"#,
-        expect_test::expect![[r#""OK (zero nonzero)""#]],
+        expect,
     );
 }
 
@@ -98,6 +103,7 @@ fn divergence_eieio_generic_call_next() {
 fn divergence_eieio_slot_accessors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defclass)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(require 'eieio)
 (cl-defclass my-accessor-class ()
@@ -107,7 +113,7 @@ fn divergence_eieio_slot_accessors() {
   (setf (my-data obj) '(a b c))
   (list (my-data obj)
         (slot-value obj 'data)))"#,
-        expect_test::expect![[r#""ERR (void-function cl-defclass)""#]],
+        expect,
     );
 }
 
@@ -115,6 +121,7 @@ fn divergence_eieio_slot_accessors() {
 fn divergence_eieio_class_allocated() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defclass)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(require 'eieio)
 (cl-defclass my-class-alloc ()
@@ -124,7 +131,7 @@ fn divergence_eieio_class_allocated() {
   (setf (slot-value a 'shared) 42)
   (list (slot-value a 'shared)
         (slot-value b 'shared)))"#,
-        expect_test::expect![[r#""ERR (void-function cl-defclass)""#]],
+        expect,
     );
 }
 
@@ -132,6 +139,7 @@ fn divergence_eieio_class_allocated() {
 fn divergence_cl_print_object() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defclass)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(require 'eieio)
 (cl-defclass my-print-class ()
@@ -139,6 +147,6 @@ fn divergence_cl_print_object() {
 (let ((obj (my-print-class :val 42)))
   (list (stringp (format "%s" obj))
         (stringp (prin1-to-string obj))))"#,
-        expect_test::expect![[r#""ERR (void-function cl-defclass)""#]],
+        expect,
     );
 }

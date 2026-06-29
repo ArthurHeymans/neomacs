@@ -9,6 +9,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo63_babel_python_integration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:ob-python-loaded t) \"hello from python\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -25,13 +26,14 @@ fn combo63_babel_python_integration() {
           (push (org-babel-execute-src-block) r))
       (error (push (list :python-error t) r)))
     (nreverse r)))"##,
-        expect_test::expect![[r#""OK ((:ob-python-loaded t) \"hello from python\n\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo63_babel_r_integration() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:ob-R-loaded t) (:ob-R-fbound t))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -43,13 +45,16 @@ fn combo63_babel_r_integration() {
     (push (list :ob-R-loaded (featurep 'ob-R)) r)
     (push (list :ob-R-fbound (fboundp 'org-babel-execute:R)) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""OK ((:ob-R-loaded t) (:ob-R-fbound t))""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo63_agenda_todo_list_noninteractive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:todo-list-fbound t) (:agenda-fbound t) (:todo-count 3) (:agenda-error t))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -73,15 +78,14 @@ fn combo63_agenda_todo_list_noninteractive() {
                 r)
       (error (push (list :agenda-error t) r)))
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:todo-list-fbound t) (:agenda-fbound t) (:todo-count 3) (:agenda-error t))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo63_export_filter_hooks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:export-ok t) (:has-prefix 19))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -101,13 +105,14 @@ fn combo63_export_filter_hooks() {
             (push (list :has-prefix (and out (string-match-p "PREFIX" out))) r))
         (error (push (list :export-error t) r)))
       (nreverse r))))"##,
-        expect_test::expect![[r#""OK ((:export-ok t) (:has-prefix 19))""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo63_babel_lob_call_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -126,13 +131,16 @@ fn combo63_babel_lob_call_lines() {
           (push (org-babel-lob-execute-maybe) r)
         (error (push (list :lob-error (car e)) r)))
       (nreverse r))))"##,
-        expect_test::expect![[r#""OK (t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo63_depend_blocking_check() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-depend\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -151,15 +159,14 @@ fn combo63_depend_blocking_check() {
           (push (list :blocked-by-depend blocked) r))
       (error (push (list :depend-error t) r)))
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"org-depend\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo63_export_custom_transcoder_roundtrip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:backend-error t))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -179,13 +186,14 @@ fn combo63_export_custom_transcoder_roundtrip() {
           (push (list :has-bold-marker (and (stringp exported) (string-match-p "\\*\\*" exported))) r))
       (error (push (list :backend-error t) r)))
     (nreverse r)))"##,
-        expect_test::expect![[r#""OK ((:backend-error t))""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo63_babel_post_header() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable val)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -204,13 +212,16 @@ fn combo63_babel_post_header() {
       (push (org-babel-execute-src-block) r)
       (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
       (nreverse r))))"##,
-        expect_test::expect![[r#""ERR (void-variable val)""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo63_agenda_tags_view_noninteractive() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:tags-view-fbound t) (:urgent-headings (\"B\" \"D\")) (:work+urgent (\"B\")))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -227,15 +238,14 @@ fn combo63_agenda_tags_view_noninteractive() {
                               (lambda () (org-get-heading t t t t))
                               "work+urgent")) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:tags-view-fbound t) (:urgent-headings (\"B\" \"D\")) (:work+urgent (\"B\")))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo63_export_icalendar_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:export-ok nil) (:has-vevent nil))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -250,6 +260,6 @@ fn combo63_export_icalendar_basic() {
             (push (list :has-vevent (and out (string-match-p "VEVENT" out))) r))
         (error (push (list :ical-error (car e)) r)))
       (nreverse r))))"##,
-        expect_test::expect![[r#""OK ((:export-ok nil) (:has-vevent nil))""#]],
+        expect,
     );
 }

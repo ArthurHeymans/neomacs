@@ -84,12 +84,10 @@ fn oracle_prop_effect_system_declare_and_perform() {
     (fmakunbound 'neovm--eff-perform)
     (makunbound 'neovm--eff-handlers)
     (makunbound 'neovm--eff-declared)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"mocked-input\" \"[OUT] hello world\" 1234567890 43 (error \"unknown effect: fly\") (error \"undeclared effect: fly\") (unhandled read-line) \"new-mocked-input\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"mocked-input\" \"[OUT] hello world\" 1234567890 43 (error \"unknown effect: fly\") (error \"undeclared effect: fly\") (unhandled read-line) \"new-mocked-input\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -170,12 +168,10 @@ fn oracle_prop_effect_system_handler_composition() {
     (fmakunbound 'neovm--eff2-make-handler-set)
     (fmakunbound 'neovm--eff2-compose)
     (fmakunbound 'neovm--eff2-perform)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"io-read\" \"io-write: test\" \"state[counter]\" \"set counter=42\" \"LOG: event happened\" \"io-flushed\" (unhandled unknown-eff (1 2 3)) 6 t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"io-read\" \"io-write: test\" \"state[counter]\" \"set counter=42\" \"LOG: event happened\" \"io-flushed\" (unhandled unknown-eff (1 2 3)) 6 t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -266,10 +262,8 @@ fn oracle_prop_effect_system_state_effect() {
     (fmakunbound 'neovm--eff3-make-state-handler)
     (fmakunbound 'neovm--eff3-perform)
     (makunbound 'neovm--eff3-state)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (10 20 \"Alice\" nil 3 999 nil 30 3 5)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (10 20 \"Alice\" nil 3 999 nil 30 3 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -380,12 +374,10 @@ fn oracle_prop_effect_system_exception_with_resume() {
     (fmakunbound 'neovm--eff4-raise)
     (makunbound 'neovm--eff4-exception-handlers)
     (makunbound 'neovm--eff4-exception-log)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (3 (propagated infinity) b (propagated 3) (propagated (type-error-propagated (:expected number :got \"string\"))) (unhandled network-error (:code 404)) 8)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (3 (propagated infinity) b (propagated 3) (propagated (type-error-propagated (:expected number :got \"string\"))) (unhandled network-error (:code 404)) 8)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -498,10 +490,8 @@ fn oracle_prop_effect_system_logging_effect() {
     (fmakunbound 'neovm--eff5-perform)
     (makunbound 'neovm--eff5-log-entries)
     (makunbound 'neovm--eff5-min-level)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (5 1 1 8 0 \"starting up\" info \"retrying\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (5 1 1 8 0 \"starting up\" info \"retrying\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -617,10 +607,8 @@ fn oracle_prop_effect_system_composed_program() {
     (makunbound 'neovm--eff6-state)
     (makunbound 'neovm--eff6-logs)
     (makunbound 'neovm--eff6-errors)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((ok 300) (ok 150) (error insufficient-funds (:from charlie :balance 350 :requested 5000)) (error invalid-amount -50) 700 650 350 6 2 (\"Created account alice with balance 1000\" \"Created account bob with balance 500\" \"Created account charlie with balance 200\" \"Transfer alice->bob: $300\" \"Transfer bob->charlie: $150\" \"FAILED: charlie->alice $5000 (insufficient funds)\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((ok 300) (ok 150) (error insufficient-funds (:from charlie :balance 350 :requested 5000)) (error invalid-amount -50) 700 650 350 6 2 (\"Created account alice with balance 1000\" \"Created account bob with balance 500\" \"Created account charlie with balance 200\" \"Transfer alice->bob: $300\" \"Transfer bob->charlie: $150\" \"FAILED: charlie->alice $5000 (insufficient funds)\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -20,10 +20,8 @@ fn oracle_prop_delete_consecutive_dups_basic_runs() {
  (delete-consecutive-dups (list 'solo)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((a b a c) (1) (1 2 3) nil (solo))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((a b a c) (1) (1 2 3) nil (solo))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -46,10 +44,8 @@ fn oracle_prop_delete_consecutive_dups_is_destructive_and_keeps_first() {
         xs))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (((k) (other)) t t nil nil t ((k) (other)))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (((k) (other)) t t nil nil t ((k) (other)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -62,12 +58,10 @@ fn oracle_prop_delete_consecutive_dups_only_removes_adjacent_equal_values() {
         xs))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"a\" \"b\" \"a\" \"b\" \"a\") (\"a\" \"b\" \"a\" \"b\" \"a\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"a\" \"b\" \"a\" \"b\" \"a\") (\"a\" \"b\" \"a\" \"b\" \"a\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -87,10 +81,8 @@ fn oracle_prop_delete_consecutive_dups_circular_option() {
    same))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((a b c a) (a b c) (z) (a b c a) (a b c) (z))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((a b c a) (a b c) (z) (a b c a) (a b c) (z))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -119,10 +111,8 @@ fn oracle_delete_consecutive_dups_improper_tail_errors_like_gnu() {
     xs)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((wrong-type-argument (listp tail)) (a . tail)) ((wrong-type-argument (listp tail)) (a . tail)) ((wrong-type-argument (listp tail)) (a b . tail)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((wrong-type-argument (listp tail)) (a . tail)) ((wrong-type-argument (listp tail)) (a . tail)) ((wrong-type-argument (listp tail)) (a b . tail)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

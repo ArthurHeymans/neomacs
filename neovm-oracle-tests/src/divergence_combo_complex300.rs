@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx300_mega_milestone_1_full_subsystem_chaos() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
@@ -75,13 +76,16 @@ fn div_cx300_mega_milestone_1_full_subsystem_chaos() {
               (kill-buffer buf)
               (list state (buffer-live-p buf))))))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx300_mega_milestone_2_pcase_rx_syntax_advice_register_window() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (wrong-number-of-arguments (closure (t) nil :overridden) 1)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
@@ -124,15 +128,14 @@ fn div_cx300_mega_milestone_2_pcase_rx_syntax_advice_register_window() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[
-            r#""ERR (wrong-number-of-arguments (closure (t) nil :overridden) 1)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx300_mega_milestone_3_process_buflocal_coding_env_timer_weak_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
@@ -173,13 +176,14 @@ fn div_cx300_mega_milestone_3_process_buflocal_coding_env_timer_weak_hash() {
         (kill-buffer buf))
       (list snapshot (buffer-live-p buf)))))
 "##,
-        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx300_mega_milestone_4_keymap_eval_macro_closure_advice_hash_obarray() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
@@ -233,13 +237,14 @@ fn div_cx300_mega_milestone_4_keymap_eval_macro_closure_advice_hash_obarray() {
                       (overlay-start ov) (overlay-end ov)
                       (text-properties-at 1)))))))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx300_mega_milestone_5_all_subsystem_ultimate_chaos() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable weak-ht)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
@@ -297,6 +302,6 @@ fn div_cx300_mega_milestone_5_all_subsystem_ultimate_chaos() {
                     (hash-table-count ht)
                     (aref rec 2)))))))))
 "##,
-        expect_test::expect![[r#""ERR (void-variable weak-ht)""#]],
+        expect,
     );
 }

@@ -36,12 +36,10 @@ fn oracle_symbol_value_void_and_default_void_errors() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil nil (void-variable (neomacs--oracle-void-symbol)) (void-variable (neomacs--oracle-void-symbol)) now-bound t t now-bound now-bound t nil nil (void-variable (neomacs--oracle-void-symbol)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil nil (void-variable (neomacs--oracle-void-symbol)) (void-variable (neomacs--oracle-void-symbol)) now-bound t t now-bound now-bound t nil nil (void-variable (neomacs--oracle-void-symbol)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -76,12 +74,10 @@ fn oracle_set_and_set_default_protect_nil_and_t() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((setting-constant (nil)) (setting-constant (nil)) (setting-constant (t)) (setting-constant (t)) (setting-constant (nil)) (setting-constant (t)) (setting-constant (nil)) (setting-constant (t)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((setting-constant (nil)) (setting-constant (nil)) (setting-constant (t)) (setting-constant (t)) (setting-constant (nil)) (setting-constant (t)) (setting-constant (nil)) (setting-constant (t)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -120,12 +116,10 @@ fn oracle_keyword_value_cell_can_only_be_set_to_self() {
      (t (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t :neomacs-oracle-keyword-edge :neomacs-oracle-keyword-edge :neomacs-oracle-keyword-edge :neomacs-oracle-keyword-edge :neomacs-oracle-keyword-edge :neomacs-oracle-keyword-edge (setting-constant (:neomacs-oracle-keyword-edge)) (setting-constant (:neomacs-oracle-keyword-edge)) (setting-constant (:neomacs-oracle-keyword-edge)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t :neomacs-oracle-keyword-edge :neomacs-oracle-keyword-edge :neomacs-oracle-keyword-edge :neomacs-oracle-keyword-edge :neomacs-oracle-keyword-edge :neomacs-oracle-keyword-edge (setting-constant (:neomacs-oracle-keyword-edge)) (setting-constant (:neomacs-oracle-keyword-edge)) (setting-constant (:neomacs-oracle-keyword-edge)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -153,12 +147,10 @@ fn oracle_set_default_uses_default_cell_not_current_let_binding() {
    (default-value sym)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (global-1 global-1 lexical-shadow (global-1 dynamic-value global-2 global-2) global-3 global-3 global-3)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (global-1 global-1 lexical-shadow (global-1 dynamic-value global-2 global-2) global-3 global-3 global-3)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -189,12 +181,10 @@ fn oracle_default_toplevel_value_ignores_active_let_binding() {
    (default-toplevel-value 'neomacs--oracle-top-default)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (global global (let-value global global default-set let-value default-set default-set nil let-value top-set top-set) top-set top-set top-set)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (global global (let-value global global default-set let-value default-set default-set nil let-value top-set top-set) top-set top-set top-set)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -222,12 +212,10 @@ fn oracle_default_toplevel_value_errors_and_constant_protection() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((void-variable (neomacs--oracle-top-void)) nil now-bound now-bound (setting-constant (nil)) (setting-constant (t)) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((void-variable (neomacs--oracle-top-void)) nil now-bound now-bound (setting-constant (nil)) (setting-constant (t)) nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -272,10 +260,8 @@ fn oracle_variable_binding_locus_default_let_local_and_alias_edges() {
       (kill-buffer buf))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil (dynamic nil nil) (t t local) nil (wrong-type-argument (symbolp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil (dynamic nil nil) (t t local) nil (wrong-type-argument (symbolp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

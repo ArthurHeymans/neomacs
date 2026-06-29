@@ -96,12 +96,10 @@ fn oracle_prop_type_system_adv_bidirectional() {
     (fmakunbound 'neovm--ts-type-equal)
     (fmakunbound 'neovm--ts-synth)
     (fmakunbound 'neovm--ts-check)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((int) (int) (bool) t t (error \"argument type mismatch\") (int) (error \"annotation check failed\") t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((int) (int) (bool) t t (error \"argument type mismatch\") (int) (error \"annotation check failed\") t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -195,12 +193,10 @@ fn oracle_prop_type_system_adv_unification_occurs_check() {
     (fmakunbound 'neovm--ts-subst-apply)
     (fmakunbound 'neovm--ts-occurs-in)
     (fmakunbound 'neovm--ts-unify)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil ((T0 int)) ((T1 bool) (T0 int)) ((T1 int) (T0 tvar T1)) (error \"occurs check failed\") ((T0 int)) (error \"cannot unify (int) with (bool)\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil ((T0 int)) ((T1 bool) (T0 int)) ((T1 int) (T0 tvar T1)) (error \"occurs check failed\") ((T0 int)) (error \"cannot unify (int) with (bool)\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -265,10 +261,8 @@ fn oracle_prop_type_system_adv_subtype_variance() {
        ;; Reflexivity
        (funcall 'neovm--ts-is-subtype '(-> (int) (bool)) '(-> (int) (bool))))
     (fmakunbound 'neovm--ts-is-subtype)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t nil nil t nil t nil t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t nil nil t nil t nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -337,10 +331,8 @@ Each field is (name . type)."
          (funcall 'neovm--ts-record-subtype point3d numpoint)))
     (fmakunbound 'neovm--ts-base-subtype)
     (fmakunbound 'neovm--ts-record-subtype)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil t nil t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil t nil t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -419,10 +411,8 @@ fn oracle_prop_type_system_adv_union_intersection() {
        (funcall 'neovm--ts-subtype-ext '(int) '(union (inter (int) (number)) (string))))
     (fmakunbound 'neovm--ts-base-eq-or-sub)
     (fmakunbound 'neovm--ts-subtype-ext)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t nil t nil t t nil t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t nil t nil t t nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -491,12 +481,10 @@ fn oracle_prop_type_system_adv_generic_instantiation() {
          (funcall 'neovm--ts-instantiate id-type '((-> (int) (bool))))))
     (fmakunbound 'neovm--ts-instantiate)
     (fmakunbound 'neovm--ts-inst-apply)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((-> (int) (int)) (-> (string) (string)) (-> (int) (-> (bool) (int))) (-> (-> (string) (int)) (-> (list-of (string)) (list-of (int)))) (-> (int) (-> (string) (pair (int) (string)))) (-> (-> (int) (bool)) (-> (int) (bool))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((-> (int) (int)) (-> (string) (string)) (-> (int) (-> (bool) (int))) (-> (-> (string) (int)) (-> (list-of (string)) (list-of (int)))) (-> (int) (-> (string) (pair (int) (string)))) (-> (-> (int) (bool)) (-> (int) (bool))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -578,10 +566,8 @@ fn oracle_prop_type_system_adv_hm_let_generalization() {
     (fmakunbound 'neovm--ts-hm-free-vars)
     (fmakunbound 'neovm--ts-hm-env-free-vars)
     (fmakunbound 'neovm--ts-hm-generalize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((forall (T0) (-> (tvar T0) (tvar T0))) (forall (T1) (-> (int) (tvar T1))) (int) nil (A A B))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((forall (T0) (-> (tvar T0) (tvar T0))) (forall (T1) (-> (int) (tvar T1))) (int) nil (A A B))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

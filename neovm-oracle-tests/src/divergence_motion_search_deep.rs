@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_line_motion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""Line1\nLine2\nLine3\nLine4\nOK (7 \"Line2\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Line1\nLine2\nLine3\nLine4\n")
@@ -15,7 +16,7 @@ fn divergence_line_motion() {
   (list (point) (buffer-substring (line-beginning-position) (line-end-position)))
   (forward-line -1)
   (list (point) (buffer-substring (line-beginning-position) (line-end-position)))) "#,
-        expect_test::expect![[r#""Line1\nLine2\nLine3\nLine4\nOK (7 \"Line2\")""#]],
+        expect,
     );
 }
 
@@ -23,6 +24,7 @@ fn divergence_line_motion() {
 fn divergence_beginning_end_of_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""Hello WorldOK (5 12 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -30,7 +32,7 @@ fn divergence_beginning_end_of_line() {
   (list (point)
         (progn (end-of-line) (point))
         (progn (beginning-of-line) (point)))) "#,
-        expect_test::expect![[r#""Hello WorldOK (5 12 1)""#]],
+        expect,
     );
 }
 
@@ -38,6 +40,7 @@ fn divergence_beginning_end_of_line() {
 fn divergence_buffer_bounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""Hello WorldOK (1 12 11 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -45,7 +48,7 @@ fn divergence_buffer_bounds() {
         (buffer-size)
         (= (point-min) 1)
         (= (point-max) (1+ (buffer-size))))) "#,
-        expect_test::expect![[r#""Hello WorldOK (1 12 11 t t)""#]],
+        expect,
     );
 }
 
@@ -53,6 +56,7 @@ fn divergence_buffer_bounds() {
 fn divergence_word_motion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""hello world foo barOK (6 12 7)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "hello world foo bar")
@@ -63,7 +67,7 @@ fn divergence_word_motion() {
     (let ((p2 (point)))
       (backward-word 1)
       (list p1 p2 (point))))) "#,
-        expect_test::expect![[r#""hello world foo barOK (6 12 7)""#]],
+        expect,
     );
 }
 
@@ -71,6 +75,7 @@ fn divergence_word_motion() {
 fn divergence_char_motion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""Hello WorldOK (6 3 108 101)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -81,7 +86,7 @@ fn divergence_char_motion() {
     (list p1 (point)
           (char-after (point))
           (char-before (point))))) "#,
-        expect_test::expect![[r#""Hello WorldOK (6 3 108 101)""#]],
+        expect,
     );
 }
 
@@ -89,6 +94,7 @@ fn divergence_char_motion() {
 fn divergence_line_number() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""Line1\nLine2\nLine3\nLine4\nOK (1 3 4 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Line1\nLine2\nLine3\nLine4\n")
@@ -97,7 +103,7 @@ fn divergence_line_number() {
         (progn (forward-line 2) (line-number-at-pos))
         (progn (forward-line 1) (line-number-at-pos))
         (count-lines (point-min) (point-max)))) "#,
-        expect_test::expect![[r#""Line1\nLine2\nLine3\nLine4\nOK (1 3 4 4)""#]],
+        expect,
     );
 }
 
@@ -105,6 +111,7 @@ fn divergence_line_number() {
 fn divergence_skip_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""   hello   world   OK (4 9 12)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "   hello   world   ")
@@ -115,7 +122,7 @@ fn divergence_skip_chars() {
     (let ((p2 (point)))
       (skip-chars-forward " ")
       (list p1 p2 (point))))) "#,
-        expect_test::expect![[r#""   hello   world   OK (4 9 12)""#]],
+        expect,
     );
 }
 
@@ -123,6 +130,7 @@ fn divergence_skip_chars() {
 fn divergence_skip_chars_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""   hello   world   OK (17 12)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "   hello   world   ")
@@ -131,7 +139,7 @@ fn divergence_skip_chars_backward() {
   (let ((p1 (point)))
     (skip-chars-backward "a-z")
     (list p1 (point)))) "#,
-        expect_test::expect![[r#""   hello   world   OK (17 12)""#]],
+        expect,
     );
 }
 
@@ -139,6 +147,7 @@ fn divergence_skip_chars_backward() {
 fn divergence_search_boundaries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""foo bar foo bar fooOK (8 16 nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "foo bar foo bar foo")
@@ -147,7 +156,7 @@ fn divergence_search_boundaries() {
         (search-forward "bar" nil t)
         (search-forward "bar" nil t)
         (search-forward "bar" nil t))) "#,
-        expect_test::expect![[r#""foo bar foo bar fooOK (8 16 nil nil)""#]],
+        expect,
     );
 }
 
@@ -155,12 +164,13 @@ fn divergence_search_boundaries() {
 fn divergence_count_lines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""a\nb\nc\nd\ne\nOK (5 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "a\nb\nc\nd\ne\n")
   (list (count-lines (point-min) (point-max))
         (= (count-lines (point-min) (point-max)) 5)
         (fboundp 'what-line))) "#,
-        expect_test::expect![[r#""a\nb\nc\nd\ne\nOK (5 t t)""#]],
+        expect,
     );
 }

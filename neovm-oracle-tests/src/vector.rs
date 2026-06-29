@@ -10,10 +10,9 @@ use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_aref_wrong_index_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(aref [1 2] "x")"#,
-        expect_test::expect![[r#""ERR (wrong-type-argument fixnump \"x\")""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument fixnump \"x\")""#]];
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(r#"(aref [1 2] "x")"#, expect);
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
@@ -21,10 +20,8 @@ fn oracle_prop_aref_wrong_index_type_error() {
 fn oracle_prop_aref_out_of_range_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(aref [1 2] 10)",
-        expect_test::expect![[r#""ERR (args-out-of-range [1 2] 10)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range [1 2] 10)""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect("(aref [1 2] 10)", expect);
     assert_err_kind(&oracle, &neovm, "args-out-of-range");
 }
 
@@ -32,10 +29,8 @@ fn oracle_prop_aref_out_of_range_error() {
 fn oracle_prop_aset_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(aset 1 0 2)",
-        expect_test::expect![[r#""ERR (wrong-type-argument arrayp 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument arrayp 1)""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect("(aset 1 0 2)", expect);
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 

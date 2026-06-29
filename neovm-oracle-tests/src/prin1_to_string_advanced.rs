@@ -40,12 +40,10 @@ fn oracle_prop_prin1_adv_primitive_types() {
   (prin1-to-string ?A)
   (prin1-to-string ?z)
   (prin1-to-string ?\n))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"0\" \"42\" \"-999\" \"1000000000\" \"0.0\" \"3.14159\" \"-2.718\" \"15000000000.0\" \"-6.022e-23\" \"\\\"\\\"\" \"\\\"hello world\\\"\" \"foo-bar\" \"nil\" \"t\" \":my-keyword\" \":another\" \"65\" \"122\" \"10\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"0\" \"42\" \"-999\" \"1000000000\" \"0.0\" \"3.14159\" \"-2.718\" \"15000000000.0\" \"-6.022e-23\" \"\\\"\\\"\" \"\\\"hello world\\\"\" \"foo-bar\" \"nil\" \"t\" \":my-keyword\" \":another\" \"65\" \"122\" \"10\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -80,12 +78,10 @@ fn oracle_prop_prin1_adv_nested_lists_and_vectors() {
   (prin1-to-string '([1 2] [3 4]))
   ;; Complex nesting
   (prin1-to-string '((name . "Alice") (scores . [95 87 92]) (tags . (:math :science)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"(1 2 3)\" \"((a b) (c d) (e f))\" \"(1 (2 (3 (4 (5)))))\" \"(1 \\\"two\\\" three 4.0 :five)\" \"nil\" \"(only)\" \"[]\" \"[1 2 3]\" \"[[1 2] [3 4]]\" \"[(a b) (c d)]\" \"([1 2] [3 4])\" \"((name . \\\"Alice\\\") (scores . [95 87 92]) (tags :math :science))\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"(1 2 3)\" \"((a b) (c d) (e f))\" \"(1 (2 (3 (4 (5)))))\" \"(1 \\\"two\\\" three 4.0 :five)\" \"nil\" \"(only)\" \"[]\" \"[1 2 3]\" \"[[1 2] [3 4]]\" \"[(a b) (c d)]\" \"([1 2] [3 4])\" \"((name . \\\"Alice\\\") (scores . [95 87 92]) (tags :math :science))\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -114,12 +110,10 @@ fn oracle_prop_prin1_adv_dotted_pairs() {
   (prin1-to-string '(a . nil))
   ;; Dotted pair with vector
   (prin1-to-string '(key . [1 2 3])))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"(a . b)\" \"(1 . 2)\" \"(\\\"key\\\" . \\\"value\\\")\" \"(1 2 . 3)\" \"(a b c . d)\" \"((a . 1) b . 2)\" \"((x . 10) (y . 20) (z . 30))\" \"(a)\" \"(key . [1 2 3])\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"(a . b)\" \"(1 . 2)\" \"(\\\"key\\\" . \\\"value\\\")\" \"(1 2 . 3)\" \"(a b c . d)\" \"((a . 1) b . 2)\" \"((x . 10) (y . 20) (z . 30))\" \"(a)\" \"(key . [1 2 3])\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,10 +143,8 @@ fn oracle_prop_prin1_adv_hash_tables() {
           (hash-table-p restored)
           (gethash "name" restored)
           (gethash "age" restored))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 19 2 (t \"Alice\" 30))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 19 2 (t \"Alice\" 30))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -185,12 +177,10 @@ fn oracle_prop_prin1_adv_special_char_escaping() {
   (prin1-to-string "hello")
   ;; Empty string
   (prin1-to-string ""))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"\\\"line1\nline2\\\"\" \"\\\"col1\tcol2\\\"\" \"\\\"she said \\\\\\\"hello\\\\\\\"\\\"\" \"\\\"path\\\\\\\\to\\\\\\\\file\\\"\" \"\\\"before\\rafter\\\"\" \"\\\"a\nb\tc\\\\\\\\d\\\\\\\"e\\\"\" \"\\\"\n\n\n\\\"\" \"\\\"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\"\" \"\\\"\t\n\\\\\\\"\\\\\\\\\\\"\" \"\\\"hello\\\"\" \"\\\"\\\"\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"\\\"line1\nline2\\\"\" \"\\\"col1\tcol2\\\"\" \"\\\"she said \\\\\\\"hello\\\\\\\"\\\"\" \"\\\"path\\\\\\\\to\\\\\\\\file\\\"\" \"\\\"before\\rafter\\\"\" \"\\\"a\nb\tc\\\\\\\\d\\\\\\\"e\\\"\" \"\\\"\n\n\n\\\"\" \"\\\"\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\"\" \"\\\"\t\n\\\\\\\"\\\\\\\\\\\"\" \"\\\"hello\\\"\" \"\\\"\\\"\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -221,12 +211,10 @@ fn oracle_prop_prin1_adv_noescape_argument() {
   ;; nil and t
   (prin1-to-string nil nil)
   (prin1-to-string nil t))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"\\\"hello\\\"\" \"hello\" \"\\\"say \\\\\\\"hi\\\\\\\"\\\"\" \"say \\\"hi\\\"\" \"foo\" \"foo\" \"(1 \\\"two\\\" three)\" \"(1 two three)\" t \"nil\" \"nil\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"\\\"hello\\\"\" \"hello\" \"\\\"say \\\\\\\"hi\\\\\\\"\\\"\" \"say \\\"hi\\\"\" \"foo\" \"foo\" \"(1 \\\"two\\\" three)\" \"(1 two three)\" t \"nil\" \"nil\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -263,12 +251,10 @@ fn oracle_prop_prin1_adv_roundtrip_complex_structures() {
              (match (equal orig restored)))
         (list match printed)))
     structures))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t \"(1 2.5 \\\"three\\\" four :five)\") (t \"((a (b . 1) (c . 2)) (d (e . 3) (f . 4)))\") (t \"['(1 2 3) '(4 5 6) '(7 8 9)]\") (t \"(level1 (level2 (level3 (level4 \\\"bottom\\\"))))\") (t \"(1 2 3 . end)\") (t \"((\\\"row1\\\" . [1 2 3]) (\\\"row2\\\" . [4 5 6]))\") (t \"'hello\") (t \"(t nil t nil)\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t \"(1 2.5 \\\"three\\\" four :five)\") (t \"((a (b . 1) (c . 2)) (d (e . 3) (f . 4)))\") (t \"['(1 2 3) '(4 5 6) '(7 8 9)]\") (t \"(level1 (level2 (level3 (level4 \\\"bottom\\\"))))\") (t \"(1 2 3 . end)\") (t \"((\\\"row1\\\" . [1 2 3]) (\\\"row2\\\" . [4 5 6]))\") (t \"'hello\") (t \"(t nil t nil)\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -329,8 +315,6 @@ fn oracle_prop_prin1_adv_serialize_record_system() {
     (fmakunbound 'neovm--test-record-get)
     (fmakunbound 'neovm--test-serialize-db)
     (fmakunbound 'neovm--test-deserialize-db)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t \"Alice\" 25 92 274 3)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t \"Alice\" 25 92 274 3)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

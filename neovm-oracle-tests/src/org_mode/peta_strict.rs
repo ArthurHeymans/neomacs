@@ -10,6 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn peta_all_parse_buffer_granularity_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -28,7 +29,7 @@ fn peta_all_parse_buffer_granularity_combinations() {
        (length (org-element-map (org-element-parse-buffer 'object) t #'identity))
        ;; Headline granularity.
        (length (org-element-map (org-element-parse-buffer 'headline) t #'identity)))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -39,6 +40,7 @@ fn peta_all_parse_buffer_granularity_combinations() {
 #[test]
 fn peta_all_cache_map_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -50,7 +52,7 @@ fn peta_all_cache_map_combinations() {
       (list
        ;; Cache map with element granularity.
        (org-element-cache-map #'car :granularity 'element))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -61,6 +63,7 @@ fn peta_all_cache_map_combinations() {
 #[test]
 fn peta_all_cache_shift_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (18 . 23)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -76,7 +79,7 @@ fn peta_all_cache_shift_combinations() {
       (let ((element (org-element-at-point)))
         (cons (org-element-property :begin element)
               (org-element-property :end element))))))"##,
-        expect_test::expect![[r#""OK (18 . 23)""#]],
+        expect,
     );
 }
 
@@ -87,6 +90,7 @@ fn peta_all_cache_shift_combinations() {
 #[test]
 fn peta_all_cache_reparent_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK item""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -104,7 +108,7 @@ fn peta_all_cache_reparent_combinations() {
       (goto-char (point-max))
       (org-element-type
        (org-element-property :parent (org-element-at-point))))))"##,
-        expect_test::expect![[r#""OK item""#]],
+        expect,
     );
 }
 
@@ -115,6 +119,7 @@ fn peta_all_cache_reparent_combinations() {
 #[test]
 fn peta_all_cache_sensitive_change_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (search-failed \"Para2\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -137,7 +142,7 @@ fn peta_all_cache_sensitive_change_combinations() {
        (insert "#+BEGIN_EXAMPLE\n")
        (search-forward "Para2")
        (org-element-type (org-element-at-point))))))"##,
-        expect_test::expect![[r#""ERR (search-failed \"Para2\")""#]],
+        expect,
     );
 }
 
@@ -148,6 +153,7 @@ fn peta_all_cache_sensitive_change_combinations() {
 #[test]
 fn peta_all_cache_intersecting_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK paragraph""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -161,7 +167,7 @@ fn peta_all_cache_intersecting_combinations() {
       (org-element-at-point)
       (insert "#+BEGIN_EXAMPLE")
       (org-element-type (org-element-at-point)))))"##,
-        expect_test::expect![[r#""OK paragraph""#]],
+        expect,
     );
 }
 
@@ -172,6 +178,7 @@ fn peta_all_cache_intersecting_combinations() {
 #[test]
 fn peta_all_cache_merge_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 . 18)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -187,7 +194,7 @@ fn peta_all_cache_merge_combinations() {
       (let ((element (org-element-at-point)))
         (cons (org-element-property :begin element)
               (org-element-property :end element))))))"##,
-        expect_test::expect![[r#""OK (1 . 18)""#]],
+        expect,
     );
 }
 
@@ -198,6 +205,7 @@ fn peta_all_cache_merge_combinations() {
 #[test]
 fn peta_all_cache_fixed_width_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 . 32)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -214,7 +222,7 @@ fn peta_all_cache_fixed_width_combinations() {
       (let ((element (org-element-at-point)))
         (cons (org-element-property :begin element)
               (org-element-property :end element))))))"##,
-        expect_test::expect![[r#""OK (1 . 32)""#]],
+        expect,
     );
 }
 
@@ -225,6 +233,7 @@ fn peta_all_cache_fixed_width_combinations() {
 #[test]
 fn peta_all_cache_post_blank_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (drawer 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -237,7 +246,7 @@ fn peta_all_cache_post_blank_combinations() {
       (list
        (org-element-type (org-element-at-point))
        (org-element-property :post-blank (org-element-at-point (point-min)))))))"##,
-        expect_test::expect![[r#""OK (drawer 0)""#]],
+        expect,
     );
 }
 
@@ -248,6 +257,7 @@ fn peta_all_cache_post_blank_combinations() {
 #[test]
 fn peta_all_cache_edit_near_end_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK paragraph""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -262,7 +272,7 @@ fn peta_all_cache_edit_near_end_combinations() {
       (backward-char 3)
       (insert "Blah")
       (org-element-type (org-element-at-point)))))"##,
-        expect_test::expect![[r#""OK paragraph""#]],
+        expect,
     );
 }
 
@@ -273,6 +283,7 @@ fn peta_all_cache_edit_near_end_combinations() {
 #[test]
 fn peta_all_cache_partial_shift_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -289,7 +300,7 @@ fn peta_all_cache_partial_shift_combinations() {
         (equal (cons (org-element-property :begin element)
                      (org-element-property :end element))
                (cons (point-min) (point-max)))))))"##,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -300,6 +311,7 @@ fn peta_all_cache_partial_shift_combinations() {
 #[test]
 fn peta_all_cache_preserve_structures_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK table""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -315,7 +327,7 @@ fn peta_all_cache_preserve_structures_combinations() {
       (beginning-of-line)
       (org-element-type
        (org-element-property :parent (org-element-at-point))))))"##,
-        expect_test::expect![[r#""OK table""#]],
+        expect,
     );
 }
 
@@ -326,6 +338,7 @@ fn peta_all_cache_preserve_structures_combinations() {
 #[test]
 fn peta_all_cache_list_structures_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 2""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -341,7 +354,7 @@ fn peta_all_cache_list_structures_combinations() {
       (search-forward "- item")
       (beginning-of-line)
       (length (org-element-property :structure (org-element-at-point))))))"##,
-        expect_test::expect![[r#""OK 2""#]],
+        expect,
     );
 }
 
@@ -352,6 +365,7 @@ fn peta_all_cache_list_structures_combinations() {
 #[test]
 fn peta_all_cache_remove_sensitive_line_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (end-of-buffer)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -366,7 +380,7 @@ fn peta_all_cache_remove_sensitive_line_combinations() {
       (delete-char 1)
       (search-forward "Para2")
       (org-element-type (org-element-at-point)))))"##,
-        expect_test::expect![[r#""ERR (end-of-buffer)""#]],
+        expect,
     );
 }
 
@@ -377,6 +391,7 @@ fn peta_all_cache_remove_sensitive_line_combinations() {
 #[test]
 fn peta_all_cache_slurp_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK paragraph""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -393,7 +408,7 @@ fn peta_all_cache_slurp_combinations() {
       (insert "#+BEGIN_EXAMPLE")
       (re-search-forward "P2")
       (org-element-type (org-element-at-point)))))"##,
-        expect_test::expect![[r#""OK paragraph""#]],
+        expect,
     );
 }
 
@@ -404,6 +419,9 @@ fn peta_all_cache_slurp_combinations() {
 #[test]
 fn peta_all_cache_empty_line_end_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (headline (:standard-properties [1 1 nil nil 5 0 (:title) first-section element t nil nil nil 1 #<killed buffer> [org-element-deferred org-element--headline-deferred nil t] nil (org-data (:standard-properties [1 1 1 5 5 0 nil org-data nil t nil 3 5 nil #<killed buffer> [org-element-deferred org-element--get-global-node-properties nil t] nil nil] :pre-blank 0 :path nil))] :pre-blank 0 :raw-value [org-element-deferred org-element--headline-parse-title (t) t] :title [org-element-deferred org-element--headline-parse-title (t) t] :level [org-element-deferred org-element--headline-parse-title (t) t] :priority [org-element-deferred org-element--headline-parse-title (t) t] :tags [org-element-deferred org-element--headline-parse-title (t) t] :todo-keyword [org-element-deferred org-element--headline-parse-title (t) t] :todo-type [org-element-deferred org-element--headline-parse-title (t) t] :footnote-section-p [org-element-deferred org-element--headline-parse-title (t) t] :archivedp [org-element-deferred org-element--headline-parse-title (t) t] :commentedp [org-element-deferred org-element--headline-parse-title (t) t]))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -415,9 +433,7 @@ fn peta_all_cache_empty_line_end_combinations() {
       (goto-char (point-min))
       (forward-line)
       (or (org-element-at-point) t))))"##,
-        expect_test::expect![[
-            r#""OK (headline (:standard-properties [1 1 nil nil 5 0 (:title) first-section element t nil nil nil 1 #<killed buffer> [org-element-deferred org-element--headline-deferred nil t] nil (org-data (:standard-properties [1 1 1 5 5 0 nil org-data nil t nil 3 5 nil #<killed buffer> [org-element-deferred org-element--get-global-node-properties nil t] nil nil] :pre-blank 0 :path nil))] :pre-blank 0 :raw-value [org-element-deferred org-element--headline-parse-title (t) t] :title [org-element-deferred org-element--headline-parse-title (t) t] :level [org-element-deferred org-element--headline-parse-title (t) t] :priority [org-element-deferred org-element--headline-parse-title (t) t] :tags [org-element-deferred org-element--headline-parse-title (t) t] :todo-keyword [org-element-deferred org-element--headline-parse-title (t) t] :todo-type [org-element-deferred org-element--headline-parse-title (t) t] :footnote-section-p [org-element-deferred org-element--headline-parse-title (t) t] :archivedp [org-element-deferred org-element--headline-parse-title (t) t] :commentedp [org-element-deferred org-element--headline-parse-title (t) t]))""#
-        ]],
+        expect,
     );
 }
 
@@ -428,6 +444,7 @@ fn peta_all_cache_empty_line_end_combinations() {
 #[test]
 fn peta_all_cache_drawer_end_combinations() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (drawer drawer)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -445,6 +462,6 @@ fn peta_all_cache_drawer_end_combinations() {
        (goto-char (point-min))
        (forward-line 2)
        (org-element-type (org-element-at-point))))))"##,
-        expect_test::expect![[r#""OK (drawer drawer)""#]],
+        expect,
     );
 }

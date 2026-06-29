@@ -31,10 +31,8 @@ fn oracle_prop_text_property_search_forward_distinct_regions() {
       (nreverse out))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 4 bold 4) (5 8 italic 8) (9 12 italic 12))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 4 bold 4) (5 8 italic 8) (9 12 italic 12))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -74,10 +72,8 @@ fn oracle_prop_text_property_search_value_and_predicate_semantics() {
              (prop-match-value member-token))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((6 9 word) (1 6 number) (6 9 word))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((6 9 word) (1 6 number) (6 9 word))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -110,10 +106,8 @@ fn oracle_prop_text_property_search_backward_and_not_current() {
                   (point)))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((12 15 input 7) (7 11 input 7))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((12 15 input 7) (7 11 input 7))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -135,8 +129,6 @@ fn oracle_prop_text_property_search_miss_restores_point() {
       (list forward after-forward backward after-backward))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil 4 nil 7)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil 4 nil 7)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

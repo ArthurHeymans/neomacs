@@ -40,10 +40,8 @@ fn oracle_prop_gnu_buffer_local_boundp_uses_buffer_local_value_contract() {
       (when (buffer-live-p buf-b) (kill-buffer buf-b)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (t t t t t nil (wrong-type-argument bufferp))""#],
-    );
+    let expect = expect_test::expect![r#""OK (t t t t t nil (wrong-type-argument bufferp))""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -79,12 +77,10 @@ fn oracle_prop_gnu_buffer_local_set_state_restores_local_global_and_void_vars() 
                (local-variable-p 'neomacs--oracle-blss-c)))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((((neomacs--oracle-blss-a t local-a) (neomacs--oracle-blss-b nil global-b) (neomacs--oracle-blss-c nil nil)) new-a new-b new-c t t t) (local-a global-b nil t nil nil))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((((neomacs--oracle-blss-a t local-a) (neomacs--oracle-blss-b nil global-b) (neomacs--oracle-blss-c nil nil)) new-a new-b new-c t t t) (local-a global-b nil t nil nil))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -111,12 +107,10 @@ fn oracle_prop_gnu_buffer_local_set_state_get_records_current_buffer_only() {
       (kill-buffer other))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (((neomacs--oracle-blss-current t current-local) (neomacs--oracle-blss-other nil global-other)) other-local other-local)""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (((neomacs--oracle-blss-current t current-local) (neomacs--oracle-blss-other nil global-other)) other-local other-local)""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -129,8 +123,7 @@ fn oracle_prop_gnu_buffer_local_set_state_rejects_odd_pairs_at_macroexpand() {
   (error err))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK (wrong-number-of-arguments buffer-local-set-state 3)""#],
-    );
+    let expect =
+        expect_test::expect![r#""OK (wrong-number-of-arguments buffer-local-set-state 3)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

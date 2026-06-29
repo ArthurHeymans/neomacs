@@ -10,6 +10,9 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn upstream_org_element_lineage_map() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((paragraph center-block section headline headline org-data) (bold paragraph center-block section headline headline org-data) (\"H2\" \"H1\") bold)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -32,9 +35,7 @@ fn upstream_org_element_lineage_map() {
        ;; FIRST-MATCH.
        (org-element-lineage-map
         (org-element-context) #'org-element-type nil t t)))))"##,
-        expect_test::expect![[
-            r#""OK ((paragraph center-block section headline headline org-data) (bold paragraph center-block section headline headline org-data) (\"H2\" \"H1\") bold)""#
-        ]],
+        expect,
     );
 }
 
@@ -43,6 +44,7 @@ fn upstream_org_element_lineage_map() {
 #[test]
 fn upstream_org_element_property_inherited() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (bar baz (bar baz) nil \"nil\" (bar value))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -88,7 +90,7 @@ fn upstream_org_element_property_inherited() {
            'parent '(:foo bar :extra value)
            (org-element-create 'child '(:foo baz)))))
     nil 'accumulate)))"##,
-        expect_test::expect![[r#""OK (bar baz (bar baz) nil \"nil\" (bar value))""#]],
+        expect,
     );
 }
 
@@ -97,6 +99,9 @@ fn upstream_org_element_property_inherited() {
 #[test]
 fn upstream_org_element_cache_map() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((org-data headline section drawer paragraph headline) (org-data headline section drawer paragraph))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -116,9 +121,7 @@ fn upstream_org_element_cache_map() {
        (insert "* headline\n:DRAWER:\nparagraph\n:END:")
        (goto-char (point-min))
        (org-element-cache-map #'car :granularity 'element)))))"##,
-        expect_test::expect![[
-            r#""OK ((org-data headline section drawer paragraph headline) (org-data headline section drawer paragraph))""#
-        ]],
+        expect,
     );
 }
 
@@ -127,6 +130,7 @@ fn upstream_org_element_cache_map() {
 #[test]
 fn upstream_org_element_cache_shift_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (18 . 23)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -144,13 +148,14 @@ fn upstream_org_element_cache_shift_positions() {
       (let ((element (org-element-at-point)))
         (cons (org-element-property :begin element)
               (org-element-property :end element))))))"##,
-        expect_test::expect![[r#""OK (18 . 23)""#]],
+        expect,
     );
 }
 
 #[test]
 fn upstream_org_element_cache_reparent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK item""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -170,13 +175,14 @@ fn upstream_org_element_cache_reparent() {
       (goto-char (point-max))
       (org-element-type
        (org-element-property :parent (org-element-at-point))))))"##,
-        expect_test::expect![[r#""OK item""#]],
+        expect,
     );
 }
 
 #[test]
 fn upstream_org_element_cache_sensitive_change() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (search-failed \"Para2\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -202,13 +208,14 @@ fn upstream_org_element_cache_sensitive_change() {
        (insert "#+BEGIN_EXAMPLE\n")
        (search-forward "Para2")
        (org-element-type (org-element-at-point))))))"##,
-        expect_test::expect![[r#""ERR (search-failed \"Para2\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn upstream_org_element_cache_intersecting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK paragraph""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -224,13 +231,14 @@ fn upstream_org_element_cache_intersecting() {
       (org-element-at-point)
       (insert "#+BEGIN_EXAMPLE")
       (org-element-type (org-element-at-point)))))"##,
-        expect_test::expect![[r#""OK paragraph""#]],
+        expect,
     );
 }
 
 #[test]
 fn upstream_org_element_cache_merge_paragraphs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 . 18)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -248,13 +256,14 @@ fn upstream_org_element_cache_merge_paragraphs() {
       (let ((element (org-element-at-point)))
         (cons (org-element-property :begin element)
               (org-element-property :end element))))))"##,
-        expect_test::expect![[r#""OK (1 . 18)""#]],
+        expect,
     );
 }
 
 #[test]
 fn upstream_org_element_cache_fixed_width() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 . 32)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -273,7 +282,7 @@ fn upstream_org_element_cache_fixed_width() {
       (let ((element (org-element-at-point)))
         (cons (org-element-property :begin element)
               (org-element-property :end element))))))"##,
-        expect_test::expect![[r#""OK (1 . 32)""#]],
+        expect,
     );
 }
 
@@ -282,6 +291,7 @@ fn upstream_org_element_cache_fixed_width() {
 #[test]
 fn upstream_org_element_cache_post_blank() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (drawer 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -296,7 +306,7 @@ fn upstream_org_element_cache_post_blank() {
       (list
        (org-element-type (org-element-at-point))
        (org-element-property :post-blank (org-element-at-point (point-min)))))))"##,
-        expect_test::expect![[r#""OK (drawer 0)""#]],
+        expect,
     );
 }
 
@@ -305,6 +315,7 @@ fn upstream_org_element_cache_post_blank() {
 #[test]
 fn upstream_org_element_cache_edit_near_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK paragraph""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -321,7 +332,7 @@ fn upstream_org_element_cache_edit_near_end() {
       (backward-char 3)
       (insert "Blah")
       (org-element-type (org-element-at-point)))))"##,
-        expect_test::expect![[r#""OK paragraph""#]],
+        expect,
     );
 }
 
@@ -330,6 +341,7 @@ fn upstream_org_element_cache_edit_near_end() {
 #[test]
 fn upstream_org_element_cache_partial_shift() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -348,7 +360,7 @@ fn upstream_org_element_cache_partial_shift() {
         (equal (cons (org-element-property :begin element)
                      (org-element-property :end element))
                (cons (point-min) (point-max)))))))"##,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -357,6 +369,7 @@ fn upstream_org_element_cache_partial_shift() {
 #[test]
 fn upstream_org_element_cache_preserve_structures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK table""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -374,7 +387,7 @@ fn upstream_org_element_cache_preserve_structures() {
       (beginning-of-line)
       (org-element-type
        (org-element-property :parent (org-element-at-point))))))"##,
-        expect_test::expect![[r#""OK table""#]],
+        expect,
     );
 }
 
@@ -383,6 +396,7 @@ fn upstream_org_element_cache_preserve_structures() {
 #[test]
 fn upstream_org_element_cache_list_structures() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 2""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -400,7 +414,7 @@ fn upstream_org_element_cache_list_structures() {
       (search-forward "- item")
       (beginning-of-line)
       (length (org-element-property :structure (org-element-at-point))))))"##,
-        expect_test::expect![[r#""OK 2""#]],
+        expect,
     );
 }
 
@@ -409,6 +423,7 @@ fn upstream_org_element_cache_list_structures() {
 #[test]
 fn upstream_org_element_cache_remove_sensitive_line() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (end-of-buffer)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -425,7 +440,7 @@ fn upstream_org_element_cache_remove_sensitive_line() {
       (delete-char 1)
       (search-forward "Para2")
       (org-element-type (org-element-at-point))))))"##,
-        expect_test::expect![[r#""ERR (end-of-buffer)""#]],
+        expect,
     );
 }
 
@@ -434,6 +449,7 @@ fn upstream_org_element_cache_remove_sensitive_line() {
 #[test]
 fn upstream_org_element_cache_slurp() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK paragraph""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -452,7 +468,7 @@ fn upstream_org_element_cache_slurp() {
       (insert "#+BEGIN_EXAMPLE")
       (re-search-forward "P2")
       (org-element-type (org-element-at-point)))))"##,
-        expect_test::expect![[r#""OK paragraph""#]],
+        expect,
     );
 }
 
@@ -461,6 +477,9 @@ fn upstream_org_element_cache_slurp() {
 #[test]
 fn upstream_org_element_cache_empty_line_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (headline (:standard-properties [1 1 nil nil 5 0 (:title) first-section element t nil nil nil 1 #<killed buffer> [org-element-deferred org-element--headline-deferred nil t] nil (org-data (:standard-properties [1 1 1 5 5 0 nil org-data nil t nil 3 5 nil #<killed buffer> [org-element-deferred org-element--get-global-node-properties nil t] nil nil] :pre-blank 0 :path nil))] :pre-blank 0 :raw-value [org-element-deferred org-element--headline-parse-title (t) t] :title [org-element-deferred org-element--headline-parse-title (t) t] :level [org-element-deferred org-element--headline-parse-title (t) t] :priority [org-element-deferred org-element--headline-parse-title (t) t] :tags [org-element-deferred org-element--headline-parse-title (t) t] :todo-keyword [org-element-deferred org-element--headline-parse-title (t) t] :todo-type [org-element-deferred org-element--headline-parse-title (t) t] :footnote-section-p [org-element-deferred org-element--headline-parse-title (t) t] :archivedp [org-element-deferred org-element--headline-parse-title (t) t] :commentedp [org-element-deferred org-element--headline-parse-title (t) t]))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -474,9 +493,7 @@ fn upstream_org_element_cache_empty_line_end() {
       (goto-char (point-min))
       (forward-line)
       (or (org-element-at-point) t))))"##,
-        expect_test::expect![[
-            r#""OK (headline (:standard-properties [1 1 nil nil 5 0 (:title) first-section element t nil nil nil 1 #<killed buffer> [org-element-deferred org-element--headline-deferred nil t] nil (org-data (:standard-properties [1 1 1 5 5 0 nil org-data nil t nil 3 5 nil #<killed buffer> [org-element-deferred org-element--get-global-node-properties nil t] nil nil] :pre-blank 0 :path nil))] :pre-blank 0 :raw-value [org-element-deferred org-element--headline-parse-title (t) t] :title [org-element-deferred org-element--headline-parse-title (t) t] :level [org-element-deferred org-element--headline-parse-title (t) t] :priority [org-element-deferred org-element--headline-parse-title (t) t] :tags [org-element-deferred org-element--headline-parse-title (t) t] :todo-keyword [org-element-deferred org-element--headline-parse-title (t) t] :todo-type [org-element-deferred org-element--headline-parse-title (t) t] :footnote-section-p [org-element-deferred org-element--headline-parse-title (t) t] :archivedp [org-element-deferred org-element--headline-parse-title (t) t] :commentedp [org-element-deferred org-element--headline-parse-title (t) t]))""#
-        ]],
+        expect,
     );
 }
 
@@ -485,6 +502,7 @@ fn upstream_org_element_cache_empty_line_end() {
 #[test]
 fn upstream_org_element_cache_drawer_end() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (drawer drawer)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -505,7 +523,7 @@ fn upstream_org_element_cache_drawer_end() {
         (goto-char (point-min))
         (forward-line 2)
         (org-element-type (org-element-at-point))))))"##,
-        expect_test::expect![[r#""OK (drawer drawer)""#]],
+        expect,
     );
 }
 
@@ -513,6 +531,7 @@ fn upstream_org_element_cache_drawer_end() {
 fn org_element_parse_cache_edit_reparse_deep_state_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 48)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -549,6 +568,6 @@ fn org_element_parse_cache_edit_reparse_deep_state_combo() {
           (list headlines-1 headlines-2 headlines-3
                 (buffer-substring-no-properties
                  (point-min) (point-max)))))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 35 48)""#]],
+        expect,
     );
 }

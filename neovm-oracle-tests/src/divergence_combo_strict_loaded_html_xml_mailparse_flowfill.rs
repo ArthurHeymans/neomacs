@@ -11,6 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_h5_html_escape_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function html-escape-string)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (html-escape-string "<a href=\"x\">&amp;</a>")
@@ -18,13 +19,14 @@ fn div_h5_html_escape_string() {
       (length (html-escape-string "&<>\"'")))
 "##,
         &["textmodes/sgml-mode.el"],
-        expect_test::expect![[r#""ERR (void-function html-escape-string)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_h5_xml_parse_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (root (a b))""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
@@ -34,13 +36,14 @@ fn div_h5_xml_parse_region() {
           (and parsed (mapcar #'xml-node-name (xml-node-children (car parsed)))))))
 "##,
         &["xml.el"],
-        expect_test::expect![[r#""OK (root (a b))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_h5_mail_header_parse_address_list() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function mail-header-parse-address-list)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (mail-header-parse-address-list "a@b.com, c@d.com")
@@ -48,28 +51,30 @@ fn div_h5_mail_header_parse_address_list() {
       (length (mail-header-parse-address-list "a@b.com, c@d.com, e@f.com")))
 "##,
         &["mail/mail-parse.el"],
-        expect_test::expect![[r#""ERR (void-function mail-header-parse-address-list)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_h5_fill_flowed() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (error \"No buffer named line one\nline two\nline three\")""#
+    ]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (list (fill-flowed "line one\nline two\nline three")
       (fill-flowed "> soft\n> wrap\n> here"))
 "##,
         &["mail/flow-fill.el"],
-        expect_test::expect![[
-            r#""ERR (error \"No buffer named line one\nline two\nline three\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_h5_xml_parse_attributes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"1\" \"two\" nil 1)""#]];
     crate::common::assert_oracle_parity_with_load_expect(
         r##"
 (with-temp-buffer
@@ -81,6 +86,6 @@ fn div_h5_xml_parse_attributes() {
           (length (xml-node-children parsed)))))
 "##,
         &["xml.el"],
-        expect_test::expect![[r#""OK (\"1\" \"two\" nil 1)""#]],
+        expect,
     );
 }

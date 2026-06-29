@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx111_read_from_buffer_at_point() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((alpha beta (gamma delta)) 27 trailing)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -15,13 +16,16 @@ fn div_cx111_read_from_buffer_at_point() {
   (let ((obj (read (current-buffer))))
     (list obj (point) (read (current-buffer)))))
 "##,
-        expect_test::expect![[r#""OK ((alpha beta (gamma delta)) 27 trailing)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx111_read_special_syntaxes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ([1 2 3] (:err . invalid-read-syntax) (:err . invalid-read-syntax) #s(record a b c) 65 1 134217825 65 233 16 15 10 1.5 1/2 1000.0 1000000000000000000000000 1e-06)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (s)
@@ -46,15 +50,14 @@ fn div_cx111_read_special_syntaxes() {
           "1000000000000000000000000"
           "0.000001"))
 "##,
-        expect_test::expect![[
-            r#""OK ([1 2 3] (:err . invalid-read-syntax) (:err . invalid-read-syntax) #s(record a b c) 65 1 134217825 65 233 16 15 10 1.5 1/2 1000.0 1000000000000000000000000 1e-06)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx111_read_with_circular_ref_when_print_circle_t() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r##""OK (\"#1=(1 2 3 . #1#)\" 1 2 3)""##]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((obj (list 1 2 3)))
@@ -67,13 +70,15 @@ fn div_cx111_read_with_circular_ref_when_print_circle_t() {
           (cadr read-back)
           (caddr read-back))))
 "##,
-        expect_test::expect![[r##""OK (\"#1=(1 2 3 . #1#)\" 1 2 3)""##]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx111_read_with_shared_refs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK (\"(#1=(1 2 3) #1# #1#)\" ((1 2 3) (1 2 3) (1 2 3)))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((shared (list 1 2 3))
@@ -82,13 +87,16 @@ fn div_cx111_read_with_shared_refs() {
     (list printed
           (car (read-from-string printed)))))
 "##,
-        expect_test::expect![[r#""OK (\"(#1=(1 2 3) #1# #1#)\" ((1 2 3) (1 2 3) (1 2 3)))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx111_read_invalid_syntax_errors() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (end-of-file end-of-file {open invalid-read-syntax end-of-file invalid-read-syntax end-of-file 1.2.3 invalid-read-syntax)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (s)
@@ -105,28 +113,28 @@ fn div_cx111_read_invalid_syntax_errors() {
           "1.2.3"
           "#xZZZ"))
 "##,
-        expect_test::expect![[
-            r#""OK (end-of-file end-of-file {open invalid-read-syntax end-of-file invalid-read-syntax end-of-file 1.2.3 invalid-read-syntax)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx111_read_with_comments_and_whitespace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK symbol""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (car (read-from-string "  ; comment\n  symbol  ; another\n  after"))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK symbol""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx111_read_multiple_objects_from_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (alpha beta gamma delta)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((s "alpha beta gamma delta")
@@ -138,13 +146,16 @@ fn div_cx111_read_multiple_objects_from_string() {
       (setq pos (cdr res))))
   (nreverse results))
 "##,
-        expect_test::expect![[r#""OK (alpha beta gamma delta)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx111_read_multibyte_symbols() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((α symbol) (Ω-symbol symbol) (世界 symbol) (café symbol) (\"café\" string))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (s)
@@ -158,15 +169,16 @@ fn div_cx111_read_multibyte_symbols() {
           "café"
           "\"café\""))
 "##,
-        expect_test::expect![[
-            r#""OK ((α symbol) (Ω-symbol symbol) (世界 symbol) (café symbol) (\"café\" string))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx111_read_string_escaped_quotes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"simple\" \"with \\\"escaped\\\"\" \"with \\\\ backslash\" \"with \n newline\" \"with \t tab\" \"\" \"é\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (s)
@@ -181,15 +193,15 @@ fn div_cx111_read_string_escaped_quotes() {
           "\"\""
           "\"\\u00e9\""))
 "##,
-        expect_test::expect![[
-            r#""OK (\"simple\" \"with \\\"escaped\\\"\" \"with \\\\ backslash\" \"with \n newline\" \"with \t tab\" \"\" \"é\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx111_read_kv_cons_cells_and_dotted_pairs() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((a . b) (a b . c) (a b c . d) ((a . 1) (b . 2)) (nil))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (mapcar (lambda (s)
@@ -202,13 +214,14 @@ fn div_cx111_read_kv_cons_cells_and_dotted_pairs() {
           "((a . 1) (b . 2))"
           "(nil . nil)"))
 "##,
-        expect_test::expect![[r#""OK ((a . b) (a b . c) (a b c . d) ((a . 1) (b . 2)) (nil))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx111_read_byte_code_function_objects() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored invalid-read-syntax)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -216,13 +229,14 @@ fn div_cx111_read_byte_code_function_objects() {
           (car (read-from-string "#s(hash-table size 10 test eq data (a 1 b 2))")))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored invalid-read-syntax)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx111_read_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((data "((name . \"alpha\") (value . 42) (tags . (a b c)))")
@@ -249,6 +263,6 @@ fn div_cx111_read_with_marker_overlay_undo_narrow_mega() {
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

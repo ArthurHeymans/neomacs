@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx195_point_and_motion_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 1 6 nil 6 0 7 7 12)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -23,13 +24,14 @@ fn div_cx195_point_and_motion_basic() {
         (line-beginning-position)
         (line-end-position)))
 "##,
-        expect_test::expect![[r#""OK (1 1 6 nil 6 0 7 7 12)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx195_region_and_mark_interactions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 10 3 nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -44,13 +46,14 @@ fn div_cx195_region_and_mark_interactions() {
         (deactivate-mark)
         (region-active-p)))
 "##,
-        expect_test::expect![[r#""OK (3 10 3 nil nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx195_save_excursion_restores_point_and_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx195-se*")))
@@ -68,13 +71,14 @@ fn div_cx195_save_excursion_restores_point_and_buffer() {
           (with-current-buffer buf (point))))
   (kill-buffer buf))
 "##,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx195_save_restriction_restores_bounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 10 5 10)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -88,13 +92,14 @@ fn div_cx195_save_restriction_restores_bounds() {
     (list narrowed-min narrowed-max
           (point-min) (point-max))))
 "##,
-        expect_test::expect![[r#""OK (5 10 5 10)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx195_narrow_then_motion_respects_bounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (end-of-buffer)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -109,13 +114,14 @@ fn div_cx195_narrow_then_motion_respects_bounds() {
         (forward-line 0)
         (point)))
 "##,
-        expect_test::expect![[r#""ERR (end-of-buffer)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx195_exchange_point_and_mark_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (8 2 2 8 t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -131,13 +137,14 @@ fn div_cx195_exchange_point_and_mark_round_trip() {
             (= p-before m-after)
             (= m-before p-after)))))
 "##,
-        expect_test::expect![[r#""OK (8 2 2 8 t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx195_point_min_max_after_widen() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 11 nil 3 7 nil 1 11)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -148,13 +155,14 @@ fn div_cx195_point_min_max_after_widen() {
         (widen)
         (point-min) (point-max)))
 "##,
-        expect_test::expect![[r#""OK (1 11 nil 3 7 nil 1 11)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx195_count_lines_with_narrowing() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (5 nil 2 nil 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -165,13 +173,14 @@ fn div_cx195_count_lines_with_narrowing() {
         (widen)
         (count-lines (point-min) (point-max))))
 "##,
-        expect_test::expect![[r#""OK (5 nil 2 nil 5)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx195_what_line_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"Line 3\" 3 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -182,13 +191,14 @@ fn div_cx195_what_line_query() {
         (line-number-at-pos)
         (current-column)))
 "##,
-        expect_test::expect![[r#""OK (\"Line 3\" 3 0)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx195_motion_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -221,6 +231,6 @@ fn div_cx195_motion_with_marker_overlay_undo_narrow_mega() {
             (overlay-start ov) (overlay-end ov)
             (text-properties-at 1)))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }

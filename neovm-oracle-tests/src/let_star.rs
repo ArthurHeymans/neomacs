@@ -10,10 +10,9 @@ use super::common::{ORACLE_PROP_CASES, assert_ok_eq, eval_oracle_and_neovm};
 fn oracle_prop_let_star_sequential_binding() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(let* ((x 1) (y (+ x 2))) y)",
-        expect_test::expect![[r#""OK 3""#]],
-    );
+    let expect = expect_test::expect![[r#""OK 3""#]];
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect("(let* ((x 1) (y (+ x 2))) y)", expect);
     assert_ok_eq("3", &oracle, &neovm);
 }
 

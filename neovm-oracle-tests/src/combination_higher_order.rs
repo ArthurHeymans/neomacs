@@ -43,7 +43,8 @@ fn oracle_prop_compose_pipe_chain() {
                      (funcall (funcall pipe add1 double square) 3)
                      ;; pipe with negate: 5 -> double -> negate -> add1 = -(5*2)+1 = -9
                      (funcall (funcall pipe double negate add1) 5))))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (-8 64 -9)""#]]);
+    let expect = expect_test::expect![[r#""OK (-8 64 -9)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -83,11 +84,10 @@ fn oracle_prop_currying_partial_application() {
                      (funcall (funcall partial mul3 2 3) 7)  ;; 42
                      (funcall (funcall partial sub 100) 30)  ;; 70
                      ;; partial with no initial args (identity wrapper)
-                     (funcall (funcall partial add) 3 4))))"; // 7
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (15 (11 30 5) 24 42 70 7)""#]],
-    );
+                     (funcall (funcall partial add) 3 4))))";
+    let expect = expect_test::expect![[r#""OK (15 (11 30 5) 24 42 70 7)""#]];
+    // 7
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -133,12 +133,10 @@ fn oracle_prop_fold_complex_accumulators() {
                                   (cons (cons x 1) acc)))
                               nil
                               '(a a a b b c a a))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((d . 1) (c . 1) (b . 3) (a . 4)) (7 35 1 9) ((a . 2) (c . 1) (b . 2) (a . 3)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((d . 1) (c . 1) (b . 3) (a . 4)) (7 35 1 9) ((a . 2) (c . 1) (b . 2) (a . 3)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -174,10 +172,8 @@ fn oracle_prop_trampoline_mutual_recursion() {
                      (funcall trampoline (lambda () (funcall is-odd-thunk 7)))    ;; t
                      (funcall trampoline (lambda () (funcall is-odd-thunk 8)))))) ;; nil
 ";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil t nil t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil t nil t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -228,11 +224,10 @@ fn oracle_prop_church_encoding() {
                      (funcall ch-to-int ch-two)    ;; 2
                      (funcall ch-to-int three)     ;; 3
                      (funcall ch-to-int four)      ;; 4
-                     (funcall ch-to-int six))))"; // 6
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable three)""#]],
-    );
+                     (funcall ch-to-int six))))";
+    let expect = expect_test::expect![[r#""ERR (void-variable three)""#]];
+    // 6
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -277,10 +272,8 @@ fn oracle_prop_y_combinator() {
                      (funcall fib 6)     ;; 8
                      (funcall fib 10)))) ;; 55
 ";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 1 120 5040 0 1 8 55)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 1 120 5040 0 1 8 55)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -331,10 +324,8 @@ fn oracle_prop_higher_order_toolkit() {
                                      (lambda (x) (funcall iterate #'1+ x 3))
                                      (lambda (x) (funcall iterate (lambda (y) (* 2 y)) x 3)))
                             5)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((6 4 25) (t nil) (42 42 42 42) 10 256 (8 40))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((6 4 25) (t nil) (42 42 42 42) 10 256 (8 40))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -379,9 +370,8 @@ fn oracle_prop_endomorphism_monoid() {
                        (funcall (funcall endo-fold (list (lambda (x) (* x 3)))) 7)
                        ;; Different input through same pipeline
                        (funcall combined 0)       ;; ((((0+1)*2)-3)^2 = (-1)^2 = 1
-                       (funcall combined 10)))))"; // ((((10+1)*2)-3)^2 = (22-3)^2 = 361
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (81 11 42 21 1 361)""#]],
-    );
+                       (funcall combined 10)))))";
+    let expect = expect_test::expect![[r#""OK (81 11 42 21 1 361)""#]];
+    // ((((10+1)*2)-3)^2 = (22-3)^2 = 361
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_undo_replace_with_props_and_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""AA-XXXXXX-CC-DD-YYYYYY-FF-GG-HH-II-JJERR (wrong-type-argument listp t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AA-BB-CC-DD-EE-FF-GG-HH-II-JJ")
@@ -60,9 +63,7 @@ fn divergence_undo_replace_with_props_and_markers() {
             (get-text-property 22 'section) (eq (get-text-property 22 'section) 'h)
             (get-text-property 25 'section) (eq (get-text-property 25 'section) 'i)
             (get-text-property 28 'section) (eq (get-text-property 28 'section) 'j))))) "#,
-        expect_test::expect![[
-            r#""AA-XXXXXX-CC-DD-YYYYYY-FF-GG-HH-II-JJERR (wrong-type-argument listp t)""#
-        ]],
+        expect,
     );
 }
 
@@ -70,6 +71,8 @@ fn divergence_undo_replace_with_props_and_markers() {
 fn divergence_undo_narrow_insert_replace_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""ZZCC-WWWW-EE-FF-GG-HHERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AA-BB-CC-DD-EE-FF-GG-HH-II-JJ-KK-LL")
@@ -112,7 +115,7 @@ fn divergence_undo_narrow_insert_replace_chain() {
             (get-text-property 1 'region) (eq (get-text-property 1 'region) 'a)
             (get-text-property 13 'region) (eq (get-text-property 13 'region) 'b)
             (get-text-property 25 'region) (eq (get-text-property 25 'region) 'c))))) "#,
-        expect_test::expect![[r#""ZZCC-WWWW-EE-FF-GG-HHERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -120,6 +123,9 @@ fn divergence_undo_narrow_insert_replace_chain() {
 fn divergence_undo_kill_yank_with_overlay_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""BLOCK1---BLOCK2---BLOCK3---BLOCK4ERR (args-out-of-range 34 39)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "BLOCK1---BLOCK2---BLOCK3---BLOCK4")
@@ -160,9 +166,7 @@ fn divergence_undo_kill_yank_with_overlay_tracking() {
             (get-text-property 12 'block) (eq (get-text-property 12 'block) 'two)
             (get-text-property 23 'block) (eq (get-text-property 23 'block) 'three)
             (get-text-property 34 'block) (eq (get-text-property 34 'block) 'four))))) "#,
-        expect_test::expect![[
-            r#""BLOCK1---BLOCK2---BLOCK3---BLOCK4ERR (args-out-of-range 34 39)""#
-        ]],
+        expect,
     );
 }
 
@@ -170,6 +174,9 @@ fn divergence_undo_kill_yank_with_overlay_tracking() {
 fn divergence_undo_multiple_overlays_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""LINE1\n\nLINE3REPLACED-LINE\nMODIFIED\nLINE5ERR (wrong-type-argument listp t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "LINE1\nLINE2\nLINE3\nLINE4\nLINE5")
@@ -212,9 +219,7 @@ fn divergence_undo_multiple_overlays_with_props() {
           (get-text-property 13 'line) (= (get-text-property 13 'line) 3)
           (get-text-property 19 'line) (= (get-text-property 19 'line) 4)
           (get-text-property 25 'line) (= (get-text-property 25 'line) 5))))) "#,
-        expect_test::expect![[
-            r#""LINE1\n\nLINE3REPLACED-LINE\nMODIFIED\nLINE5ERR (wrong-type-argument listp t)""#
-        ]],
+        expect,
     );
 }
 
@@ -222,6 +227,7 @@ fn divergence_undo_multiple_overlays_with_props() {
 fn divergence_undo_with_overlay_evaporate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""KEEP-E-KEEPVE-KEEPERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "KEEP-REMOVE-KEEP-REMOVE-KEEP")
@@ -263,7 +269,7 @@ fn divergence_undo_with_overlay_evaporate() {
             (get-text-property 1 'zone) (eq (get-text-property 1 'zone) 'keep1)
             (get-text-property 6 'zone) (eq (get-text-property 6 'zone) 'remove1)
             (get-text-property 12 'zone) (eq (get-text-property 12 'zone) 'keep2))))) "#,
-        expect_test::expect![[r#""KEEP-E-KEEPVE-KEEPERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -271,6 +277,9 @@ fn divergence_undo_with_overlay_evaporate() {
 fn divergence_undo_regex_replace_preserve_intervals() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""tok1-SEPARATOR-tok2-SEPARATOR-tok3-SEPARATOR-tok4-SEPARATOR-tok5ERR (wrong-type-argument listp t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "tok1-sep-tok2-sep-tok3-sep-tok4-sep-tok5")
@@ -313,9 +322,7 @@ fn divergence_undo_regex_replace_preserve_intervals() {
             (marker-position m4) (= (marker-position m4) 13)
             (marker-position m5) (= (marker-position m5) 17)
             (marker-position m6) (= (marker-position m6) 21)))))) "#,
-        expect_test::expect![[
-            r#""tok1-SEPARATOR-tok2-SEPARATOR-tok3-SEPARATOR-tok4-SEPARATOR-tok5ERR (wrong-type-argument listp t)""#
-        ]],
+        expect,
     );
 }
 
@@ -323,6 +330,8 @@ fn divergence_undo_regex_replace_preserve_intervals() {
 fn divergence_undo_insert_delete_with_prop_transitions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""AAAABBBBCCCCDDDDEEEEERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAABBBBCCCCDDDDEEEE")
@@ -353,6 +362,6 @@ fn divergence_undo_insert_delete_with_prop_transitions() {
           (get-text-property 9 'color) (eq (get-text-property 9 'color) 'green)
           (get-text-property 13 'color) (eq (get-text-property 13 'color) 'yellow)
           (get-text-property 17 'color) (eq (get-text-property 17 'color) 'purple)))) "#,
-        expect_test::expect![[r#""AAAABBBBCCCCDDDDEEEEERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }

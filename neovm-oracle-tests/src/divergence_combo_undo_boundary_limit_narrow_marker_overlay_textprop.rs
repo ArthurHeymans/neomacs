@@ -14,6 +14,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_undo_boundary_chain_marker_overlay_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     // Multiple undo boundaries with markers/overlays/text-properties.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -71,7 +72,7 @@ fn combo_undo_boundary_chain_marker_overlay_textprop() {
                                    (get-text-property 16 'zone))))
                 (kill-buffer buf)
                 (list state-3 state-2 state-1 state-0))))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -79,6 +80,7 @@ fn combo_undo_boundary_chain_marker_overlay_textprop() {
 fn combo_undo_narrow_marker_overlay_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     // Undo in narrowed buffer; markers/overlays must track.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -127,7 +129,7 @@ fn combo_undo_narrow_marker_overlay_textprop() {
               (kill-buffer buf)
               (list narrowed m1-narrow m2-narrow m3-narrow
                     after-undo-1 after-undo-2))))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -135,6 +137,9 @@ fn combo_undo_narrow_marker_overlay_textprop() {
 fn combo_undo_buffer_local_undo_list_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((#(\"HELLO-BEAUTIFUL--WORLD\" 0 5 (word hello) 17 22 (word world)) 6 17 1 23 hello nil (nil (6 . 17) 12 nil (nil word nil 7 . 12) (nil word nil 1 . 6) (1 . 12) (t . 0))) (#(\"HELLO-BEAUTIFUL--WORLD\" 0 5 (word hello) 17 22 (word world)) 6 17 1 23 hello nil))""#
+    ]];
     // Buffer-local undo-list with markers/overlays.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -169,9 +174,7 @@ fn combo_undo_buffer_local_undo_list_marker_overlay() {
                                   (get-text-property 7 'word))))
             (kill-buffer buf)
             (list after-insert after-undo))))))) "#,
-        expect_test::expect![[
-            r#""OK ((#(\"HELLO-BEAUTIFUL--WORLD\" 0 5 (word hello) 17 22 (word world)) 6 17 1 23 hello nil (nil (6 . 17) 12 nil (nil word nil 7 . 12) (nil word nil 1 . 6) (1 . 12) (t . 0))) (#(\"HELLO-BEAUTIFUL--WORLD\" 0 5 (word hello) 17 22 (word world)) 6 17 1 23 hello nil))""#
-        ]],
+        expect,
     );
 }
 
@@ -179,6 +182,7 @@ fn combo_undo_buffer_local_undo_list_marker_overlay() {
 fn combo_undo_limit_marker_overlay_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     // undo-limit affects undo behavior; markers/overlays must track.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -216,7 +220,7 @@ fn combo_undo_limit_marker_overlay_textprop() {
               (setq undo-limit undo-limit-saved)
               (kill-buffer buf)
               (list state-before state-after)))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -224,6 +228,7 @@ fn combo_undo_limit_marker_overlay_textprop() {
 fn combo_undo_auto_save_marker_overlay_textprop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     // undo-auto markers with save-excursion; markers/overlays track.
     crate::common::assert_oracle_parity_expect(
         r#"(progn
@@ -261,6 +266,6 @@ fn combo_undo_auto_save_marker_overlay_textprop() {
                                   (get-text-property 13 'part))))
             (kill-buffer buf)
             (list after after-undo))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }

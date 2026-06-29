@@ -12,12 +12,10 @@ fn oracle_kbd_repeats_and_historical_macro_delimiters() {
  (key-description (kbd "2*C-x"))
  (kbd "C-x ( C-d C-x )")
  (key-description (kbd "C-x ( C-d C-x )")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"aaa\" \"a a a\" \"\u{18}\u{18}\" \"C-x C-x\" \"\u{4}\" \"C-d\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"aaa\" \"a a a\" \"\u{18}\u{18}\" \"C-x C-x\" \"\u{4}\" \"C-d\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -32,10 +30,8 @@ b"))
 b")
  (key-description (kbd "a REM ignored to end of line
 b")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"ab\" \"a b\" \"ab\" \"a b\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"ab\" \"a b\" \"ab\" \"a b\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -47,10 +43,8 @@ fn oracle_key_parse_octal_events() {
  (kbd "\\377")
  (key-description (kbd "\\377"))
  (listify-key-sequence (kbd "\\377")))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"A\" \"A\" [255] \"ÿ\" (255))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"A\" \"A\" [255] \"ÿ\" (255))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -61,10 +55,8 @@ fn oracle_key_parse_angle_tokens_with_embedded_spaces() {
  (key-parse "<mouse-1> a")
  (condition-case err (key-parse "<mouse 1>") (error (car err)))
  (condition-case err (kbd "<mouse 1>") (error (car err))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ([mouse-1] [mouse-1 97] [mouse\\ 1] [mouse\\ 1])""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ([mouse-1] [mouse-1 97] [mouse\\ 1] [mouse\\ 1])""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -92,10 +84,8 @@ fn oracle_key_valid_p_strict_textual_syntax_contract() {
  (condition-case e
      (key-parse "M-C-a")
    (error (list (car e) (cadr e)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t t t t nil t nil nil nil nil nil (error \"C-M- must prefix a single character, not foo\") [134217729])""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t t t t nil t nil nil nil nil nil (error \"C-M- must prefix a single character, not foo\") [134217729])""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

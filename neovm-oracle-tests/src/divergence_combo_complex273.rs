@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx273_isearch_lazy_highlight_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'lazy-highlight-cleanup)
@@ -16,13 +17,16 @@ fn div_cx273_isearch_lazy_highlight_availability() {
       (boundp 'isearch-lazy-highlight)
       (boundp 'search-highlight))
 "##,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx273_isearch_face_customization() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ([face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] unspecified)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (facep 'isearch)
@@ -31,15 +35,14 @@ fn div_cx273_isearch_face_customization() {
       (facep 'match)
       (face-attribute 'isearch :foreground))
 "##,
-        expect_test::expect![[
-            r#""OK ([face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] [face unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified unspecified] unspecified)""#
-        ]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx273_occur_edit_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored file-missing)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -50,13 +53,14 @@ fn div_cx273_occur_edit_mode_availability() {
             (boundp 'occur-mode-hook)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored file-missing)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx273_multi_occur_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -67,13 +71,14 @@ fn div_cx273_multi_occur_availability() {
             (boundp 'multi-occur-buffer-list)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t nil)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx273_comint_availability_full() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -87,13 +92,14 @@ fn div_cx273_comint_availability_full() {
             (boundp 'comint-input-ring-size)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx273_ielm_repl_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -105,13 +111,14 @@ fn div_cx273_ielm_repl_availability() {
             (boundp 'ielm-noisy)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx273_color_component_queries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -124,13 +131,14 @@ fn div_cx273_color_component_queries() {
           (fboundp 'color-supported-p))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil nil t t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx273_color_hsl_conversions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored void-function)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -141,13 +149,14 @@ fn div_cx273_color_hsl_conversions() {
           (color-rgb-to-hsl 0.0 0.0 0.0))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored void-function)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx273_search_ring_and_regexp_search_ring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil t nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'search-ring)
@@ -157,13 +166,14 @@ fn div_cx273_search_ring_and_regexp_search_ring() {
       (boundp 'search-ring-max)
       (integerp search-ring-max))
 "##,
-        expect_test::expect![[r#""OK (t nil t nil t t)""#]],
+        expect,
     )
 }
 
 #[test]
 fn div_cx273_isearch_comint_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((avail (list (boundp 'lazy-highlight-cleanup)
@@ -194,6 +204,6 @@ fn div_cx273_isearch_comint_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     )
 }

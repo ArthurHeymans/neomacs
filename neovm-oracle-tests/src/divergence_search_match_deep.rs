@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_goto_char_bounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""Hello WorldOK (6 32)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -16,7 +17,7 @@ fn divergence_goto_char_bounds() {
   (list (point))
   (goto-char 6)
   (list (point) (char-after))) "#,
-        expect_test::expect![[r#""Hello WorldOK (6 32)""#]],
+        expect,
     );
 }
 
@@ -24,6 +25,7 @@ fn divergence_goto_char_bounds() {
 fn divergence_search_forward_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""foo bar foo baz fooOK (1 4 9 12 9 12)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "foo bar foo baz foo")
@@ -36,7 +38,7 @@ fn divergence_search_forward_backward() {
           (p4 (match-end 0)))
       (search-backward "foo")
       (list p1 p2 p3 p4 (match-beginning 0) (match-end 0))))) "#,
-        expect_test::expect![[r#""foo bar foo baz fooOK (1 4 9 12 9 12)""#]],
+        expect,
     );
 }
 
@@ -44,6 +46,7 @@ fn divergence_search_forward_backward() {
 fn divergence_match_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""abc123def456OK (4 7 4 7 \"123\" \"123\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "abc123def456")
@@ -55,7 +58,7 @@ fn divergence_match_data() {
         (match-end 1)
         (match-string 0)
         (match-string 1))) "#,
-        expect_test::expect![[r#""abc123def456OK (4 7 4 7 \"123\" \"123\")""#]],
+        expect,
     );
 }
 
@@ -63,6 +66,8 @@ fn divergence_match_data() {
 fn divergence_match_data_groups() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""2024-01-15OK (\"2024-01-15\" \"2024\" \"01\" \"15\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "2024-01-15")
@@ -72,7 +77,7 @@ fn divergence_match_data_groups() {
         (match-string 1)
         (match-string 2)
         (match-string 3))) "#,
-        expect_test::expect![[r#""2024-01-15OK (\"2024-01-15\" \"2024\" \"01\" \"15\")""#]],
+        expect,
     );
 }
 
@@ -80,6 +85,7 @@ fn divergence_match_data_groups() {
 fn divergence_re_search_no_match() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""hello worldOK (nil 6 \"hello\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "hello world")
@@ -87,7 +93,7 @@ fn divergence_re_search_no_match() {
   (list (re-search-forward "[0-9]+" nil t)
         (re-search-forward "[a-z]+" nil t)
         (match-string 0))) "#,
-        expect_test::expect![[r#""hello worldOK (nil 6 \"hello\")""#]],
+        expect,
     );
 }
 
@@ -95,6 +101,7 @@ fn divergence_re_search_no_match() {
 fn divergence_replace_match_deep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""baz bar fooOK \"baz bar foo\"""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "foo bar foo")
@@ -102,7 +109,7 @@ fn divergence_replace_match_deep() {
   (re-search-forward "foo")
   (replace-match "baz")
   (buffer-string)) "#,
-        expect_test::expect![[r#""baz bar fooOK \"baz bar foo\"""#]],
+        expect,
     );
 }
 
@@ -110,6 +117,7 @@ fn divergence_replace_match_deep() {
 fn divergence_re_search_backward() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""aaa bbb aaa bbb aaaOK (5 8)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "aaa bbb aaa bbb aaa")
@@ -118,7 +126,7 @@ fn divergence_re_search_backward() {
   (list (match-beginning 0) (match-end 0))
   (re-search-backward "bbb")
   (list (match-beginning 0) (match-end 0))) "#,
-        expect_test::expect![[r#""aaa bbb aaa bbb aaaOK (5 8)""#]],
+        expect,
     );
 }
 
@@ -126,6 +134,7 @@ fn divergence_re_search_backward() {
 fn divergence_case_fold_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""Hello WorldOK (nil 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -137,7 +146,7 @@ fn divergence_case_fold_search() {
     (goto-char 1)
     (list (search-forward "hello" nil t)
           (search-forward "Hello" nil t)))) "#,
-        expect_test::expect![[r#""Hello WorldOK (nil 6)""#]],
+        expect,
     );
 }
 
@@ -145,6 +154,7 @@ fn divergence_case_fold_search() {
 fn divergence_word_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""hello world helloworldOK (6 6 nil 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "hello world helloworld")
@@ -153,7 +163,7 @@ fn divergence_word_search() {
         (point)
         (word-search-forward "hello" nil t)
         (point))) "#,
-        expect_test::expect![[r#""hello world helloworldOK (6 6 nil 6)""#]],
+        expect,
     );
 }
 
@@ -161,6 +171,7 @@ fn divergence_word_search() {
 fn divergence_save_match_data() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""abc def ghiOK (t \"abc\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "abc def ghi")
@@ -171,6 +182,6 @@ fn divergence_save_match_data() {
       (re-search-forward "[a-z]+"))
     (list (equal m (match-data))
           (match-string 0)))) "#,
-        expect_test::expect![[r#""abc def ghiOK (t \"abc\")""#]],
+        expect,
     );
 }

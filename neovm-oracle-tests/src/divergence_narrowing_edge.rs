@@ -7,13 +7,14 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_narrow_to_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""WorlOK (7 11 \"Worl\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World Foo Bar")
   (narrow-to-region 7 11)
   (list (point-min) (point-max)
         (buffer-string))) "#,
-        expect_test::expect![[r#""WorlOK (7 11 \"Worl\")""#]],
+        expect,
     );
 }
 
@@ -21,6 +22,9 @@ fn divergence_narrow_to_region() {
 fn divergence_widen() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""Hello World Foo BarOK (\"Worl\" 1 20 \"Hello World Foo Bar\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World Foo Bar")
@@ -29,9 +33,7 @@ fn divergence_widen() {
     (widen)
     (list narrowed (point-min) (point-max)
           (buffer-string)))) "#,
-        expect_test::expect![[
-            r#""Hello World Foo BarOK (\"Worl\" 1 20 \"Hello World Foo Bar\")""#
-        ]],
+        expect,
     );
 }
 
@@ -39,6 +41,9 @@ fn divergence_widen() {
 fn divergence_narrow_and_restriction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""CDEFERR (error \"The mark is not set now, so there is no region\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -46,9 +51,7 @@ fn divergence_narrow_and_restriction() {
   (list (buffer-narrowed-p)
         (point-min) (point-max)
         (region-beginning) (region-end))) "#,
-        expect_test::expect![[
-            r#""CDEFERR (error \"The mark is not set now, so there is no region\")""#
-        ]],
+        expect,
     );
 }
 
@@ -56,13 +59,14 @@ fn divergence_narrow_and_restriction() {
 fn divergence_buffer_narrowed_p() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""HelloOK (nil nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (buffer-narrowed-p)
   (progn (insert "Hello") (buffer-narrowed-p))
   (progn (narrow-to-region 1 3) (buffer-narrowed-p))
   (progn (widen) (buffer-narrowed-p))) "#,
-        expect_test::expect![[r#""HelloOK (nil nil t nil)""#]],
+        expect,
     );
 }
 
@@ -70,6 +74,7 @@ fn divergence_buffer_narrowed_p() {
 fn divergence_save_restriction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""HellOK ((1 5 \"Hell\") 1 12 \"Hello World\" (1 12))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -82,7 +87,7 @@ fn divergence_save_restriction() {
             (progn
               (save-restriction)
               (list (point-min) (point-max))))))) "#,
-        expect_test::expect![[r#""HellOK ((1 5 \"Hell\") 1 12 \"Hello World\" (1 12))""#]],
+        expect,
     );
 }
 
@@ -90,6 +95,7 @@ fn divergence_save_restriction() {
 fn divergence_save_excursion_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""Hello WorldOK (5 1 12)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -99,7 +105,7 @@ fn divergence_save_excursion_narrow() {
       (widen)
       (goto-char 10))
     (list (point) (point-min) (point-max)))) "#,
-        expect_test::expect![[r#""Hello WorldOK (5 1 12)""#]],
+        expect,
     );
 }
 
@@ -107,6 +113,9 @@ fn divergence_save_excursion_narrow() {
 fn divergence_narrow_with_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""llo WOK ((#<overlay from 1 to 6 in  *neovm-oracle-stdout*>) 1 \"llo W\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -115,9 +124,7 @@ fn divergence_narrow_with_overlay() {
   (list (overlays-in (point-min) (point-max))
         (length (overlays-in 1 12))
         (buffer-string))) "#,
-        expect_test::expect![[
-            r#""llo WOK ((#<overlay from 1 to 6 in  *neovm-oracle-stdout*>) 1 \"llo W\")""#
-        ]],
+        expect,
     );
 }
 
@@ -125,6 +132,7 @@ fn divergence_narrow_with_overlay() {
 fn divergence_narrow_with_text_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""llo WOK (bold bold #(\"llo W\" 0 3 (face bold)))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Hello World")
@@ -133,7 +141,7 @@ fn divergence_narrow_with_text_props() {
   (list (get-text-property (point-min) 'face)
         (get-text-property (1+ (point-min)) 'face)
         (buffer-string))) "#,
-        expect_test::expect![[r#""llo WOK (bold bold #(\"llo W\" 0 3 (face bold)))""#]],
+        expect,
     );
 }
 
@@ -141,6 +149,7 @@ fn divergence_narrow_with_text_props() {
 fn divergence_narrow_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABXCDEFGHIJOK (\"ABXCDEFGHIJ\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -150,7 +159,7 @@ fn divergence_narrow_insert() {
   (list (buffer-string) (point) (point-min) (point-max))
   (widen)
   (list (buffer-string))) "#,
-        expect_test::expect![[r#""ABXCDEFGHIJOK (\"ABXCDEFGHIJ\")""#]],
+        expect,
     );
 }
 
@@ -158,6 +167,7 @@ fn divergence_narrow_insert() {
 fn divergence_narrow_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABEFGHIJOK (\"ABEFGHIJ\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -166,6 +176,6 @@ fn divergence_narrow_delete() {
   (list (buffer-string) (point-min) (point-max))
   (widen)
   (list (buffer-string))) "#,
-        expect_test::expect![[r#""ABEFGHIJOK (\"ABEFGHIJ\")""#]],
+        expect,
     );
 }

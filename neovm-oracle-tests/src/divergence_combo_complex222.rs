@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx222_uniquify_buffer_names() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -19,13 +20,14 @@ fn div_cx222_uniquify_buffer_names() {
             (boundp 'uniquify-after-kill-buffer-p)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx222_reveal_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -35,13 +37,14 @@ fn div_cx222_reveal_mode_availability() {
             (boundp 'reveal-auto-hide)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx222_hl_line_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (fboundp 'hl-line-mode)
@@ -49,13 +52,14 @@ fn div_cx222_hl_line_mode_availability() {
       (boundp 'hl-line-sticky-flag)
       (boundp 'hl-line-overlay-priority))
 "##,
-        expect_test::expect![[r#""OK (t t nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx222_hl_todo_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored file-missing)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -66,13 +70,14 @@ fn div_cx222_hl_todo_mode_availability() {
             (boundp 'hl-todo-color-priorities)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored file-missing)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx222_rainbow_delimiters_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -81,13 +86,14 @@ fn div_cx222_rainbow_delimiters_availability() {
           (boundp 'rainbow-delimiters-max-face-count))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx222_rainbow_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored file-missing)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -97,13 +103,14 @@ fn div_cx222_rainbow_mode_availability() {
             (boundp 'rainbow-hexadecimal-colors-font-lock-keywords)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored file-missing)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx222_delsel_delete_selection_mode() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -113,13 +120,14 @@ fn div_cx222_delsel_delete_selection_mode() {
             (boundp 'delete-selection-save-to-register)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx222_cua_mode_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -130,13 +138,14 @@ fn div_cx222_cua_mode_availability() {
             (boundp 'cua-rectangle-mark-key)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx222_diff_hl_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -145,13 +154,14 @@ fn div_cx222_diff_hl_availability() {
           (boundp 'diff-hl-side))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx222_highlight_modes_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -179,6 +189,6 @@ fn div_cx222_highlight_modes_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     );
 }

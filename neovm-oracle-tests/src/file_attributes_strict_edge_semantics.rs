@@ -64,12 +64,10 @@ fn oracle_file_attributes_shape_id_format_missing_bad_filename_and_lessp_edges()
     (delete-directory dir t)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((nil t t t t t t 5 \"-\" t t t 12) (t t) (t \"d\" 12) nil nil nil nil t nil (wrong-type-argument (listp \"beta\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((nil t t t t t t 5 \"-\" t t t 12) (t t) (t \"d\" 12) nil nil nil nil t nil (wrong-type-argument (listp \"beta\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -118,12 +116,10 @@ fn oracle_file_attributes_symlink_type_and_dangling_link_edges() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"target.txt\" \"target-dir\" \"missing-target\" nil \"missing-target\" t t \"l\" nil 12 12)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"target.txt\" \"target-dir\" \"missing-target\" nil \"missing-target\" t t \"l\" nil 12 12)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -176,10 +172,8 @@ fn oracle_file_attributes_handler_and_expand_error_edges() {
     (makunbound 'neomacs--oracle-fileattrs-calls)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((nil ((expand-file-name \"child\" \"/oracle-fileattrs-root/\"))) nil ((t 1 2 3 nil nil nil 0 \"drwx------\" nil 1 1) ((file-attributes \"/oracle-fileattrs-root/child\"))) nil ((t 1 2 3 nil nil nil 0 \"drwx------\" nil 1 1) ((file-attributes \"/oracle-fileattrs-root/child\" string))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((nil ((expand-file-name \"child\" \"/oracle-fileattrs-root/\"))) nil ((t 1 2 3 nil nil nil 0 \"drwx------\" nil 1 1) ((file-attributes \"/oracle-fileattrs-root/child\"))) nil ((t 1 2 3 nil nil nil 0 \"drwx------\" nil 1 1) ((file-attributes \"/oracle-fileattrs-root/child\" string))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

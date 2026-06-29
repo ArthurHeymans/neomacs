@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_undo_boundary_amalgamation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCDEFGHIOK (t (nil (4 . 7) nil (1 . 4) (t . 0)) 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -19,7 +20,7 @@ fn divergence_undo_boundary_amalgamation() {
     (list (> len 0)
           (member nil buffer-undo-list)
           len)))"#,
-        expect_test::expect![[r#""ABCDEFGHIOK (t (nil (4 . 7) nil (1 . 4) (t . 0)) 6)""#]],
+        expect,
     );
 }
 
@@ -27,6 +28,7 @@ fn divergence_undo_boundary_amalgamation() {
 fn divergence_undo_after_multiple_inserts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""AAAOK (\"AAA\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -41,7 +43,7 @@ fn divergence_undo_after_multiple_inserts() {
   (list (buffer-string))
   (undo)
   (list (buffer-string)))"#,
-        expect_test::expect![[r#""AAAOK (\"AAA\")""#]],
+        expect,
     );
 }
 
@@ -49,6 +51,7 @@ fn divergence_undo_after_multiple_inserts() {
 fn divergence_undo_with_markers_tracked() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (1 \"\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -60,7 +63,7 @@ fn divergence_undo_with_markers_tracked() {
     (list (marker-position m) (buffer-string))
     (undo)
     (list (marker-position m) (buffer-string))))"#,
-        expect_test::expect![[r#""OK (1 \"\")""#]],
+        expect,
     );
 }
 
@@ -68,6 +71,8 @@ fn divergence_undo_with_markers_tracked() {
 fn divergence_undo_in_narrowed_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""BBBCCCDDDERR (user-error \"No further undo information\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAABBBCCCDDDEEE")
@@ -80,7 +85,7 @@ fn divergence_undo_in_narrowed_buffer() {
   (list (buffer-string))
   (widen)
   (buffer-string))"#,
-        expect_test::expect![[r#""BBBCCCDDDERR (user-error \"No further undo information\")""#]],
+        expect,
     );
 }
 
@@ -88,6 +93,7 @@ fn divergence_undo_in_narrowed_buffer() {
 fn divergence_undo_limit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(list
   (integerp undo-limit)
@@ -95,7 +101,7 @@ fn divergence_undo_limit() {
   (> undo-limit 0)
   (> undo-strong-limit 0)
   (integerp undo-outer-limit))"#,
-        expect_test::expect![[r#""OK (t t t t nil)""#]],
+        expect,
     );
 }
 
@@ -103,6 +109,7 @@ fn divergence_undo_limit() {
 fn divergence_undo_in_read_only() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""HelloOK (\"Hello\" t ((1 . 6) (t . 0)))""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -111,7 +118,7 @@ fn divergence_undo_in_read_only() {
   (list (buffer-string)
         buffer-read-only
         buffer-undo-list))"#,
-        expect_test::expect![[r#""HelloOK (\"Hello\" t ((1 . 6) (t . 0)))""#]],
+        expect,
     );
 }
 
@@ -119,6 +126,7 @@ fn divergence_undo_in_read_only() {
 fn divergence_undo_after_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -129,7 +137,7 @@ fn divergence_undo_after_replace() {
   (list (buffer-string))
   (undo)
   (buffer-string))"#,
-        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
+        expect,
     );
 }
 
@@ -137,6 +145,7 @@ fn divergence_undo_after_replace() {
 fn divergence_buffer_undo_list_torture() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -150,7 +159,7 @@ fn divergence_buffer_undo_list_torture() {
     (list initial-string
           (buffer-string)
           (= (point-max) (point-min))))"#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -158,6 +167,7 @@ fn divergence_buffer_undo_list_torture() {
 fn divergence_undo_nil_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCDEFOK ((nil (1 . 4) (t . 0)) t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -167,7 +177,7 @@ fn divergence_undo_nil_boundary() {
   (let ((has-boundary (memq nil buffer-undo-list)))
     (list has-boundary
           (consp has-boundary))))"#,
-        expect_test::expect![[r#""ABCDEFOK ((nil (1 . 4) (t . 0)) t)""#]],
+        expect,
     );
 }
 
@@ -175,6 +185,7 @@ fn divergence_undo_nil_boundary() {
 fn divergence_undo_only_inserts() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -187,6 +198,6 @@ fn divergence_undo_only_inserts() {
   (undo)
   (list (buffer-string))
   (= (point-min) (point-max)))"#,
-        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
+        expect,
     );
 }

@@ -140,12 +140,10 @@ fn oracle_prop_petri_net_basic_structure_and_firing() {
     (fmakunbound 'neovm--pn-fire)
     (fmakunbound 'neovm--pn-enabled-transitions)
     (fmakunbound 'neovm--pn-tokens)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:initial 3 0 0) (:enabled-initially (t1)) (:after-t1-once 2 1 0) (:after-t1-twice 1 2 0) (:after-t2-twice 1 0 2) (:enabled-now (t1)) (:final 0 0 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:initial 3 0 0) (:enabled-initially (t1)) (:after-t1-once 2 1 0) (:after-t1-twice 1 2 0) (:after-t2-twice 1 0 2) (:enabled-now (t1)) (:final 0 0 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -231,12 +229,10 @@ fn oracle_prop_petri_net_weighted_arcs() {
     (fmakunbound 'neovm--pn-enabled-p)
     (fmakunbound 'neovm--pn-fire)
     (fmakunbound 'neovm--pn-tokens)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:reaction-count 3 :h2-remaining 0 :o2-remaining 0 :h2o-produced 6) (:assembly-count 3 :parts-left 1 :base-left 1 :products 3) (:split-fires 5 :a 5 :b 10 :c 5))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:reaction-count 3 :h2-remaining 0 :o2-remaining 0 :h2o-produced 6) (:assembly-count 3 :parts-left 1 :base-left 1 :products 3) (:split-fires 5 :a 5 :b 10 :c 5))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -330,12 +326,10 @@ fn oracle_prop_petri_net_simulation_to_completion() {
     (fmakunbound 'neovm--pn-fire)
     (fmakunbound 'neovm--pn-tokens)
     (fmakunbound 'neovm--pn-simulate)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:trace (produce produce produce produce consume consume consume consume) :final-marking ((source . 0) (buffer . 0) (sink . 4)) :steps 8) (:trace (fork fork join join) :final-marking ((start . 0) (left . 0) (right . 0) (end . 2)) :steps 4) (:trace (enter1 leave1 enter1 leave1 enter1 leave1 enter1 leave1 enter1 leave1 enter1 leave1 enter1 leave1 enter1 leave1 enter1 leave1 enter1 leave1) :final-marking ((idle1 . 1) (idle2 . 1) (mutex . 1) (critical1 . 0) (critical2 . 0)) :steps 20))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:trace (produce produce produce produce consume consume consume consume) :final-marking ((source . 0) (buffer . 0) (sink . 4)) :steps 8) (:trace (fork fork join join) :final-marking ((start . 0) (left . 0) (right . 0) (end . 2)) :steps 4) (:trace (enter1 leave1 enter1 leave1 enter1 leave1 enter1 leave1 enter1 leave1 enter1 leave1 enter1 leave1 enter1 leave1 enter1 leave1 enter1 leave1) :final-marking ((idle1 . 1) (idle2 . 1) (mutex . 1) (critical1 . 0) (critical2 . 0)) :steps 20))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -456,12 +450,10 @@ fn oracle_prop_petri_net_dining_philosophers() {
     (fmakunbound 'neovm--pn-enabled-p)
     (fmakunbound 'neovm--pn-fire)
     (fmakunbound 'neovm--pn-tokens)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:initial :forks (1 1 1) :thinking (1 1 1) :eating (0 0 0)) (:phil0-eating :forks (0 0 1) :eating (1 0 0)) (:phil1-enabled nil :phil2-enabled nil) (:phil2-can-eat nil) (:after-putdown0 :phil1-enabled t :phil2-enabled t) (:conservation :free-forks 3 :held-forks 0 :total 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:initial :forks (1 1 1) :thinking (1 1 1) :eating (0 0 0)) (:phil0-eating :forks (0 0 1) :eating (1 0 0)) (:phil1-enabled nil :phil2-enabled nil) (:phil2-can-eat nil) (:after-putdown0 :phil1-enabled t :phil2-enabled t) (:conservation :free-forks 3 :held-forks 0 :total 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -562,12 +554,10 @@ fn oracle_prop_petri_net_producer_consumer() {
     (fmakunbound 'neovm--pn-enabled-p)
     (fmakunbound 'neovm--pn-fire)
     (fmakunbound 'neovm--pn-tokens)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:after-3-produces :full 3 :empty 0 :produced 3 :can-produce nil :can-consume t) (:after-2-consumes :full 1 :empty 2 :consumed 2) (:final :full 0 :empty 3 :produced 5 :consumed 5) (:invariant-holds t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:after-3-produces :full 3 :empty 0 :produced 3 :can-produce nil :can-consume t) (:after-2-consumes :full 1 :empty 2 :consumed 2) (:final :full 0 :empty 3 :produced 5 :consumed 5) (:invariant-holds t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -698,12 +688,10 @@ fn oracle_prop_petri_net_deadlock_detection() {
     (fmakunbound 'neovm--pn-tokens)
     (fmakunbound 'neovm--pn-deadlocked-p)
     (fmakunbound 'neovm--pn-explore-deadlock)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:always-deadlocks (:deadlock-found t :states-explored 2 :deadlock-marking ((p1 . 0)))) (:cyclic-no-deadlock (:deadlock-found nil :states-explored 127 :deadlock-marking nil)) (:resource-contention (:deadlock-found t :states-explored 2 :deadlock-marking ((idle1 . 0) (idle2 . 0) (resA . 1) (resB . 1) (has-a1 . 0) (has-b2 . 0) (done1 . 1) (done2 . 1)))) (:ordered-no-deadlock (:deadlock-found t :states-explored 2 :deadlock-marking ((idle1 . 0) (idle2 . 0) (resA . 1) (resB . 1) (has-a1 . 0) (has-a2 . 0) (done1 . 1) (done2 . 1)))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:always-deadlocks (:deadlock-found t :states-explored 2 :deadlock-marking ((p1 . 0)))) (:cyclic-no-deadlock (:deadlock-found nil :states-explored 127 :deadlock-marking nil)) (:resource-contention (:deadlock-found t :states-explored 2 :deadlock-marking ((idle1 . 0) (idle2 . 0) (resA . 1) (resB . 1) (has-a1 . 0) (has-b2 . 0) (done1 . 1) (done2 . 1)))) (:ordered-no-deadlock (:deadlock-found t :states-explored 2 :deadlock-marking ((idle1 . 0) (idle2 . 0) (resA . 1) (resB . 1) (has-a1 . 0) (has-a2 . 0) (done1 . 1) (done2 . 1)))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -813,10 +801,8 @@ fn oracle_prop_petri_net_invariant_checking() {
     (fmakunbound 'neovm--pn-fire)
     (fmakunbound 'neovm--pn-tokens)
     (fmakunbound 'neovm--pn-invariant-sum)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:pipeline-invariant :initial-sum 5 :step-sums (5 5 5 5 5) :all-ok t) (:mutex-invariant :initial-sum 1 :final-sum 1 :all-ok t :mutual-exclusion t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:pipeline-invariant :initial-sum 5 :step-sums (5 5 5 5 5) :all-ok t) (:mutex-invariant :initial-sum 1 :final-sum 1 :all-ok t :mutual-exclusion t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

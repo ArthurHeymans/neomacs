@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_undo_20_step_edit_session_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"u20\")))\n\
@@ -29,7 +30,7 @@ fn deficiency_undo_20_step_edit_session_props() {
          (cl-loop for i from 1 to (1- (point-max))\n\
          collect (get-text-property i 'gen)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -37,6 +38,7 @@ fn deficiency_undo_20_step_edit_session_props() {
 fn deficiency_undo_alternating_insert_delete_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 16 21)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"uai\")))\n\
@@ -68,7 +70,7 @@ fn deficiency_undo_alternating_insert_delete_props() {
          (get-text-property 8 'pos)\n\
          (get-text-property 12 'pos))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (args-out-of-range 16 21)""#]],
+        expect,
     );
 }
 
@@ -76,6 +78,7 @@ fn deficiency_undo_alternating_insert_delete_props() {
 fn deficiency_undo_propertize_after_each_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"upa\")))\n\
@@ -111,7 +114,7 @@ fn deficiency_undo_propertize_after_each_insert() {
          (list (get-text-property 1 'step)\n\
          (get-text-property 2 'step))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -119,6 +122,7 @@ fn deficiency_undo_propertize_after_each_insert() {
 fn deficiency_undo_replace_then_propertize_then_delete() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"urp\")))\n\
@@ -148,7 +152,7 @@ fn deficiency_undo_replace_then_propertize_then_delete() {
          (get-text-property 5 'final)\n\
          (get-text-property 1 'original)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -156,6 +160,7 @@ fn deficiency_undo_replace_then_propertize_then_delete() {
 fn deficiency_undo_multiple_overlays_same_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"uos\")))\n\
@@ -183,7 +188,7 @@ fn deficiency_undo_multiple_overlays_same_region() {
          (overlay-end ov)\n\
          (overlay-get ov 'idx))))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -191,6 +196,7 @@ fn deficiency_undo_multiple_overlays_same_region() {
 fn deficiency_undo_delete_then_reinsert_different_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 13 13)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"udr\")))\n\
@@ -217,7 +223,7 @@ fn deficiency_undo_delete_then_reinsert_different_props() {
          (get-text-property 9 'owner)\n\
          (get-text-property 13 'owner)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (args-out-of-range 13 13)""#]],
+        expect,
     );
 }
 
@@ -225,6 +231,7 @@ fn deficiency_undo_delete_then_reinsert_different_props() {
 fn deficiency_undo_kill_ring_yank_with_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 66 75)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"uky\")))\n\
@@ -254,7 +261,7 @@ fn deficiency_undo_kill_ring_yank_with_props() {
          (get-text-property 33 'tag)\n\
          (get-text-property 54 'tag)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (args-out-of-range 66 75)""#]],
+        expect,
     );
 }
 
@@ -262,6 +269,7 @@ fn deficiency_undo_kill_ring_yank_with_props() {
 fn deficiency_undo_narrow_insert_widen_insert_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 14 14)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"uni\")))\n\
@@ -295,7 +303,7 @@ fn deficiency_undo_narrow_insert_widen_insert_chain() {
          (get-text-property 14 'half)\n\
          (marker-position m))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (args-out-of-range 14 14)""#]],
+        expect,
     );
 }
 
@@ -303,6 +311,7 @@ fn deficiency_undo_narrow_insert_widen_insert_chain() {
 fn deficiency_undo_with_nested_condition_case() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"unc\")))\n\
@@ -336,7 +345,7 @@ fn deficiency_undo_with_nested_condition_case() {
          (get-text-property 4 'grp)\n\
          (get-text-property 7 'grp)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -344,6 +353,7 @@ fn deficiency_undo_with_nested_condition_case() {
 fn deficiency_undo_with_dolist_insert_propertize() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"udip\"))\n\
@@ -365,6 +375,6 @@ fn deficiency_undo_with_dolist_insert_propertize() {
          when (get-text-property i 'rank)\n\
          collect (get-text-property i 'rank)))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

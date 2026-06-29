@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_multi_buf_marker_overlay_shared() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable my-val)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass mbuf-snap ()
@@ -77,7 +78,7 @@ fn combo_eieio_multi_buf_marker_overlay_shared() {
               (with-current-buffer buf2 (default-value 'my-val)))))
     (kill-buffer buf1)
     (kill-buffer buf2)))"#,
-        expect_test::expect![[r#""ERR (void-variable my-val)""#]],
+        expect,
     );
 }
 
@@ -85,6 +86,7 @@ fn combo_eieio_multi_buf_marker_overlay_shared() {
 fn combo_eieio_multi_buf_kill_overlay_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass kill-buf-snap ()
@@ -145,7 +147,7 @@ fn combo_eieio_multi_buf_kill_overlay_marker() {
           (overlay-live-p ov)
           (buffer-live-p buf1))
     (kill-buffer buf2)))"#,
-        expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]],
+        expect,
     );
 }
 
@@ -153,6 +155,7 @@ fn combo_eieio_multi_buf_kill_overlay_marker() {
 fn combo_eieio_multi_buf_get_buffer_create_reuse() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass reuse-snap ()
@@ -213,7 +216,7 @@ fn combo_eieio_multi_buf_get_buffer_create_reuse() {
                   (overlay-live-p ov)
                   (with-current-buffer buf2 (default-value 'my-reuse-count)))
           (kill-buffer buf2))))))"#,
-        expect_test::expect![[r#""ERR (void-function overlay-live-p)""#]],
+        expect,
     );
 }
 
@@ -221,6 +224,7 @@ fn combo_eieio_multi_buf_get_buffer_create_reuse() {
 fn combo_eieio_multi_buf_overlay_cross_buf_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf2-has-copy)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass cross-ov-snap ()
@@ -297,7 +301,7 @@ fn combo_eieio_multi_buf_overlay_cross_buf_marker() {
               my-cross-log)))
     (kill-buffer buf1)
     (kill-buffer buf2)))"#,
-        expect_test::expect![[r#""ERR (void-variable buf2-has-copy)""#]],
+        expect,
     );
 }
 
@@ -305,6 +309,7 @@ fn combo_eieio_multi_buf_overlay_cross_buf_marker() {
 fn combo_eieio_multi_buf_buflocal_inherit_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass inherit-snap ()
@@ -391,6 +396,6 @@ fn combo_eieio_multi_buf_buflocal_inherit_narrow() {
               my-inherit-log)))
     (kill-buffer buf1)
     (kill-buffer buf2)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }

@@ -101,12 +101,10 @@ fn oracle_prop_combination_dist_sys_vector_clocks() {
     (fmakunbound 'neovm--test-vc-compare)
     (fmakunbound 'neovm--test-vc-send)
     (fmakunbound 'neovm--test-vc-receive)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:a-vc ((\"A\" . 1) (\"B\" . 0) (\"C\" . 0)) :b-vc ((\"A\" . 2) (\"B\" . 2) (\"C\" . 0)) :c-vc ((\"A\" . 2) (\"B\" . 3) (\"C\" . 3)) :a-vs-b before :b-vs-c before :a-vs-c before)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:a-vc ((\"A\" . 1) (\"B\" . 0) (\"C\" . 0)) :b-vc ((\"A\" . 2) (\"B\" . 2) (\"C\" . 0)) :c-vc ((\"A\" . 2) (\"B\" . 3) (\"C\" . 3)) :a-vs-b before :b-vs-c before :a-vs-c before)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -190,12 +188,10 @@ fn oracle_prop_combination_dist_sys_lamport_timestamps() {
                                                (plist-get e :timestamp)))
                                        sorted)))))
     (makunbound 'neovm--test-lt-events)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:p1-clock 2 :p2-clock 4 :p3-clock 5 :total-events 10 :event-order ((\"P1\" \"compute\" 1) (\"P2\" \"init\" 1) (\"P3\" \"start\" 1) (\"P1\" \"send-to-P2\" 2) (\"P2\" \"prepare\" 2) (\"P3\" \"process\" 2) (\"P2\" \"recv-from-P1\" 3) (\"P3\" \"finish\" 3) (\"P2\" \"send-to-P3\" 4) (\"P3\" \"recv-from-P2\" 5)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:p1-clock 2 :p2-clock 4 :p3-clock 5 :total-events 10 :event-order ((\"P1\" \"compute\" 1) (\"P2\" \"init\" 1) (\"P3\" \"start\" 1) (\"P1\" \"send-to-P2\" 2) (\"P2\" \"prepare\" 2) (\"P3\" \"process\" 2) (\"P2\" \"recv-from-P1\" 3) (\"P3\" \"finish\" 3) (\"P2\" \"send-to-P3\" 4) (\"P3\" \"recv-from-P2\" 5)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -281,12 +277,10 @@ fn oracle_prop_combination_dist_sys_two_phase_commit() {
          (funcall 'neovm--test-2pc-run "coord-1" participants
                   '(:key "item-7" :amount 10))))
     (fmakunbound 'neovm--test-2pc-run)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:coordinator \"coord-1\" :transaction (:key \"order-42\" :amount 500) :decision commit :phase1 ((:participant \"db-node\" :vote yes) (:participant \"cache-node\" :vote yes) (:participant \"queue-node\" :vote yes)) :phase2 ((:participant \"db-node\" :action commit :result \"DB committed 500\") (:participant \"cache-node\" :action commit :result \"Cache updated for order-42\") (:participant \"queue-node\" :action commit :result \"Queue enqueued order-42\"))) (:coordinator \"coord-1\" :transaction (:key \"big-order\" :amount 5000) :decision abort :phase1 ((:participant \"db-node\" :vote no) (:participant \"cache-node\" :vote yes) (:participant \"queue-node\" :vote yes)) :phase2 ((:participant \"db-node\" :action abort :result \"DB rolled back\") (:participant \"cache-node\" :action abort :result \"Cache invalidated\") (:participant \"queue-node\" :action abort :result \"Queue purged pending\"))) (:coordinator \"coord-1\" :transaction (:key \"restricted-data\" :amount 100) :decision abort :phase1 ((:participant \"db-node\" :vote yes) (:participant \"cache-node\" :vote yes) (:participant \"queue-node\" :vote no)) :phase2 ((:participant \"db-node\" :action abort :result \"DB rolled back\") (:participant \"cache-node\" :action abort :result \"Cache invalidated\") (:participant \"queue-node\" :action abort :result \"Queue purged pending\"))) (:coordinator \"coord-1\" :transaction (:key \"item-7\" :amount 10) :decision commit :phase1 ((:participant \"db-node\" :vote yes) (:participant \"cache-node\" :vote yes) (:participant \"queue-node\" :vote yes)) :phase2 ((:participant \"db-node\" :action commit :result \"DB committed 10\") (:participant \"cache-node\" :action commit :result \"Cache updated for item-7\") (:participant \"queue-node\" :action commit :result \"Queue enqueued item-7\"))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:coordinator \"coord-1\" :transaction (:key \"order-42\" :amount 500) :decision commit :phase1 ((:participant \"db-node\" :vote yes) (:participant \"cache-node\" :vote yes) (:participant \"queue-node\" :vote yes)) :phase2 ((:participant \"db-node\" :action commit :result \"DB committed 500\") (:participant \"cache-node\" :action commit :result \"Cache updated for order-42\") (:participant \"queue-node\" :action commit :result \"Queue enqueued order-42\"))) (:coordinator \"coord-1\" :transaction (:key \"big-order\" :amount 5000) :decision abort :phase1 ((:participant \"db-node\" :vote no) (:participant \"cache-node\" :vote yes) (:participant \"queue-node\" :vote yes)) :phase2 ((:participant \"db-node\" :action abort :result \"DB rolled back\") (:participant \"cache-node\" :action abort :result \"Cache invalidated\") (:participant \"queue-node\" :action abort :result \"Queue purged pending\"))) (:coordinator \"coord-1\" :transaction (:key \"restricted-data\" :amount 100) :decision abort :phase1 ((:participant \"db-node\" :vote yes) (:participant \"cache-node\" :vote yes) (:participant \"queue-node\" :vote no)) :phase2 ((:participant \"db-node\" :action abort :result \"DB rolled back\") (:participant \"cache-node\" :action abort :result \"Cache invalidated\") (:participant \"queue-node\" :action abort :result \"Queue purged pending\"))) (:coordinator \"coord-1\" :transaction (:key \"item-7\" :amount 10) :decision commit :phase1 ((:participant \"db-node\" :vote yes) (:participant \"cache-node\" :vote yes) (:participant \"queue-node\" :vote yes)) :phase2 ((:participant \"db-node\" :action commit :result \"DB committed 10\") (:participant \"cache-node\" :action commit :result \"Cache updated for item-7\") (:participant \"queue-node\" :action commit :result \"Queue enqueued item-7\"))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -360,12 +354,10 @@ fn oracle_prop_combination_dist_sys_bully_election() {
          ;; Single node alive
          (funcall 'neovm--test-bully-elect all-nodes '(3) 3)))
     (fmakunbound 'neovm--test-bully-elect)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:leader 5 :rounds 5 :log-length 32 :election-log ((:round 1 :from 1 :to 2 :msg ELECTION) (:round 1 :from 1 :to 3 :msg ELECTION) (:round 1 :from 1 :to 4 :msg ELECTION) (:round 1 :from 1 :to 5 :msg ELECTION) (:round 1 :from 5 :to 1 :msg OK) (:round 1 :from 4 :to 1 :msg OK) (:round 1 :from 3 :to 1 :msg OK) (:round 1 :from 2 :to 1 :msg OK) (:round 2 :from 2 :to 3 :msg ELECTION) (:round 2 :from 2 :to 4 :msg ELECTION) (:round 2 :from 2 :to 5 :msg ELECTION) (:round 2 :from 5 :to 2 :msg OK) (:round 2 :from 4 :to 2 :msg OK) (:round 2 :from 3 :to 2 :msg OK) (:round 2 :from 3 :to 4 :msg ELECTION) (:round 2 :from 3 :to 5 :msg ELECTION) (:round 2 :from 5 :to 3 :msg OK) (:round 2 :from 4 :to 3 :msg OK) (:round 2 :from 4 :to 5 :msg ELECTION) (:round 2 :from 5 :to 4 :msg OK) (:round 2 :from 5 :msg COORDINATOR) (:round 3 :from 3 :to 4 :msg ELECTION) (:round 3 :from 3 :to 5 :msg ELECTION) (:round 3 :from 5 :to 3 :msg OK) (:round 3 :from 4 :to 3 :msg OK) (:round 3 :from 4 :to 5 :msg ELECTION) (:round 3 :from 5 :to 4 :msg OK) (:round 3 :from 5 :msg COORDINATOR) (:round 4 :from 4 :to 5 :msg ELECTION) (:round 4 :from 5 :to 4 :msg OK) (:round 4 :from 5 :msg COORDINATOR) (:round 5 :from 5 :msg COORDINATOR))) (:leader 4 :rounds 3 :log-length 8 :election-log ((:round 1 :from 2 :to 3 :msg ELECTION) (:round 1 :from 2 :to 4 :msg ELECTION) (:round 1 :from 4 :to 2 :msg OK) (:round 1 :from 3 :to 2 :msg OK) (:round 2 :from 3 :to 4 :msg ELECTION) (:round 2 :from 4 :to 3 :msg OK) (:round 2 :from 4 :msg COORDINATOR) (:round 3 :from 4 :msg COORDINATOR))) (:leader 3 :rounds 2 :log-length 3 :election-log ((:round 1 :from 1 :to 3 :msg ELECTION) (:round 1 :from 3 :to 1 :msg OK) (:round 2 :from 3 :msg COORDINATOR))) (:leader 5 :rounds 1 :log-length 1 :election-log ((:round 1 :from 5 :msg COORDINATOR))) (:leader 3 :rounds 1 :log-length 1 :election-log ((:round 1 :from 3 :msg COORDINATOR))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:leader 5 :rounds 5 :log-length 32 :election-log ((:round 1 :from 1 :to 2 :msg ELECTION) (:round 1 :from 1 :to 3 :msg ELECTION) (:round 1 :from 1 :to 4 :msg ELECTION) (:round 1 :from 1 :to 5 :msg ELECTION) (:round 1 :from 5 :to 1 :msg OK) (:round 1 :from 4 :to 1 :msg OK) (:round 1 :from 3 :to 1 :msg OK) (:round 1 :from 2 :to 1 :msg OK) (:round 2 :from 2 :to 3 :msg ELECTION) (:round 2 :from 2 :to 4 :msg ELECTION) (:round 2 :from 2 :to 5 :msg ELECTION) (:round 2 :from 5 :to 2 :msg OK) (:round 2 :from 4 :to 2 :msg OK) (:round 2 :from 3 :to 2 :msg OK) (:round 2 :from 3 :to 4 :msg ELECTION) (:round 2 :from 3 :to 5 :msg ELECTION) (:round 2 :from 5 :to 3 :msg OK) (:round 2 :from 4 :to 3 :msg OK) (:round 2 :from 4 :to 5 :msg ELECTION) (:round 2 :from 5 :to 4 :msg OK) (:round 2 :from 5 :msg COORDINATOR) (:round 3 :from 3 :to 4 :msg ELECTION) (:round 3 :from 3 :to 5 :msg ELECTION) (:round 3 :from 5 :to 3 :msg OK) (:round 3 :from 4 :to 3 :msg OK) (:round 3 :from 4 :to 5 :msg ELECTION) (:round 3 :from 5 :to 4 :msg OK) (:round 3 :from 5 :msg COORDINATOR) (:round 4 :from 4 :to 5 :msg ELECTION) (:round 4 :from 5 :to 4 :msg OK) (:round 4 :from 5 :msg COORDINATOR) (:round 5 :from 5 :msg COORDINATOR))) (:leader 4 :rounds 3 :log-length 8 :election-log ((:round 1 :from 2 :to 3 :msg ELECTION) (:round 1 :from 2 :to 4 :msg ELECTION) (:round 1 :from 4 :to 2 :msg OK) (:round 1 :from 3 :to 2 :msg OK) (:round 2 :from 3 :to 4 :msg ELECTION) (:round 2 :from 4 :to 3 :msg OK) (:round 2 :from 4 :msg COORDINATOR) (:round 3 :from 4 :msg COORDINATOR))) (:leader 3 :rounds 2 :log-length 3 :election-log ((:round 1 :from 1 :to 3 :msg ELECTION) (:round 1 :from 3 :to 1 :msg OK) (:round 2 :from 3 :msg COORDINATOR))) (:leader 5 :rounds 1 :log-length 1 :election-log ((:round 1 :from 5 :msg COORDINATOR))) (:leader 3 :rounds 1 :log-length 1 :election-log ((:round 1 :from 3 :msg COORDINATOR))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -457,12 +449,10 @@ fn oracle_prop_combination_dist_sys_consistent_hashing() {
     (fmakunbound 'neovm--test-ch-add-node)
     (fmakunbound 'neovm--test-ch-lookup)
     (fmakunbound 'neovm--test-ch-remove-node)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:ring-size 9 :ring-after-remove 6 :before ((\"user:1\" . \"node-A\") (\"user:2\" . \"node-A\") (\"user:3\" . \"node-A\") (\"session:abc\" . \"node-A\") (\"session:xyz\" . \"node-A\") (\"data:foo\" . \"node-A\") (\"data:bar\" . \"node-A\") (\"config:main\" . \"node-A\")) :after ((\"user:1\" . \"node-A\") (\"user:2\" . \"node-A\") (\"user:3\" . \"node-A\") (\"session:abc\" . \"node-A\") (\"session:xyz\" . \"node-A\") (\"data:foo\" . \"node-A\") (\"data:bar\" . \"node-A\") (\"config:main\" . \"node-A\")) :keys-changed 0)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:ring-size 9 :ring-after-remove 6 :before ((\"user:1\" . \"node-A\") (\"user:2\" . \"node-A\") (\"user:3\" . \"node-A\") (\"session:abc\" . \"node-A\") (\"session:xyz\" . \"node-A\") (\"data:foo\" . \"node-A\") (\"data:bar\" . \"node-A\") (\"config:main\" . \"node-A\")) :after ((\"user:1\" . \"node-A\") (\"user:2\" . \"node-A\") (\"user:3\" . \"node-A\") (\"session:abc\" . \"node-A\") (\"session:xyz\" . \"node-A\") (\"data:foo\" . \"node-A\") (\"data:bar\" . \"node-A\") (\"config:main\" . \"node-A\")) :keys-changed 0)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -539,12 +529,10 @@ fn oracle_prop_combination_dist_sys_gossip_protocol() {
                 '(("x" . 100) ("y" . 200) ("z" . 300))
                 2))
     (fmakunbound 'neovm--test-gossip-run)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:converged t :per-node ((\"n1\" . 4) (\"n2\" . 4) (\"n3\" . 4) (\"n4\" . 4)) :rounds-with-activity 2 :log ((:round 0 :transfers ((:from \"n1\" :to \"n2\" :new-items 1) (:from \"n2\" :to \"n3\" :new-items 2) (:from \"n3\" :to \"n4\" :new-items 3) (:from \"n4\" :to \"n1\" :new-items 3))) (:round 1 :transfers ((:from \"n1\" :to \"n3\" :new-items 1) (:from \"n4\" :to \"n2\" :new-items 2))))) (:converged t :per-node ((\"x\" . 3) (\"y\" . 3) (\"z\" . 3)) :rounds-with-activity 2 :log ((:round 0 :transfers ((:from \"x\" :to \"y\" :new-items 1) (:from \"y\" :to \"z\" :new-items 2) (:from \"z\" :to \"x\" :new-items 2))) (:round 1 :transfers ((:from \"z\" :to \"y\" :new-items 1))))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:converged t :per-node ((\"n1\" . 4) (\"n2\" . 4) (\"n3\" . 4) (\"n4\" . 4)) :rounds-with-activity 2 :log ((:round 0 :transfers ((:from \"n1\" :to \"n2\" :new-items 1) (:from \"n2\" :to \"n3\" :new-items 2) (:from \"n3\" :to \"n4\" :new-items 3) (:from \"n4\" :to \"n1\" :new-items 3))) (:round 1 :transfers ((:from \"n1\" :to \"n3\" :new-items 1) (:from \"n4\" :to \"n2\" :new-items 2))))) (:converged t :per-node ((\"x\" . 3) (\"y\" . 3) (\"z\" . 3)) :rounds-with-activity 2 :log ((:round 0 :transfers ((:from \"x\" :to \"y\" :new-items 1) (:from \"y\" :to \"z\" :new-items 2) (:from \"z\" :to \"x\" :new-items 2))) (:round 1 :transfers ((:from \"z\" :to \"y\" :new-items 1))))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -637,10 +625,8 @@ fn oracle_prop_combination_dist_sys_split_brain() {
                   3)))
     (fmakunbound 'neovm--test-sb-find-components)
     (fmakunbound 'neovm--test-sb-detect)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:split-brain nil :num-partitions 1 :quorum-components 1 :components ((:nodes (\"n1\" \"n2\" \"n3\" \"n4\" \"n5\") :leader \"n5\" :size 5 :has-quorum t)) :danger nil) (:split-brain t :num-partitions 2 :quorum-components 1 :components ((:nodes (\"n1\" \"n2\" \"n3\") :leader \"n3\" :size 3 :has-quorum t) (:nodes (\"n4\" \"n5\") :leader \"n5\" :size 2 :has-quorum nil)) :danger nil) (:split-brain t :num-partitions 5 :quorum-components 0 :components ((:nodes (\"n1\") :leader \"n1\" :size 1 :has-quorum nil) (:nodes (\"n2\") :leader \"n2\" :size 1 :has-quorum nil) (:nodes (\"n3\") :leader \"n3\" :size 1 :has-quorum nil) (:nodes (\"n4\") :leader \"n4\" :size 1 :has-quorum nil) (:nodes (\"n5\") :leader \"n5\" :size 1 :has-quorum nil)) :danger nil) (:split-brain t :num-partitions 2 :quorum-components 2 :components ((:nodes (\"n1\" \"n2\") :leader \"n2\" :size 2 :has-quorum t) (:nodes (\"n3\" \"n4\") :leader \"n4\" :size 2 :has-quorum t)) :danger t) (:split-brain nil :num-partitions 1 :quorum-components 1 :components ((:nodes (\"n1\" \"n2\" \"n3\" \"n4\" \"n5\") :leader \"n5\" :size 5 :has-quorum t)) :danger nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:split-brain nil :num-partitions 1 :quorum-components 1 :components ((:nodes (\"n1\" \"n2\" \"n3\" \"n4\" \"n5\") :leader \"n5\" :size 5 :has-quorum t)) :danger nil) (:split-brain t :num-partitions 2 :quorum-components 1 :components ((:nodes (\"n1\" \"n2\" \"n3\") :leader \"n3\" :size 3 :has-quorum t) (:nodes (\"n4\" \"n5\") :leader \"n5\" :size 2 :has-quorum nil)) :danger nil) (:split-brain t :num-partitions 5 :quorum-components 0 :components ((:nodes (\"n1\") :leader \"n1\" :size 1 :has-quorum nil) (:nodes (\"n2\") :leader \"n2\" :size 1 :has-quorum nil) (:nodes (\"n3\") :leader \"n3\" :size 1 :has-quorum nil) (:nodes (\"n4\") :leader \"n4\" :size 1 :has-quorum nil) (:nodes (\"n5\") :leader \"n5\" :size 1 :has-quorum nil)) :danger nil) (:split-brain t :num-partitions 2 :quorum-components 2 :components ((:nodes (\"n1\" \"n2\") :leader \"n2\" :size 2 :has-quorum t) (:nodes (\"n3\" \"n4\") :leader \"n4\" :size 2 :has-quorum t)) :danger t) (:split-brain nil :num-partitions 1 :quorum-components 1 :components ((:nodes (\"n1\" \"n2\" \"n3\" \"n4\" \"n5\") :leader \"n5\" :size 5 :has-quorum t)) :danger nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

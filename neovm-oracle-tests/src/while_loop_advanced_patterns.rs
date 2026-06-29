@@ -25,12 +25,10 @@ fn oracle_prop_while_nested_accumulator_multiplication_table() {
       (setq table (cons (nreverse row) table)))
     (setq i (1+ i)))
   (nreverse table))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4 5) (2 4 6 8 10) (3 6 9 12 15) (4 8 12 16 20) (5 10 15 20 25))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5) (2 4 6 8 10) (3 6 9 12 15) (4 8 12 16 20) (5 10 15 20 25))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -60,12 +58,10 @@ fn oracle_prop_while_nested_cross_accumulators() {
     (setq fibs (cdr fibs)))
   (list :grand-total grand-total
         :results (nreverse all-sums)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:grand-total 120 :results ((1 (0)) (1 (0)) (2 (0 1)) (3 (0 1 3)) (5 (0 1 3 6 10)) (8 (0 1 3 6 10 15 21 28)) (13 (0 1 3 6 10 15 21 28 36 45 55 66 78))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:grand-total 120 :results ((1 (0)) (1 (0)) (2 (0 1)) (3 (0 1 3)) (5 (0 1 3 6 10)) (8 (0 1 3 6 10 15 21 28)) (13 (0 1 3 6 10 15 21 28 36 45 55 66 78))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -89,10 +85,9 @@ fn oracle_prop_while_throw_catch_exit() {
         (setq rest (cdr rest))
         (setq idx (1+ idx)))
       (list :not-found t))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (:index 4 :value 20 :msg \"divisible by 5 and > 10\")""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (:index 4 :value 20 :msg \"divisible by 5 and > 10\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -123,10 +118,8 @@ fn oracle_prop_while_nested_catch_throw_break() {
         (setq rows (cdr rows))
         (setq ri (1+ ri)))))
   result)"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((3 0 13) (2 0 9) (1 2 7))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((3 0 13) (2 0 9) (1 2 7))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -159,12 +152,10 @@ fn oracle_prop_while_collect_hash_table() {
                            result)))
       (setq keys (cdr keys)))
     (nreverse result)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"a\" (\"acai\" \"apple\" \"apricot\" \"avocado\")) (\"b\" (\"banana\" \"blackberry\" \"blueberry\" \"boysenberry\")) (\"c\" (\"cantaloupe\" \"cherry\" \"coconut\")) (\"d\" (\"date\")) (\"e\" (\"elderberry\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"a\" (\"acai\" \"apple\" \"apricot\" \"avocado\")) (\"b\" (\"banana\" \"blackberry\" \"blueberry\" \"boysenberry\")) (\"c\" (\"cantaloupe\" \"cherry\" \"coconut\")) (\"d\" (\"date\")) (\"e\" (\"elderberry\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -196,12 +187,10 @@ fn oracle_prop_while_frequency_histogram() {
     (dolist (k sorted-keys)
       (setq result (cons (cons k (gethash k freq)) result)))
     (list :mode mode :max-count max-count :histogram (nreverse result))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:mode 1 :max-count 5 :histogram ((1 . 5) (2 . 4) (3 . 4) (4 . 2) (5 . 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:mode 1 :max-count 5 :histogram ((1 . 5) (2 . 4) (3 . 4) (4 . 2) (5 . 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -232,10 +221,9 @@ fn oracle_prop_while_dynamic_binding_changes() {
         (list :final-depth neovm--test-dyn-depth
               :trace (nreverse results)))
     (makunbound 'neovm--test-dyn-depth)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (:final-depth 0 :trace ((a 1) (b 1) (c 1) (d 1) (e 1)))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (:final-depth 0 :trace ((a 1) (b 1) (c 1) (d 1) (e 1)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -268,12 +256,10 @@ fn oracle_prop_while_buffer_operations() {
       (list :total-lines (1- line-num)
             :buffer-size (buffer-size)
             :matches (nreverse matches)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:total-lines 5 :buffer-size 109 :matches (\"001: The quick brown fox\" \"003: the lazy dog\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:total-lines 5 :buffer-size 109 :matches (\"001: The quick brown fox\" \"003: the lazy dog\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -297,12 +283,10 @@ fn oracle_prop_while_buffer_delete_and_track() {
           :positions (nreverse positions)
           :final-text (buffer-string)
           :final-size (buffer-size))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:deletions 7 :positions (3 4 5 6 7 8 9) :final-text \"abcdefgh\" :final-size 8)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:deletions 7 :positions (3 4 5 6 7 8 9) :final-text \"abcdefgh\" :final-size 8)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -332,12 +316,10 @@ fn oracle_prop_while_regexp_group_extraction() {
     (when current
       (setq entries (cons (nreverse current) entries)))
     (nreverse entries)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"name\" . \"Alice\") (\"age\" . \"30\") (\"city\" . \"NYC\")) ((\"name\" . \"Bob\") (\"age\" . \"25\") (\"city\" . \"LA\")) ((\"name\" . \"Eve\") (\"age\" . \"28\") (\"city\" . \"SF\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"name\" . \"Alice\") (\"age\" . \"30\") (\"city\" . \"NYC\")) ((\"name\" . \"Bob\") (\"age\" . \"25\") (\"city\" . \"LA\")) ((\"name\" . \"Eve\") (\"age\" . \"28\") (\"city\" . \"SF\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -369,12 +351,10 @@ fn oracle_prop_while_condition_case_recovery() {
   (list :successes successes
         :errors errors
         :log (nreverse results)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:successes 6 :errors 3 :log ((:ok (+ 10 5) 15) (:ok (/ 20 4) 5) (:error (/ 10 0) nil) (:ok (+ 3 7) 10) (:error (/ 100 0) nil) (:ok (* 6 7) 42) (:ok (- 50 8) 42) (:error (/ 0 0) nil) (:ok (+ 99 1) 100)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:successes 6 :errors 3 :log ((:ok (+ 10 5) 15) (:ok (/ 20 4) 5) (:error (/ 10 0) nil) (:ok (+ 3 7) 10) (:error (/ 100 0) nil) (:ok (* 6 7) 42) (:ok (- 50 8) 42) (:error (/ 0 0) nil) (:ok (+ 99 1) 100)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -401,12 +381,10 @@ fn oracle_prop_while_newtons_method_sqrt() {
                                 :error (/ (round (* (abs (- (* guess guess) n)) 1e12)) 1e12))
                           results))))
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:target 2.0 :sqrt 1.414214 :iterations 4 :error 5e-12) (:target 9.0 :sqrt 3.0 :iterations 5 :error 0.0) (:target 16.0 :sqrt 4.0 :iterations 5 :error 0.0) (:target 25.0 :sqrt 5.0 :iterations 6 :error 0.0) (:target 100.0 :sqrt 10.0 :iterations 7 :error 0.0) (:target 0.25 :sqrt 0.5 :iterations 6 :error 0.0) (:target 0.01 :sqrt 0.1 :iterations 8 :error 0.0))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:target 2.0 :sqrt 1.414214 :iterations 4 :error 5e-12) (:target 9.0 :sqrt 3.0 :iterations 5 :error 0.0) (:target 16.0 :sqrt 4.0 :iterations 5 :error 0.0) (:target 25.0 :sqrt 5.0 :iterations 6 :error 0.0) (:target 100.0 :sqrt 10.0 :iterations 7 :error 0.0) (:target 0.25 :sqrt 0.5 :iterations 6 :error 0.0) (:target 0.01 :sqrt 0.1 :iterations 8 :error 0.0))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -438,12 +416,10 @@ fn oracle_prop_while_binary_search() {
       (setq results (cons (or found (list :found nil :target target :steps steps))
                           results))))
   (nreverse results))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:found t :index 5 :steps 3) (:found nil :target 1 :steps 4) (:found t :index 14 :steps 4) (:found t :index 9 :steps 3) (:found nil :target 100 :steps 4) (:found t :index 7 :steps 1) (:found t :index 10 :steps 4) (:found nil :target -5 :steps 4) (:found t :index 13 :steps 3) (:found nil :target 600 :steps 4))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:found t :index 5 :steps 3) (:found nil :target 1 :steps 4) (:found t :index 14 :steps 4) (:found t :index 9 :steps 3) (:found nil :target 100 :steps 4) (:found t :index 7 :steps 1) (:found t :index 10 :steps 4) (:found nil :target -5 :steps 4) (:found t :index 13 :steps 3) (:found nil :target 600 :steps 4))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -477,12 +453,10 @@ fn oracle_prop_while_euclidean_gcd() {
        (funcall 'neovm--test-gcd -48 18)
        (funcall 'neovm--test-gcd 48 -18))
     (fmakunbound 'neovm--test-gcd)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((:gcd 6 :steps 3 :trace ((48 18) (18 12) (12 6))) (:gcd 25 :steps 2 :trace ((100 75) (75 25))) (:gcd 1 :steps 3 :trace ((17 13) (13 4) (4 1))) (:gcd 5 :steps 1 :trace ((0 5))) (:gcd 21 :steps 3 :trace ((1071 462) (462 147) (147 21))) (:gcd 6 :steps 4 :trace ((270 192) (192 78) (78 36) (36 6))) (:gcd 6 :steps 3 :trace ((48 18) (18 12) (12 6))) (:gcd 6 :steps 3 :trace ((48 18) (18 12) (12 6))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((:gcd 6 :steps 3 :trace ((48 18) (18 12) (12 6))) (:gcd 25 :steps 2 :trace ((100 75) (75 25))) (:gcd 1 :steps 3 :trace ((17 13) (13 4) (4 1))) (:gcd 5 :steps 1 :trace ((0 5))) (:gcd 21 :steps 3 :trace ((1071 462) (462 147) (147 21))) (:gcd 6 :steps 4 :trace ((270 192) (192 78) (78 36) (36 6))) (:gcd 6 :steps 3 :trace ((48 18) (18 12) (12 6))) (:gcd 6 :steps 3 :trace ((48 18) (18 12) (12 6))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -523,12 +497,10 @@ fn oracle_prop_while_destructuring_iteration() {
         :avg-score (/ total-score count)
         :seniors (nreverse seniors)
         :honor-roll (nreverse honor-roll)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:count 5 :avg-age 30 :avg-score 88 :seniors (\"Alice\" \"Carol\" \"Eve\") :honor-roll (\"Alice\" \"Carol\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:count 5 :avg-age 30 :avg-score 88 :seniors (\"Alice\" \"Carol\" \"Eve\") :honor-roll (\"Alice\" \"Carol\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -554,12 +526,10 @@ fn oracle_prop_while_fibonacci_memo_table() {
       (setq result (cons (gethash j memo) result))
       (setq j (1+ j)))
     (nreverse result)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (0 1 1 2 3 5 8 13 21 34 55 89 144 233 377 610 987 1597 2584 4181 6765)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (0 1 1 2 3 5 8 13 21 34 55 89 144 233 377 610 987 1597 2584 4181 6765)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -611,12 +581,10 @@ fn oracle_prop_while_state_machine() {
                     (setq rev (cdr rev))
                     (setq i (1+ i)))
                   (nreverse t3))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (:final-state idle :vend-count 3 :trace-length 12 :last-3 ((idle coin -> has-coin) (has-coin coin -> has-two) (has-two select -> vending-change)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (:final-state idle :vend-count 3 :trace-length 12 :last-3 ((idle coin -> has-coin) (has-coin coin -> has-two) (has-two select -> vending-change)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -647,8 +615,6 @@ fn oracle_prop_while_insertion_sort() {
   (list :sorted (append vec nil)
         :comparisons comparisons
         :swaps swaps))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (void-variable data)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (void-variable data)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

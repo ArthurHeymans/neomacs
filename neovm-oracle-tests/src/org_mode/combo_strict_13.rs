@@ -12,6 +12,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn strict_datetree_insertion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 15 45)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -28,13 +29,16 @@ fn strict_datetree_insertion() {
              :levels (mapcar (lambda (h) (org-element-property :level h))
                              (org-element-map (org-element-parse-buffer) 'headline #'identity))))
         (error (list :datetree-error t)))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 15 45)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_babel_shebang_prologue() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"ob-sh\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -56,15 +60,14 @@ fn strict_babel_shebang_prologue() {
           (error (push (list :prologue-error (car e)) r)))
         (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
         (nreverse r))))))"##,
-        expect_test::expect![[
-            r#""ERR (file-missing \"Cannot open load file\" \"No such file or directory\" \"ob-sh\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn strict_table_copy_down() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 15 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -81,13 +84,14 @@ fn strict_table_copy_down() {
         (goto-char (point-min))
         (push (list :to-lisp (org-table-to-lisp)) r)
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 15 25)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_footnote_action_edge() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-function org-footnote-renumber-fn-n)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -114,13 +118,14 @@ fn strict_footnote_action_edge() {
         (org-footnote-renumber-fn-n)
         (push (list :remaining-refs (length (org-element-map (org-element-parse-buffer) 'footnote-reference #'identity))) r)
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (void-function org-footnote-renumber-fn-n)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_insert_structure_template() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 20 19)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -142,13 +147,14 @@ fn strict_insert_structure_template() {
                  (push (list :template-s (buffer-string)) r))
         (error (push (list :template-s-error t) r))))
     (nreverse r))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 20 19)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_entities_help_function() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp \"* Letters\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -169,13 +175,14 @@ fn strict_entities_help_function() {
    ;; user entity lookup
    (list (org-entity-get "dots"))
    (list (org-entity-get "hellip"))))"##,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp \"* Letters\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_babel_results_scalar_vector() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 17 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -194,13 +201,14 @@ fn strict_babel_results_scalar_vector() {
         (push (org-babel-execute-src-block) r)
         (push (list :result-count (length (org-element-map (org-element-parse-buffer) 'result #'identity))) r)
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 17 25)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_table_formula_debugger() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p \"c\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -219,13 +227,14 @@ fn strict_table_formula_debugger() {
         (goto-char (point-min)) (forward-line 1)
         (push (list :cell-c (org-table-get "c" nil)) r)
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (wrong-type-argument number-or-marker-p \"c\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_element_cache_reset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 24 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -251,13 +260,14 @@ fn strict_element_cache_reset() {
           (push (list :after-raw (mapcar (lambda (h) (substring-no-properties (org-element-property :raw-value h)))
                                          (org-element-map t2 'headline #'identity))) r))
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 24 25)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_timestamp_dayname_variants() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 19 62)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -278,13 +288,14 @@ fn strict_timestamp_dayname_variants() {
    ;; inactive
    (let ((ts (org-timestamp-from-string "[2024-12-25 Wed]")))
      (list :inactive-type (org-element-property :type ts))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 19 62)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_babel_ref_resolve() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 11 37)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -297,13 +308,14 @@ fn strict_babel_ref_resolve() {
           (list :ref-resolved (and val (listp val))
                 :ref-type (type-of val)))
       (error (list :ref-error t))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 11 37)""#]],
+        expect,
     );
 }
 
 #[test]
 fn strict_org_table_export_to_csv() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 15 25)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -320,6 +332,6 @@ fn strict_org_table_export_to_csv() {
         (push (list :cell-count (length (org-element-map (org-element-parse-buffer) 'table-cell #'identity))) r)
         (push (list :row-count (length (org-element-map (org-element-parse-buffer) 'table-row #'identity))) r)
         (nreverse r))))))"##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 15 25)""#]],
+        expect,
     );
 }

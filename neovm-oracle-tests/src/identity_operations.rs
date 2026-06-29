@@ -52,12 +52,10 @@ fn oracle_prop_identity_various_types() {
     (eq s (identity s)))
   (let ((v (vector 1 2)))
     (eq v (identity v))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (0 42 -17 3.14159 0 0 \"\" \"hello world\" \"multi\nline\tstring\" foo bar-baz nil t nil (1 2 3) (a (b c) (d (e f))) [] [1 2 3] [a \"b\" 3] (1 . 2) 65 10 t t t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (0 42 -17 3.14159 0 0 \"\" \"hello world\" \"multi\nline\tstring\" foo bar-baz nil t nil (1 2 3) (a (b c) (d (e f))) [] [1 2 3] [a \"b\" 3] (1 . 2) 65 10 t t t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -95,12 +93,10 @@ fn oracle_prop_identity_higher_order_functions() {
   ;; identity in nested mapcar
   (mapcar (lambda (lst) (mapcar #'identity lst))
           '((1 2) (3 4) (5 6))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 2 3 4 5) t nil) (1 \"two\" three (4 . 5) [6 7] nil t) (1 2 3 4 5 6 7 8 9) (a b c d) \"hello-world-foo\" \"abcd\" \"\" ((1 2) (3 4) (5 6)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 2 3 4 5) t nil) (1 \"two\" three (4 . 5) [6 7] nil t) (1 2 3 4 5 6 7 8 9) (a b c d) \"hello-world-foo\" \"abcd\" \"\" ((1 2) (3 4) (5 6)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -167,10 +163,9 @@ fn oracle_prop_identity_default_function_parameter() {
                  #'length))
     (fmakunbound 'neovm--test-transform-list)
     (fmakunbound 'neovm--test-reduce)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3 4 5) (1 4 9 16 25) (3 4 5) (20 40 60) 15 60 11)""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((1 2 3 4 5) (1 4 9 16 25) (3 4 5) (20 40 60) 15 60 11)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -228,12 +223,10 @@ fn oracle_prop_identity_composition_chains() {
               (setq val (funcall f val)))
             val)))
     (fmakunbound 'neovm--test-compose2)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (14 14 42 \"hello\" (1 2 3) 11 ((t t) (t t) (t t) (t t)) -21)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (14 14 42 \"hello\" (1 2 3) 11 ((t t) (t t) (t t) (t t)) -21)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -304,12 +297,10 @@ fn oracle_prop_identity_filter_partition() {
     (fmakunbound 'neovm--test-filter)
     (fmakunbound 'neovm--test-remove)
     (fmakunbound 'neovm--test-partition)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 t \"hello\") (nil nil nil nil) ((0 1 \"\" t 42) nil nil nil) ((:name \"Alice\" :active t) (:name \"Carol\" :active t) (:name \"Eve\" :active t)) ((1 2) nil (3 4) (5)) 8)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 t \"hello\") (nil nil nil nil) ((0 1 \"\" t 42) nil nil nil) ((:name \"Alice\" :active t) (:name \"Carol\" :active t) (:name \"Eve\" :active t)) ((1 2) nil (3 4) (5)) 8)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -387,12 +378,10 @@ fn oracle_prop_identity_dispatch_wrapper() {
           (funcall combined 10)))
     (fmakunbound 'neovm--test-make-processor)
     (fmakunbound 'neovm--test-make-validator)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (42 \"hello\" 10 45 \"[42]\" ((:valid t :checks ((\"always-pass\" . pass) (\"is-number\" . pass) (\"positive\" . pass))) (:valid nil :checks ((\"always-pass\" . pass) (\"is-number\" . pass) (\"positive\" . fail))) (:valid nil :checks ((\"always-pass\" . fail) (\"is-number\" . fail) (\"positive\" . fail))) (:valid nil :checks ((\"always-pass\" . pass) (\"is-number\" . fail) (\"positive\" . fail)))) 22)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (42 \"hello\" 10 45 \"[42]\" ((:valid t :checks ((\"always-pass\" . pass) (\"is-number\" . pass) (\"positive\" . pass))) (:valid nil :checks ((\"always-pass\" . pass) (\"is-number\" . pass) (\"positive\" . fail))) (:valid nil :checks ((\"always-pass\" . fail) (\"is-number\" . fail) (\"positive\" . fail))) (:valid nil :checks ((\"always-pass\" . pass) (\"is-number\" . fail) (\"positive\" . fail)))) 22)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -468,12 +457,10 @@ fn oracle_prop_identity_sort_dedup_group() {
     (fmakunbound 'neovm--test-sort-by)
     (fmakunbound 'neovm--test-group-by)
     (fmakunbound 'neovm--test-dedup)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 5 8 9) (\"apple\" \"banana\" \"cherry\") ((1 . \"a\") (2 . \"b\") (3 . \"c\")) ((1 1 1 1) (2 2 2) (3 3 3 3)) ((97 \"apple\" \"ant\" \"avocado\") (98 \"banana\" \"berry\")) (1 2 3 1) (\"a\" \"b\" \"a\") ((1 . \"a\") (2 . \"c\") (3 . \"e\")) nil (42))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 5 8 9) (\"apple\" \"banana\" \"cherry\") ((1 . \"a\") (2 . \"b\") (3 . \"c\")) ((1 1 1 1) (2 2 2) (3 3 3 3)) ((97 \"apple\" \"ant\" \"avocado\") (98 \"banana\" \"berry\")) (1 2 3 1) (\"a\" \"b\" \"a\") ((1 . \"a\") (2 . \"c\") (3 . \"e\")) nil (42))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -539,10 +526,8 @@ fn oracle_prop_identity_eq_preservation_and_caching() {
           (funcall c2 :size)
           (funcall c2 :keys)))
     (fmakunbound 'neovm--test-make-cache)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (1 2 3 t nil 3 (42 \"hello\" \"world\") \"person-a-updated\" \"person-b\" 2 (alice bob))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (1 2 3 t nil 3 (42 \"hello\" \"world\") \"person-a-updated\" \"person-b\" 2 (alice bob))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

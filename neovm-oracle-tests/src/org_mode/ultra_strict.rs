@@ -10,6 +10,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn ultra_deeply_nested_inline_markup() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -32,7 +33,7 @@ Nested *bold with _underline_ and /italic/ inside*.")
          (let ((bold (car (org-element-map tree 'bold #'identity))))
            (mapcar #'org-element-type
                    (org-element-contents bold)))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -43,6 +44,7 @@ Nested *bold with _underline_ and /italic/ inside*.")
 #[test]
 fn ultra_complex_table_mixed_content() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -70,7 +72,7 @@ fn ultra_complex_table_mixed_content() {
          (length (org-element-map tree 'strike-through #'identity))
          ;; Links in cells.
          (length (org-element-map tree 'link #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -81,6 +83,7 @@ fn ultra_complex_table_mixed_content() {
 #[test]
 fn ultra_complex_list_mixed_content() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -113,7 +116,7 @@ fn ultra_complex_list_mixed_content() {
          ;; Checkboxes.
          (mapcar (lambda (i) (org-element-property :checkbox i))
                  (org-element-map tree 'item #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -124,6 +127,7 @@ fn ultra_complex_list_mixed_content() {
 #[test]
 fn ultra_complex_headline_all_features() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -172,7 +176,7 @@ Body with [[https://orgmode.org][link]] and [fn:1].
          (mapcar #'org-element-type
                  (org-element-contents
                   (org-element-map tree 'headline #'identity nil t)))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -183,6 +187,7 @@ Body with [[https://orgmode.org][link]] and [fn:1].
 #[test]
 fn ultra_complex_source_block_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -215,7 +220,7 @@ echo \"hello\"
          (mapcar (lambda (b) (org-element-property :parameters b)) src-blocks)
          ;; Values (code content).
          (mapcar (lambda (b) (org-element-property :value b)) src-blocks)))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -226,6 +231,7 @@ echo \"hello\"
 #[test]
 fn ultra_complex_export_block_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -255,7 +261,7 @@ Plain text content.
          (mapcar (lambda (b) (org-element-property :type b)) export-blocks)
          ;; Values.
          (mapcar (lambda (b) (org-element-property :value b)) export-blocks)))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -266,6 +272,7 @@ Plain text content.
 #[test]
 fn ultra_complex_example_block_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -291,7 +298,7 @@ Numbered example
          (mapcar (lambda (b) (org-element-property :switches b)) example-blocks)
          ;; Values.
          (mapcar (lambda (b) (org-element-property :value b)) example-blocks)))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -302,6 +309,7 @@ Numbered example
 #[test]
 fn ultra_complex_quote_block_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -325,7 +333,7 @@ Another quote.
          (length (org-element-map tree 'bold #'identity))
          (length (org-element-map tree 'italic #'identity))
          (length (org-element-map tree 'link #'identity)))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -336,6 +344,7 @@ Another quote.
 #[test]
 fn ultra_complex_center_block_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -357,7 +366,7 @@ Another centered paragraph.
          ;; Inline markup in center blocks.
          (length (org-element-map tree 'bold #'identity))
          (length (org-element-map tree 'italic #'identity)))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -368,6 +377,7 @@ Another centered paragraph.
 #[test]
 fn ultra_complex_verse_block_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -387,7 +397,7 @@ Verse line 3
          (length verse-blocks)
          ;; Types.
          (mapcar #'org-element-type verse-blocks)))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -398,6 +408,7 @@ Verse line 3
 #[test]
 fn ultra_complex_comment_block_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -417,7 +428,7 @@ It can contain multiple lines.
          (length (org-element-map tree 'comment-block #'identity))
          ;; Line comments.
          (length (org-element-map tree 'comment #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -428,6 +439,7 @@ It can contain multiple lines.
 #[test]
 fn ultra_complex_fixed_width_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -445,7 +457,7 @@ fn ultra_complex_fixed_width_scenarios() {
          ;; Types.
          (mapcar #'org-element-type
                  (org-element-map tree 'fixed-width #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -456,6 +468,7 @@ fn ultra_complex_fixed_width_scenarios() {
 #[test]
 fn ultra_complex_keyword_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -489,7 +502,7 @@ fn ultra_complex_keyword_scenarios() {
          ;; Keyword values (first 5).
          (mapcar (lambda (k) (org-element-property :value k))
                  (take 5 keywords))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -500,6 +513,7 @@ fn ultra_complex_keyword_scenarios() {
 #[test]
 fn ultra_complex_affiliated_keyword_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -530,7 +544,7 @@ fn ultra_complex_affiliated_keyword_scenarios() {
          ;; Name on table.
          (org-element-property :name
            (car (org-element-map tree 'table #'identity)))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -541,6 +555,7 @@ fn ultra_complex_affiliated_keyword_scenarios() {
 #[test]
 fn ultra_complex_paragraph_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -573,7 +588,7 @@ Paragraph 3 with $x^2$ and \\alpha and {{{macro}}}.
          ;; Footnotes.
          (length (org-element-map tree 'footnote-reference #'identity))
          (length (org-element-map tree 'footnote-definition #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -584,6 +599,7 @@ Paragraph 3 with $x^2$ and \\alpha and {{{macro}}}.
 #[test]
 fn ultra_complex_section_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -613,7 +629,7 @@ Paragraph 5.")
                              (substring-no-properties
                               (org-element-property :raw-value h))))
                  (org-element-map tree 'headline #'identity))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -624,6 +640,7 @@ Paragraph 5.")
 #[test]
 fn ultra_complex_org_data_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -643,7 +660,7 @@ Body 2")
          (org-element-contents tree)
          ;; Child types.
          (mapcar #'org-element-type (org-element-contents tree))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -654,6 +671,7 @@ Body 2")
 #[test]
 fn ultra_complex_anonymous_node_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil anonymous anonymous dummy dummy nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -668,7 +686,7 @@ fn ultra_complex_anonymous_node_scenarios() {
    ;; Invalid.
    (org-element-type '(1 2) t)
    (org-element-type nil)))"##,
-        expect_test::expect![[r#""OK (nil anonymous anonymous dummy dummy nil nil)""#]],
+        expect,
     );
 }
 
@@ -679,6 +697,7 @@ fn ultra_complex_anonymous_node_scenarios() {
 #[test]
 fn ultra_complex_type_p_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil (foo) (foo bar) nil t t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -697,7 +716,7 @@ fn ultra_complex_type_p_scenarios() {
    ;; Invalid.
    (org-element-type-p nil 'foo)
    (org-element-type-p 1 'foo)))"##,
-        expect_test::expect![[r#""OK (t nil (foo) (foo bar) nil t t nil nil)""#]],
+        expect,
     );
 }
 
@@ -708,6 +727,9 @@ fn ultra_complex_type_p_scenarios() {
 #[test]
 fn ultra_complex_class_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (element element object object element object object element element element object object object)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -732,9 +754,7 @@ fn ultra_complex_class_scenarios() {
    (org-element-class '(foo nil) '(bold nil))
    (org-element-class '(foo nil) '(paragraph nil))
    (org-element-class '(foo nil) '("secondary"))))"##,
-        expect_test::expect![[
-            r#""OK (element element object object element object object element element element object object object)""#
-        ]],
+        expect,
     );
 }
 
@@ -745,6 +765,7 @@ fn ultra_complex_class_scenarios() {
 #[test]
 fn ultra_complex_property_raw_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -767,7 +788,7 @@ fn ultra_complex_property_raw_scenarios() {
                       (headline (:standard-properties ,(make-vector 10 'test)) (headline))))
      (list (org-element-property-raw :begin element)
            (org-element-property-raw :begin1 element)))))"##,
-        expect_test::expect![[r#""OK (nil nil nil)""#]],
+        expect,
     );
 }
 
@@ -778,6 +799,7 @@ fn ultra_complex_property_raw_scenarios() {
 #[test]
 fn ultra_complex_deferred_scenarios() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org-element)
@@ -838,6 +860,6 @@ fn ultra_complex_deferred_scenarios() {
                              (org-element-deferred-create
                               nil (lambda (_) 1)))))))
      (org-element-property :foo el))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

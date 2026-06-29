@@ -45,12 +45,10 @@ fn oracle_prop_forward_comment_patterns_positive_n() {
              (list 'skip-2 r2 p2 (buffer-substring p2 (min (+ p2 10) (point-max))))
              (list 'skip-3 r3 p3 (buffer-substring p3 (min (+ p3 10) (point-max))))
              (list 'skip-4 r4 p4))))))))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((skip-1 t 16 \";; comment\") (skip-2 t 31 \";; comment\") (skip-3 t 48 \"actual cod\") (skip-4 nil 48))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((skip-1 t 16 \";; comment\") (skip-2 t 31 \";; comment\") (skip-3 t 48 \"actual cod\") (skip-4 nil 48))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -94,10 +92,8 @@ fn oracle_prop_forward_comment_patterns_negative_n() {
                (list 'back-2 r2 p2)
                (list 'back-3 r3 p3)
                (list 'back-100 r100 p100))))))))))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 31 50)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 31 50)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -137,12 +133,10 @@ fn oracle_prop_forward_comment_patterns_zero_n() {
                (list 'on-whitespace r3 p3)
                (list 'at-eob r4 p4)
                (list 'at-bob r5 p5)))))))))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((on-comment t 1) (on-code t 14) (on-whitespace t 24) (at-eob t 38) (at-bob t 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((on-comment t 1) (on-code t 14) (on-whitespace t 24) (at-eob t 38) (at-bob t 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -175,10 +169,8 @@ fn oracle_prop_forward_comment_patterns_custom_syntax() {
         (list
          (list 'first r1 p1 rest1)
          (list 'all r-all p-all rest-all))))))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((first t 16 \"code1\") (all nil 16 \"code1\"))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((first t 16 \"code1\") (all nil 16 \"code1\"))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -216,12 +208,10 @@ fn oracle_prop_forward_comment_patterns_block_comments() {
            (list 'first-block r1 p1 rest1)
            (list 'fail-on-code r-fail p-fail)
            (list 'skip-all r-all p-all rest-all)))))))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((first-block t 16 \" code1 /* \") (fail-on-code nil 17) (skip-all nil 17 \"code1 /* b\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((first-block t 16 \" code1 /* \") (fail-on-code nil 17) (skip-all nil 17 \"code1 /* b\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -269,12 +259,10 @@ fn oracle_prop_forward_comment_patterns_counting_extraction() {
       (list
        'count count
        'comments (nreverse comments)))))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (count 4 comments (\";; first comment\" \";; second comment\" \";; third comment\" \";; fourth comment\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (count 4 comments (\";; first comment\" \";; second comment\" \";; third comment\" \";; fourth comment\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -325,12 +313,10 @@ fn oracle_prop_forward_comment_patterns_code_comment_separation() {
       (list
        'code-parts (nreverse code-parts)
        'comment-regions comment-count))))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (code-parts (\"(defun foo (x)\n  \" \"(+ x 1)) \" \"(defun bar (y)\n  (* y 2))\n\") comment-regions 3)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (code-parts (\"(defun foo (x)\n  \" \"(+ x 1)) \" \"(defun bar (y)\n  (* y 2))\n\") comment-regions 3)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -377,10 +363,8 @@ fn oracle_prop_forward_comment_patterns_mixed_styles() {
                (list 'line-2 r3 p3)
                (list 'fail r4 p4)
                (list 'all r-all p-all rest))))))))))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 52)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 34 52)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -418,10 +402,8 @@ fn oracle_prop_forward_comment_patterns_whitespace_interleaved() {
            (list 'one r1 p1 rest1)
            (list 'big r-big p-big rest-big)
            (list 'back r-back p-back)))))))"####;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((one t 20 \"\n   \t\ncode\") (big nil 26 \"code\") (back t 9))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((one t 20 \"\n   \t\ncode\") (big nil 26 \"code\") (back t 9))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

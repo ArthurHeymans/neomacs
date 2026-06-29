@@ -14,6 +14,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_syntax_ppss_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-sppss")))
@@ -44,7 +45,7 @@ fn combo_syntax_ppss_marker_overlay_undo() {
                                   (get-text-property 1 'lang))))
               (kill-buffer buf)
               (list ppss-before after ppss-after ppss-restored restored)))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -52,6 +53,9 @@ fn combo_syntax_ppss_marker_overlay_undo() {
 fn combo_modify_syntax_entry_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((#(\"AAAA-BBBB-CCCC\" 0 4 (zone a) 5 9 (zone b) 10 14 (zone c)) 5 10 1 15 a b 119) (32 5 10 1 15 a b c))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-mse")))
@@ -84,9 +88,7 @@ fn combo_modify_syntax_entry_marker_overlay_undo() {
                                      (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list after-mod after-restore))))))) "#,
-        expect_test::expect![[
-            r#""OK ((#(\"AAAA-BBBB-CCCC\" 0 4 (zone a) 5 9 (zone b) 10 14 (zone c)) 5 10 1 15 a b 119) (32 5 10 1 15 a b c))""#
-        ]],
+        expect,
     );
 }
 
@@ -94,6 +96,7 @@ fn combo_modify_syntax_entry_marker_overlay_undo() {
 fn combo_forward_sexp_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-fsexp")))
@@ -128,7 +131,7 @@ fn combo_forward_sexp_marker_overlay_undo() {
                                   (get-text-property 20 'tree))))
               (kill-buffer buf)
               (list pos-after-fwd pos-after-bwd after restored)))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }
 
@@ -136,6 +139,7 @@ fn combo_forward_sexp_marker_overlay_undo() {
 fn combo_forward_comment_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 31 34)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-fcomm")))
@@ -173,7 +177,7 @@ fn combo_forward_comment_marker_overlay_undo() {
                                   (get-text-property 31 'word))))
               (kill-buffer buf)
               (list pos-after-fwd pos-after-bwd after restored)))))))) "#,
-        expect_test::expect![[r#""ERR (args-out-of-range 31 34)""#]],
+        expect,
     );
 }
 
@@ -181,6 +185,7 @@ fn combo_forward_comment_marker_overlay_undo() {
 fn combo_syntax_table_buffer_local_marker_overlay_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((buf (generate-new-buffer " combo-stbl")))
@@ -216,6 +221,6 @@ fn combo_syntax_table_buffer_local_marker_overlay_undo() {
                                 (get-text-property 11 'zone))))
             (kill-buffer buf)
             (list pos-after-fwd after restored))))))) "#,
-        expect_test::expect![[r#""ERR (wrong-type-argument listp t)""#]],
+        expect,
     );
 }

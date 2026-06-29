@@ -41,8 +41,6 @@ fn oracle_set_file_times_handler_and_timestamp_order() {
     (fmakunbound 'neomacs--oracle-times-handler)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 27 50)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 27 50)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

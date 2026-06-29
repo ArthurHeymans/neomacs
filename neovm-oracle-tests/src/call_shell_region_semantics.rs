@@ -21,10 +21,8 @@ fn oracle_prop_gnu_call_shell_region_delete_replaces_region() {
    (point)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 \"xABCY\" 5)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 \"xABCY\" 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -43,10 +41,8 @@ fn oracle_prop_gnu_call_shell_region_uses_dynamic_shell_bindings() {
      (point))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 \"incsr:cmdput\" 10)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 \"incsr:cmdput\" 10)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -61,8 +57,6 @@ fn oracle_prop_gnu_call_shell_region_mixes_stderr_when_requested() {
    (buffer-string)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (0 \"abcouterr\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (0 \"abcouterr\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

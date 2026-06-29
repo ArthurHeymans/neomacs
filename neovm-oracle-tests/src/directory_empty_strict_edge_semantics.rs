@@ -46,10 +46,8 @@ fn oracle_directory_empty_p_regular_missing_symlink_and_type_edges() {
     (ignore-errors (delete-directory dir))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t nil nil nil t (wrong-type-argument (stringp 42)) (wrong-number-of-arguments ((1 . 1) 0)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t nil nil nil t (wrong-type-argument (stringp 42)) (wrong-number-of-arguments ((1 . 1) 0)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

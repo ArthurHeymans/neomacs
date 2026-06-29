@@ -9,6 +9,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_method_around_before_after() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass method-ctx ()
@@ -67,7 +68,7 @@ fn combo_eieio_method_around_before_after() {
               (overlay-start ov) (overlay-end ov)
               (mc-log ctx))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -75,6 +76,7 @@ fn combo_eieio_method_around_before_after() {
 fn combo_eieio_method_around_wrapper_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass around-ctx ()
@@ -133,7 +135,7 @@ fn combo_eieio_method_around_wrapper_edit() {
               (overlay-start ov) (overlay-end ov)
               (ac-log ctx))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -141,6 +143,7 @@ fn combo_eieio_method_around_wrapper_edit() {
 fn combo_eieio_method_dispatch_multilevel() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass base-obj () ((val :initarg :val :accessor bo-val :initform 0)))
@@ -190,7 +193,7 @@ fn combo_eieio_method_dispatch_multilevel() {
               (marker-position m)
               (overlay-start ov) (overlay-end ov))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -198,6 +201,7 @@ fn combo_eieio_method_dispatch_multilevel() {
 fn combo_eieio_method_no_applicable_method() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass target-obj () ((name :initarg :name :accessor to-name :initform "")))
@@ -247,7 +251,7 @@ fn combo_eieio_method_no_applicable_method() {
               (overlay-start ov) (overlay-end ov)
               my-nam-log)))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }
 
@@ -255,6 +259,7 @@ fn combo_eieio_method_no_applicable_method() {
 fn combo_eieio_method_dispatch_with_marker_overlay() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defmethod)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass dispatch-ctx ()
@@ -310,6 +315,6 @@ fn combo_eieio_method_dispatch_with_marker_overlay() {
               (marker-position m)
               (overlay-start ov) (overlay-end ov))))
     (kill-buffer buf)))"#,
-        expect_test::expect![[r#""ERR (void-function defmethod)""#]],
+        expect,
     );
 }

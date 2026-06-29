@@ -5,6 +5,7 @@ use crate::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn org_indent_region_drawer_list_block_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -34,7 +35,7 @@ fn org_indent_region_drawer_list_block_combo() {
              (list (org-element-type e)
                    (org-element-property :begin e)
                    (org-element-property :end e))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -42,6 +43,7 @@ fn org_indent_region_drawer_list_block_combo() {
 fn org_fill_paragraph_item_timestamp_macro_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -68,7 +70,7 @@ fn org_fill_paragraph_item_timestamp_macro_combo() {
                  (org-element-property :key e)
                  (org-element-property :value e)
                  (org-element-property :name e)))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -76,6 +78,7 @@ fn org_fill_paragraph_item_timestamp_macro_combo() {
 fn org_comment_uncomment_heading_block_region_combo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn
   (require 'org)
@@ -109,6 +112,6 @@ fn org_comment_uncomment_heading_block_region_combo() {
                         (org-element-property :begin e)
                         (org-element-property :end e)
                         (org-element-property :raw-value e))))))))"##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }

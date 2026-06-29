@@ -20,10 +20,8 @@ fn oracle_truncate_ascii_start_and_end_columns() {
  (truncate-string-to-width "abcdefghij" 20 8))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"abcde\" \"cde\" \"\" \"ij\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"abcde\" \"cde\" \"\" \"ij\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -43,10 +41,8 @@ fn oracle_truncate_wide_chars_and_padding_edges() {
    (truncate-string-to-width s 4 2 ?_)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (7 \"a\" \"a\" \"a中\" \"a中b\" \"中\" \"_b\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (7 \"a\" \"a\" \"a中\" \"a中b\" \"中\" \"_b\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -61,10 +57,8 @@ fn oracle_truncate_padding_when_string_is_too_short() {
  (truncate-string-to-width "ab" 5 1 ?-))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"....\" \"ab___\" \"xxxxx\" \"b---\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"....\" \"ab___\" \"xxxxx\" \"b---\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -81,10 +75,8 @@ fn oracle_truncate_explicit_ellipsis_semantics() {
    (truncate-string-to-width "abc" 2 nil nil "")))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"a...\" \"ab...\" \"abcd<>\" \"ab\" \"ab\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"a...\" \"ab...\" \"abcd<>\" \"ab\" \"ab\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -102,12 +94,10 @@ fn oracle_truncate_ellipsis_text_property_mode() {
           (get-text-property 5 'display r))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (#(\"abcdefghij\" 2 7 (face bold display \"...\") 7 10 (display \"...\")) \"abcdefghij\" (face bold display \"...\") (face bold display \"...\") \"...\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (#(\"abcdefghij\" 2 7 (face bold display \"...\") 7 10 (display \"...\")) \"abcdefghij\" (face bold display \"...\") (face bold display \"...\") \"...\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -129,10 +119,8 @@ fn oracle_truncate_argument_errors() {
    cases))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((wrong-type-argument number-or-marker-p) (wrong-type-argument number-or-marker-p) \"ab\" (wrong-type-argument sequencep))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((wrong-type-argument number-or-marker-p) (wrong-type-argument number-or-marker-p) \"ab\" (wrong-type-argument sequencep))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -23,12 +23,10 @@ fn oracle_prop_message_returns_formatted_string() {
       (message "")
       (message "100%%")
       (message "%s %s %s" 1 2.0 'sym))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"hello\" \"value: 42\" \"Alice is 30\" nil \"\" \"100%\" \"1 2.0 sym\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"hello\" \"value: 42\" \"Alice is 30\" nil \"\" \"100%\" \"1 2.0 sym\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -83,12 +81,10 @@ fn oracle_prop_format_all_specifiers_comprehensive() {
       (format "%g" 0.00001)
       (format "%g" 100000.0)
       (format "%g" 3.14))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"hello\" \"42\" \"3.14\" \"nil\" \"t\" \"(a b c)\" \"symbol\" \"0\" \"42\" \"-999\" \"2147483647\" \"0.000000\" \"3.141593\" \"-1.500000\" \"A\" \"a\" \"0\" \"0\" \"7\" \"10\" \"377\" \"777\" \"0\" \"f\" \"ff\" \"ffff\" \"FF\" \"FFFF\" \"1.000000e+00\" \"1.234568e+05\" \"1.000000e-03\" \"1\" \"1e-05\" \"100000\" \"3.14\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"hello\" \"42\" \"3.14\" \"nil\" \"t\" \"(a b c)\" \"symbol\" \"0\" \"42\" \"-999\" \"2147483647\" \"0.000000\" \"3.141593\" \"-1.500000\" \"A\" \"a\" \"0\" \"0\" \"7\" \"10\" \"377\" \"777\" \"0\" \"f\" \"ff\" \"ffff\" \"FF\" \"FFFF\" \"1.000000e+00\" \"1.234568e+05\" \"1.000000e-03\" \"1\" \"1e-05\" \"100000\" \"3.14\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -141,12 +137,10 @@ fn oracle_prop_format_field_width_padding_combinations() {
       ;; Width with %s overflow (field width is minimum, not maximum)
       (format "%2s" "longstring")
       (format "%2d" 99999))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"        hi\" \"         hello world\" \"abcdef\" \"hi        \" \"hello world         \" \"abcdef\" \"00042\" \"-000000042\" \"00000\" \"000000ff\" \"000000FF\" \"00000377\" \"        42\" \"       -42\" \"42        \" \"-42       \" \"3\" \"3.1\" \"3.14\" \"3.14159\" \"3.1415900000\" \"      3.14\" \"3.14      \" \"0000003.14\" \"1.23e+04\" \"1e+04\" \"      1.234e-03\" \"3.1\" \"3.14159\" \"longstring\" \"99999\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"        hi\" \"         hello world\" \"abcdef\" \"hi        \" \"hello world         \" \"abcdef\" \"00042\" \"-000000042\" \"00000\" \"000000ff\" \"000000FF\" \"00000377\" \"        42\" \"       -42\" \"42        \" \"-42       \" \"3\" \"3.1\" \"3.14\" \"3.14159\" \"3.1415900000\" \"      3.14\" \"3.14      \" \"0000003.14\" \"1.23e+04\" \"1e+04\" \"      1.234e-03\" \"3.1\" \"3.14159\" \"longstring\" \"99999\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -174,12 +168,10 @@ fn oracle_prop_format_mixed_type_args() {
       ;; %S (prin1) mixed with %s (princ)
       (format "princ=%s prin1=%S" "hello" "hello")
       (format "princ=%s prin1=%S" '(a b) '(a b)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Order: 5 items at $9.99 each\" \"dec=255 hex=0xff oct=0377\" \"char A has code 65 and hex 41\" \"str 42 3.14 nil (a b)\" \"s=hi d=42 f=3.1 c=A o=377 x=ff e=1.2e+04 g=100\" \"3+4=7, 3*4=12\" \"princ=hello prin1=\\\"hello\\\"\" \"princ=(a b) prin1=(a b)\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Order: 5 items at $9.99 each\" \"dec=255 hex=0xff oct=0377\" \"char A has code 65 and hex 41\" \"str 42 3.14 nil (a b)\" \"s=hi d=42 f=3.1 c=A o=377 x=ff e=1.2e+04 g=100\" \"3+4=7, 3*4=12\" \"princ=hello prin1=\\\"hello\\\"\" \"princ=(a b) prin1=(a b)\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -224,12 +216,10 @@ fn oracle_prop_format_log_message_builder() {
               (apply 'neovm--test-format-log entry))
             entries "\n")))
     (fmakunbound 'neovm--test-format-log)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"[INFO ] 12:00:01 [net] Connection from 192.168.1.1:8080\" \"[ERROR] 12:00:02 [db] Query failed after 2.5s: timeout\" \"[DEBUG] 12:00:03 [gc] Collected 1500 objects (23.5% of heap)\" \"[WARN ] 12:00:04 [auth] Failed login attempt #3 for user \\\"admin\\\"\" \"[INFO ] 09:00 [app] Started\n[INFO ] 09:01 [db] Connected to postgres://localhost\n[WARN ] 09:05 [mem] Usage at 85%\n[ERROR] 09:10 [disk] Write failed: ENOSPC\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"[INFO ] 12:00:01 [net] Connection from 192.168.1.1:8080\" \"[ERROR] 12:00:02 [db] Query failed after 2.5s: timeout\" \"[DEBUG] 12:00:03 [gc] Collected 1500 objects (23.5% of heap)\" \"[WARN ] 12:00:04 [auth] Failed login attempt #3 for user \\\"admin\\\"\" \"[INFO ] 09:00 [app] Started\n[INFO ] 09:01 [db] Connected to postgres://localhost\n[WARN ] 09:05 [mem] Usage at 85%\n[ERROR] 09:10 [disk] Write failed: ENOSPC\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -275,12 +265,10 @@ fn oracle_prop_format_aligned_table_complex() {
                           rows
                           (list sep summary))
                   "\n"))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK \"  ID  Name         Score  Grade      Pct\n----------------------------------------\n   1  Alice         95.5      A    95.5%\n   2  Bob           87.2     B+    87.2%\n   3  Carol         92.8     A-    92.8%\n   4  Dave          73.1      C    73.1%\n   5  Eve          100.0     A+   100.0%\n----------------------------------------\n  Average: 89.72  |  Total: 448.6  |  Count: 5\"""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK \"  ID  Name         Score  Grade      Pct\n----------------------------------------\n   1  Alice         95.5      A    95.5%\n   2  Bob           87.2     B+    87.2%\n   3  Carol         92.8     A-    92.8%\n   4  Dave          73.1      C    73.1%\n   5  Eve          100.0     A+   100.0%\n----------------------------------------\n  Average: 89.72  |  Total: 448.6  |  Count: 5\"""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -319,12 +307,10 @@ fn oracle_prop_format_number_base_conversions() {
           (format "%d in oct is %o" 8 8)
           (format "ASCII %d = %c" 65 65)))
     (fmakunbound 'neovm--test-num-display)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"   Dec     Hex      Oct   Chr\" \"=============================\" (\"     0  0x0000  0000000  .\" \"     1  0x0001  0000001  .\" \"     9  0x0009  0000011  .\" \"    10  0x000A  0000012  .\" \"    15  0x000F  0000017  .\" \"    16  0x0010  0000020  .\" \"    31  0x001F  0000037  .\" \"    32  0x0020  0000040   \" \"    48  0x0030  0000060  0\" \"    57  0x0039  0000071  9\" \"    65  0x0041  0000101  A\" \"    90  0x005A  0000132  Z\" \"    97  0x0061  0000141  a\" \"   122  0x007A  0000172  z\" \"   126  0x007E  0000176  ~\" \"   127  0x007F  0000177  .\" \"   255  0x00FF  0000377  .\") (\"  0\" \"  1\" \"  9\" \" 10\" \" 15\" \" 16\" \" 31\" \" 32\" \" 48\" \" 57\" \" 65\" \" 90\" \" 97\" \"122\" \"126\" \"127\" \"255\") \"255 in hex is ff\" \"8 in oct is 10\" \"ASCII 65 = A\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"   Dec     Hex      Oct   Chr\" \"=============================\" (\"     0  0x0000  0000000  .\" \"     1  0x0001  0000001  .\" \"     9  0x0009  0000011  .\" \"    10  0x000A  0000012  .\" \"    15  0x000F  0000017  .\" \"    16  0x0010  0000020  .\" \"    31  0x001F  0000037  .\" \"    32  0x0020  0000040   \" \"    48  0x0030  0000060  0\" \"    57  0x0039  0000071  9\" \"    65  0x0041  0000101  A\" \"    90  0x005A  0000132  Z\" \"    97  0x0061  0000141  a\" \"   122  0x007A  0000172  z\" \"   126  0x007E  0000176  ~\" \"   127  0x007F  0000177  .\" \"   255  0x00FF  0000377  .\") (\"  0\" \"  1\" \"  9\" \" 10\" \" 15\" \" 16\" \" 31\" \" 32\" \" 48\" \" 57\" \" 65\" \" 90\" \" 97\" \"122\" \"126\" \"127\" \"255\") \"255 in hex is ff\" \"8 in oct is 10\" \"ASCII 65 = A\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -365,10 +351,8 @@ fn oracle_prop_format_edge_cases() {
       (let ((msg-result (message "%d + %d = %d" 3 4 7))
             (fmt-result (format "%d + %d = %d" 3 4 7)))
         (string= msg-result fmt-result)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"\" \"plain text\" \"%\" \"%%\" \"100% done\" \"50% of 100%\" \"*\" \"0\" \"item0=0, item1=1, item2=4, item3=9, item4=16, item5=25, item6=36, item7=49, item8=64, item9=81\" \"outer(inner(deep(42)))\" \"nil\" \"nil\" \"t\" \"t\" t)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"\" \"plain text\" \"%\" \"%%\" \"100% done\" \"50% of 100%\" \"*\" \"0\" \"item0=0, item1=1, item2=4, item3=9, item4=16, item5=25, item6=36, item7=49, item8=64, item9=81\" \"outer(inner(deep(42)))\" \"nil\" \"nil\" \"t\" \"t\" t)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

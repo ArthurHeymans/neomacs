@@ -66,10 +66,8 @@ fn oracle_file_name_completion_prefix_ignored_case_regex_and_predicate_edges() {
     (delete-directory dir t)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"alpha\" \"alpha\" t \"subdir/\" nil (\"alpha\" \"alphabet\") (\"beta.el\" t (\"beta.el\" \"beta.elc\")) (\"case.TXT\" (\"case.TXT\")) (\"case.TXT\" (\"case.TXT\")) (\"subdir/\" ((nil \"subdir/\" t))) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"alpha\" \"alpha\" t \"subdir/\" nil (\"alpha\" \"alphabet\") (\"beta.el\" t (\"beta.el\" \"beta.elc\")) (\"case.TXT\" (\"case.TXT\")) (\"case.TXT\" (\"case.TXT\")) (\"subdir/\" ((nil \"subdir/\" t))) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

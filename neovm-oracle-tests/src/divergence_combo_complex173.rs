@@ -8,6 +8,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx173_fixnum_bignum_boundary() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (0 0 2305843009213693952 -2305843009213693953 4611686018427387902 -4611686018427387904 0 4611686018427387904 18446744073709551616)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((mpf most-positive-fixnum)
@@ -21,15 +24,16 @@ fn div_cx173_fixnum_bignum_boundary() {
         (expt 2 62)
         (expt 2 64)))
 "##,
-        expect_test::expect![[
-            r#""OK (0 0 2305843009213693952 -2305843009213693953 4611686018427387902 -4611686018427387904 0 4611686018427387904 18446744073709551616)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx173_float_precision_overflow_underflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (1e+308 1.0e+INF 1e-308 0.0 1.0e+INF -1.0e+INF -0.0e+NaN 1.0 0.0)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (* 1.0 1e308)
@@ -42,15 +46,14 @@ fn div_cx173_float_precision_overflow_underflow() {
       (+ 0.5 0.5 0.0)
       (- 0.0 0.0))
 "##,
-        expect_test::expect![[
-            r#""OK (1e+308 1.0e+INF 1e-308 0.0 1.0e+INF -1.0e+INF -0.0e+NaN 1.0 0.0)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx173_signed_zero_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil t t nil nil t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (eq 0.0 0.0)
@@ -62,13 +65,14 @@ fn div_cx173_signed_zero_predicates() {
       (= 0.0 0)
       (eq 0.0 0))
 "##,
-        expect_test::expect![[r#""OK (nil nil t t nil nil t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx173_ratio_arithmetic_no_overflow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable 1/2)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (+ 1/2 1/3)
@@ -82,13 +86,16 @@ fn div_cx173_ratio_arithmetic_no_overflow() {
       (denominator 1/3)
       (numerator 1/3))
 "##,
-        expect_test::expect![[r#""ERR (void-variable 1/2)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx173_expt_chains_int_vs_float() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (1 2 18446744073709551616 340282366920938463463374607431768211456 115792089237316195423570985008687907853269984665640564039457584007913129639936 1.4142135623730951 0.5 0.7071067811865476 100000000000000000000 1e-20 1 0 1)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (expt 2 0)
@@ -105,15 +112,14 @@ fn div_cx173_expt_chains_int_vs_float() {
       (expt 0 1)
       (expt 1 100))
 "##,
-        expect_test::expect![[
-            r#""OK (1 2 18446744073709551616 340282366920938463463374607431768211456 115792089237316195423570985008687907853269984665640564039457584007913129639936 1.4142135623730951 0.5 0.7071067811865476 100000000000000000000 1e-20 1 0 1)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx173_floor_ceiling_round_with_negative() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (2 -3 3 -2 2 4 -2 -4 2 -2 2.0 3.0 2.0 2.0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (floor 2.7)
@@ -131,13 +137,14 @@ fn div_cx173_floor_ceiling_round_with_negative() {
       (fround 2.5)
       (ftruncate 2.7))
 "##,
-        expect_test::expect![[r#""OK (2 -3 3 -2 2 4 -2 -4 2 -2 2.0 3.0 2.0 2.0)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx173_modulo_with_negative_divisor() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 -1 1 -1 1 2 -2 -1 1.5 1.5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (% 7 3)
@@ -151,13 +158,16 @@ fn div_cx173_modulo_with_negative_divisor() {
       (mod 7.5 3)
       (mod -7.5 3))
 "##,
-        expect_test::expect![[r#""OK (1 -1 1 -1 1 2 -2 -1 1.5 1.5)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx173_bignum_factorial_via_reduction() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (3628800 2432902008176640000 265252859812191058636308480000000 815915283247897734345611269596115894272000000000 30414093201713378043612608166064768844377641568960512000000000000)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((nums (list 10 20 30 40 50)))
@@ -165,15 +175,16 @@ fn div_cx173_bignum_factorial_via_reduction() {
             (cl-reduce #'* (number-sequence 1 n)))
           nums))
 "##,
-        expect_test::expect![[
-            r#""OK (3628800 2432902008176640000 265252859812191058636308480000000 815915283247897734345611269596115894272000000000 30414093201713378043612608166064768844377641568960512000000000000)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx173_bignum_arithmetic_with_format() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"115792089237316195423570985008687907853269984665640564039457584007913129639936\" \"10000000000000000000000000000000000000000000000000000000000000000\" \"20000000000000000000000000000000000000000000000000000000000000000000000000000000000000\" \"10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\" 78)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((big (expt 2 256)))
@@ -183,15 +194,16 @@ fn div_cx173_bignum_arithmetic_with_format() {
         (format "%b" big)
         (length (format "%d" big))))
 "##,
-        expect_test::expect![[
-            r#""OK (\"115792089237316195423570985008687907853269984665640564039457584007913129639936\" \"10000000000000000000000000000000000000000000000000000000000000000\" \"20000000000000000000000000000000000000000000000000000000000000000000000000000000000000\" \"10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000\" 78)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx173_ash_overflow_to_bignum() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (0 4611686018427387902 2361183241434822605824 42535295865117307914475081855261474816 0 0 -1 -1)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((mpf most-positive-fixnum))
@@ -204,15 +216,16 @@ fn div_cx173_ash_overflow_to_bignum() {
         (ash -1 -1)
         (ash -1 -64)))
 "##,
-        expect_test::expect![[
-            r#""OK (0 4611686018427387902 2361183241434822605824 42535295865117307914475081855261474816 0 0 -1 -1)""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx173_float_formatting_precision() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"3.141593\" \"3.14\" \"3.1415926536\" \"3.141593e+00\" \"3.14159\" \"1e-09\" \"1e+09\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (format "%f" 3.141592653589793)
@@ -223,15 +236,14 @@ fn div_cx173_float_formatting_precision() {
       (format "%g" 0.000000001)
       (format "%g" 1000000000.0))
 "##,
-        expect_test::expect![[
-            r#""OK (\"3.141593\" \"3.14\" \"3.1415926536\" \"3.141593e+00\" \"3.14159\" \"1e-09\" \"1e+09\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx173_number_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (void-variable 355/113)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((big (expt 2 128))
@@ -260,6 +272,6 @@ fn div_cx173_number_with_marker_overlay_undo_narrow_mega() {
               (overlay-start ov) (overlay-end ov)
               (text-properties-at 1))))))
 "##,
-        expect_test::expect![[r#""ERR (void-variable 355/113)""#]],
+        expect,
     );
 }

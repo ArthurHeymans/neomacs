@@ -51,10 +51,8 @@ fn oracle_prop_string_interning_intern_soft_comprehensive() {
                                  (equal (symbol-name s4) (nth 3 names))
                                  ;; All found after interning
                                  all-found))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((t t t t) t t t t t t t t t t t (t t t t))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((t t t t) t t t t t t t t t t t (t t t t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -107,12 +105,10 @@ fn oracle_prop_string_interning_symbol_properties_metadata() {
                         (put s 'type nil)
                         (put s 'doc nil)
                         (put s 'range nil))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (integer \"An x coordinate\" (0 100) string nil (type nil doc nil range nil) (0 200) (integer string float) (3 3 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (integer \"An x coordinate\" (0 100) string nil (type nil doc nil range nil) (0 200) (integer string float) (3 3 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -166,12 +162,10 @@ fn oracle_prop_string_interning_roundtrip_name_value_plist() {
                                                    ;; plist still present
                                                    (get sym 'version))))
                             (list initial after-set after-modify after-makunbound))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"neovm--si-roundtrip-test\" nil nil nil) ((1 2 3) 15 2026 t (test temporary) t t) (\"new-value\" nil 2) (nil t 2))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"neovm--si-roundtrip-test\" nil nil nil) ((1 2 3) 15 2026 t (test temporary) t t) (\"new-value\" nil 2) (nil t 2))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -226,12 +220,10 @@ fn oracle_prop_string_interning_gensym_pattern() {
                                  (symbol-value (nth 7 syms))))
                          ;; Counter advanced
                          counter))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"G0\" \"G1\" \"G2\" \"G3\" \"G4\" \"G5\" \"G6\" \"G7\") (t t t t t t t t) t nil (first nil last) 8)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"G0\" \"G1\" \"G2\" \"G3\" \"G4\" \"G5\" \"G6\" \"G7\") (t t t t t t t t) t nil (first nil last) 8)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -324,10 +316,9 @@ fn oracle_prop_string_interning_mini_language_symtab() {
     (fmakunbound 'neovm--si-symtab-declare)
     (fmakunbound 'neovm--si-symtab-lookup)
     (fmakunbound 'neovm--si-symtab-leave-scope)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((float 3.14 string \"hello\" int 42) int 10 t (bool t))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((float 3.14 string \"hello\" int 42) int 10 t (bool t))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -382,12 +373,10 @@ fn oracle_prop_string_interning_uninterned_independent_namespaces() {
                               (list (symbol-value s1)
                                     (symbol-value s2)
                                     (symbol-value s3))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t nil nil nil value-one value-two value-three \"fn-one\" \"fn-two\" \"fn-three\" first second third only-on-s1 nil (mutated value-two value-three))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t nil nil nil value-one value-two value-three \"fn-one\" \"fn-two\" \"fn-three\" first second third only-on-s1 nil (mutated value-two value-three))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -456,12 +445,10 @@ fn oracle_prop_string_interning_type_registry() {
                                        (put v 'coerce nil)
                                        (put v 'registered nil))
                                      type-table))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t number t t t nil nil 3 5.0 \"42\" 5 (any float integer number string))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t number t t t nil nil 3 5.0 \"42\" 5 (any float integer number string))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -508,10 +495,8 @@ fn oracle_prop_string_interning_custom_obarray() {
                        (let ((count 0))
                          (mapatoms (lambda (s) (setq count (1+ count))) my-obarray)
                          count))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (t t t \"alpha\" \"beta\" \"gamma\" 100 200 300 t t t t t 3)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (t t t \"alpha\" \"beta\" \"gamma\" 100 200 300 t t t t t 3)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

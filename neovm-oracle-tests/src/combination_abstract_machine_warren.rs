@@ -102,12 +102,10 @@ fn oracle_prop_wam_heap_representation() {
     (fmakunbound 'neovm--wam-put-const)
     (fmakunbound 'neovm--wam-put-var)
     (fmakunbound 'neovm--wam-put-structure)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (6 (con . a) (ref . 1) (str . 3) (fun f . 2) (ref . 0) (ref . 1))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (6 (con . a) (ref . 1) (str . 3) (fun f . 2) (ref . 0) (ref . 1))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -247,7 +245,8 @@ fn oracle_prop_wam_unification() {
     (fmakunbound 'neovm--wam-bind)
     (fmakunbound 'neovm--wam-unify)
     (fmakunbound 'neovm--wam-read-term)))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -363,12 +362,10 @@ fn oracle_prop_wam_register_allocation() {
     (fmakunbound 'neovm--wamr-set-variable)
     (fmakunbound 'neovm--wamr-set-value)
     (fmakunbound 'neovm--wamr-set-constant)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (12 (str . 8) (str . 1) (str . 5) (ref . 2) (ref . 3) (fun p . 3))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (12 (str . 8) (str . 1) (str . 5) (ref . 2) (ref . 3) (fun p . 3))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -494,10 +491,8 @@ fn oracle_prop_wam_knowledge_base_query() {
     (fmakunbound 'neovm--wkb-unify)
     (fmakunbound 'neovm--wkb-query)
     (fmakunbound 'neovm--wkb-extract-vars)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 87 54)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 87 54)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -627,12 +622,10 @@ fn oracle_prop_wam_list_predicates() {
     (fmakunbound 'neovm--wlp-length)
     (fmakunbound 'neovm--wlp-remove-one)
     (fmakunbound 'neovm--wlp-permutations)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 2 3 4 5) (a b) (x) nil t nil t (4 3 2 1) nil (a) 5 0 ((1 2 3) (1 3 2) (2 1 3) (2 3 1) (3 1 2) (3 2 1)) ((a)) 24 nil fail)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 3 4 5) (a b) (x) nil t nil t (4 3 2 1) nil (a) 5 0 ((1 2 3) (1 3 2) (2 1 3) (2 3 1) (3 1 2) (3 2 1)) ((a)) 24 nil fail)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -748,8 +741,6 @@ fn oracle_prop_wam_rule_inference() {
     (fmakunbound 'neovm--wri-query-facts)
     (fmakunbound 'neovm--wri-grandparents)
     (fmakunbound 'neovm--wri-ancestors)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 64 50)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 64 50)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

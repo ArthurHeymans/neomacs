@@ -10,10 +10,8 @@ use super::common::{ORACLE_PROP_CASES, assert_err_kind, assert_ok_eq, eval_oracl
 fn oracle_prop_stringp_wrong_arity_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        "(stringp)",
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments stringp 0)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments stringp 0)""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect("(stringp)", expect);
     assert_err_kind(&oracle, &neovm, "wrong-number-of-arguments");
 }
 
@@ -21,10 +19,8 @@ fn oracle_prop_stringp_wrong_arity_error() {
 fn oracle_prop_concat_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(concat "a" 1)"#,
-        expect_test::expect![[r#""ERR (wrong-type-argument sequencep 1)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument sequencep 1)""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(r#"(concat "a" 1)"#, expect);
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
@@ -32,10 +28,9 @@ fn oracle_prop_concat_wrong_type_error() {
 fn oracle_prop_substring_out_of_range_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(substring "abc" 10)"#,
-        expect_test::expect![[r#""ERR (args-out-of-range \"abc\" 10 nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range \"abc\" 10 nil)""#]];
+    let (oracle, neovm) =
+        crate::common::eval_oracle_and_neovm_expect(r#"(substring "abc" 10)"#, expect);
     assert_err_kind(&oracle, &neovm, "args-out-of-range");
 }
 
@@ -43,10 +38,8 @@ fn oracle_prop_substring_out_of_range_error() {
 fn oracle_prop_string_wrong_type_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(
-        r#"(string "a")"#,
-        expect_test::expect![[r#""ERR (wrong-type-argument characterp \"a\")""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument characterp \"a\")""#]];
+    let (oracle, neovm) = crate::common::eval_oracle_and_neovm_expect(r#"(string "a")"#, expect);
     assert_err_kind(&oracle, &neovm, "wrong-type-argument");
 }
 
@@ -64,10 +57,8 @@ fn oracle_string_rejects_character_above_gnu_max_char() {
      (string #x400000)
    (error (list (car err) (cdr err)))))
 "#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 (wrong-type-argument (characterp 4194304)))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 (wrong-type-argument (characterp 4194304)))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 proptest! {

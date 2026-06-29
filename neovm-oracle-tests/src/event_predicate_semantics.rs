@@ -16,10 +16,8 @@ fn oracle_eventp_accepts_integers_and_non_keyword_symbols() {
  (eventp '(:keyword ignored))
  (eventp "mouse-1")
  (eventp '(\"mouse-1\" ignored)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t nil t nil nil nil t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t nil t nil nil nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -44,12 +42,10 @@ fn oracle_mouse_event_predicates_follow_basic_type() {
            (mouse-movement-p event)
            (event-basic-type event)))
    events))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((mouse-1 (mouse-1 mouse-2 mouse-3 mouse-movement) nil mouse-1) (down-mouse-1 (mouse-1 mouse-2 mouse-3 mouse-movement) nil mouse-1) (drag-mouse-2 (mouse-2 mouse-3 mouse-movement) nil mouse-2) (double-mouse-3 nil nil nil) (mouse-movement (mouse-movement) nil mouse-movement) (C-M-drag-mouse-1 (mouse-1 mouse-2 mouse-3 mouse-movement) nil mouse-1) (wheel-up nil nil wheel-up) (wheel-up nil nil wheel-up) (f1 nil nil f1) (97 nil nil 97))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((mouse-1 (mouse-1 mouse-2 mouse-3 mouse-movement) nil mouse-1) (down-mouse-1 (mouse-1 mouse-2 mouse-3 mouse-movement) nil mouse-1) (drag-mouse-2 (mouse-2 mouse-3 mouse-movement) nil mouse-2) (double-mouse-3 nil nil nil) (mouse-movement (mouse-movement) nil mouse-movement) (C-M-drag-mouse-1 (mouse-1 mouse-2 mouse-3 mouse-movement) nil mouse-1) (wheel-up nil nil wheel-up) (wheel-up nil nil wheel-up) (f1 nil nil f1) (97 nil nil 97))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -62,8 +58,6 @@ fn oracle_mouse_movement_p_only_checks_event_car() {
  (mouse-movement-p nil)
  (mouse-movement-p '(mouse-1))
  (mouse-movement-p '(drag-mouse-1 nil nil)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t nil nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t nil nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

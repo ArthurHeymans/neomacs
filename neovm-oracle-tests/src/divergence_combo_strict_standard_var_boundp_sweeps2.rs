@@ -11,6 +11,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_i1_completion_minibuffer_var_sweep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'completion-styles)
@@ -22,13 +23,14 @@ fn div_i1_completion_minibuffer_var_sweep() {
       (boundp 'completion-cycle-threshold)
       (boundp 'minibuffer-eldef-shorten-default))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t t nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_i1_fontlock_jitlock_var_sweep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'font-lock-maximum-decoration)
@@ -41,13 +43,14 @@ fn div_i1_fontlock_jitlock_var_sweep() {
       (boundp 'font-lock-verbose)
       (boundp 'font-lock-fontified))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_i1_display_redisplay_var_sweep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'redisplay-dont-pause)
@@ -59,13 +62,14 @@ fn div_i1_display_redisplay_var_sweep() {
       (boundp 'scroll-step)
       (boundp 'mouse-yank-at-point))
 "##,
-        expect_test::expect![[r#""OK (nil t t t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_i1_dired_process_var_sweep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil nil t nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'dired-listing-switches)
@@ -76,13 +80,14 @@ fn div_i1_dired_process_var_sweep() {
       (boundp 'compilation-scroll-output)
       (boundp 'executable-prefix-env))
 "##,
-        expect_test::expect![[r#""OK (t nil nil t nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_i1_window_frame_display_var_sweep() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (boundp 'display-buffer-mark-dedicated)
@@ -94,6 +99,6 @@ fn div_i1_window_frame_display_var_sweep() {
       (boundp 'split-width-threshold)
       (boundp 'window-resize-pixelwise))
 "##,
-        expect_test::expect![[r#""OK (t t t t t t t t)""#]],
+        expect,
     );
 }

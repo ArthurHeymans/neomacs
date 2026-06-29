@@ -11,6 +11,8 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_n2_case_ascii_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 1 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (downcase "HELLO WORLD")
@@ -19,13 +21,16 @@ fn div_n2_case_ascii_basic() {
       (upcase-initials "hello world foo")
       (upcase-initials-region 1 5))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range #<buffer  *neovm-oracle-stdout*> 1 5)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_n2_case_unicode_latin_greek() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK (\"éàçü\" \"ÉÀÇÜ\" \"Éàçü Ñoño\" \"αβγδε\" \"ΑΒΓΔΕ\" \"Αβγ Αβγ\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (downcase "ÉÀÇÜ")
@@ -35,15 +40,14 @@ fn div_n2_case_unicode_latin_greek() {
       (upcase "αβγδε")
       (capitalize "αβγ αβγ"))
 "##,
-        expect_test::expect![[
-            r#""OK (\"éàçü\" \"ÉÀÇÜ\" \"Éàçü Ñoño\" \"αβγδε\" \"ΑΒΓΔΕ\" \"Αβγ Αβγ\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_n2_case_cyrillic_and_sharp_s() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 6 28)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (downcase "ЖЕНЯ")
@@ -52,13 +56,14 @@ fn div_n2_case_cyrillic_and_sharp_s() {
       (upcase "ßstraße")
       (downcase "STRASSE")))
 "##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 6 28)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_n2_case_region_and_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"HELLO World\" \"Hello World\" \"hellO\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer
@@ -74,13 +79,14 @@ fn div_n2_case_region_and_buffer() {
         (downcase-region 1 5)
         (buffer-string)))
 "##,
-        expect_test::expect![[r#""OK (\"HELLO World\" \"Hello World\" \"hellO\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_n2_case_table_introspect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 7 31)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (char-equal ?a (downcase ?A))
@@ -90,6 +96,6 @@ fn div_n2_case_table_introspect() {
       (upcase-word 0)
       (capitalize-region 1 1)))
 "##,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 7 31)""#]],
+        expect,
     );
 }

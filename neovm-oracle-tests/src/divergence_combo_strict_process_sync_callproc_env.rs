@@ -10,6 +10,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_f8_call_process_exit_and_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((0 \"hello\n\") (0 \"world\n\") (1 \"\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer
@@ -22,26 +23,29 @@ fn div_f8_call_process_exit_and_output() {
         (let ((status (call-process "false" nil t nil)))
           (list status (buffer-string)))))
 "##,
-        expect_test::expect![[r#""OK ((0 \"hello\n\") (0 \"world\n\") (1 \"\"))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f8_shell_command_to_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"hi\n\" \"abc\" 10)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (shell-command-to-string "echo hi")
       (shell-command-to-string "printf abc")
       (length (shell-command-to-string "seq 1 5")))
 "##,
-        expect_test::expect![[r#""OK (\"hi\n\" \"abc\" 10)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f8_call_process_stderr_and_args() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""OK ((0 \"a\nb\") (0 \"out\nerr\n\") (0 \"2\n3\n4\n\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (list (with-temp-buffer
@@ -55,13 +59,14 @@ fn div_f8_call_process_stderr_and_args() {
         (let ((status (call-process "seq" nil t nil "2" "4")))
           (list status (buffer-string)))))
 "##,
-        expect_test::expect![[r#""OK ((0 \"a\nb\") (0 \"out\nerr\n\") (0 \"2\n3\n4\n\"))""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f8_process_environment_getenv() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"zzz\" t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((process-environment (cons "NEO_PROBE_SYNC_ENV=zzz" process-environment)))
@@ -69,13 +74,14 @@ fn div_f8_process_environment_getenv() {
         (stringp (getenv "HOME"))
         (stringp (getenv "PATH"))))
 "##,
-        expect_test::expect![[r#""OK (\"zzz\" t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f8_process_environment_length() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK 222""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK 284
     // Neomacs:   OK 283
@@ -86,13 +92,14 @@ fn div_f8_process_environment_length() {
         r##"
 (length process-environment)
 "##,
-        expect_test::expect![[r#""OK 222""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_f8_call_process_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (0 \"1\n2\n3\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
@@ -100,6 +107,6 @@ fn div_f8_call_process_region() {
   (let ((status (call-process-region (point-min) (point-max) "sort" t t nil)))
     (list status (buffer-string))))
 "##,
-        expect_test::expect![[r#""OK (0 \"1\n2\n3\n\")""#]],
+        expect,
     );
 }

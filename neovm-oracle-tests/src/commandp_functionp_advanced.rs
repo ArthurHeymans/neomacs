@@ -49,10 +49,8 @@ fn oracle_prop_commandp_functionp_predicate_matrix() {
                      (list 'string (functionp "hello") (commandp "hello"))
                      (list 'symbol-t (functionp t) (commandp t))
                      (list 'cons-cell (functionp '(1 2)) (commandp '(1 2)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 28 55)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 28 55)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -87,10 +85,8 @@ fn oracle_prop_fboundp_fset_lifecycle() {
         (setq results (cons (funcall 'neovm--test-fbp-fn1 3 4) results))
         (nreverse results))
     (fmakunbound 'neovm--test-fbp-fn1)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil t t 25 105 nil t 7)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil t t 25 105 nil t 7)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -132,10 +128,8 @@ fn oracle_prop_defalias_chain_indirect_function() {
     (fmakunbound 'neovm--test-chain-a)
     (fmakunbound 'neovm--test-chain-b)
     (fmakunbound 'neovm--test-chain-c)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t 27 64 125 nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t 27 64 125 nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -190,12 +184,10 @@ fn oracle_prop_macro_vs_function_predicates() {
     (fmakunbound 'neovm--test-mac1)
     (fmakunbound 'neovm--test-fn1)
     (fmakunbound 'neovm--test-cmd1)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((macro t nil nil nil t t) (function t t nil nil) (command t t t nil) (special-form-if t t nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((macro t nil nil nil t t) (function t t nil nil) (command t t t nil) (special-form-if t t nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -246,12 +238,10 @@ fn oracle_prop_function_classifier() {
     (fmakunbound 'neovm--test-cls-mac)
     (fmakunbound 'neovm--test-cls-cmd)
     (fmakunbound 'neovm--test-cls-alias)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((car . subr) (cons . subr) (+ . subr) (if . special-form) (and . special-form) (or . special-form) (setq . special-form) (let . special-form) (progn . special-form) (neovm--test-cls-fn . lambda) (neovm--test-cls-mac . macro) (neovm--test-cls-cmd . command) (neovm--test-cls-alias . alias) (neovm--test-cls-nonexistent . unbound))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((car . subr) (cons . subr) (+ . subr) (if . special-form) (and . special-form) (or . special-form) (setq . special-form) (let . special-form) (progn . special-form) (neovm--test-cls-fn . lambda) (neovm--test-cls-mac . macro) (neovm--test-cls-cmd . command) (neovm--test-cls-alias . alias) (neovm--test-cls-nonexistent . unbound))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -292,10 +282,8 @@ fn oracle_prop_closure_predicate_tests() {
                        (subrp cmd)
                        ;; indirect-function on closures returns itself
                        (eq (indirect-function c1) c1))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (4 13 t t t nil t nil nil t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (4 13 t t t nil t nil nil t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -343,8 +331,6 @@ fn oracle_prop_defalias_commandp_arity_interaction() {
     (fmakunbound 'neovm--test-da-fn)
     (fmakunbound 'neovm--test-da-cmd)
     (fmakunbound 'neovm--test-da-chain)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (12 30 t 42 6 (0 . many) (0 . many) t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (12 30 t 42 6 (0 . many) (0 . many) t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

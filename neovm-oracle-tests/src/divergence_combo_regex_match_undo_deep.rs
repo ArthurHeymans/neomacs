@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn deficiency_save_match_data_with_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"smu\")))\n\
@@ -35,7 +36,7 @@ fn deficiency_save_match_data_with_undo() {
          (get-text-property 7 'type)\n\
          (get-text-property 13 'type))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -43,6 +44,7 @@ fn deficiency_save_match_data_with_undo() {
 fn deficiency_re_search_replace_propertize_undo_loop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 46 51)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rrp\"))\n\
@@ -80,7 +82,7 @@ fn deficiency_re_search_replace_propertize_undo_loop() {
          (get-text-property 12 'kind)\n\
          (length (nreverse match-log))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (args-out-of-range 46 51)""#]],
+        expect,
     );
 }
 
@@ -88,6 +90,7 @@ fn deficiency_re_search_replace_propertize_undo_loop() {
 fn deficiency_match_data_across_narrow_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mnu\")))\n\
@@ -118,7 +121,7 @@ fn deficiency_match_data_across_narrow_undo() {
          (get-text-property 5 'grp)\n\
          (get-text-property 8 'grp))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -126,6 +129,7 @@ fn deficiency_match_data_across_narrow_undo() {
 fn deficiency_re_place_match_overlay_bounds_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rpm\")))\n\
@@ -158,7 +162,7 @@ fn deficiency_re_place_match_overlay_bounds_undo() {
          (overlay-get ov 'link-url)))\n\
          (nreverse ovs)))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -166,6 +170,7 @@ fn deficiency_re_place_match_overlay_bounds_undo() {
 fn deficiency_looking_back_with_props_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"lbw\")))\n\
@@ -189,7 +194,7 @@ fn deficiency_looking_back_with_props_undo() {
          (buffer-string)\n\
          (get-text-property 23 'type))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }
 
@@ -197,6 +202,7 @@ fn deficiency_looking_back_with_props_undo() {
 fn deficiency_skip_chars_with_props_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 20 25)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"scw\")))\n\
@@ -223,7 +229,7 @@ fn deficiency_skip_chars_with_props_undo() {
          (get-text-property 1 'type)\n\
          (get-text-property 8 'type))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (args-out-of-range 20 25)""#]],
+        expect,
     );
 }
 
@@ -231,6 +237,7 @@ fn deficiency_skip_chars_with_props_undo() {
 fn deficiency_multiple_capture_groups_props_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 34 51)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"mcg\")))\n\
@@ -264,7 +271,7 @@ fn deficiency_multiple_capture_groups_props_undo() {
          (get-text-property 1 'field)\n\
          (get-text-property 12 'field)))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (args-out-of-range 34 51)""#]],
+        expect,
     );
 }
 
@@ -272,6 +279,7 @@ fn deficiency_multiple_capture_groups_props_undo() {
 fn deficiency_re_replace_with_overlay_tracking() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rot\")))\n\
@@ -304,7 +312,7 @@ fn deficiency_re_replace_with_overlay_tracking() {
          (overlay-get ov 'todo-type)))\n\
          (nreverse ovs)))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -312,6 +320,7 @@ fn deficiency_re_replace_with_overlay_tracking() {
 fn deficiency_whitespace_regex_props_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"wrp\")))\n\
@@ -336,7 +345,7 @@ fn deficiency_whitespace_regex_props_undo() {
          (cl-loop for i from 1 to (buffer-size)\n\
          count (get-text-property i 'whitespace))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -344,6 +353,7 @@ fn deficiency_whitespace_regex_props_undo() {
 fn deficiency_regex_subexp_with_props_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
          (let ((buf (generate-new-buffer \"rsp\")))\n\
@@ -375,6 +385,6 @@ fn deficiency_regex_subexp_with_props_markers() {
          (marker-position m-start)\n\
          (marker-position m-end))))))\n\
          (kill-buffer buf)))",
-        expect_test::expect![[r#""ERR (void-variable buf)""#]],
+        expect,
     );
 }

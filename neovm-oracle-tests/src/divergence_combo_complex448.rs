@@ -13,11 +13,12 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx448_calc_display_process() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"5\" #<process cx448>)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'calc)
   (list (calc-eval "2+3")
         (condition-case e (make-process :name "cx448" :command '("echo" "hi") :connection-type 'pipe :buffer nil) (error (car e)))))"##,
-        expect_test::expect![[r#""OK (\"5\" #<process cx448>)""#]],
+        expect,
     );
 }
 
@@ -25,12 +26,13 @@ fn div_cx448_calc_display_process() {
 #[test]
 fn div_cx448_url_casefold_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"http\" (501485566126885707972608 . 0))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'url-parse)
   (let ((case-fold-search t))
     (list (url-type (url-generic-parse-url "HTTP://EXAMPLE.COM"))
           (condition-case e (encode-time 30.5 30 14 16 6 2026 nil) (error (car e))))))"##,
-        expect_test::expect![[r#""OK (\"http\" (501485566126885707972608 . 0))""#]],
+        expect,
     );
 }
 
@@ -38,6 +40,7 @@ fn div_cx448_url_casefold_time() {
 #[test]
 fn div_cx448_info_overlay_collate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (1 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'info-look)
   (with-temp-buffer
@@ -46,7 +49,7 @@ fn div_cx448_info_overlay_collate() {
       (overlay-put ov 'face 'bold)
       (list (length (overlays-in 1 10))
             (string-collate-lessp "a" "B")))))"##,
-        expect_test::expect![[r#""OK (1 nil)""#]],
+        expect,
     );
 }
 
@@ -54,11 +57,12 @@ fn div_cx448_info_overlay_collate() {
 #[test]
 fn div_cx448_woman_font_face() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t bold)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'woman)
   (list (fboundp 'woman)
         (face-attribute 'bold :weight nil 'default)))"##,
-        expect_test::expect![[r#""OK (t bold)""#]],
+        expect,
     );
 }
 
@@ -66,6 +70,7 @@ fn div_cx448_woman_font_face() {
 #[test]
 fn div_cx448_diff_marker_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'diff)
   (with-temp-buffer
@@ -75,7 +80,7 @@ fn div_cx448_diff_marker_undo() {
       (delete-region 1 3)
       (undo)
       (marker-position m))))"##,
-        expect_test::expect![[r#""ERR (user-error \"No further undo information\")""#]],
+        expect,
     );
 }
 
@@ -83,11 +88,12 @@ fn div_cx448_diff_marker_undo() {
 #[test]
 fn div_cx448_vc_coding_detect() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t (undecided))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'vc)
   (list (boundp 'vc-handled-backends)
         (detect-coding-string "hello")))"##,
-        expect_test::expect![[r#""OK (t (undecided))""#]],
+        expect,
     );
 }
 
@@ -95,13 +101,14 @@ fn div_cx448_vc_coding_detect() {
 #[test]
 fn div_cx448_hanoi_eightbit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t 4 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'hanoi)
   (let ((raw (unibyte-string 200 201 65 66)))
     (list (fboundp 'hanoi)
           (string-bytes raw)
           (length raw))))"##,
-        expect_test::expect![[r#""OK (t 4 4)""#]],
+        expect,
     );
 }
 
@@ -109,13 +116,14 @@ fn div_cx448_hanoi_eightbit() {
 #[test]
 fn div_cx448_life_column_display() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t 4)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'life)
   (with-temp-buffer
     (insert "abc")
     (put-text-property 2 3 'display "XX")
     (list (fboundp 'life) (current-column))))"##,
-        expect_test::expect![[r#""OK (t 4)""#]],
+        expect,
     );
 }
 
@@ -123,10 +131,11 @@ fn div_cx448_life_column_display() {
 #[test]
 fn div_cx448_rot13_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"uryyb\" \"caf\\303\\251\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (rot13 "hello")
       (encode-coding-string "café" 'utf-8))"##,
-        expect_test::expect![[r#""OK (\"uryyb\" \"caf\\303\\251\")""#]],
+        expect,
     );
 }
 
@@ -134,12 +143,13 @@ fn div_cx448_rot13_multibyte() {
 #[test]
 fn div_cx448_zone_buffer_local() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t zone-val)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'zone)
   (with-temp-buffer
     (setq-local neo-cx448-z 'zone-val)
     (list (fboundp 'zone) neo-cx448-z)))"##,
-        expect_test::expect![[r#""OK (t zone-val)""#]],
+        expect,
     );
 }
 
@@ -147,12 +157,13 @@ fn div_cx448_zone_buffer_local() {
 #[test]
 fn div_cx448_copyright_casefold() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'copyright)
   (let ((case-fold-search t))
     (list (fboundp 'copyright-update)
           (char-equal ?π ?Π))))"##,
-        expect_test::expect![[r#""OK (t t)""#]],
+        expect,
     );
 }
 
@@ -160,6 +171,7 @@ fn div_cx448_copyright_casefold() {
 #[test]
 fn div_cx448_doctor_local_collate() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil 19)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'doctor)
   (with-temp-buffer
@@ -167,7 +179,7 @@ fn div_cx448_doctor_local_collate() {
       (list (boundp 'doctor-doctors)
             (string-collate-lessp "a" "B")
             (length locals)))))"##,
-        expect_test::expect![[r#""OK (nil nil 19)""#]],
+        expect,
     );
 }
 
@@ -175,12 +187,13 @@ fn div_cx448_doctor_local_collate() {
 #[test]
 fn div_cx448_calc_coding_charset() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"6\" (undecided) 179)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'calc)
   (list (calc-eval "2*3")
         (detect-coding-string "abc")
         (length (charset-priority-list))))"##,
-        expect_test::expect![[r#""OK (\"6\" (undecided) 179)""#]],
+        expect,
     );
 }
 
@@ -188,6 +201,7 @@ fn div_cx448_calc_coding_charset() {
 #[test]
 fn div_cx448_url_overlay_split() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (\"https\" 1 (ascii 65))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'url-parse)
   (with-temp-buffer
@@ -197,7 +211,7 @@ fn div_cx448_url_overlay_split() {
       (list (url-type (url-generic-parse-url "https://test.com"))
             (length (car (overlay-lists)))
             (condition-case e (split-char ?A) (error (car e)))))))"##,
-        expect_test::expect![[r#""OK (\"https\" 1 (ascii 65))""#]],
+        expect,
     );
 }
 
@@ -205,6 +219,7 @@ fn div_cx448_url_overlay_split() {
 #[test]
 fn div_cx448_info_features_provide() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(progn (require 'info)
   (let ((sym (make-symbol "neo-cx448-f")))
@@ -212,6 +227,6 @@ fn div_cx448_info_features_provide() {
     (list (fboundp 'info)
           (featurep sym)
           (listp features))))"##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }

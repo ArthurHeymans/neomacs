@@ -28,10 +28,8 @@ fn oracle_prop_gnu_looking_back_match_data_and_limit() {
    (match-string 0)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t \"c123\" t \"c\" t \"c\")""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t \"c123\" t \"c\" t \"c\")""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -55,10 +53,8 @@ fn oracle_prop_gnu_looking_back_greedy_extends_match_data() {
    (match-end 0)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t \"foo\" 4 7 t \"foo\" 4 7)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t \"foo\" 4 7 t \"foo\" 4 7)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -80,8 +76,6 @@ fn oracle_prop_gnu_subregexp_context_parser_contracts() {
  (subregexp-context-p "[[:alpha:]]" 4))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t nil nil nil t t nil nil t t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t nil nil nil t t nil nil t t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

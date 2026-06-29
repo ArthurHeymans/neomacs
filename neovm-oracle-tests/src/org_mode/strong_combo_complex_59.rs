@@ -11,6 +11,7 @@ use crate::common::{assert_oracle_parity, return_if_neovm_enable_oracle_proptest
 #[test]
 fn combo59_babel_noweb_nonexistent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (3 :executed)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -25,13 +26,16 @@ fn combo59_babel_noweb_nonexistent() {
                  (push :executed r))
         (error (push (list :error (car e)) r)))
       (nreverse r))))"##,
-        expect_test::expect![[r#""OK (3 :executed)""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo59_clock_note_store_positions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:clocking-before-note t) (:note-result nil) (:clocking-after nil) (:clock-count 1))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -50,15 +54,16 @@ fn combo59_clock_note_store_positions() {
       (push (list :clocking-after (org-clocking-p)) r)
       (push (list :clock-count (length (org-element-map (org-element-parse-buffer) 'clock #'identity))) r)
       (nreverse r))))"##,
-        expect_test::expect![[
-            r#""OK ((:clocking-before-note t) (:note-result nil) (:clocking-after nil) (:clock-count 1))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo59_table_formula_error_refix() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:first-result #(\"| a | b | a + b |\n| 1 | 2 |     3 |\n| 3 | 4 |     7 |\n#+TBLFM: $3=$1+$2\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table rear-nonsticky t display (space :relative-width 1)) 6 7 (face org-table) 7 8 (face org-table display (space :relative-width 1.001)) 8 9 (face org-table) 9 10 (face org-table rear-nonsticky t display (space :relative-width 1)) 10 15 (face org-table) 15 16 (face org-table display (space :relative-width 1.001)) 16 17 (face org-table) 17 18 (face org-table-row) 18 19 (face org-table) 19 20 (face org-table rear-nonsticky t display (space :relative-width 1)) 20 21 (face org-table) 21 22 (face org-table display (space :relative-width 1.001)) 22 23 (face org-table) 23 24 (face org-table rear-nonsticky t display (space :relative-width 1)) 24 25 (face org-table) 25 26 (face org-table display (space :relative-width 1.001)) 26 27 (face org-table) 27 28 (face org-table rear-nonsticky t display (space :relative-width 1)) 28 32 (face org-table) 32 33 (face org-table) 33 34 (face org-table display (space :relative-width 1.001)) 34 35 (face org-table) 35 36 (face org-table-row) 36 37 (face org-table) 37 38 (face org-table rear-nonsticky t display (space :relative-width 1)) 38 39 (face org-table) 39 40 (face org-table display (space :relative-width 1.001)) 40 41 (face org-table) 41 42 (face org-table rear-nonsticky t display (space :relative-width 1)) 42 43 (face org-table) 43 44 (face org-table display (space :relative-width 1.001)) 44 45 (face org-table) 45 46 (face org-table rear-nonsticky t display (space :relative-width 1)) 46 50 (face org-table) 50 51 (face org-table) 51 52 (face org-table display (space :relative-width 1.001)) 52 53 (face org-table) 53 54 (face org-table-row))) (:fixed-result #(\"| a | b | a + b | c |\n| 1 | 2 |     3 |   |\n| 3 | 4 |     7 |   |\n#+TBLFM: $3=$1+$2\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table rear-nonsticky t display (space :relative-width 1)) 6 7 (face org-table) 7 8 (face org-table display (space :relative-width 1.001)) 8 9 (face org-table) 9 10 (face org-table rear-nonsticky t display (space :relative-width 1)) 10 15 (face org-table) 15 16 (face org-table display (space :relative-width 1.001)) 16 17 (face org-table) 17 21 (face org-table) 21 22 (face org-table-row) 22 23 (face org-table) 23 24 (face org-table rear-nonsticky t display (space :relative-width 1)) 24 25 (face org-table) 25 26 (face org-table display (space :relative-width 1.001)) 26 27 (face org-table) 27 28 (face org-table rear-nonsticky t display (space :relative-width 1)) 28 29 (face org-table) 29 30 (face org-table display (space :relative-width 1.001)) 30 31 (face org-table) 31 32 (face org-table rear-nonsticky t display (space :relative-width 1)) 32 36 (face org-table) 36 37 (face org-table) 37 38 (face org-table display (space :relative-width 1.001)) 38 39 (face org-table) 39 40 (face org-table rear-nonsticky t display (space :relative-width 1)) 40 41 (face org-table) 41 42 (face org-table display (space :relative-width 1.001)) 42 43 (face org-table) 43 44 (face org-table-row) 44 45 (face org-table) 45 46 (face org-table rear-nonsticky t display (space :relative-width 1)) 46 47 (face org-table) 47 48 (face org-table display (space :relative-width 1.001)) 48 49 (face org-table) 49 50 (face org-table rear-nonsticky t display (space :relative-width 1)) 50 51 (face org-table) 51 52 (face org-table display (space :relative-width 1.001)) 52 53 (face org-table) 53 54 (face org-table rear-nonsticky t display (space :relative-width 1)) 54 58 (face org-table) 58 59 (face org-table) 59 60 (face org-table display (space :relative-width 1.001)) 60 61 (face org-table) 61 62 (face org-table rear-nonsticky t display (space :relative-width 1)) 62 63 (face org-table) 63 64 (face org-table display (space :relative-width 1.001)) 64 65 (face org-table) 65 66 (face org-table-row))) (:to-lisp ((#(\"a\" 0 1 (face org-table)) #(\"b\" 0 1 (face org-table)) #(\"a + b\" 0 5 (face org-table)) #(\"c\" 0 1 (face org-table))) (#(\"1\" 0 1 (face org-table)) #(\"2\" 0 1 (face org-table)) #(\"3\" 0 1 (face org-table)) \"\") (#(\"3\" 0 1 (face org-table)) #(\"4\" 0 1 (face org-table)) #(\"7\" 0 1 (face org-table)) \"\"))))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -88,15 +93,16 @@ fn combo59_table_formula_error_refix() {
     (goto-char (point-min))
     (push (list :to-lisp (org-table-to-lisp)) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:first-result #(\"| a | b | a + b |\n| 1 | 2 |     3 |\n| 3 | 4 |     7 |\n#+TBLFM: $3=$1+$2\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table rear-nonsticky t display (space :relative-width 1)) 6 7 (face org-table) 7 8 (face org-table display (space :relative-width 1.001)) 8 9 (face org-table) 9 10 (face org-table rear-nonsticky t display (space :relative-width 1)) 10 15 (face org-table) 15 16 (face org-table display (space :relative-width 1.001)) 16 17 (face org-table) 17 18 (face org-table-row) 18 19 (face org-table) 19 20 (face org-table rear-nonsticky t display (space :relative-width 1)) 20 21 (face org-table) 21 22 (face org-table display (space :relative-width 1.001)) 22 23 (face org-table) 23 24 (face org-table rear-nonsticky t display (space :relative-width 1)) 24 25 (face org-table) 25 26 (face org-table display (space :relative-width 1.001)) 26 27 (face org-table) 27 28 (face org-table rear-nonsticky t display (space :relative-width 1)) 28 32 (face org-table) 32 33 (face org-table) 33 34 (face org-table display (space :relative-width 1.001)) 34 35 (face org-table) 35 36 (face org-table-row) 36 37 (face org-table) 37 38 (face org-table rear-nonsticky t display (space :relative-width 1)) 38 39 (face org-table) 39 40 (face org-table display (space :relative-width 1.001)) 40 41 (face org-table) 41 42 (face org-table rear-nonsticky t display (space :relative-width 1)) 42 43 (face org-table) 43 44 (face org-table display (space :relative-width 1.001)) 44 45 (face org-table) 45 46 (face org-table rear-nonsticky t display (space :relative-width 1)) 46 50 (face org-table) 50 51 (face org-table) 51 52 (face org-table display (space :relative-width 1.001)) 52 53 (face org-table) 53 54 (face org-table-row))) (:fixed-result #(\"| a | b | a + b | c |\n| 1 | 2 |     3 |   |\n| 3 | 4 |     7 |   |\n#+TBLFM: $3=$1+$2\n\" 0 1 (face org-table) 1 2 (face org-table rear-nonsticky t display (space :relative-width 1)) 2 3 (face org-table) 3 4 (face org-table display (space :relative-width 1.001)) 4 5 (face org-table) 5 6 (face org-table rear-nonsticky t display (space :relative-width 1)) 6 7 (face org-table) 7 8 (face org-table display (space :relative-width 1.001)) 8 9 (face org-table) 9 10 (face org-table rear-nonsticky t display (space :relative-width 1)) 10 15 (face org-table) 15 16 (face org-table display (space :relative-width 1.001)) 16 17 (face org-table) 17 21 (face org-table) 21 22 (face org-table-row) 22 23 (face org-table) 23 24 (face org-table rear-nonsticky t display (space :relative-width 1)) 24 25 (face org-table) 25 26 (face org-table display (space :relative-width 1.001)) 26 27 (face org-table) 27 28 (face org-table rear-nonsticky t display (space :relative-width 1)) 28 29 (face org-table) 29 30 (face org-table display (space :relative-width 1.001)) 30 31 (face org-table) 31 32 (face org-table rear-nonsticky t display (space :relative-width 1)) 32 36 (face org-table) 36 37 (face org-table) 37 38 (face org-table display (space :relative-width 1.001)) 38 39 (face org-table) 39 40 (face org-table rear-nonsticky t display (space :relative-width 1)) 40 41 (face org-table) 41 42 (face org-table display (space :relative-width 1.001)) 42 43 (face org-table) 43 44 (face org-table-row) 44 45 (face org-table) 45 46 (face org-table rear-nonsticky t display (space :relative-width 1)) 46 47 (face org-table) 47 48 (face org-table display (space :relative-width 1.001)) 48 49 (face org-table) 49 50 (face org-table rear-nonsticky t display (space :relative-width 1)) 50 51 (face org-table) 51 52 (face org-table display (space :relative-width 1.001)) 52 53 (face org-table) 53 54 (face org-table rear-nonsticky t display (space :relative-width 1)) 54 58 (face org-table) 58 59 (face org-table) 59 60 (face org-table display (space :relative-width 1.001)) 60 61 (face org-table) 61 62 (face org-table rear-nonsticky t display (space :relative-width 1)) 62 63 (face org-table) 63 64 (face org-table display (space :relative-width 1.001)) 64 65 (face org-table) 65 66 (face org-table-row))) (:to-lisp ((#(\"a\" 0 1 (face org-table)) #(\"b\" 0 1 (face org-table)) #(\"a + b\" 0 5 (face org-table)) #(\"c\" 0 1 (face org-table))) (#(\"1\" 0 1 (face org-table)) #(\"2\" 0 1 (face org-table)) #(\"3\" 0 1 (face org-table)) \"\") (#(\"3\" 0 1 (face org-table)) #(\"4\" 0 1 (face org-table)) #(\"7\" 0 1 (face org-table)) \"\"))))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo59_headline_indent_after_delete_insert() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:init ((1 \"A\") (2 \"B\") (2 \"C\") (1 \"D\"))) (:after-delete-insert ((1 \"A\") (2 \"C\") (2 \"X\") (1 \"D\"))))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -120,15 +126,15 @@ fn combo59_headline_indent_after_delete_insert() {
                                           (substring-no-properties (org-element-property :raw-value h))))
                         (org-element-map (org-element-parse-buffer) 'headline #'identity))) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:init ((1 \"A\") (2 \"B\") (2 \"C\") (1 \"D\"))) (:after-delete-insert ((1 \"A\") (2 \"C\") (2 \"X\") (1 \"D\"))))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo59_id_collision_double_create() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect =
+        expect_test::expect![[r#""ERR (error \"‘org-id-get’ expects a file-visiting buffer\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -155,13 +161,16 @@ fn combo59_id_collision_double_create() {
                  (push (list :manual-id (org-entry-get nil "ID")) r))
         (error nil))
       (nreverse r))))"##,
-        expect_test::expect![[r#""ERR (error \"‘org-id-get’ expects a file-visiting buffer\")""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo59_nested_block_toggle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:quote-type (quote-block)) (:src-count 1) (:bold-count 1) (:src-lang \"emacs-lisp\") (:src-value \"(+ 1 2)\n\") (:quote-has-src t))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -185,15 +194,16 @@ fn combo59_nested_block_toggle() {
       (when (car quotes)
         (push (list :quote-has-src (> (length (org-element-map (car quotes) 'src-block #'identity)) 0)) r)))
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:quote-type (quote-block)) (:src-count 1) (:bold-count 1) (:src-lang \"emacs-lisp\") (:src-value \"(+ 1 2)\n\") (:quote-has-src t))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo59_sort_mixed_level_entries() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:init (\"Zebra\" \"Apple\" \"Mango\" \"Banana\" \"Cherry\" \"Date\")) (:after-alpha (\"Zebra\" \"Apple\" \"Mango\" \"Banana\" \"Cherry\" \"Date\")))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -207,15 +217,14 @@ fn combo59_sort_mixed_level_entries() {
     (push (list :after-alpha (mapcar (lambda (h) (substring-no-properties (org-element-property :raw-value h)))
                                      (org-element-map (org-element-parse-buffer) 'headline #'identity))) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:init (\"Zebra\" \"Apple\" \"Mango\" \"Banana\" \"Cherry\" \"Date\")) (:after-alpha (\"Zebra\" \"Apple\" \"Mango\" \"Banana\" \"Cherry\" \"Date\")))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo59_dynamic_block_failure_recovery() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK ((:updated t) (:dblock-count 1))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -232,13 +241,16 @@ fn combo59_dynamic_block_failure_recovery() {
     ;; element parse after attempted update
     (push (list :dblock-count (length (org-element-map (org-element-parse-buffer) 'dynamic-block #'identity))) r)
     (nreverse r)))"##,
-        expect_test::expect![[r#""OK ((:updated t) (:dblock-count 1))""#]],
+        expect,
     );
 }
 
 #[test]
 fn combo59_occur_special_regex_chars() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:matched-bracket (\"Data [and] (parens) {braces}\" \"Line with | pipe and \\\\ backslash\")) (:matched-pipe (\"Data [and] (parens) {braces}\" \"Line with | pipe and \\\\ backslash\")))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -262,15 +274,16 @@ fn combo59_occur_special_regex_chars() {
       (error (push (list :pipe-error t) r)))
     (org-remove-occur-highlights)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:matched-bracket (\"Data [and] (parens) {braces}\" \"Line with | pipe and \\\\ backslash\")) (:matched-pipe (\"Data [and] (parens) {braces}\" \"Line with | pipe and \\\\ backslash\")))""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn combo59_property_with_semicolons_newlines() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((:notes nil) (:url nil) (:multi nil) (:config \"x=1;y=2;z=3\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
   (org-mode)
@@ -286,8 +299,6 @@ fn combo59_property_with_semicolons_newlines() {
     (org-entry-put nil "CONFIG" "x=1;y=2;z=3")
     (push (list :config (org-entry-get nil "CONFIG")) r)
     (nreverse r)))"##,
-        expect_test::expect![[
-            r#""OK ((:notes nil) (:url nil) (:multi nil) (:config \"x=1;y=2;z=3\"))""#
-        ]],
+        expect,
     );
 }

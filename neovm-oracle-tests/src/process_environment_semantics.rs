@@ -25,12 +25,10 @@ fn oracle_prop_setenv_mutates_let_bound_process_environment() {
                process-environment)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"one\" \"two\" (\"NEOMACS_ORACLE_ENV_B=two\" \"NEOMACS_ORACLE_ENV_A=one\"))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"one\" \"two\" (\"NEOMACS_ORACLE_ENV_B=two\" \"NEOMACS_ORACLE_ENV_A=one\"))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -49,10 +47,8 @@ fn oracle_prop_setenv_nil_creates_negative_entry() {
      (not (equal before process-environment)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil \"NEOMACS_ORACLE_ENV_NEG\" t nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil \"NEOMACS_ORACLE_ENV_NEG\" t nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -68,10 +64,8 @@ fn oracle_prop_getenv_internal_explicit_env_list_first_match_and_negative() {
    (getenv-internal "D" env)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (\"first\" t \"\" nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (\"first\" t \"\" nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -93,12 +87,10 @@ fn oracle_prop_getenv_internal_explicit_env_list_strict_edges() {
    (getenv-internal "G" env)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"short\" \"long\" t \"value\" \"one\" \"\" \"empty-name\" t nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"short\" \"long\" t \"value\" \"one\" \"\" \"empty-name\" t nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -124,12 +116,10 @@ fn oracle_prop_setenv_internal_mutation_and_scan_edges() {
          env)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t (\"A=new\" \"B=old\" 42 \"A=late\")) ((\"C=new\" \"A=old\" \"B=old\" 42 \"C=late\") (\"A=old\" \"B=old\" 42 \"C=late\")) ((\"A=old\" 42 \"B=late\") (\"A=old\" 42 \"B=late\")) (t (\"A\" \"B=old\" 42 \"A=late\")) ((\"A=old\" \"B=old\") (\"A=old\" \"B=old\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t (\"A=new\" \"B=old\" 42 \"A=late\")) ((\"C=new\" \"A=old\" \"B=old\" 42 \"C=late\") (\"A=old\" \"B=old\" 42 \"C=late\")) ((\"A=old\" 42 \"B=late\") (\"A=old\" 42 \"B=late\")) (t (\"A\" \"B=old\" 42 \"A=late\")) ((\"A=old\" \"B=old\") (\"A=old\" \"B=old\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -146,12 +136,10 @@ fn oracle_prop_substitute_env_in_file_name_uses_lisp_environment() {
    (substitute-env-in-file-name "$NEOMACS_ORACLE_ENV_MISSING/x")))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"/tmp/env-root/leaf\" \"/tmp/env-root/x\" \"$NEOMACS_ORACLE_ENV_MISSING/x\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"/tmp/env-root/leaf\" \"/tmp/env-root/x\" \"$NEOMACS_ORACLE_ENV_MISSING/x\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -189,8 +177,6 @@ fn oracle_prop_with_environment_variables_scoping_edges() {
      (error (list (car err) (cdr err)))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 29 43)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \")\" 29 43)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -152,10 +152,8 @@ fn oracle_prop_earley_advanced_nullable_chain() {
     (fmakunbound 'neovm--epa-complete)
     (fmakunbound 'neovm--epa-parse)
     (fmakunbound 'neovm--epa-ok-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t t nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -286,10 +284,8 @@ fn oracle_prop_earley_advanced_left_recursive() {
     (fmakunbound 'neovm--epb-complete)
     (fmakunbound 'neovm--epb-parse)
     (fmakunbound 'neovm--epb-ok-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -434,10 +430,8 @@ fn oracle_prop_earley_advanced_parse_forest_count() {
     (fmakunbound 'neovm--epc-parse)
     (fmakunbound 'neovm--epc-count)
     (fmakunbound 'neovm--epc-count-all-complete)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (1 1 1 1 (0 1 2 3) (2 4 6))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (1 1 1 1 (0 1 2 3) (2 4 6))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -580,10 +574,8 @@ fn oracle_prop_earley_advanced_priority_grammar() {
     (fmakunbound 'neovm--epd-complete)
     (fmakunbound 'neovm--epd-parse)
     (fmakunbound 'neovm--epd-ok-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t t nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -710,10 +702,8 @@ fn oracle_prop_earley_advanced_furthest_match() {
     (fmakunbound 'neovm--epe-complete)
     (fmakunbound 'neovm--epe-parse)
     (fmakunbound 'neovm--epe-furthest)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (3 2 1 0 1 3 0)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (3 2 1 0 1 3 0)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -834,12 +824,10 @@ fn oracle_prop_earley_advanced_right_vs_left_recursive() {
     (fmakunbound 'neovm--epf-complete)
     (fmakunbound 'neovm--epf-parse)
     (fmakunbound 'neovm--epf-ok-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((t t) (t t) (t t) (t t) (nil nil) (nil nil) (nil nil) (nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((t t) (t t) (t t) (t t) (nil nil) (nil nil) (nil nil) (nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -967,8 +955,6 @@ fn oracle_prop_earley_advanced_indirect_left_recursion() {
     (fmakunbound 'neovm--epg-complete)
     (fmakunbound 'neovm--epg-parse)
     (fmakunbound 'neovm--epg-ok-p)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t nil nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t nil nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

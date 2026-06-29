@@ -41,12 +41,10 @@ fn oracle_file_name_directory_and_nondirectory_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (nil \"\" nil \"plain\" \"/\" \"\" \"//\" \"\" \"///\" \"\" \"a/\" \"b\" \"a/b/\" \"\" \"a//\" \"b\" \"/a//\" \"b\" \"/a//b/\" \"\" (wrong-number-of-arguments (file-name-directory 0)) (wrong-type-argument (stringp 42)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (nil \"\" nil \"plain\" \"/\" \"\" \"//\" \"\" \"///\" \"\" \"a/\" \"b\" \"a/b/\" \"\" \"a//\" \"b\" \"/a//\" \"b\" \"/a//b/\" \"\" (wrong-number-of-arguments (file-name-directory 0)) (wrong-type-argument (stringp 42)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -82,12 +80,10 @@ fn oracle_file_name_directory_handler_result_contract_edges() {
     (fmakunbound 'neomacs--oracle-file-name-component-bad-handler)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"handled-dir/\" \"handled-base\" nil (error (\"Invalid handler in ‘file-name-handler-alist’\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"handled-dir/\" \"handled-base\" nil (error (\"Invalid handler in ‘file-name-handler-alist’\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -136,12 +132,10 @@ fn oracle_file_name_extension_and_version_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"plain\" nil \"\" \"plain\" \"plain\" \"plain\" \"plain\") (\"plain.\" \"\" \".\" \"plain\" \"plain\" \"plain.\" \"plain.\") (\".emacs\" nil \"\" \".emacs\" \".emacs\" \".emacs\" \".emacs\") (\".emacs.el\" \"el\" \".el\" \".emacs\" \".emacs\" \".emacs.el\" \".emacs.el\") (\"archive.tar.gz\" \"gz\" \".gz\" \"archive.tar\" \"archive.tar\" \"archive.tar.gz\" \"archive.tar.gz\") (\"/tmp/archive.tar.gz\" \"gz\" \".gz\" \"/tmp/archive.tar\" \"archive.tar\" \"/tmp/archive.tar.gz\" \"/tmp/archive.tar.gz\") (\"/tmp/.hidden\" nil \"\" \"/tmp/.hidden\" \".hidden\" \"/tmp/.hidden\" \"/tmp/.hidden\") (\"/tmp/.hidden.el\" \"el\" \".el\" \"/tmp/.hidden\" \".hidden\" \"/tmp/.hidden.el\" \"/tmp/.hidden.el\") (\"/tmp/dir.with.dots/file\" nil \"\" \"/tmp/dir.with.dots/file\" \"file\" \"/tmp/dir.with.dots/file\" \"/tmp/dir.with.dots/file\") (\"/tmp/dir.with.dots/file.\" \"\" \".\" \"/tmp/dir.with.dots/file\" \"file\" \"/tmp/dir.with.dots/file.\" \"/tmp/dir.with.dots/file.\") (\"foo.~12~\" nil \"\" \"foo.~12~\" \"foo.~12~\" \"foo\" \"foo.~12~\") (\"foo.el.~12~\" \"el\" \".el\" \"foo\" \"foo\" \"foo.el\" \"foo.el.~12~\") (\"foo.el.~12~.~3~\" \"~12~\" \".~12~\" \"foo.el\" \"foo.el\" \"foo.el.~12~\" \"foo.el.~12~.~3~\") (\"foo.~~\" \"~\" \".~\" \"foo\" \"foo\" \"foo.~\" \"foo.~~\") (\"foo.js.~HEAD~1~\" \"js\" \".js\" \"foo\" \"foo\" \"foo.js\" \"foo.js.~HEAD~1~\")) (wrong-type-argument (stringp 42)) (wrong-number-of-arguments ((1 . 2) 3)) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp nil)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"plain\" nil \"\" \"plain\" \"plain\" \"plain\" \"plain\") (\"plain.\" \"\" \".\" \"plain\" \"plain\" \"plain.\" \"plain.\") (\".emacs\" nil \"\" \".emacs\" \".emacs\" \".emacs\" \".emacs\") (\".emacs.el\" \"el\" \".el\" \".emacs\" \".emacs\" \".emacs.el\" \".emacs.el\") (\"archive.tar.gz\" \"gz\" \".gz\" \"archive.tar\" \"archive.tar\" \"archive.tar.gz\" \"archive.tar.gz\") (\"/tmp/archive.tar.gz\" \"gz\" \".gz\" \"/tmp/archive.tar\" \"archive.tar\" \"/tmp/archive.tar.gz\" \"/tmp/archive.tar.gz\") (\"/tmp/.hidden\" nil \"\" \"/tmp/.hidden\" \".hidden\" \"/tmp/.hidden\" \"/tmp/.hidden\") (\"/tmp/.hidden.el\" \"el\" \".el\" \"/tmp/.hidden\" \".hidden\" \"/tmp/.hidden.el\" \"/tmp/.hidden.el\") (\"/tmp/dir.with.dots/file\" nil \"\" \"/tmp/dir.with.dots/file\" \"file\" \"/tmp/dir.with.dots/file\" \"/tmp/dir.with.dots/file\") (\"/tmp/dir.with.dots/file.\" \"\" \".\" \"/tmp/dir.with.dots/file\" \"file\" \"/tmp/dir.with.dots/file.\" \"/tmp/dir.with.dots/file.\") (\"foo.~12~\" nil \"\" \"foo.~12~\" \"foo.~12~\" \"foo\" \"foo.~12~\") (\"foo.el.~12~\" \"el\" \".el\" \"foo\" \"foo\" \"foo.el\" \"foo.el.~12~\") (\"foo.el.~12~.~3~\" \"~12~\" \".~12~\" \"foo.el\" \"foo.el\" \"foo.el.~12~\" \"foo.el.~12~.~3~\") (\"foo.~~\" \"~\" \".~\" \"foo\" \"foo\" \"foo.~\" \"foo.~~\") (\"foo.js.~HEAD~1~\" \"js\" \".js\" \"foo\" \"foo\" \"foo.js\" \"foo.js.~HEAD~1~\")) (wrong-type-argument (stringp 42)) (wrong-number-of-arguments ((1 . 2) 3)) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp nil)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -182,12 +176,10 @@ fn oracle_file_name_with_extension_strict_edges() {
    (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"plain.el\" \"plain.el\" \"plain.el\" \"archive.tar.xz\" \"/tmp/archive.tar.xz\" \"/tmp/.hidden.el\" \"/tmp/.hidden.txt\" \"foo.~12~.el\" \"foo.txt\" (error (\"Empty filename\")) (error (\"Malformed extension: \")) (error (\"Malformed extension: .\")) (error (\"Filename is a directory: /tmp/dir/\")) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)) (wrong-number-of-arguments ((2 . 2) 1)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"plain.el\" \"plain.el\" \"plain.el\" \"archive.tar.xz\" \"/tmp/archive.tar.xz\" \"/tmp/.hidden.el\" \"/tmp/.hidden.txt\" \"foo.~12~.el\" \"foo.txt\" (error (\"Empty filename\")) (error (\"Malformed extension: \")) (error (\"Malformed extension: .\")) (error (\"Filename is a directory: /tmp/dir/\")) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)) (wrong-number-of-arguments ((2 . 2) 1)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -227,10 +219,8 @@ fn oracle_file_name_split_and_parent_directory_edges() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"\" nil \"\") (\".\" (\".\") \".\") (\"..\" (\"..\") \"..\") (\"plain\" (\"plain\") \"plain\") (\"plain/\" (\"plain\" \"\") \"plain/\") (\"a/b\" (\"a\" \"b\") \"a/b\") (\"a/b/\" (\"a\" \"b\" \"\") \"a/b/\") (\"/\" (\"\" \"\" \"\") \"//\") (\"//\" (\"/\" \"\" \"\") \"///\") (\"///\" (\"\" \"\" \"\") \"//\") (\"/a\" (\"\" \"a\") \"/a\") (\"/a/\" (\"\" \"a\" \"\") \"/a/\") (\"/a//b\" (\"\" \"a\" \"b\") \"/a/b\") (\"/a//b/\" (\"\" \"a\" \"b\" \"\") \"/a/b/\") (\"a//b\" (\"a\" \"b\") \"a/b\") (\"a/./b\" (\"a\" \".\" \"b\") \"a/./b\") (\"a/../b\" (\"a\" \"..\" \"b\") \"a/../b\")) ((\"/\" nil) (\"//\" nil) (\"///\" nil) (\"/a\" \"/\") (\"/a/\" \"/\") (\"/a/b\" \"/a/\") (\"/a/b/\" \"/a/\") (\"plain\" \"./\") (\"plain/\" \"./\") (\"a/b\" \"a/\") (\"a/b/\" \"a/\") (\".\" \"../\") (\"..\" \"../../\") (\"\" \"../\")) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)) (wrong-number-of-arguments ((1 . 1) 0)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"\" nil \"\") (\".\" (\".\") \".\") (\"..\" (\"..\") \"..\") (\"plain\" (\"plain\") \"plain\") (\"plain/\" (\"plain\" \"\") \"plain/\") (\"a/b\" (\"a\" \"b\") \"a/b\") (\"a/b/\" (\"a\" \"b\" \"\") \"a/b/\") (\"/\" (\"\" \"\" \"\") \"//\") (\"//\" (\"/\" \"\" \"\") \"///\") (\"///\" (\"\" \"\" \"\") \"//\") (\"/a\" (\"\" \"a\") \"/a\") (\"/a/\" (\"\" \"a\" \"\") \"/a/\") (\"/a//b\" (\"\" \"a\" \"b\") \"/a/b\") (\"/a//b/\" (\"\" \"a\" \"b\" \"\") \"/a/b/\") (\"a//b\" (\"a\" \"b\") \"a/b\") (\"a/./b\" (\"a\" \".\" \"b\") \"a/./b\") (\"a/../b\" (\"a\" \"..\" \"b\") \"a/../b\")) ((\"/\" nil) (\"//\" nil) (\"///\" nil) (\"/a\" \"/\") (\"/a/\" \"/\") (\"/a/b\" \"/a/\") (\"/a/b/\" \"/a/\") (\"plain\" \"./\") (\"plain/\" \"./\") (\"a/b\" \"a/\") (\"a/b/\" \"a/\") (\".\" \"../\") (\"..\" \"../../\") (\"\" \"../\")) (wrong-type-argument (stringp 42)) (wrong-type-argument (stringp 42)) (wrong-number-of-arguments ((1 . 1) 0)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

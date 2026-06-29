@@ -26,7 +26,8 @@ fn oracle_prop_trig_special_values_sin() {
                     (< (abs (sin pi)) eps)
                     (< (abs (- (sin (* 1.5 pi)) -1.0)) eps)
                     (< (abs (sin (* 2.0 pi))) eps)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t t)""#]]);
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -42,7 +43,8 @@ fn oracle_prop_trig_special_values_cos() {
                     (< (abs (- (cos pi) -1.0)) eps)
                     (< (abs (cos (* 1.5 pi))) eps)
                     (< (abs (- (cos (* 2.0 pi)) 1.0)) eps)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t t)""#]]);
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -57,7 +59,8 @@ fn oracle_prop_trig_special_values_tan() {
                     (< (abs (- (tan (/ pi 4.0)) 1.0)) eps)
                     (< (abs (tan pi)) eps)
                     (< (abs (- (tan (/ pi -4.0)) -1.0)) eps)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (t t t t)""#]]);
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -84,7 +87,8 @@ fn oracle_prop_inverse_trig_full_range() {
                                    (< a half-pi))
                         (setq all-ok nil))))
                   all-ok)";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK t""#]]);
+    let expect = expect_test::expect![[r#""OK t""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -116,10 +120,8 @@ fn oracle_prop_atan2_comprehensive() {
                     (< (abs (atan 0.0 1.0)) eps)
                     ;; Negative x-axis: atan2(0,-1) = pi
                     (< (abs (- (atan 0.0 -1.0) pi)) eps)))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -154,10 +156,8 @@ fn oracle_prop_exp_log_sqrt_edge_cases() {
                     (< (abs (- (expt (sqrt 144.0) 2) 144.0)) eps)
                     ;; large exp/log roundtrip
                     (< (abs (- (log (exp 20.0)) 20.0)) eps)))";
-    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
-        form,
-        expect_test::expect![[r#""OK (t t t t t t t t t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t t)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(form, expect);
     assert_ok_eq("(t t t t t t t t t t t t t)", &o, &n);
 }
 
@@ -186,10 +186,8 @@ fn oracle_prop_isnan_and_special_float_computation() {
                   (floatp 1.0e+INF)
                   (floatp -1.0e+INF)
                   (floatp 0.0e+NaN))";
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil nil nil nil t t t t t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil t t t t t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -230,7 +228,8 @@ fn oracle_prop_simpsons_rule_integration() {
                          1.0))
                  1e-8)))
     (fmakunbound 'neovm--test-simpsons)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK (nil t t)""#]]);
+    let expect = expect_test::expect![[r#""OK (nil t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -290,5 +289,6 @@ fn oracle_prop_polar_cartesian_roundtrip() {
         all-ok)
     (fmakunbound 'neovm--test-cart-to-polar)
     (fmakunbound 'neovm--test-polar-to-cart)))";
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK t""#]]);
+    let expect = expect_test::expect![[r#""OK t""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

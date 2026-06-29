@@ -23,12 +23,10 @@ fn oracle_prop_gnu_internal_format_docstring_line_fill_column_semantics() {
      (internal--format-docstring-line "alpha beta gamma"))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"short\" \"hello world\" \"alpha beta\ngamma\" \"alpha  beta\" \"abcdefghijklm\" \"alpha beta gamma\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"short\" \"hello world\" \"alpha beta\ngamma\" \"alpha  beta\" \"abcdefghijklm\" \"alpha beta gamma\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -47,12 +45,10 @@ fn oracle_prop_gnu_internal_format_docstring_line_rejects_newlines_after_format(
   (lambda () (internal--format-docstring-line "%s" "ok"))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((error \"Unable to fill string containing newline: \\\"line1\nline2\\\"\") \"line\nbreak\" \"ok\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((error \"Unable to fill string containing newline: \\\"line1\nline2\\\"\") \"line\nbreak\" \"ok\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -72,10 +68,8 @@ fn oracle_prop_gnu_internal_fill_string_single_line_edge_cases() {
      (internal--fill-string-single-line "ab cd ef"))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"\" \"short\" \"one two\nthree\" \"one  two\" \" leading\nspace\" \"trailing \" \"ab cd\nef\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"\" \"short\" \"one two\nthree\" \"one  two\" \" leading\nspace\" \"trailing \" \"ab cd\nef\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -8,6 +8,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn combo_eieio_slot_unbound_error_recovery() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function slot-makunbound)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass guarded-resource ()
@@ -67,7 +68,7 @@ fn combo_eieio_slot_unbound_error_recovery() {
                 (buffer-string)
                 resources)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function slot-makunbound)""#]],
+        expect,
     );
 }
 
@@ -75,6 +76,7 @@ fn combo_eieio_slot_unbound_error_recovery() {
 fn combo_eieio_no_method_error_with_narrow() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defgeneric)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass data-source ()
@@ -137,7 +139,7 @@ fn combo_eieio_no_method_error_with_narrow() {
                 (buffer-string)
                 sources)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function defgeneric)""#]],
+        expect,
     );
 }
 
@@ -145,6 +147,7 @@ fn combo_eieio_no_method_error_with_narrow() {
 fn combo_eieio_invalid_initarg_error() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass strict-config ()
@@ -195,7 +198,7 @@ fn combo_eieio_invalid_initarg_error() {
                 (buffer-string)
                 config)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -203,6 +206,7 @@ fn combo_eieio_invalid_initarg_error() {
 fn combo_eieio_slot_missing_error_multi_buf() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass base-component ()
@@ -276,7 +280,7 @@ fn combo_eieio_slot_missing_error_multi_buf() {
               (reverse results) (reverse errors))))
     (kill-buffer buf1)
     (kill-buffer buf2)))"#,
-        expect_test::expect![[r#""OK t""#]],
+        expect,
     );
 }
 
@@ -284,6 +288,7 @@ fn combo_eieio_slot_missing_error_multi_buf() {
 fn combo_eieio_nested_condition_case_generics() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ERR (void-function defgeneric)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defclass pipeline-stage ()
@@ -357,6 +362,6 @@ fn combo_eieio_nested_condition_case_generics() {
                 (buffer-string)
                 stages)))
       (kill-buffer buf))))"#,
-        expect_test::expect![[r#""ERR (void-function defgeneric)""#]],
+        expect,
     );
 }

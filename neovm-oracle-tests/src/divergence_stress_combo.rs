@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_stress_many_inserts_deletes() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""line0\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nline51\nline52\nline53\nline54\nline55\nline56\nline57\nline58\nline59\nline60\nline61\nline62\nline63\nline64\nline65\nline66\nline67\nline68\nline69\nline70\nline71\nline72\nline73\nline74\nline75\nline76\nline77\nline78\nline79\nline80\nline81\nline82\nline83\nline84\nline85\nline86\nline87\nline88\nline89\nline90\nline91\nline92\nline93\nline94\nline95\nline96\nline97\nline98\nline99\nOK (691 400 399)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -19,9 +22,7 @@ fn divergence_stress_many_inserts_deletes() {
       (forward-line 1)
       (kill-line))
     (list len (point-max) (buffer-size))))"#,
-        expect_test::expect![[
-            r#""line0\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\nline51\nline52\nline53\nline54\nline55\nline56\nline57\nline58\nline59\nline60\nline61\nline62\nline63\nline64\nline65\nline66\nline67\nline68\nline69\nline70\nline71\nline72\nline73\nline74\nline75\nline76\nline77\nline78\nline79\nline80\nline81\nline82\nline83\nline84\nline85\nline86\nline87\nline88\nline89\nline90\nline91\nline92\nline93\nline94\nline95\nline96\nline97\nline98\nline99\nOK (691 400 399)""#
-        ]],
+        expect,
     );
 }
 
@@ -29,6 +30,7 @@ fn divergence_stress_many_inserts_deletes() {
 fn divergence_stress_nested_save_excursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCDEFGHIJERR (invalid-read-syntax \")\" 10 17)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -40,7 +42,7 @@ fn divergence_stress_nested_save_excursion() {
         (goto-char 3))))
     (list (point)))
   (list (point)))"#,
-        expect_test::expect![[r#""ABCDEFGHIJERR (invalid-read-syntax \")\" 10 17)""#]],
+        expect,
     );
 }
 
@@ -48,6 +50,9 @@ fn divergence_stress_nested_save_excursion() {
 fn divergence_stress_many_overlays() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXOK (10 10 t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 100 ?X))
@@ -57,9 +62,7 @@ fn divergence_stress_many_overlays() {
     (list (length ovs)
           (length (overlays-in 1 100))
           (overlayp (car ovs)))))"#,
-        expect_test::expect![[
-            r#""XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXOK (10 10 t)""#
-        ]],
+        expect,
     );
 }
 
@@ -67,6 +70,9 @@ fn divergence_stress_many_overlays() {
 fn divergence_stress_many_text_props() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXOK ((bold italic underline) (bold italic underline) nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert (make-string 100 ?X))
@@ -76,9 +82,7 @@ fn divergence_stress_many_text_props() {
   (list (get-text-property 1 'face)
         (get-text-property 11 'face)
         (get-text-property 6 'face)))"#,
-        expect_test::expect![[
-            r#""XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXOK ((bold italic underline) (bold italic underline) nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -86,6 +90,7 @@ fn divergence_stress_many_text_props() {
 fn divergence_stress_many_narrows() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABCDEFGHIJOK (1 11 \"ABCDEFGHIJ\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -96,7 +101,7 @@ fn divergence_stress_many_narrows() {
       (list (point-min) (point-max) (buffer-string)))
     (list (point-min) (point-max) (buffer-string)))
   (list (point-min) (point-max) (buffer-string)))"#,
-        expect_test::expect![[r#""ABCDEFGHIJOK (1 11 \"ABCDEFGHIJ\")""#]],
+        expect,
     );
 }
 
@@ -104,6 +109,7 @@ fn divergence_stress_many_narrows() {
 fn divergence_stress_many_markers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""ABXXXCDEFGHIJOK (1 2 3 7 8 9 10 11 12 13)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -112,7 +118,7 @@ fn divergence_stress_many_markers() {
     (goto-char 3)
     (insert "XXX")
     (mapcar #'marker-position markers)))"#,
-        expect_test::expect![[r#""ABXXXCDEFGHIJOK (1 2 3 7 8 9 10 11 12 13)""#]],
+        expect,
     );
 }
 
@@ -120,6 +126,7 @@ fn divergence_stress_many_markers() {
 fn divergence_stress_condition_case_loop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (4 (caught error \"boom at 3\") 2 1 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((result nil))
   (dotimes (i 5)
@@ -127,7 +134,7 @@ fn divergence_stress_condition_case_loop() {
         (if (= i 3) (error "boom at %d" i) (push i result))
       (error (push (cons 'caught err) result))))
   result)"#,
-        expect_test::expect![[r#""OK (4 (caught error \"boom at 3\") 2 1 0)""#]],
+        expect,
     );
 }
 
@@ -135,6 +142,7 @@ fn divergence_stress_condition_case_loop() {
 fn divergence_stress_undo_redo_cycle() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""oneOK (\"onetwothree\" \"one\" \"one\")""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (setq buffer-undo-list nil)
@@ -149,7 +157,7 @@ fn divergence_stress_undo_redo_cycle() {
     (let ((after2 (buffer-string)))
       (undo)
       (list full after2 (buffer-string)))))"#,
-        expect_test::expect![[r#""oneOK (\"onetwothree\" \"one\" \"one\")""#]],
+        expect,
     );
 }
 
@@ -157,6 +165,7 @@ fn divergence_stress_undo_redo_cycle() {
 fn divergence_stress_hash_many_ops() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (100 100 2500 9801 missing)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((ht (make-hash-table :test 'eql)))
   (dotimes (i 100)
@@ -166,7 +175,7 @@ fn divergence_stress_hash_many_ops() {
         (gethash 50 ht)
         (gethash 99 ht)
         (gethash 100 ht 'missing)))"#,
-        expect_test::expect![[r#""OK (100 100 2500 9801 missing)""#]],
+        expect,
     );
 }
 
@@ -174,6 +183,9 @@ fn divergence_stress_hash_many_ops() {
 fn divergence_stress_list_manipulation() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (48 3 50 13 (30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(let ((lst (number-sequence 1 50)))
   (setq lst (mapcar #'1+ lst))
@@ -183,8 +195,6 @@ fn divergence_stress_list_manipulation() {
         (car (last lst))
         (nth 10 lst)
         (member 30 lst)))"#,
-        expect_test::expect![[
-            r#""OK (48 3 50 13 (30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 48 49 50))""#
-        ]],
+        expect,
     );
 }

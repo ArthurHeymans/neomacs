@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx135_compile_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -18,13 +19,14 @@ fn div_cx135_compile_availability() {
             (boundp 'compile-command)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx135_grep_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -37,13 +39,14 @@ fn div_cx135_grep_availability() {
             (boundp 'grep-find-template)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx135_xref_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -56,13 +59,14 @@ fn div_cx135_xref_availability() {
             (boundp 'xref-search-program)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx135_project_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -75,13 +79,14 @@ fn div_cx135_project_availability() {
             (boundp 'project-vc-extra-root-markers)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx135_find_dired_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -92,13 +97,14 @@ fn div_cx135_find_dired_availability() {
             (fboundp 'find-grep-dired)))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx135_lgrep_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK :ran""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -114,13 +120,14 @@ fn div_cx135_lgrep_basic() {
       :ran)
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK :ran""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx135_xref_backend_predicates() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -129,13 +136,16 @@ fn div_cx135_xref_backend_predicates() {
           (boundp 'xref-show-definitions-function))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx135_project_root_via_marker() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[
+        r#""OK ((transient . \"/tmp/nix-shell.XcUf3d/neo-cx135-root87KYT5/\") t \"/tmp/nix-shell.XcUf3d/neo-cx135-root87KYT5/\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -153,15 +163,14 @@ fn div_cx135_project_root_via_marker() {
           (list proj (consp proj) (when (consp proj) (cdr proj))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[
-            r#""OK ((transient . \"/tmp/nix-shell.XcUf3d/neo-cx135-root87KYT5/\") t \"/tmp/nix-shell.XcUf3d/neo-cx135-root87KYT5/\")""#
-        ]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx135_compilation_buffer_name_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -171,13 +180,14 @@ fn div_cx135_compilation_buffer_name_query() {
           (boundp 'compilation-scroll-output))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t t t t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx135_xref_query_replace() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (t nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -186,13 +196,14 @@ fn div_cx135_xref_query_replace() {
           (boundp 'xref-history-storage))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (t nil t)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx135_project_ignore_patterns() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -201,13 +212,14 @@ fn div_cx135_project_ignore_patterns() {
           (boundp 'project-files-cache))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (nil nil nil)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx135_compile_with_marker_overlay_undo_narrow_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (:errored args-out-of-range)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -235,6 +247,6 @@ fn div_cx135_compile_with_marker_overlay_undo_narrow_mega() {
                   (text-properties-at 1))))))
   (error (list :errored (car e))))
 "##,
-        expect_test::expect![[r#""OK (:errored args-out-of-range)""#]],
+        expect,
     );
 }

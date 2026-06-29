@@ -7,6 +7,9 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_buffer_list_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((\" test-blo1-xxx\") (\" test-blo2-xxx\") (\" test-blo3-xxx\") t t t t t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer " test-blo1-xxx"))
@@ -32,9 +35,7 @@ fn divergence_buffer_list_order() {
               (null (cdr b1-visible))
               (null (cdr b2-visible))
               (null (cdr b3-visible))))))) "#,
-        expect_test::expect![[
-            r#""OK ((\" test-blo1-xxx\") (\" test-blo2-xxx\") (\" test-blo3-xxx\") t t t t t t)""#
-        ]],
+        expect,
     );
 }
 
@@ -42,6 +43,8 @@ fn divergence_buffer_list_order() {
 fn divergence_buffer_name_unique() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect =
+        expect_test::expect![[r#""OK (t t t t t 0 0 t t t t t t t t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((v1 (generate-new-buffer "test-bnu-xxx"))
@@ -68,7 +71,7 @@ fn divergence_buffer_name_unique() {
        (kill-buffer h1) (kill-buffer h2) (kill-buffer h3)
        (not (buffer-live-p v1)) (not (buffer-live-p v2)) (not (buffer-live-p v3))
        (not (buffer-live-p h1)) (not (buffer-live-p h2)) (not (buffer-live-p h3)))))) "#,
-        expect_test::expect![[r#""OK (t t t t t 0 0 t t t t t t t t t t t t t t t t t t t)""#]],
+        expect,
     );
 }
 
@@ -76,6 +79,9 @@ fn divergence_buffer_name_unique() {
 fn divergence_marker_point_in_multiple_buffers() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (2 7 8 nil nil t #(\"AAXXAA\" 0 2 (buf b1) 4 5 (buf b1)) #(\"YYBBBBBBBB\" 2 9 (buf b2)) #(\"CCCCCCCCCC\" 0 9 (buf b3)) nil t t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer " test-mpimb1-xxx"))
@@ -109,9 +115,7 @@ fn divergence_marker_point_in_multiple_buffers() {
             (with-current-buffer b3 (buffer-string))
             (get-text-property 1 'buf (buffer-base-buffer b1))
             (kill-buffer b1) (kill-buffer b2) (kill-buffer b3))))) "#,
-        expect_test::expect![[
-            r#""OK (2 7 8 nil nil t #(\"AAXXAA\" 0 2 (buf b1) 4 5 (buf b1)) #(\"YYBBBBBBBB\" 2 9 (buf b2)) #(\"CCCCCCCCCC\" 0 9 (buf b3)) nil t t t)""#
-        ]],
+        expect,
     );
 }
 
@@ -119,6 +123,9 @@ fn divergence_marker_point_in_multiple_buffers() {
 fn divergence_buffer_swap_content() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK (#(\"CONTENT-1\" 0 8 (src buf1)) #(\"CONTENT-2\" 0 8 (src buf2)) buf1 buf2 #(\"CONTENT-2\" 0 8 (src buf2)) #(\"CONTENT-1\" 0 8 (src buf1)) t t t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((b1 (generate-new-buffer " test-bsc1-xxx"))
@@ -148,9 +155,7 @@ fn divergence_buffer_swap_content() {
               (string= ns2 "CONTENT-1")
               (eq p1 'buf1)
               (eq p2 'buf2)))))) "#,
-        expect_test::expect![[
-            r#""OK (#(\"CONTENT-1\" 0 8 (src buf1)) #(\"CONTENT-2\" 0 8 (src buf2)) buf1 buf2 #(\"CONTENT-2\" 0 8 (src buf2)) #(\"CONTENT-1\" 0 8 (src buf1)) t t t t)""#
-        ]],
+        expect,
     );
 }
 
@@ -158,6 +163,7 @@ fn divergence_buffer_swap_content() {
 fn divergence_point_marker_excursion() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""XXABCDEFGHIJOK (5 11 3 13 nil t 3 nil 13 t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "ABCDEFGHIJ")
@@ -181,7 +187,7 @@ fn divergence_point_marker_excursion() {
                 (= (marker-position m) (+ mp 2))
                 (get-text-property 1 'half)
                 (eq (get-text-property 1 'half) 'first))))))) "#,
-        expect_test::expect![[r#""XXABCDEFGHIJOK (5 11 3 13 nil t 3 nil 13 t nil nil)""#]],
+        expect,
     );
 }
 
@@ -189,6 +195,7 @@ fn divergence_point_marker_excursion() {
 fn divergence_buffer_modified_tick() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((tick1 (buffer-modified-tick))
@@ -211,7 +218,7 @@ fn divergence_buffer_modified_tick() {
               (string= (buffer-string) "hello")
               (get-text-property 1 'test)
               (eq (get-text-property 1 'test) 'val))))) "#,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
@@ -219,6 +226,9 @@ fn divergence_buffer_modified_tick() {
 fn divergence_narrow_widen_marker_bounds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""AAAA-XXBBBB-CCCC-DDDD-EEEEOK (#(\"XXBBBB-CCC\" 2 5 (section b) 7 10 (section c)) (1 8 13 18 23) #(\"AAAA-XXBBBB-CCCC-DDDD-EEEE\" 0 3 (section a) 7 10 (section b) 12 15 (section c) 17 20 (section d) 22 25 (section e)) t 1 t 8 t 13 t 18 nil 23 nil a t nil nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "AAAA-BBBB-CCCC-DDDD-EEEE")
@@ -255,9 +265,7 @@ fn divergence_narrow_widen_marker_bounds() {
             (eq (get-text-property 1 'section) 'a)
             (get-text-property 6 'section)
             (eq (get-text-property 6 'section) 'b))))) "#,
-        expect_test::expect![[
-            r#""AAAA-XXBBBB-CCCC-DDDD-EEEEOK (#(\"XXBBBB-CCC\" 2 5 (section b) 7 10 (section c)) (1 8 13 18 23) #(\"AAAA-XXBBBB-CCCC-DDDD-EEEE\" 0 3 (section a) 7 10 (section b) 12 15 (section c) 17 20 (section d) 22 25 (section e)) t 1 t 8 t 13 t 18 nil 23 nil a t nil nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -265,6 +273,9 @@ fn divergence_narrow_widen_marker_bounds() {
 fn divergence_buffer_visibility_functions() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""VISIBLE1-INVISIBLE-VISIBLE2-INVISIBLE-VISIBLE3OK (nil nil nil t t t t test-bvf-xxx t 46 nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "VISIBLE1-INVISIBLE-VISIBLE2-INVISIBLE-VISIBLE3")
@@ -286,9 +297,7 @@ fn divergence_buffer_visibility_functions() {
             (eq (overlay-get ov1 'invisible) 'test-bvf-xxx)
             (buffer-size)
             (= (buffer-size) 45))))) "#,
-        expect_test::expect![[
-            r#""VISIBLE1-INVISIBLE-VISIBLE2-INVISIBLE-VISIBLE3OK (nil nil nil t t t t test-bvf-xxx t 46 nil)""#
-        ]],
+        expect,
     );
 }
 
@@ -296,6 +305,9 @@ fn divergence_buffer_visibility_functions() {
 fn divergence_temp_buffer_macro() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[
+        r#""OK ((#(\"temp content\" 0 3 (tag temp)) t temp t t t) #(\"temp content\" 0 3 (tag temp)) t t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (let ((result nil)
@@ -315,9 +327,7 @@ fn divergence_temp_buffer_macro() {
           (car result)
           (eq (nth 2 result) 'temp)
           (eq (nth 5 result) t)))) "#,
-        expect_test::expect![[
-            r#""OK ((#(\"temp content\" 0 3 (tag temp)) t temp t t t) #(\"temp content\" 0 3 (tag temp)) t t)""#
-        ]],
+        expect,
     );
 }
 
@@ -325,6 +335,7 @@ fn divergence_temp_buffer_macro() {
 fn divergence_buffer_local_variables_chain() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
+    let expect = expect_test::expect![[r#""OK (default buf1-val buf2-val b1 b2 t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (defvar test-blvc-xxx 'default)
@@ -351,6 +362,6 @@ fn divergence_buffer_local_variables_chain() {
             (eq v-b2 'buf2-val)
             (eq p-b1 'b1)
             (eq p-b2 'b2))))) "#,
-        expect_test::expect![[r#""OK (default buf1-val buf2-val b1 b2 t t t t t)""#]],
+        expect,
     );
 }

@@ -107,12 +107,10 @@ fn oracle_prop_combination_gc_sim_mark_sweep() {
     (fmakunbound 'neovm--gc-ms-alloc)
     (fmakunbound 'neovm--gc-ms-mark)
     (fmakunbound 'neovm--gc-ms-sweep)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((A B C D E F G) 3 (A B C D) (t t t t nil nil nil nil nil nil))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((A B C D E F G) 3 (A B C D) (t t t t nil nil nil nil nil nil))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -203,10 +201,9 @@ fn oracle_prop_combination_gc_sim_refcount_cycles() {
     (fmakunbound 'neovm--gc-rc-addref)
     (fmakunbound 'neovm--gc-rc-release)
     (fmakunbound 'neovm--gc-rc-detect-cycles)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (((a . 1) (b . 2) (c . 1) (d . 1) (e . 1)) 1 1 (b c e))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK (((a . 1) (b . 2) (c . 1) (d . 1) (e . 1)) 1 1 (b c e))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -286,10 +283,8 @@ fn oracle_prop_combination_gc_sim_semispace() {
                   (setq j (1+ j)))
                 has-garbage)))))
     (fmakunbound 'neovm--gc-ss-collect)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((child-a child-b grandchild root) 4 nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((child-a child-b grandchild root) 4 nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -366,12 +361,10 @@ fn oracle_prop_combination_gc_sim_generational() {
     (fmakunbound 'neovm--gc-gen-create)
     (fmakunbound 'neovm--gc-gen-alloc)
     (fmakunbound 'neovm--gc-gen-minor-gc)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((freed (temp-1 temp-2) promoted nil) (freed (obj-c) promoted (obj-b obj-a)) (freed nil promoted nil) (new-1) (obj-a obj-b))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((freed (temp-1 temp-2) promoted nil) (freed (obj-c) promoted (obj-b obj-a)) (freed nil promoted nil) (new-1) (obj-a obj-b))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -446,12 +439,10 @@ fn oracle_prop_combination_gc_sim_root_set() {
     (fmakunbound 'neovm--gc-root-pop-frame)
     (fmakunbound 'neovm--gc-root-add)
     (fmakunbound 'neovm--gc-root-all)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((global-a global-b) (global-a global-b local-x local-y) (global-a global-b inner-z local-x local-y) (inner-z) (global-a global-b local-x local-y) (local-y local-x) (global-a global-b))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((global-a global-b) (global-a global-b local-x local-y) (global-a global-b inner-z local-x local-y) (inner-z) (global-a global-b local-x local-y) (local-y local-x) (global-a global-b))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -519,10 +510,8 @@ fn oracle_prop_combination_gc_sim_compaction() {
             ;; Verify C's refs updated: old (0) -> new (0)
             (cdr (aref compacted 2)))))
     (fmakunbound 'neovm--gc-compact)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((A 1 2) (B 2) (C 0) nil 0 1 2 (1 2) (0))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((A 1 2) (B 2) (C 0) nil 0 1 2 (1 2) (0))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -604,10 +593,8 @@ fn oracle_prop_combination_gc_sim_weak_refs_finalization() {
                   (setq cleared-count (1+ cleared-count))))
               cleared-count))))
     (fmakunbound 'neovm--gc-weak-collect)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((wr-1 . obj-a) (wr-2) (wr-3) (wr-4) (wr-5 . obj-c)) (obj-d) (obj-a obj-c) 3)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((wr-1 . obj-a) (wr-2) (wr-3) (wr-4) (wr-5 . obj-c)) (obj-d) (obj-a obj-c) 3)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

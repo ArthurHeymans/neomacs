@@ -60,12 +60,10 @@ fn oracle_prop_string_transformation_pipeline() {
        (funcall 'neovm--test-str-pipeline "")
        (funcall 'neovm--test-str-pipeline "single"))
     (fmakunbound 'neovm--test-str-pipeline)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"again hello world\" \"brown dog fox jumps lazy over quick the\" \"aaa bbb ccc\" \"\" \"single\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"again hello world\" \"brown dog fox jumps lazy over quick the\" \"aaa bbb ccc\" \"\" \"single\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,12 +147,10 @@ fn oracle_prop_string_state_machine_tokenizer() {
        (funcall 'neovm--test-sm-tokenize "\"escaped \\\"quote\\\"\"")
        (funcall 'neovm--test-sm-tokenize ""))
     (fmakunbound 'neovm--test-sm-tokenize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((ident . \"x\") (punct . \"=\") (number . \"42\") (punct . \"+\") (ident . \"y\")) ((ident . \"foo\") (punct . \"(\") (number . \"1\") (punct . \",\") (number . \"2.5\") (punct . \",\") (string . \"hello\") (punct . \")\")) ((ident . \"a_b\") (punct . \"+\") (ident . \"c3\") (punct . \"*\") (number . \"100\")) ((string . \"escaped \\\"quote\\\"\")) nil)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((ident . \"x\") (punct . \"=\") (number . \"42\") (punct . \"+\") (ident . \"y\")) ((ident . \"foo\") (punct . \"(\") (number . \"1\") (punct . \",\") (number . \"2.5\") (punct . \",\") (string . \"hello\") (punct . \")\")) ((ident . \"a_b\") (punct . \"+\") (ident . \"c3\") (punct . \"*\") (number . \"100\")) ((string . \"escaped \\\"quote\\\"\")) nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -228,12 +224,10 @@ fn oracle_prop_string_template_engine_nested() {
                 "{{a}}"
                 '(("a" . "{{b}}") ("b" . "{{c}}") ("c" . "final")) 0))
     (fmakunbound 'neovm--test-tpl-resolve)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"Hello Alice!\" \"Hi Bob, you have 5 items.\" \"Dear Dr Smith\" \"found and {{unknown}}\" \"just plain text\" \"final\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"Hello Alice!\" \"Hi Bob, you have 5 items.\" \"Dear Dr Smith\" \"found and {{unknown}}\" \"just plain text\" \"final\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -312,12 +306,10 @@ fn oracle_prop_string_csv_parser_quoted() {
                 "id,name,bio\n1,Alice,\"Likes coding, reading\"\n2,Bob,\"Said \"\"hello\"\"\"\n3,Carol,simple"))
     (fmakunbound 'neovm--test-csv-parse-row)
     (fmakunbound 'neovm--test-csv-parse)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((\"a\" \"b\" \"c\") (\"1\" \"2\" \"3\")) ((\"name\" \"desc\" \"value\") (\"Alice\" \"Hello, World\" \"42\")) ((\"text\") (\"He said \\\"hi\\\"\")) ((\"a\" \"\" \"c\") (\"\" \"b\" \"\") (\"\" \"\" \"\")) ((\"one\") (\"two\") (\"three\")) ((\"id\" \"name\" \"bio\") (\"1\" \"Alice\" \"Likes coding, reading\") (\"2\" \"Bob\" \"Said \\\"hello\\\"\") (\"3\" \"Carol\" \"simple\")))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((\"a\" \"b\" \"c\") (\"1\" \"2\" \"3\")) ((\"name\" \"desc\" \"value\") (\"Alice\" \"Hello, World\" \"42\")) ((\"text\") (\"He said \\\"hi\\\"\")) ((\"a\" \"\" \"c\") (\"\" \"b\" \"\") (\"\" \"\" \"\")) ((\"one\") (\"two\") (\"three\")) ((\"id\" \"name\" \"bio\") (\"1\" \"Alice\" \"Likes coding, reading\") (\"2\" \"Bob\" \"Said \\\"hello\\\"\") (\"3\" \"Carol\" \"simple\")))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -374,12 +366,10 @@ fn oracle_prop_string_longest_common_subsequence() {
        ;; Longer strings
        (funcall 'neovm--test-lcs "thequickbrownfox" "thefastbrowndog"))
     (fmakunbound 'neovm--test-lcs)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (\"ace\" \"BDAB\" \"hello\" \"\" \"\" \"bd\" \"thebrowno\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (\"ace\" \"BDAB\" \"hello\" \"\" \"\" \"bd\" \"thebrowno\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -446,12 +436,10 @@ fn oracle_prop_string_base16_encode_decode() {
     (fmakunbound 'neovm--test-hex-encode)
     (fmakunbound 'neovm--test-hex-val)
     (fmakunbound 'neovm--test-hex-decode)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((\"48656c6c6f\" \"576f726c64\" \"\" \"616263313233\" \"20207370616365732020\" \"5370656369616c3a207e214023\") (t t t t t t) \"4142\" \"AB\")""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((\"48656c6c6f\" \"576f726c64\" \"\" \"616263313233\" \"20207370616365732020\" \"5370656369616c3a207e214023\") (t t t t t t) \"4142\" \"AB\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -510,10 +498,8 @@ fn oracle_prop_string_run_length_encoding() {
            (list (length s) (length encoded)))))
     (fmakunbound 'neovm--test-rle-encode)
     (fmakunbound 'neovm--test-rle-decode)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((((3 . 97) (3 . 98) (2 . 99)) ((3 . 97)) ((1 . 97) (1 . 98) (1 . 99) (1 . 100) (1 . 101) (1 . 102)) ((8 . 97)) nil ((2 . 97) (2 . 98) (2 . 99) (2 . 100) (2 . 101)) ((2 . 120) (2 . 121) (2 . 122))) (t t t t t t t) (30 2))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((((3 . 97) (3 . 98) (2 . 99)) ((3 . 97)) ((1 . 97) (1 . 98) (1 . 99) (1 . 100) (1 . 101) (1 . 102)) ((8 . 97)) nil ((2 . 97) (2 . 98) (2 . 99) (2 . 100) (2 . 101)) ((2 . 120) (2 . 121) (2 . 122))) (t t t t t t t) (30 2))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

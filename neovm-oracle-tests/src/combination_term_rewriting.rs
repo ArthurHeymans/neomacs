@@ -83,10 +83,8 @@ fn oracle_prop_term_rewriting_pattern_matching() {
     (fmakunbound 'neovm--tr-var-p)
     (fmakunbound 'neovm--tr-match)
     (fmakunbound 'neovm--tr-subst)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 58 40)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 58 40)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -191,10 +189,8 @@ fn oracle_prop_term_rewriting_single_step() {
     (fmakunbound 'neovm--tr2-subst)
     (fmakunbound 'neovm--tr2-try-rules)
     (fmakunbound 'neovm--tr2-step)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil nil nil nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -304,12 +300,10 @@ fn oracle_prop_term_rewriting_fixpoint() {
     (fmakunbound 'neovm--tr3-try-rules)
     (fmakunbound 'neovm--tr3-step)
     (fmakunbound 'neovm--tr3-normalize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((result a steps 100) (result (+ a 0) steps 100) (result (+ (+ a 0) 0) steps 100) (result (+ (+ (+ a 0) 0) 0) steps 100) (result (* 1 (+ 0 (+ a 0))) steps 100) (result (* (+ a b) 0) steps 100) (result (* 1 (+ (* 0 c) (+ d 0))) steps 100))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((result a steps 100) (result (+ a 0) steps 100) (result (+ (+ a 0) 0) steps 100) (result (+ (+ (+ a 0) 0) 0) steps 100) (result (* 1 (+ 0 (+ a 0))) steps 100) (result (* (+ a b) 0) steps 100) (result (* 1 (+ (* 0 c) (+ d 0))) steps 100))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -428,12 +422,10 @@ fn oracle_prop_term_rewriting_algebra_simplify() {
     (fmakunbound 'neovm--tr4-try-rules)
     (fmakunbound 'neovm--tr4-step)
     (fmakunbound 'neovm--tr4-normalize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((+ (* a 1) 0) (+ a a) (- b b) (- (- c)) (expt x 0) (expt x 1) (* 1 (+ (expt y 1) 0)) (+ (* (- (- a)) 1) (- b b)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((+ (* a 1) 0) (+ a a) (- b b) (- (- c)) (expt x 0) (expt x 1) (* 1 (+ (expt y 1) 0)) (+ (* (- (- a)) 1) (- b b)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -557,12 +549,10 @@ fn oracle_prop_term_rewriting_boolean_normalize() {
     (fmakunbound 'neovm--tr5-try-rules)
     (fmakunbound 'neovm--tr5-step)
     (fmakunbound 'neovm--tr5-normalize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((not (not a)) (not (not (not b))) (and p true) (or q false) (and anything false) (or anything true) (and x x) (or y y) (and p (not p)) (or q (not q)) (and (not (not a)) (or b false)) (or (and x false) (not (not y))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((not (not a)) (not (not (not b))) (and p true) (or q false) (and anything false) (or anything true) (and x x) (or y y) (and p (not p)) (or q (not q)) (and (not (not a)) (or b false)) (or (and x false) (not (not y))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -689,8 +679,6 @@ fn oracle_prop_term_rewriting_conditional_rules() {
     (fmakunbound 'neovm--tr6-try-crules)
     (fmakunbound 'neovm--tr6-step)
     (fmakunbound 'neovm--tr6-normalize)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 78 23)""#]],
-    );
+    let expect = expect_test::expect![[r#""ERR (invalid-read-syntax \"?\" 78 23)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

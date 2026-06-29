@@ -25,12 +25,10 @@ fn oracle_append_copies_prefix_and_shares_final_tail() {
         (eq result prefix)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((a b changed-tail d) (changed-prefix b) (changed-tail d) t nil)""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((a b changed-tail d) (changed-prefix b) (changed-tail d) t nil)""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -53,12 +51,10 @@ fn oracle_append_sequence_arguments_and_dotted_tail() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((97 20013 x y nil t nil t tail) final-atom (97 98 . tail) (wrong-type-argument (listp c)) (wrong-type-argument (sequencep 42)))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((97 20013 x y nil t nil t tail) final-atom (97 98 . tail) (wrong-type-argument (listp c)) (wrong-type-argument (sequencep 42)))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -75,12 +71,10 @@ fn oracle_append_rejects_char_table_like_gnu() {
     (error (list (car err) (cdr err)))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK (wrong-type-argument (sequencep #^[65 nil generic 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65]))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK (wrong-type-argument (sequencep #^[65 nil generic 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65 65]))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -102,12 +96,10 @@ fn oracle_append_vconcat_accept_byte_code_but_concat_rejects() {
      (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (byte-code-function 4 (257 \"\\300\\207\" [42] 1) [257 \"\\300\\207\" [42] 1] (wrong-type-argument (sequencep #[257 \"\\300\\207\" [42] 1])))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (byte-code-function 4 (257 \"\\300\\207\" [42] 1) [257 \"\\300\\207\" [42] 1] (wrong-type-argument (sequencep #[257 \"\\300\\207\" [42] 1])))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -127,12 +119,10 @@ fn oracle_nconc_mutates_prefix_and_shares_tail() {
         (eq (nthcdr 2 result) b)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((a1 a2 changed-b b2) (a1 a2 changed-b b2) (changed-b b2) t t)""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((a1 a2 changed-b b2) (a1 a2 changed-b b2) (changed-b b2) t t)""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -153,12 +143,10 @@ fn oracle_nconc_nil_arguments_and_dotted_tail() {
           (error (list (car err) (cdr err))))))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![
-            r#""OK ((a b) t (x y . tail) final (wrong-type-argument (consp not-last)))""#
-        ],
-    );
+    let expect = expect_test::expect![
+        r#""OK ((a b) t (x y . tail) final (wrong-type-argument (consp not-last)))""#
+    ];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 #[test]
@@ -176,8 +164,6 @@ fn oracle_nconc_overwrites_dotted_nonfinal_tail() {
         (eq (cdr result) tail)))
 "#;
 
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![r#""OK ((head new-tail) (head new-tail) (new-tail) t t)""#],
-    );
+    let expect = expect_test::expect![r#""OK ((head new-tail) (head new-tail) (new-tail) t t)""#];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

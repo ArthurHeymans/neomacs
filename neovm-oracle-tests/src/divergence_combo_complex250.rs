@@ -7,6 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx250_mega_milestone_all_subsystem_ultimate_1() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
@@ -75,13 +76,14 @@ fn div_cx250_mega_milestone_all_subsystem_ultimate_1() {
               (kill-buffer buf)
               (list state (buffer-live-p buf))))))))
 "##,
-        expect_test::expect![[r#""OK nil""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx250_mega_milestone_pcase_rx_syntax_advice_register_window_format_time() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((lexical-binding t)
@@ -124,13 +126,14 @@ fn div_cx250_mega_milestone_pcase_rx_syntax_advice_register_window_format_time()
                 (overlay-start ov) (overlay-end ov)
                 (text-properties-at 1)))))))
 "##,
-        expect_test::expect![[r#""ERR (args-out-of-range 1 1)""#]],
+        expect,
     );
 }
 
 #[test]
 fn div_cx250_mega_milestone_process_buflocal_coding_env_timer_weak_hash_textprop_undo() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""ERR (wrong-number-of-arguments puthash 6)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
@@ -171,6 +174,6 @@ fn div_cx250_mega_milestone_process_buflocal_coding_env_timer_weak_hash_textprop
         (kill-buffer buf))
       (list snapshot (buffer-live-p buf)))))
 "##,
-        expect_test::expect![[r#""ERR (wrong-number-of-arguments puthash 6)""#]],
+        expect,
     );
 }

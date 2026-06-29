@@ -68,12 +68,10 @@ fn oracle_prop_markov_build_transition_table() {
                                        (symbol-name (car b)))))))
     (fmakunbound 'neovm--mc-build-table)
     (fmakunbound 'neovm--mc-table-to-sorted-alist)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((ate (the . 2)) (cat (ate . 1) (sat . 1)) (dog (ate . 1) (sat . 1)) (fish (the . 1)) (mat (the . 2)) (on (the . 2)) (sat (on . 2)) (the (bone . 1) (cat . 2) (dog . 2) (fish . 1) (mat . 2))) 8 ((bone . 1) (cat . 2) (dog . 2) (fish . 1) (mat . 2)) ((ate . 1) (sat . 1)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((ate (the . 2)) (cat (ate . 1) (sat . 1)) (dog (ate . 1) (sat . 1)) (fish (the . 1)) (mat (the . 2)) (on (the . 2)) (sat (on . 2)) (the (bone . 1) (cat . 2) (dog . 2) (fish . 1) (mat . 2))) 8 ((bone . 1) (cat . 2) (dog . 2) (fish . 1) (mat . 2)) ((ate . 1) (sat . 1)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -146,12 +144,10 @@ fn oracle_prop_markov_generate_deterministic() {
     (fmakunbound 'neovm--mc-build)
     (fmakunbound 'neovm--mc-most-likely)
     (fmakunbound 'neovm--mc-generate)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((the cat ate the cat ate) (cat ate the cat ate the) (dog ate the cat ate the) (sat on the cat) (bone))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((the cat ate the cat ate) (cat ate the cat ate the) (dog ate the cat ate the) (sat on the cat) (bone))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -214,12 +210,10 @@ fn oracle_prop_markov_trigram_table() {
           (gethash '(to . eat) table)))
     (fmakunbound 'neovm--mc-build-trigram)
     (fmakunbound 'neovm--mc-trigram-to-sorted)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((((I . like) (to . 3)) ((I . want) (to . 1)) ((cake . I) (like . 1)) ((eat . cake) (I . 1)) ((eat . fish) (I . 1)) ((fish . I) (like . 1)) ((games . I) (want . 1)) ((like . to) (eat . 2) (play . 1)) ((play . games) (I . 1)) ((to . eat) (cake . 1) (fish . 2)) ((to . play) (games . 1)) ((want . to) (eat . 1))) 12 ((play . 1) (eat . 2)) ((cake . 1) (fish . 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((((I . like) (to . 3)) ((I . want) (to . 1)) ((cake . I) (like . 1)) ((eat . cake) (I . 1)) ((eat . fish) (I . 1)) ((fish . I) (like . 1)) ((games . I) (want . 1)) ((like . to) (eat . 2) (play . 1)) ((play . games) (I . 1)) ((to . eat) (cake . 1) (fish . 2)) ((to . play) (games . 1)) ((want . to) (eat . 1))) 12 ((play . 1) (eat . 2)) ((cake . 1) (fish . 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -299,12 +293,10 @@ fn oracle_prop_markov_probability_distribution() {
     (fmakunbound 'neovm--mc-build-freq)
     (fmakunbound 'neovm--mc-probabilities)
     (fmakunbound 'neovm--mc-all-probs)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((a (b . 80) (c . 20)) (b (c . 80) (d . 20)) (c (a . 60) (b . 20) (d . 20)) (d (a . 100))) ((b . 80) (c . 20)) ((c . 80) (d . 20)) ((a . 5) (b . 5) (c . 5) (d . 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((a (b . 80) (c . 20)) (b (c . 80) (d . 20)) (c (a . 60) (b . 20) (d . 20)) (d (a . 100))) ((b . 80) (c . 20)) ((c . 80) (d . 20)) ((a . 5) (b . 5) (c . 5) (d . 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -392,12 +384,10 @@ fn oracle_prop_markov_most_common_transitions() {
     (fmakunbound 'neovm--mc-all-transitions)
     (fmakunbound 'neovm--mc-top-k)
     (fmakunbound 'neovm--mc-hub-states)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((on the 3) (sat on 3) (the cat 3) (the dog 3) (ate the 2)) ((the . 7) (dog . 3) (cat . 2) (ate . 1) (bone . 1) (fish . 1) (floor . 1) (mat . 1) (on . 1) (ran . 1) (sat . 1) (to . 1)) 21 33)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((on the 3) (sat on 3) (the cat 3) (the dog 3) (ate the 2)) ((the . 7) (dog . 3) (cat . 2) (ate . 1) (bone . 1) (fish . 1) (floor . 1) (mat . 1) (on . 1) (ran . 1) (sat . 1) (to . 1)) 21 33)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -505,10 +495,8 @@ fn oracle_prop_markov_state_space_exploration() {
     (fmakunbound 'neovm--mc-absorbing-states)
     (fmakunbound 'neovm--mc-all-states)
     (fmakunbound 'neovm--mc-self-loops)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((a b c d e f g) (a b c d e f g) (a b c d e f g) (g) nil ((a . 2) (b . 2) (c . 2) (d . 2) (e . 1) (f . 2) (g . 0)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((a b c d e f g) (a b c d e f g) (a b c d e f g) (g) nil ((a . 2) (b . 2) (c . 2) (d . 2) (e . 1) (f . 2) (g . 0)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

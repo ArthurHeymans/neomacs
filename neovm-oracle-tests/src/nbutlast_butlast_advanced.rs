@@ -23,10 +23,9 @@ fn oracle_prop_nbutlast_butlast_default_n() {
   (let ((orig (list 10 20 30 40)))
     (let ((result (butlast orig)))
       (list result orig (length orig)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3 4) (a) nil nil ((10 20 30) (10 20 30 40) 4))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((1 2 3 4) (a) nil nil ((10 20 30) (10 20 30 40) 4))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -43,10 +42,8 @@ fn oracle_prop_nbutlast_butlast_explicit_n() {
   (butlast '(1 2 3 4 5) 2)
   (butlast '(1 2 3 4 5) 3)
   (butlast '(1 2 3 4 5) 4))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3 4 5) (1 2 3 4) (1 2 3) (1 2) (1))""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 2 3 4 5) (1 2 3 4) (1 2 3) (1 2) (1))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -68,10 +65,8 @@ fn oracle_prop_nbutlast_butlast_n_exceeds_length() {
   ;; nbutlast with N >= length
   (nbutlast (list 'a 'b) 2)
   (nbutlast (list 'a 'b) 10))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK (nil nil nil nil nil nil nil nil nil)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK (nil nil nil nil nil nil nil nil nil)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -101,10 +96,9 @@ fn oracle_prop_nbutlast_destructive_behavior() {
                 (copy (copy-sequence (list 10 20 30))))
             (nbutlast copy)
             (list (length orig) (length copy))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3 4) (1 2 3 4) 4 t ((a b c) (a b c) t) (3 2))""#]],
-    );
+    let expect =
+        expect_test::expect![[r#""OK ((1 2 3 4) (1 2 3 4) 4 t ((a b c) (a b c) t) (3 2))""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -136,10 +130,8 @@ fn oracle_prop_nbutlast_butlast_vs_nbutlast_comparison() {
              ;; But butlast made a fresh list
              ;; while nbutlast reused the original
              (eq nb b))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((1 2 3 4) 7 (1 2 3 4) 4 t t)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((1 2 3 4) 7 (1 2 3 4) 4 t t)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -193,12 +185,10 @@ fn oracle_prop_nbutlast_sliding_window() {
                             (funcall window-full-p win))
                       snapshots)))
         (nreverse snapshots)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((10) nil 10 nil) ((10 20) nil 15 nil) ((10 20 30) (10) 20 nil) ((10 20 30 40) (10 20) 25 t) ((20 30 40 50) (20 30) 35 t) ((30 40 50 60) (30 40) 45 t) ((40 50 60 70) (40 50) 55 t))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((10) nil 10 nil) ((10 20) nil 15 nil) ((10 20 30) (10) 20 nil) ((10 20 30 40) (10 20) 25 t) ((20 30 40 50) (20 30) 35 t) ((30 40 50 60) (30 40) 45 t) ((40 50 60 70) (40 50) 55 t))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -276,10 +266,8 @@ fn oracle_prop_nbutlast_queue_trim() {
                       (car dq-result)   ;; dequeued item
                       (funcall q-items (cadr dq-result)) ;; remaining
                       (funcall q-trim-count trimmed-q))))))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[r#""OK ((d e f g h) 3 (d e f) t d (e f) 5)""#]],
-    );
+    let expect = expect_test::expect![[r#""OK ((d e f g h) 3 (d e f) t d (e f) 5)""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -307,10 +295,8 @@ fn oracle_prop_nbutlast_butlast_nested_lists() {
    (let ((bl (butlast nested)))
      (setcar bl 'replaced)
      (list bl (car nested)))))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (((1 2) (3 4) (5 6) (7 8)) ((1 2) (3 4) (5 6)) ((1 2)) t (((1 2) (3 4) (5 6)) 3) ((replaced (3 4) (5 6) (7 8)) (1 2)))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (((1 2) (3 4) (5 6) (7 8)) ((1 2) (3 4) (5 6)) ((1 2)) t (((1 2) (3 4) (5 6)) 3) ((replaced (3 4) (5 6) (7 8)) (1 2)))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -110,12 +110,10 @@ fn oracle_prop_abstract_domain_interval_lattice_ops() {
     (fmakunbound 'neovm--iad-meet)
     (fmakunbound 'neovm--iad-widen)
     (fmakunbound 'neovm--iad-narrow)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((1 . 8) (1 . 20) (3 . 7) (-5 . 5) (neginf . posinf) (5 . 10) nil (1 . 10) nil (0 . 5) (0 . posinf) (neginf . 5) (neginf . posinf) (0 . 5) (3 . 7) (0 . 100) (0 . 10) (0 . 50) (0 . 10))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((1 . 8) (1 . 20) (3 . 7) (-5 . 5) (neginf . posinf) (5 . 10) nil (1 . 10) nil (0 . 5) (0 . posinf) (neginf . 5) (neginf . posinf) (0 . 5) (3 . 7) (0 . 100) (0 . 10) (0 . 50) (0 . 10))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -219,12 +217,10 @@ fn oracle_prop_abstract_domain_sign_transfer_functions() {
     (fmakunbound 'neovm--sd-mul)
     (fmakunbound 'neovm--sd-abs)
     (fmakunbound 'neovm--sd-div)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK (pos neg top pos neg top pos neg zero neg pos zero pos top bot top pos top neg bot pos neg)""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK (pos neg top pos neg top pos neg zero neg pos zero pos top bot top pos top neg bot pos neg)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -339,12 +335,10 @@ fn oracle_prop_abstract_domain_congruence_domain() {
     (fmakunbound 'neovm--cd-meet)
     (fmakunbound 'neovm--cd-add)
     (fmakunbound 'neovm--cd-mul)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((4 . 3) (3 . 0) (0 . 0) (2 . 1) (0 . 0) (4 . 2) (6 . 3) (6 . 1) nil (3 . 1) (2 . 1) (3 . 0) (6 . 0))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((4 . 3) (3 . 0) (0 . 0) (2 . 1) (0 . 0) (4 . 2) (6 . 3) (6 . 1) nil (3 . 1) (2 . 1) (3 . 0) (6 . 0))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -439,12 +433,10 @@ fn oracle_prop_abstract_domain_reduced_product() {
     (fmakunbound 'neovm--rp-itv-meet)
     (fmakunbound 'neovm--rp-sign-meet)
     (fmakunbound 'neovm--rp-reduce)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((pos 5 . 10) (neg -100 . -1) (zero 0 . 0) (bot) (pos 3 . 7) (top -3 . 3) (bot) (pos 1 . posinf))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((pos 5 . 10) (neg -100 . -1) (zero 0 . 0) (bot) (pos 3 . 7) (top -3 . 3) (bot) (pos 1 . posinf))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -594,12 +586,10 @@ fn oracle_prop_abstract_domain_loop_widening_narrowing() {
     (fmakunbound 'neovm--lw-state-widen)
     (fmakunbound 'neovm--lw-state-eq)
     (fmakunbound 'neovm--lw-analyze)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((widening-iters 2 narrowing-iters 1 final ((x 0 . posinf))) (widening-iters 2 narrowing-iters 1 final ((x neginf . 10))) (widening-iters 2 narrowing-iters 1 final ((x 0 . posinf) (y neginf . 100))))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((widening-iters 2 narrowing-iters 1 final ((x 0 . posinf))) (widening-iters 2 narrowing-iters 1 final ((x neginf . 10))) (widening-iters 2 narrowing-iters 1 final ((x 0 . posinf) (y neginf . 100))))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -667,7 +657,8 @@ fn oracle_prop_abstract_domain_lattice_laws() {
        (eq (funcall 'neovm--ll-join 'top 'pos) 'top)
        (eq (funcall 'neovm--ll-meet 'top 'neg) 'neg)
        (eq (funcall 'neovm--ll-meet 'bot 'neg) 'bot))))"#;
-    crate::common::assert_oracle_parity_expect(form, expect_test::expect![[r#""OK nil""#]]);
+    let expect = expect_test::expect![[r#""OK nil""#]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
 
 // ---------------------------------------------------------------------------
@@ -758,10 +749,8 @@ fn oracle_prop_abstract_domain_compound_transfer_functions() {
     (fmakunbound 'neovm--ctf-isub)
     (fmakunbound 'neovm--ctf-imul)
     (fmakunbound 'neovm--ctf-eval)))"#;
-    crate::common::assert_oracle_parity_expect(
-        form,
-        expect_test::expect![[
-            r#""OK ((-4 . 15) (-4 . 15) (-50 . 50) (101 . 210) (-400 . 1500) (-9 . 9) (1 . 100) (-19 . 19))""#
-        ]],
-    );
+    let expect = expect_test::expect![[
+        r#""OK ((-4 . 15) (-4 . 15) (-50 . 50) (101 . 210) (-400 . 1500) (-9 . 9) (1 . 100) (-19 . 19))""#
+    ]];
+    crate::common::assert_oracle_parity_expect(form, expect);
 }
