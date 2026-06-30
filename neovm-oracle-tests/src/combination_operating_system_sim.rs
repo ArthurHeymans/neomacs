@@ -443,7 +443,9 @@ fn oracle_prop_combination_os_sim_filesystem() {
     (fmakunbound 'neovm--os-fs-ls)
     (fmakunbound 'neovm--os-fs-find)
     (fmakunbound 'neovm--os-fs-rm)))"##;
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[
+        r#""OK (((\"etc\" . dir) (\"home\" . dir)) ((\"notes.md\" . file) (\"readme.txt\" . file)) ((\"\" . dir) (\"/etc\" . dir) (\"/etc/config.ini\" . file) (\"/home\" . dir) (\"/home/user\" . dir) (\"/home/user/bin\" . dir) (\"/home/user/bin/script.sh\" . file) (\"/home/user/docs\" . dir) (\"/home/user/docs/notes.md\" . file) (\"/home/user/docs/readme.txt\" . file)) ((\"readme.txt\" . file)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
