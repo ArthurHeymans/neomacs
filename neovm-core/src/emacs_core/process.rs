@@ -6453,7 +6453,7 @@ impl ProcStatSnapshot {
             start_ticks: 0,
             vsize: 0,
             rss: 0,
-            ttname: read_proc_tty_name(pid),
+            ttname: procfs_ttyname(0),
         }
     }
 }
@@ -6489,26 +6489,82 @@ fn clock_ticks_per_second() -> i64 {
     100
 }
 
-fn read_proc_tty_name(pid: i64) -> String {
-    std::fs::read_link(format!("/proc/{pid}/fd/0"))
-        .ok()
-        .map(|path| path.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "?".to_string())
+fn procfs_dev_major(rdev: i64) -> u64 {
+    let dev = rdev as u64;
+    (dev >> 8) & 0xfff
 }
 
-fn parse_proc_cmdline(pid: i64) -> String {
+fn procfs_dev_minor(rdev: i64) -> u64 {
+    let dev = rdev as u64;
+    (dev & 0xff) | ((dev & 0xfff00000) >> 12)
+}
+
+fn parse_proc_minor_range(value: &str) -> Option<(u64, u64)> {
+    if let Some((start, end)) = value.split_once('-') {
+        Some((start.parse().ok()?, end.parse().ok()?))
+    } else {
+        let minor = value.parse().ok()?;
+        Some((minor, minor))
+    }
+}
+
+fn procfs_ttyname(rdev: i64) -> String {
+    if rdev <= 0 {
+        return String::new();
+    }
+
+    let major = procfs_dev_major(rdev);
+    let minor = procfs_dev_minor(rdev);
+    let Ok(drivers) = std::fs::read_to_string("/proc/tty/drivers") else {
+        return String::new();
+    };
+
+    for line in drivers.lines() {
+        let mut fields = line.split_whitespace();
+        let _driver = fields.next();
+        let Some(name) = fields.next() else {
+            continue;
+        };
+        let Some(line_major) = fields.next().and_then(|field| field.parse::<u64>().ok()) else {
+            continue;
+        };
+        let Some((minor_start, minor_end)) = fields.next().and_then(parse_proc_minor_range) else {
+            continue;
+        };
+        if line_major == major && minor_start <= minor && minor <= minor_end {
+            return format!("{name}{minor}");
+        }
+    }
+
+    String::new()
+}
+
+fn parse_proc_cmdline(pid: i64, comm: &str) -> String {
     let bytes = match std::fs::read(format!("/proc/{pid}/cmdline")) {
         Ok(bytes) => bytes,
         Err(_) => return String::new(),
     };
-    let mut args = Vec::new();
-    for chunk in bytes.split(|b| *b == 0) {
-        if chunk.is_empty() {
-            continue;
-        }
-        args.push(String::from_utf8_lossy(chunk).into_owned());
+
+    let mut end = bytes.len();
+    while end > 0 && bytes[end - 1] == 0 {
+        end -= 1;
     }
-    args.join(" ")
+    if end == 0 {
+        return format!("[{comm}]");
+    }
+
+    let mut quoted = Vec::with_capacity(end);
+    for &byte in &bytes[..end] {
+        if byte == 0 {
+            quoted.push(b' ');
+        } else {
+            if byte.is_ascii_whitespace() || byte == b'\\' {
+                quoted.push(b'\\');
+            }
+            quoted.push(byte);
+        }
+    }
+    String::from_utf8_lossy(&quoted).into_owned()
 }
 
 fn parse_proc_boot_time_secs() -> Option<i64> {
@@ -6599,6 +6655,7 @@ fn parse_proc_stat_snapshot(pid: i64) -> Option<ProcStatSnapshot> {
     let ppid = parse_stat_i64_field(&fields, 1)?;
     let pgrp = parse_stat_i64_field(&fields, 2)?;
     let sess = parse_stat_i64_field(&fields, 3)?;
+    let tty_nr = parse_stat_i64_field(&fields, 4)?;
     let tpgid = parse_stat_i64_field(&fields, 5)?;
     let minflt = parse_stat_i64_field(&fields, 7)?;
     let cminflt = parse_stat_i64_field(&fields, 8)?;
@@ -6615,7 +6672,7 @@ fn parse_proc_stat_snapshot(pid: i64) -> Option<ProcStatSnapshot> {
     let vsize = parse_stat_i64_field(&fields, 20)?;
     let rss_pages = parse_stat_i64_field(&fields, 21)?;
     let rss = rss_pages.saturating_mul(page_size_kb());
-    let ttname = read_proc_tty_name(pid);
+    let ttname = procfs_ttyname(tty_nr);
 
     Some(ProcStatSnapshot {
         comm,
@@ -11727,7 +11784,10 @@ pub(crate) fn builtin_process_attributes_impl(args: Vec<Value>) -> EvalResult {
     }
 
     let stat = parse_proc_stat_snapshot(pid).unwrap_or_else(|| ProcStatSnapshot::fallback(pid));
-    attrs.push(Value::cons(Value::symbol("comm"), Value::string(stat.comm)));
+    attrs.push(Value::cons(
+        Value::symbol("comm"),
+        Value::string(stat.comm.clone()),
+    ));
     attrs.push(Value::cons(
         Value::symbol("state"),
         Value::string(stat.state),
@@ -11799,7 +11859,7 @@ pub(crate) fn builtin_process_attributes_impl(args: Vec<Value>) -> EvalResult {
     ));
     attrs.push(Value::cons(
         Value::symbol("vsize"),
-        Value::fixnum(stat.vsize),
+        Value::fixnum(stat.vsize / 1024),
     ));
     attrs.push(Value::cons(Value::symbol("rss"), Value::fixnum(stat.rss)));
     let elapsed = match (now_epoch_secs_usecs(), start_epoch_time) {
@@ -11835,7 +11895,7 @@ pub(crate) fn builtin_process_attributes_impl(args: Vec<Value>) -> EvalResult {
     ));
     attrs.push(Value::cons(
         Value::symbol("args"),
-        Value::string(parse_proc_cmdline(pid)),
+        Value::string(parse_proc_cmdline(pid, &stat.comm)),
     ));
     attrs.push(Value::cons(
         Value::symbol("ttname"),
@@ -13144,6 +13204,57 @@ pub(crate) fn builtin_process_running_child_p(
     builtin_process_running_child_p_impl(&eval.processes, &eval.buffers, args)
 }
 
+#[cfg(unix)]
+fn process_tty_foreground_group(proc: &Process) -> Option<libc::pid_t> {
+    fn ioctl_tiocgpgrp(fd: RawFd) -> Option<libc::pid_t> {
+        let mut gid: libc::pid_t = -1;
+        let ok = unsafe { libc::ioctl(fd, libc::TIOCGPGRP, &mut gid) } != -1;
+        (ok && gid != -1).then_some(gid)
+    }
+
+    if let Some(gid) = proc
+        .pty_master
+        .as_ref()
+        .and_then(|master| master.as_raw_fd())
+        .and_then(ioctl_tiocgpgrp)
+    {
+        return Some(gid);
+    }
+
+    let tty_name = proc.tty_name.as_lisp_string()?;
+    if tty_name.as_bytes().is_empty() {
+        return None;
+    }
+    let tty_path = lisp_string_to_os_string(tty_name);
+    let c_tty_path = CString::new(tty_path.as_os_str().as_bytes()).ok()?;
+    let fd = unsafe { libc::open(c_tty_path.as_ptr(), libc::O_RDONLY, 0) };
+    if fd == -1 {
+        return None;
+    }
+    let gid = ioctl_tiocgpgrp(fd);
+    unsafe {
+        libc::close(fd);
+    }
+    gid
+}
+
+#[cfg(not(unix))]
+fn process_tty_foreground_group(_proc: &Process) -> Option<i32> {
+    None
+}
+
+fn process_running_child_value(proc: &Process) -> Value {
+    if let Some(gid) = process_tty_foreground_group(proc) {
+        if proc.os_pid.is_some_and(|pid| pid as i64 == gid as i64) {
+            Value::NIL
+        } else {
+            Value::fixnum(gid as i64)
+        }
+    } else {
+        Value::T
+    }
+}
+
 pub(crate) fn builtin_process_running_child_p_impl(
     processes: &ProcessManager,
     buffers: &BufferManager,
@@ -13175,7 +13286,7 @@ pub(crate) fn builtin_process_running_child_p_impl(
     if processes.get(id).is_none() {
         return Err(signal_process_not_active_in_manager(processes, id));
     }
-    Ok(Value::NIL)
+    Ok(process_running_child_value(proc))
 }
 
 /// (accept-process-output &optional PROCESS SECONDS MILLISECS JUST-THIS-ONE) -> bool

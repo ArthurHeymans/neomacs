@@ -3248,6 +3248,27 @@ fn process_attributes_runtime_shape_matches_oracle() {
 }
 
 #[test]
+fn process_attributes_pipe_child_args_ttname_and_running_child_match_oracle() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((proc (make-process
+                        :name "neo-attrs-pipe-child"
+                        :command '("/bin/sh" "-c" "sleep 0.5")
+                        :connection-type 'pipe)))
+             (unwind-protect
+                 (let* ((attrs (process-attributes (process-id proc)))
+                        (args (cdr (assq 'args attrs)))
+                        (ttname (cdr (assq 'ttname attrs))))
+                   (list (process-running-child-p proc)
+                         args
+                         ttname))
+               (when (process-live-p proc)
+                 (delete-process proc))))"#,
+    );
+    assert_eq!(result, "OK (t \"/bin/sh -c sleep\\\\ 0.5\" \"\")");
+}
+
+#[test]
 fn process_attributes_timing_memory_shape_matches_oracle() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(
