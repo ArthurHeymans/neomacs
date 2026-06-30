@@ -5057,7 +5057,7 @@ impl super::eval::Context {
                 .get(pid)
                 .is_some_and(|process| process.status_notify_pending)
             {
-                self.run_process_status_notification(pid, is_target, &mut outcome)?;
+                self.run_process_status_notification(pid)?;
                 continue;
             }
             if self
@@ -5126,6 +5126,7 @@ impl super::eval::Context {
                     self.run_process_filter_callback(pid, filter, data)?;
                     if let Some(status) = self.processes.poll_child_exit_status(pid) {
                         self.processes.set_child_exit_status_pending(pid, status);
+                        self.run_process_status_notification(pid)?;
                     }
                 }
                 ProcessOutputRead::Eof if is_stderr_pipe => {
@@ -5199,21 +5200,14 @@ impl super::eval::Context {
             };
 
             if exited {
-                self.run_process_status_notification(pid, is_target, &mut outcome)?;
+                self.run_process_status_notification(pid)?;
             }
         }
 
         Ok(outcome)
     }
 
-    fn run_process_status_notification(
-        &mut self,
-        pid: ProcessId,
-        is_target: bool,
-        outcome: &mut ProcessOutputServiceOutcome,
-    ) -> Result<(), Flow> {
-        outcome.record_activity(is_target);
-
+    fn run_process_status_notification(&mut self, pid: ProcessId) -> Result<(), Flow> {
         // GNU `status_notify` (process.c) drains ALL remaining output from a
         // terminated process before reporting its status and (when
         // `delete-exited-processes' is non-nil) removing it from

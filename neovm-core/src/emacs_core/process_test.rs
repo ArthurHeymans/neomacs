@@ -1227,6 +1227,40 @@ fn internal_default_process_sentinel_inserts_status_at_process_mark() {
 }
 
 #[test]
+fn process_status_notification_runs_default_sentinel_and_reaps() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let buffer_id = ev.buffers.create_buffer("*proc-status-notify*");
+    ev.buffers
+        .insert_into_buffer(buffer_id, "payload")
+        .expect("insert process buffer text");
+    let pid = ev.processes.create_process(
+        "neo-default-sentinel".into(),
+        Value::make_buffer(buffer_id),
+        "prog".into(),
+        vec![],
+    );
+    ev.processes
+        .sync_process_mark(&mut ev.buffers, pid)
+        .expect("sync process mark");
+    ev.processes
+        .set_child_exit_status_pending(pid, process_status_exit_value(0));
+
+    ev.run_process_status_notification(pid)
+        .expect("status notification");
+
+    assert_eq!(
+        ev.buffers
+            .get(buffer_id)
+            .expect("process buffer")
+            .buffer_string(),
+        "payload\nProcess neo-default-sentinel finished\n"
+    );
+    assert!(ev.processes.get(pid).is_none());
+    assert!(ev.processes.get_any(pid).is_some());
+}
+
+#[test]
 fn builtin_process_tty_name_uses_value_slot() {
     crate::test_utils::init_test_tracing();
     let mut pm = ProcessManager::new();

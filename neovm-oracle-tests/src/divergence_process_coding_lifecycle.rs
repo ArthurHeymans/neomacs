@@ -1,6 +1,6 @@
 //! Process coding/lifecycle parity: set/get coding-system, filter-multibyte,
-//! tty-name, send+eof through wc, call-process exit/signal, plus two
-//! permissiveness divergences (unibyte high-byte send, :stop flag).
+//! tty-name, send+eof through wc, call-process exit/signal, unibyte high-byte
+//! send, and :stop flag handling.
 
 use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;

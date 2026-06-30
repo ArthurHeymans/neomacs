@@ -1,6 +1,5 @@
-//! Confirmed divergences in process/subprocess handling, kept as
-//! `#[ignore]`d oracle-parity tests that document the exact mismatch
-//! (see each ignore reason). They fail today and guard the fix.
+//! Process/subprocess signal, exit-status, environment, and stderr oracle
+//! parity coverage.
 
 use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;

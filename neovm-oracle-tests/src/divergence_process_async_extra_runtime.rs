@@ -1,7 +1,7 @@
 //! Extra process/network parity: datagram (UDP) loopback, binary send/recv,
 //! query-on-exit flag, filter/sentinel getters, set-process-buffer,
-//! waiting-for-user-input-p, accept-process-output after exit, send-after-eof;
-//! plus the binary-coding filter unibyte-vs-multibyte divergence.
+//! waiting-for-user-input-p, accept-process-output after exit, send-after-eof,
+//! and binary-coding filter string shape.
 
 use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
