@@ -4022,15 +4022,17 @@ pub(crate) fn builtin_visited_file_modtime(eval: &mut Context, args: Vec<Value>)
     let nsec = buf.modtime_nsec;
     match (sec, nsec) {
         (Some(s), Some(ns)) => {
-            // GNU returns (HIGH LOW USEC PSEC).
+            // GNU returns (HIGH LOW USEC PSEC) via make_lisp_time: PSEC is
+            // `ns % 1000 * 1000`, not a hardcoded 0.
             let high = s >> 16;
             let low = s & 0xFFFF;
             let usec = (ns / 1000) as i64;
+            let psec = ((ns % 1000) as i64) * 1000;
             Ok(Value::list(vec![
                 Value::fixnum(high),
                 Value::fixnum(low),
                 Value::fixnum(usec),
-                Value::fixnum(0),
+                Value::fixnum(psec),
             ]))
         }
         _ => Ok(Value::fixnum(0)),
@@ -4090,22 +4092,37 @@ pub(crate) fn builtin_set_visited_file_modtime(eval: &mut Context, args: Vec<Val
 
     if let Some(arg) = args.first() {
         if !arg.is_nil() {
-            // Explicit timestamp argument
+            // Explicit timestamp argument.
             validate_set_visited_file_modtime_arg(arg)?;
-            if let Some(items) = list_to_vec(arg) {
-                if items.len() >= 2 {
-                    if let (Ok(sec), Ok(nsec)) =
-                        (expect_fixnum(&items[0]), expect_fixnum(&items[1]))
-                    {
-                        let buf = eval.buffers.current_buffer_mut().ok_or_else(|| {
-                            signal("error", vec![Value::string("No current buffer")])
-                        })?;
-                        buf.modtime_sec = Some(sec);
-                        buf.modtime_nsec = Some(nsec as i32);
-                        buf.modtime_size = None;
-                    }
+            // GNU `Fset_visited_file_modtime': an integer "flag" (-1/0) sets the
+            // unknown-modtime sentinel (this is how `clear-visited-file-modtime'
+            // works -- it calls `(set-visited-file-modtime 0)'); any other time
+            // form is decoded (including the 4-element (HIGH LOW USEC PSEC)
+            // list) into one (sec, nsec) via `lisp_time_argument', rather than
+            // taking elements 0 and 1 as raw seconds and nanoseconds.
+            // (neomacs represents an unknown modtime as None.)
+            let decoded = if arg.as_fixnum().is_some() {
+                None
+            } else {
+                Some(crate::emacs_core::timefns::time_value_seconds_and_nanos(
+                    arg,
+                )?)
+            };
+            let buf = eval
+                .buffers
+                .current_buffer_mut()
+                .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+            match decoded {
+                None => {
+                    buf.modtime_sec = None;
+                    buf.modtime_nsec = None;
+                }
+                Some((sec, nsec)) => {
+                    buf.modtime_sec = Some(sec);
+                    buf.modtime_nsec = Some(nsec as i32);
                 }
             }
+            buf.modtime_size = None;
             return Ok(Value::NIL);
         }
     }
