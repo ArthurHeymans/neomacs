@@ -368,14 +368,18 @@ fn div_cx22_process_list_filter_dead() {
     let expect = expect_test::expect![[r#""OK (nil nil 0 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
-(let ((p (make-process :name "neo-cx22-pl" :command '("true"))))
-  (accept-process-output p 2)
-  (let ((live-before (process-live-p p)))
-    (delete-process p)
-    (list live-before
-          (process-live-p p)
-          (length (cl-remove-if-not #'processp (process-list)))
-          (memq p (process-list)))))
+  (let ((p (make-process :name "neo-cx22-pl" :command '("true"))))
+    (accept-process-output p 2)
+    (let ((live-before (process-live-p p)))
+      (delete-process p)
+      (let ((process-count 0))
+        (dolist (candidate (process-list))
+          (when (processp candidate)
+            (setq process-count (1+ process-count))))
+        (list live-before
+              (process-live-p p)
+              process-count
+              (memq p (process-list))))))
 "##,
         expect,
     );
