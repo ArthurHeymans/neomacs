@@ -983,35 +983,11 @@ fn for_each_utf8_emacs_code(bytes: &[u8], mut f: impl FnMut(u32)) {
                     | (((b2 & 0x3F) as u32) << 12)
                     | (((b3 & 0x3F) as u32) << 6)
                     | ((b4 & 0x3F) as u32);
-                f(code);
-                i += 5;
-                continue;
-            }
-        }
-
-        if (0xFC..=0xFD).contains(&b0) && i + 5 < bytes.len() {
-            let (b1, b2, b3, b4, b5) = (
-                bytes[i + 1],
-                bytes[i + 2],
-                bytes[i + 3],
-                bytes[i + 4],
-                bytes[i + 5],
-            );
-            if (b1 & 0xC0) == 0x80
-                && (b2 & 0xC0) == 0x80
-                && (b3 & 0xC0) == 0x80
-                && (b4 & 0xC0) == 0x80
-                && (b5 & 0xC0) == 0x80
-            {
-                let code = (((b0 & 0x01) as u32) << 30)
-                    | (((b1 & 0x3F) as u32) << 24)
-                    | (((b2 & 0x3F) as u32) << 18)
-                    | (((b3 & 0x3F) as u32) << 12)
-                    | (((b4 & 0x3F) as u32) << 6)
-                    | ((b5 & 0x3F) as u32);
-                f(code);
-                i += 6;
-                continue;
+                if code <= crate::emacs_core::emacs_char::MAX_5_BYTE_CHAR {
+                    f(code);
+                    i += 5;
+                    continue;
+                }
             }
         }
 

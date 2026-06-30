@@ -344,6 +344,56 @@ fn decode_coding_string_keeps_real_pua_glyphs_issue_131() {
 }
 
 #[test]
+fn decode_coding_string_rejects_six_byte_utf8_emacs_sequence_as_raw_bytes() {
+    crate::test_utils::init_test_tracing();
+    // GNU Emacs' internal multibyte form has MAX_MULTIBYTE_LENGTH == 5.
+    // This six-byte sequence previously decoded to 0x1003162F and then
+    // tripped `char_string`'s valid-character assertion.
+    let input = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
+        0xFC, 0x90, 0x80, 0xB1, 0x98, 0xAF,
+    ]));
+    let decoded = builtin_decode_coding_string(vec![input, Value::symbol("utf-8")])
+        .expect("decode-coding-string should keep malformed bytes raw");
+    let ls = decoded.as_lisp_string().expect("string result");
+    let codes = crate::emacs_core::builtins::lisp_string_char_codes(ls);
+    assert_eq!(
+        codes,
+        vec![
+            0x3FFF00 + 0xFC,
+            0x3FFF00 + 0x90,
+            0x3FFF00 + 0x80,
+            0x3FFF00 + 0xB1,
+            0x3FFF00 + 0x98,
+            0x3FFF00 + 0xAF,
+        ]
+    );
+}
+
+#[test]
+fn decode_coding_string_rejects_out_of_range_five_byte_utf8_emacs_sequence_as_raw_bytes() {
+    crate::test_utils::init_test_tracing();
+    // MAX_CHAR is 0x3FFFFF and MAX_5_BYTE_CHAR is 0x3FFF7F, so this
+    // five-byte form would be out of Neo/GNU's valid Emacs character range.
+    let input = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
+        0xF8, 0x90, 0x80, 0x80, 0x80,
+    ]));
+    let decoded = builtin_decode_coding_string(vec![input, Value::symbol("utf-8")])
+        .expect("decode-coding-string should keep out-of-range forms raw");
+    let ls = decoded.as_lisp_string().expect("string result");
+    let codes = crate::emacs_core::builtins::lisp_string_char_codes(ls);
+    assert_eq!(
+        codes,
+        vec![
+            0x3FFF00 + 0xF8,
+            0x3FFF00 + 0x90,
+            0x3FFF00 + 0x80,
+            0x3FFF00 + 0x80,
+            0x3FFF00 + 0x80,
+        ]
+    );
+}
+
+#[test]
 fn encode_coding_string_extracts_multibyte_byte8_chars_like_gnu() {
     crate::test_utils::init_test_tracing();
     let mut bytes = Vec::new();
