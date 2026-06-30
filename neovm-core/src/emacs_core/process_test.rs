@@ -6159,6 +6159,18 @@ fn network_interface_broadcast_derivation_helpers() {
     );
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn network_interface_info_loopback_matches_gnu_linux_ioctl_metadata() {
+    crate::test_utils::init_test_tracing();
+    let info = builtin_network_interface_info_impl(vec![Value::string("lo")]).unwrap();
+
+    assert_eq!(
+        format!("{info}"),
+        "([127 0 0 1 0] [0 0 0 0 0] [255 0 0 0 0] (772 . [0 0 0 0 0 0]) (running loopback up))"
+    );
+}
+
 #[test]
 fn network_lookup_literal_family_filtering_helpers() {
     crate::test_utils::init_test_tracing();
