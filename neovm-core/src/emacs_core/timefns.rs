@@ -1295,6 +1295,11 @@ fn parse_zone_rule(zone: &Value) -> Result<ZoneRule, Flow> {
             Some(TimeZoneSymbol::Wall) => Ok(ZoneRule::Local),
             None => Err(invalid_time_zone_spec(zone)),
         },
+        // GNU `tzlookup` (timefns.c:250) treats the integer 0 as a special
+        // UTC alias, identical to `t`: its zone abbreviation is "GMT", not the
+        // numeric "+00" that a generic fixed offset would produce. All other
+        // integers are genuine fixed offsets.
+        ValueKind::Fixnum(0) => Ok(ZoneRule::Utc),
         ValueKind::Fixnum(n) => Ok(ZoneRule::FixedOffset(n)),
         ValueKind::String => Ok(ZoneRule::TzString(
             zone.as_lisp_string()
