@@ -6,7 +6,6 @@ use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
-#[ignore = "DIVERGENCE: process-send-string of a unibyte string with a high byte (233) under :coding latin-1 - GNU signals \"Cannot convert character ... to unibyte\", neomacs transmits the bytes unchanged."]
 fn divergence_proc_send_unibyte_highbyte_latin1() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -57,7 +56,6 @@ fn proc_filter_multibyte_flag() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: make-process :stop t on a pipe process - GNU signals (wrong-type-argument null t), neomacs accepts it and the process runs."]
 fn divergence_proc_make_process_stop_flag() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

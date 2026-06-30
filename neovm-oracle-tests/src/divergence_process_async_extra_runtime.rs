@@ -103,7 +103,6 @@ fn proc_send_after_eof() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: a process filter's accumulated output under :coding binary is unibyte in GNU but multibyte in neomacs (multibyte-string-p nil vs t), though the bytes are identical."]
 fn divergence_proc_binary_filter_multibyte() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
