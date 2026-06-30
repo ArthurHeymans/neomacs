@@ -5486,6 +5486,13 @@ pub(crate) fn load_charset_registry(decoder: &mut LoadDecoder, dcr: &DumpCharset
             dcr.priority_syms.iter().map(load_sym_id).collect()
         },
         next_id: dcr.next_id,
+        // The binary dump does not carry GNU's `Vcharset_non_preferred_head`
+        // boundary; a freshly loaded session reproduces GNU's dumped default
+        // (only `ascii` preferred -> non-ASCII BMP chars classify as `unicode`),
+        // and `set-charset-priority` / `set-language-environment` reset it at
+        // runtime. Index 1 == everything after `ascii` (priority[0]) is
+        // non-preferred, matching `CharsetRegistry::new`.
+        non_preferred_head: Some(1),
     };
     restore_charset_registry(snapshot);
 }

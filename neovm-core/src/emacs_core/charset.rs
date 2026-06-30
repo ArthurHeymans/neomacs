@@ -216,6 +216,12 @@ pub(crate) struct CharsetRegistrySnapshot {
     pub charsets: Vec<CharsetInfoSnapshot>,
     pub priority: Vec<SymId>,
     pub next_id: i64,
+    /// Index into `priority` of the first non-preferred charset, mirroring GNU's
+    /// `Vcharset_non_preferred_head` (charset.c:85). `char_charset` returns the
+    /// `unicode` parent charset once a Unicode character crosses this boundary
+    /// without matching a preferred charset. `None` means the boundary is the
+    /// end of the list (GNU's `Qnil`).
+    pub non_preferred_head: Option<usize>,
 }
 
 /// Information about a single charset.
@@ -249,6 +255,14 @@ pub(crate) struct CharsetRegistry {
     aliases: HashMap<SymId, SymId>,
     /// Priority-ordered list of charset names.
     priority: Vec<SymId>,
+    /// Index into `priority` of the first *non-preferred* charset, mirroring
+    /// GNU's `Vcharset_non_preferred_head` (charset.c:85). When `char_charset`
+    /// walks `priority` for a Unicode character (`<= MAX_UNICODE_CHAR`) and
+    /// crosses this boundary without a match, it returns the `unicode` parent
+    /// charset (charset.c:1990-1993) instead of continuing into the
+    /// non-preferred subset charsets (`unicode-bmp`, `latin-iso8859-1`, ...).
+    /// `None` means the boundary is the end of the list (GNU's `Qnil`).
+    non_preferred_head: Option<usize>,
     /// Next auto-assigned charset ID.
     next_id: i64,
 }
@@ -260,9 +274,19 @@ impl CharsetRegistry {
             charsets: HashMap::new(),
             aliases: HashMap::new(),
             priority: Vec::new(),
+            non_preferred_head: None,
             next_id: 256, // start above the Emacs built-in range
         };
         reg.init_standard_charsets();
+        // GNU's dumped Emacs has only `ascii` preferred by default (the locale
+        // setup runs `set-charset-priority` with the ASCII-first list), so a
+        // freshly started session classifies non-ASCII BMP characters as the
+        // `unicode` parent charset, never the non-preferred `unicode-bmp`
+        // subset (`(char-charset ?é)` => `unicode`). Seed the boundary to match:
+        // index 1 == everything after `ascii` (priority[0]) is non-preferred.
+        // `set-language-environment` / `set-charset-priority` override this at
+        // runtime (e.g. the UTF-8 environment moves `unicode-bmp` to the front).
+        reg.non_preferred_head = Some(1);
         reg
     }
 
@@ -540,6 +564,54 @@ impl CharsetRegistry {
         &self.priority
     }
 
+    /// Classify a character into the highest-priority charset that contains it,
+    /// mirroring GNU `char_charset` (charset.c:1968-1998) walking
+    /// `Vcharset_ordered_list`.
+    ///
+    /// ASCII (`< 0x80`) short-circuits to `ascii` (GNU `CHAR_CHARSET`,
+    /// charset.h:404). Otherwise the charsets are tried in priority order and
+    /// the first whose `ENCODE_CHAR` succeeds wins. When a Unicode character
+    /// (`<= MAX_UNICODE_CHAR`) crosses the `non_preferred_head` boundary
+    /// without a match, GNU returns the dimension-3 `unicode` parent charset
+    /// rather than descend into the non-preferred subsets such as
+    /// `unicode-bmp`/`latin-iso8859-1` (charset.c:1990-1993). Characters past
+    /// Unicode fall back to `emacs` (`<= MAX_5_BYTE_CHAR`) or `eight-bit`.
+    ///
+    /// This is what makes `(char-charset ?é)` follow the active charset
+    /// priority: `unicode` under the default ASCII-only priority, but
+    /// `unicode-bmp` once `set-language-environment "UTF-8"` moves the BMP
+    /// subset to the front.
+    pub(crate) fn classify_char(&self, ch: i64) -> SymId {
+        const MAX_UNICODE_CHAR: i64 = 0x10_FFFF;
+        const MAX_5_BYTE_CHAR: i64 = 0x3F_FF7F;
+
+        if (0..=0x7F).contains(&ch) {
+            return intern("ascii");
+        }
+
+        for (i, &charset) in self.priority.iter().enumerate() {
+            if self.encode_char(charset, ch).is_some() {
+                return charset;
+            }
+            // GNU advances past `priority[i]`; before examining the next
+            // charset it returns `unicode` when that next slot begins the
+            // non-preferred region and `ch` is within Unicode.
+            if ch <= MAX_UNICODE_CHAR && self.non_preferred_head == Some(i + 1) {
+                return intern("unicode");
+            }
+        }
+
+        // End of the ordered list (GNU's `charset_list == Qnil`): a Unicode
+        // char with a `None` (== `Qnil`) boundary still resolves to `unicode`.
+        if ch <= MAX_UNICODE_CHAR {
+            intern("unicode")
+        } else if ch <= MAX_5_BYTE_CHAR {
+            intern("emacs")
+        } else {
+            intern("eight-bit")
+        }
+    }
+
     /// Move the requested charset names to the front of the priority list
     /// (deduplicated, preserving relative order for remaining entries).
     pub fn set_priority(&mut self, requested: &[SymId]) {
@@ -551,6 +623,13 @@ impl CharsetRegistry {
                 reordered.push(name);
             }
         }
+
+        // GNU `Fset_charset_priority` (charset.c:2184-2196) sets
+        // `Vcharset_non_preferred_head` to the old ordered list with the
+        // requested charsets removed: the boundary therefore sits right after
+        // the prepended preferred charsets. That count is exactly the prefix
+        // built by the loop above.
+        self.non_preferred_head = Some(reordered.len());
 
         for &name in &self.priority {
             if seen.insert(name) {
@@ -648,6 +727,7 @@ impl CharsetRegistry {
             charsets,
             priority: self.priority.clone(),
             next_id: self.next_id,
+            non_preferred_head: self.non_preferred_head,
         }
     }
 
@@ -698,6 +778,7 @@ impl CharsetRegistry {
             // none remain to resolve dynamically after a restore.
             aliases: HashMap::new(),
             priority: snapshot.priority,
+            non_preferred_head: snapshot.non_preferred_head,
             next_id: snapshot.next_id,
         }
     }
@@ -1486,22 +1567,16 @@ pub(crate) fn builtin_set_charset_priority(args: Vec<Value>) -> EvalResult {
 /// (0x10FFFF) but within MAX_5_BYTE_CHAR are in the internal `emacs` charset,
 /// and the rest are Unicode.
 ///
-/// GNU never surfaces the `unicode-bmp` subset charset from `CHAR_CHARSET`:
-/// `char_charset` walks `Vcharset_ordered_list` and, on reaching
-/// `Vcharset_non_preferred_head` for any char `<= MAX_UNICODE_CHAR`, returns
-/// the dimension-3 parent `unicode` charset (charset.c:1990-1992) before it
-/// ever reaches the `unicode-bmp` entry that mule-conf.el appends later.  So
-/// all BMP and astral Unicode characters canonicalize to `unicode`.
+/// Whether GNU surfaces the `unicode-bmp` subset depends on the active charset
+/// priority: `char_charset` walks `Vcharset_ordered_list`, so once
+/// `set-language-environment "UTF-8"` moves `unicode-bmp` ahead of the
+/// `non_preferred_head` boundary, BMP characters classify as `unicode-bmp`;
+/// under the default ASCII-only priority they fall through to the `unicode`
+/// parent. The live ordered list and boundary are consulted via
+/// `CharsetRegistry::classify_char` (a faithful port of GNU `char_charset`).
 pub(crate) fn char_charset_name(ch: i64) -> &'static str {
-    if (0..=0x7F).contains(&ch) {
-        "ascii"
-    } else if ch > 0x3F_FF7F {
-        "eight-bit"
-    } else if ch > 0x10_FFFF {
-        "emacs"
-    } else {
-        "unicode"
-    }
+    let sym = CHARSET_REGISTRY.with(|slot| slot.borrow().classify_char(ch));
+    resolve_sym(sym)
 }
 
 /// `(char-charset CH &optional RESTRICTION)` -- return charset for character.
@@ -2302,54 +2377,50 @@ fn classify_string_charsets(ls: &crate::heap_types::LispString) -> Vec<&'static 
         return Vec::new();
     }
 
-    let mut has_ascii = false;
-    let mut has_unicode = false;
-    let mut has_eight_bit = false;
-
-    // Issue #131: classify the string's real Emacs characters directly (an
-    // eight-bit raw byte is a byte8 char, a multibyte char is decoded from its
-    // extended encoding) rather than inspecting the retired in-Unicode storage
-    // sentinels.
-    //
-    // Like GNU's `CHAR_CHARSET` (see `char_charset_name`), every Unicode
-    // character -- BMP and astral alike -- canonicalizes to the dimension-3
-    // `unicode` charset; the internal `unicode-bmp` subset is never surfaced.
-    if ls.is_multibyte() {
-        let mut pos = 0usize;
-        while pos < bytes.len() {
-            let (cp, len) = emacs_char::string_char(&bytes[pos..]);
-            pos += len;
-            if emacs_char::char_byte8_p(cp) {
-                has_eight_bit = true;
-            } else if cp <= 0x7F {
-                has_ascii = true;
-            } else {
-                has_unicode = true;
+    // GNU `find_charsets_in_text` (charset.c:1487) records, per character, the
+    // charset that `CHAR_CHARSET` resolves it to, then `find-charset-string`
+    // (charset.c:1577) returns those charsets ordered by ascending charset id
+    // (it iterates `charset_table` high -> low, consing each set entry, which
+    // reverses to low -> high). We mirror that: classify each character through
+    // the live ordered list (so `unicode-bmp` appears under a UTF-8 priority),
+    // collect the distinct charsets, and sort by registry id. Issue #131: an
+    // eight-bit raw byte is a byte8 char; a multibyte char is decoded from its
+    // extended encoding.
+    CHARSET_REGISTRY.with(|slot| {
+        let reg = slot.borrow();
+        let mut per_char: Vec<SymId> = Vec::new();
+        if ls.is_multibyte() {
+            let mut pos = 0usize;
+            while pos < bytes.len() {
+                let (cp, len) = emacs_char::string_char(&bytes[pos..]);
+                pos += len;
+                per_char.push(if emacs_char::char_byte8_p(cp) {
+                    intern("eight-bit")
+                } else {
+                    reg.classify_char(cp as i64)
+                });
+            }
+        } else {
+            for &b in bytes {
+                per_char.push(if b <= 0x7F {
+                    intern("ascii")
+                } else {
+                    intern("eight-bit")
+                });
             }
         }
-    } else {
-        for &b in bytes {
-            if b <= 0x7F {
-                has_ascii = true;
-            } else {
-                has_eight_bit = true;
+
+        // Distinct charsets, ordered by ascending registry id (GNU's
+        // `charset_table` iteration order).
+        let mut found: Vec<(i64, SymId)> = Vec::new();
+        for sym in per_char {
+            if !found.iter().any(|&(_, existing)| existing == sym) {
+                found.push((reg.id(sym).unwrap_or(i64::MAX), sym));
             }
         }
-    }
-
-    // Match Emacs ordering observed for find-charset-string:
-    // ascii, unicode, eight-bit.
-    let mut out = Vec::new();
-    if has_ascii {
-        out.push("ascii");
-    }
-    if has_unicode {
-        out.push("unicode");
-    }
-    if has_eight_bit {
-        out.push("eight-bit");
-    }
-    out
+        found.sort_by_key(|&(id, _)| id);
+        found.into_iter().map(|(_, sym)| resolve_sym(sym)).collect()
+    })
 }
 
 // ---------------------------------------------------------------------------
