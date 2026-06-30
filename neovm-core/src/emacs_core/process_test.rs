@@ -3981,6 +3981,18 @@ fn accept_process_output_runs_timer_before_filter_and_sentinel_like_gnu() {
     let events_after_first = ev
         .eval_symbol("apio-order-events")
         .expect("ordering event list after first wait");
+    assert_eq!(first, Value::T);
+    let after_first = format!("{}", events_after_first);
+    let after_filter = r#"(timer (filter "out
+"))"#;
+    let after_sentinel = r#"(timer (filter "out
+") (sentinel "finished
+"))"#;
+    assert!(
+        after_first == after_filter || after_first == after_sentinel,
+        "unexpected timer/process order after first accept: {after_first}"
+    );
+
     let second = builtin_accept_process_output(
         &mut ev,
         vec![Value::make_process(pid), Value::make_float(0.1)],
@@ -3990,19 +4002,8 @@ fn accept_process_output_runs_timer_before_filter_and_sentinel_like_gnu() {
         .eval_symbol("apio-order-events")
         .expect("ordering event list");
 
-    assert_eq!(first, Value::T);
     assert_eq!(second, Value::NIL);
-    assert_eq!(
-        format!("{}", events_after_first),
-        r#"(timer (filter "out
-"))"#
-    );
-    assert_eq!(
-        format!("{}", events_after_second),
-        r#"(timer (filter "out
-") (sentinel "finished
-"))"#
-    );
+    assert_eq!(format!("{}", events_after_second), after_sentinel);
 }
 
 #[test]
@@ -4168,6 +4169,50 @@ fn accept_process_output_runs_default_process_filter() {
         "second wait should either observe terminal status or find no remaining activity"
     );
     assert_eq!(text, "out\n\nProcess apio-default-filter finished\n");
+}
+
+#[test]
+fn accept_process_output_notifies_exit_after_ready_output_for_exited_child() {
+    crate::test_utils::init_test_tracing();
+    let echo = find_bin("echo");
+    let mut ev = Context::new();
+    let spawned = eval_one_in_context(
+        &mut ev,
+        &format!(
+            r#"(progn
+                 (setq apio-ready-exit-buffer
+                       (get-buffer-create "*apio-ready-exit*"))
+                 (setq apio-ready-exit-process
+                       (make-process :name "apio-ready-exit"
+                                     :buffer apio-ready-exit-buffer
+                                     :command (list "{echo}" "out")
+                                     :connection-type 'pipe))
+                 'spawned)"#
+        ),
+    );
+    assert_eq!(spawned, "OK spawned");
+
+    std::thread::sleep(Duration::from_millis(200));
+
+    let result = eval_one_in_context(
+        &mut ev,
+        r#"(let ((accepted (accept-process-output apio-ready-exit-process 0.5)))
+             (list accepted (process-status apio-ready-exit-process)))"#,
+    );
+    let buffer_id = ev
+        .buffers
+        .find_buffer_by_name("*apio-ready-exit*")
+        .expect("process buffer");
+    let text = ev
+        .buffers
+        .get(buffer_id)
+        .expect("process buffer")
+        .buffer_string();
+    let killed = eval_one_in_context(&mut ev, "(kill-buffer apio-ready-exit-buffer)");
+
+    assert_eq!(result, "OK (t exit)");
+    assert_eq!(text, "out\n\nProcess apio-ready-exit finished\n");
+    assert_eq!(killed, "OK t");
 }
 
 #[test]

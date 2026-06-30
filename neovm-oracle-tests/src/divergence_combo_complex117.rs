@@ -100,7 +100,9 @@ fn div_cx117_process_send_string_to_stdin() {
 #[test]
 fn div_cx117_process_connection_type_pipe_vs_pty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    crate::common::assert_oracle_parity(
+    let expect =
+        expect_test::expect![[r#""OK \"via-pipe\n\nProcess neo-cx117-pipe finished\n\"""#]];
+    crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let* ((buf-pipe (get-buffer-create " *neo-cx117-pipe*"))
@@ -109,11 +111,13 @@ fn div_cx117_process_connection_type_pipe_vs_pty() {
                                  :buffer buf-pipe
                                  :connection-type 'pipe)))
       (accept-process-output p-pipe 2)
+      (sit-for 0.05)
       (let ((pipe-content (with-current-buffer buf-pipe (buffer-string))))
         (kill-buffer buf-pipe)
         pipe-content))
   (error (list :errored (car e))))
 "##,
+        expect,
     );
 }
 

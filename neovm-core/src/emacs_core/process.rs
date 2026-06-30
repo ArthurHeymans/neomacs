@@ -5311,15 +5311,23 @@ impl super::eval::Context {
                         .poll_associated_stderr_output_without_status(stderr_id, target_process)?;
                     outcome.absorb(stderr_outcome);
                 }
+
+                // GNU may observe SIGCHLD before or during the same wait pass
+                // that drains the child's final bytes.  When that happens,
+                // `status_notify' drains leftovers and runs the sentinel before
+                // `accept-process-output' returns, so the default sentinel
+                // message is already visible in the process buffer.  Keep the
+                // probe non-blocking: if the child is still running, the status
+                // notification remains a later wakeup.
+                if self.processes.check_child_exit(pid) {
+                    self.run_process_status_notification(pid)?;
+                }
                 continue;
             }
 
-            // GNU keeps subprocess exit bookkeeping separate from output
-            // readiness: a wait that wakes for output reads and filters that
-            // output, then returns; the later status-notify pass reports the
-            // terminal state and runs the sentinel.  Probing `try_wait` here
-            // would collapse those two GNU wakeups and make short-lived
-            // children report "finished" too eagerly.
+            // No process bytes were read in this pass.  A child exit can still
+            // be the event that wakes the wait, so check for pending terminal
+            // status and run the GNU-style notification if available.
             let exited = self.processes.check_child_exit(pid);
 
             if exited {
