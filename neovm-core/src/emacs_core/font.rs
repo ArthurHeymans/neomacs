@@ -5935,15 +5935,33 @@ pub(crate) fn builtin_color_values_from_color_spec(args: Vec<Value>) -> EvalResu
 
 /// `(color-gray-p COLOR &optional FRAME)` -- t if COLOR resolves to equal RGB
 /// channels, nil otherwise.
-pub(crate) fn builtin_color_gray_p(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_color_gray_p(ctx: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_min_args("color-gray-p", &args, 1)?;
     expect_max_args("color-gray-p", &args, 2)?;
-    let color = expect_color_string(&args[0])?;
+    let _ = expect_color_string(&args[0])?;
     expect_optional_color_frame_arg(&args, 1)?;
-    let Some((r, g, b)) = parse_color_16bit_any(&color) else {
+    // GNU `Fcolor_gray_p` -> `face_color_gray_p` (xfaces.c:1214-1235) resolves
+    // the name through the frame's colour hook -- the same `tty-color-desc'
+    // path as `color-values'/`color-distance', not a private name table -- and
+    // treats an unresolvable colour as simply "not gray" (false), never an
+    // error.
+    let graphic = graphic_color_target_frame_id(ctx, args.get(1))
+        .map(|id| id.is_some())
+        .unwrap_or(false);
+    let Ok((r, g, b)) = resolve_color_distance_rgb(ctx, &args[0], graphic) else {
         return Ok(Value::NIL);
     };
-    Ok(Value::bool_val(r == g && g == b))
+    Ok(Value::bool_val(color_is_gray(r, g, b)))
+}
+
+/// GNU `face_color_gray_p` (xfaces.c:1214-1235): a colour is "gray" if it is
+/// close to black (every 16-bit channel < 5000) or its channels are within 5%
+/// (`max/20`) of one another.
+fn color_is_gray(r: i64, g: i64, b: i64) -> bool {
+    if r < 5000 && g < 5000 && b < 5000 {
+        return true;
+    }
+    (r - g).abs() < r.max(g) / 20 && (g - b).abs() < g.max(b) / 20 && (b - r).abs() < b.max(r) / 20
 }
 
 /// `(color-supported-p COLOR &optional FRAME BACKGROUND-P)` -- t if COLOR

@@ -3293,28 +3293,29 @@ fn color_values_from_color_spec_semantics() {
 #[test]
 fn color_gray_and_supported_semantics() {
     crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
     assert!(
-        builtin_color_gray_p(vec![Value::string("#000000")])
+        builtin_color_gray_p(&mut eval, vec![Value::string("#000000")])
             .unwrap()
             .is_truthy()
     );
     assert!(
-        builtin_color_gray_p(vec![Value::string("#808080")])
+        builtin_color_gray_p(&mut eval, vec![Value::string("#808080")])
             .unwrap()
             .is_truthy()
     );
     assert!(
-        builtin_color_gray_p(vec![Value::string("#ff0000")])
+        builtin_color_gray_p(&mut eval, vec![Value::string("#ff0000")])
             .unwrap()
             .is_nil()
     );
     assert!(
-        builtin_color_gray_p(vec![Value::string("#fff"), Value::NIL])
+        builtin_color_gray_p(&mut eval, vec![Value::string("#fff"), Value::NIL])
             .unwrap()
             .is_truthy()
     );
 
-    let gray_color_type = builtin_color_gray_p(vec![Value::fixnum(1)])
+    let gray_color_type = builtin_color_gray_p(&mut eval, vec![Value::fixnum(1)])
         .expect_err("color-gray-p should enforce stringp");
     match gray_color_type {
         Flow::Signal(sig) => {
@@ -3324,8 +3325,9 @@ fn color_gray_and_supported_semantics() {
         other => panic!("unexpected flow: {other:?}"),
     }
 
-    let gray_frame_type = builtin_color_gray_p(vec![Value::string("#fff"), Value::fixnum(0)])
-        .expect_err("color-gray-p should validate FRAME");
+    let gray_frame_type =
+        builtin_color_gray_p(&mut eval, vec![Value::string("#fff"), Value::fixnum(0)])
+            .expect_err("color-gray-p should validate FRAME");
     match gray_frame_type {
         Flow::Signal(sig) => {
             assert_eq!(sig.symbol_name(), "wrong-type-argument");

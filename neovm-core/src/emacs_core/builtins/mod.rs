@@ -8458,7 +8458,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "color-gray-p",
-        |_ctx, args| super::font::builtin_color_gray_p(args),
+        |ctx, args| super::font::builtin_color_gray_p(ctx, args),
         1,
         Some(2),
     );
