@@ -3704,6 +3704,12 @@ impl ProcessManager {
         }
     }
 
+    fn stderr_pipe_owner(&self, stderr_id: ProcessId) -> Option<ProcessId> {
+        self.processes.iter().find_map(|(id, proc)| {
+            (process_value_to_id(&proc.stderrproc) == Some(stderr_id)).then_some(*id)
+        })
+    }
+
     fn clear_status_notify_pending(&mut self, id: ProcessId) {
         if let Some(proc) = self.processes.get_mut(&id) {
             proc.status_notify_pending = false;
@@ -4906,6 +4912,35 @@ impl super::eval::Context {
         }
     }
 
+    fn poll_associated_stderr_output_without_status(
+        &mut self,
+        stderr_id: ProcessId,
+        target_process: Option<ProcessId>,
+    ) -> Result<ProcessOutputServiceOutcome, Flow> {
+        let mut outcome = ProcessOutputServiceOutcome::default();
+        let is_target = target_process == Some(stderr_id);
+
+        loop {
+            match self.processes.read_process_output_result(stderr_id) {
+                ProcessOutputRead::Data(ref data) if !data.is_empty() => {
+                    outcome.record_activity(is_target);
+                    let filter = self
+                        .processes
+                        .get(stderr_id)
+                        .map(|p| p.filter)
+                        .unwrap_or(Value::NIL);
+                    self.run_process_filter_callback(stderr_id, filter, data)?;
+                }
+                ProcessOutputRead::Data(_)
+                | ProcessOutputRead::WouldBlock
+                | ProcessOutputRead::Eof
+                | ProcessOutputRead::NoSource => break,
+            }
+        }
+
+        Ok(outcome)
+    }
+
     fn run_process_sentinel_callback(
         &mut self,
         pid: ProcessId,
@@ -5032,13 +5067,20 @@ impl super::eval::Context {
         proc_ids: Vec<ProcessId>,
         target_process: Option<ProcessId>,
     ) -> Result<ProcessOutputServiceOutcome, Flow> {
-        let proc_ids = dedupe_process_ids(proc_ids);
+        let mut proc_ids = dedupe_process_ids(proc_ids);
 
         if proc_ids.is_empty() {
             return Ok(ProcessOutputServiceOutcome::default());
         }
+        if let Some(target) = target_process
+            && let Some(index) = proc_ids.iter().position(|pid| *pid == target)
+        {
+            proc_ids.remove(index);
+            proc_ids.insert(0, target);
+        }
 
         let mut outcome = ProcessOutputServiceOutcome::default();
+        let mut split_stderr_owners_with_output = Vec::new();
 
         for pid in proc_ids {
             let is_target = target_process.map_or(true, |target| target == pid);
@@ -5121,11 +5163,19 @@ impl super::eval::Context {
                         self.run_process_filter_callback(pid, filter, data)?;
                     }
                     ProcessOutputRead::Eof if is_stderr_pipe => {
+                        if let Some(owner_id) = self.processes.stderr_pipe_owner(pid)
+                            && target_process == Some(owner_id)
+                            && split_stderr_owners_with_output.contains(&owner_id)
+                        {
+                            break;
+                        }
                         outcome.record_activity(is_target);
 
-                        // Mirror GNU: when the child's stderr EOFs, the stderr
+                        // Mirror GNU's later status notification pass: when
+                        // the child's stderr EOF is reported, the stderr
                         // pipe-process finishes (exit status 0) and runs its
-                        // sentinel, which inserts "Process NAME stderr finished".
+                        // sentinel, which inserts "Process NAME stderr
+                        // finished".
                         self.processes.deactivate_stderr_pipe_process_io(pid);
                         if let Some(proc) = self.processes.get_mut(pid) {
                             proc.status = process_status_exit_value(0);
@@ -5206,31 +5256,35 @@ impl super::eval::Context {
                         proc.kind == ProcessKind::Real
                             && (proc.child.is_some() || proc.pty_child.is_some())
                     });
-                if let Some(status) = self.processes.poll_child_exit_status(pid) {
+                if let Some(stderr_id) =
+                    associated_stderr_id.filter(|id| self.processes.get(*id).is_some())
+                {
+                    if !split_stderr_owners_with_output.contains(&pid) {
+                        split_stderr_owners_with_output.push(pid);
+                    }
+                    // GNU's first targeted wait for a split-stderr subprocess
+                    // can read both stdout and stderr bytes without also
+                    // running the main or implicit stderr process sentinels.
+                    // Drain currently available stderr bytes here, leaving EOF
+                    // and terminal notification visible to a later wait/status
+                    // pass.
+                    let stderr_outcome = self
+                        .poll_associated_stderr_output_without_status(stderr_id, target_process)?;
+                    outcome.absorb(stderr_outcome);
+                } else if let Some(status) = self.processes.poll_child_exit_status(pid) {
                     self.processes.set_child_exit_status_pending(pid, status);
                     self.run_process_status_notification(pid)?;
                 } else if saw_eof && self.processes.check_child_exit(pid) {
                     self.run_process_status_notification(pid)?;
-                } else if associated_stderr_id.is_some() || needs_child_status_followup {
+                } else if needs_child_status_followup {
                     // GNU wakes `wait_reading_process_output` through its
                     // SIGCHLD self-pipe after short-lived subprocess output.
                     // Neomacs has no child-exit wake fd yet, so after targeted
                     // real-process output do a tiny bounded follow-up poll for
-                    // the main child status.  If the process has an associated
-                    // "<name> stderr" pipe-process, service that pipe too so a
-                    // single `accept-process-output' observes GNU's stderr EOF
-                    // notification ordering.
+                    // the main child status.
                     let deadline = Instant::now() + Duration::from_millis(10);
                     let mut main_status_notified = false;
                     loop {
-                        if let Some(stderr_id) =
-                            associated_stderr_id.filter(|id| self.processes.get(*id).is_some())
-                        {
-                            let stderr_outcome =
-                                self.poll_process_output_for_ids(vec![stderr_id], target_process)?;
-                            outcome.absorb(stderr_outcome);
-                        }
-
                         if !main_status_notified {
                             if let Some(status) = self.processes.poll_child_exit_status(pid) {
                                 self.processes.set_child_exit_status_pending(pid, status);
@@ -5239,14 +5293,7 @@ impl super::eval::Context {
                             }
                         }
 
-                        let stderr_active = associated_stderr_id.is_some_and(|stderr_id| {
-                            self.processes
-                                .get(stderr_id)
-                                .is_some_and(process_has_readable_process_io)
-                        });
-                        if (main_status_notified || self.processes.get(pid).is_none())
-                            && !stderr_active
-                        {
+                        if main_status_notified || self.processes.get(pid).is_none() {
                             break;
                         }
                         if Instant::now() >= deadline {

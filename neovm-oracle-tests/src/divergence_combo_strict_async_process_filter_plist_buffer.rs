@@ -105,15 +105,11 @@ fn div_j0_process_connection_type_and_contact() {
 #[test]
 fn div_j0_process_stderr_separate_buffer() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"out\n\nProcess probe-stderr finished\n\" \"err\n\nProcess probe-stderr stderr finished\n\")""#
-    ]];
-    // Divergence surfaced 2026-06-27:
-    // GNU Emacs: OK ("out\n    " "err\n    ")
-    // Neomacs:   OK ("out\n\n    Process probe-stderr finished\n    " "err\n\n    Process probe-stderr stderr finished\n    ")
-    // Neomacs writes the default "Process X finished" sentinel message INTO
-    // the stdout and stderr buffers when the process exits; GNU does not
-    // pollute the output buffers with the sentinel message.
+    let expect = expect_test::expect![[r#""OK (\"out\n\" \"err\n\")""#]];
+    // A single targeted wait on the main process may drain both stdout and the
+    // implicit stderr pipe-process bytes, but GNU does not run either default
+    // sentinel before this form reads the buffers.  Later waits can still
+    // insert the usual "Process ... finished" messages.
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((outbuf (generate-new-buffer " *probe-stderr-out*"))
