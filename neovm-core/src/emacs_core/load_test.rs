@@ -9168,66 +9168,6 @@ fn load_elc_gz_is_explicitly_unsupported() {
     let _ = fs::remove_dir_all(&dir);
 }
 
-/// Try loading the full loadup.el file sequence through the NeoVM
-/// evaluator.  This test runs by default.  Set
-/// NEOVM_LOADUP_TEST_SKIP=1 to skip it.
-///
-/// Probes test state directly via `(get SYM 'cl--class)` — which is
-/// exactly what compiled .elc code executes when it calls the
-/// `cl--find-class` macro. This avoids depending on whether `cl-macs`
-/// (a compile-time-only library) has been loaded at runtime: GNU's
-/// own bootstrap doesn't load it either, and raw calls to
-/// `(cl--find-class ...)` at the top level signal void-function unless
-/// user code has done `(require 'cl-macs)` first. See the
-/// contribution notes on test authoring re: macro dependencies.
-#[test]
-fn neovm_loadup_bootstrap() {
-    crate::test_utils::init_test_tracing();
-    if std::env::var("NEOVM_LOADUP_TEST_SKIP").as_deref() == Ok("1") {
-        tracing::info!("skipping neovm_loadup_bootstrap (NEOVM_LOADUP_TEST_SKIP=1)");
-        return;
-    }
-
-    crate::test_utils::init_test_tracing();
-
-    let mut eval = create_bootstrap_evaluator().expect("loadup bootstrap should succeed");
-    let result = eval
-        .eval_str(
-            "(list (not (null (get 'float 'cl--class))) (not (null (get 'integer 'cl--class))))",
-        )
-        .expect("evaluate cl class probe");
-    let items = crate::emacs_core::value::list_to_vec(&result).expect("result list");
-    assert_eq!(
-        items,
-        vec![Value::T, Value::T],
-        "expected float/integer CL classes to be registered, got {result}"
-    );
-
-    let float_pred = eval.obarray().get_property("float", "cl-deftype-satisfies");
-    let integer_pred = eval
-        .obarray()
-        .get_property("integer", "cl-deftype-satisfies");
-    assert!(
-        float_pred.is_some_and(|v| !v.is_nil()),
-        "expected float cl-deftype-satisfies property to be non-nil, got {float_pred:?}"
-    );
-    assert!(
-        integer_pred.is_some_and(|v| !v.is_nil()),
-        "expected integer cl-deftype-satisfies property to be non-nil, got {integer_pred:?}"
-    );
-
-    let compat_result = eval
-        .eval_str("(list (coding-system-p 'iso-8859-15) (stringp system-configuration-features))")
-        .expect("evaluate startup compatibility probe");
-    let compat_items =
-        crate::emacs_core::value::list_to_vec(&compat_result).expect("compat probe result list");
-    assert_eq!(
-        compat_items,
-        vec![Value::T, Value::T],
-        "expected iso-8859-15 and system-configuration-features to be available, got {compat_result}"
-    );
-}
-
 #[test]
 fn compiled_bootstrap_cl_preload_stubs_work_after_faces() {
     crate::test_utils::init_test_tracing();

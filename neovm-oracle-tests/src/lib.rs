@@ -56,6 +56,7 @@ mod bool_vector_operations;
 mod bool_vector_syntax_strict_edge_semantics;
 mod boolean_helper_semantics;
 mod bootstrap_library_require;
+mod bootstrap_runtime_surface;
 mod buffer_base_buffer_semantics;
 mod buffer_edit_strict_edge_semantics;
 mod buffer_file_name_semantics;
