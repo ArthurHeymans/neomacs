@@ -8355,7 +8355,11 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
         Value::make_float(1.0 / 3.0), // (/ (frame-height) 3) approximation
     );
     obarray.set_symbol_value("temp-buffer-max-width", Value::NIL);
-    obarray.set_symbol_value("even-window-sizes", Value::symbol("width-only"));
+    // `even-window-sizes' is NOT a C variable in GNU -- it is defined purely by
+    // `(defcustom even-window-sizes t)' in window.el. A Rust bootstrap value
+    // here would win (defcustom never overwrites an already-bound variable) and
+    // shadow the .el default, so we deliberately do not seed it: neomacs's
+    // window.el provides the value, matching GNU.
     obarray.set_symbol_value("auto-window-vscroll", Value::T);
 }
 /// `(window-combination-limit WINDOW)` -> nil or t.
