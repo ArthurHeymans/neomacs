@@ -980,7 +980,10 @@ fn test_make_thread_non_callable_last_error_shape() {
     let mut eval = Context::new();
     let thread = builtin_make_thread(&mut eval, vec![Value::fixnum(1)]).unwrap();
     let result = builtin_thread_join(&mut eval, vec![thread]);
-    assert!(matches!(result, Err(Flow::Signal(_))));
+    // GNU `thread-join` does not re-raise an error signalled inside the thread
+    // function; it returns the thread's result. The error remains observable
+    // through `thread-last-error`.
+    assert!(result.is_ok());
     let err = builtin_thread_last_error(&mut eval, vec![]).unwrap();
     assert_eq!(
         super::super::print::print_value(&err),
@@ -1001,8 +1004,11 @@ fn test_thread_last_error_is_published_when_signaled_thread_exits() {
         "(wrong-number-of-arguments #<subr car> 0)"
     );
 
+    // Internal thread errors are not re-raised by join (GNU semantics); the
+    // error stays in thread-last-error (asserted above) and join returns the
+    // thread's result.
     let join_result = builtin_thread_join(&mut eval, vec![thread]);
-    assert!(matches!(join_result, Err(Flow::Signal(_))));
+    assert!(join_result.is_ok());
 
     let _ = builtin_thread_last_error(&mut eval, vec![Value::T]).unwrap();
     let cleared = builtin_thread_last_error(&mut eval, vec![]).unwrap();

@@ -214,7 +214,11 @@ impl ThreadManager {
         }
     }
 
-    /// Mark a thread as Signaled with an error value.
+    /// Mark a thread as Signaled by an *external* `thread-signal`.
+    ///
+    /// GNU `thread_set_error` (thread.c:984-991) records the error in the
+    /// thread's `error_symbol`/`error_data`, which is what a blocked
+    /// `thread-join` re-raises. Only `thread-signal` reaches this path.
     pub fn signal_thread(&mut self, id: u64, error: Value) {
         if let Some(t) = self.threads.get_mut(&id) {
             t.status = ThreadStatus::Signaled;
@@ -227,6 +231,33 @@ impl ThreadManager {
                 t.error_data = Value::NIL;
             }
         }
+    }
+
+    /// Record a thread's terminal *internal* error (one signalled inside the
+    /// thread function itself).
+    ///
+    /// GNU `record_thread_error` (thread.c:753-758) stores such an error only
+    /// for `thread-last-error`; unlike an external `thread-signal` it leaves
+    /// the thread's `error_symbol` nil, so `thread-join` returns the thread's
+    /// (nil) result rather than re-raising the error.
+    pub fn record_thread_internal_error(&mut self, id: u64, error: Value) {
+        if let Some(t) = self.threads.get_mut(&id) {
+            t.status = ThreadStatus::Signaled;
+            t.last_error = Some(error);
+            t.error_symbol = Value::NIL;
+            t.error_data = Value::NIL;
+        }
+    }
+
+    /// The pending re-raise for `thread-join`: GNU re-signals only an error
+    /// injected by `thread-signal` (recorded in `error_symbol`), never an
+    /// internal one. Returns the `Flow` to re-raise, or `None`.
+    pub fn pending_thread_signal(&self, id: u64) -> Option<Flow> {
+        let thread = self.threads.get(&id)?;
+        if thread.error_symbol.is_nil() {
+            return None;
+        }
+        thread.last_error.and_then(signal_from_binding_value)
     }
 
     /// Publish an error value for `thread-last-error`.
@@ -769,14 +800,17 @@ pub(crate) fn finish_make_thread_result(
         }
         Err(Flow::Signal(ref sig)) => {
             let error_val = make_signal_binding_value(sig);
-            threads.signal_thread(thread_id, error_val);
+            // Internal error: recorded for thread-last-error and marks the
+            // thread dead, but NOT re-raised by a later thread-join (GNU
+            // record_thread_error, thread.c:753-758).
+            threads.record_thread_internal_error(thread_id, error_val);
             // GNU publishes thread-last-error when the thread dies, not when
             // another thread joins it later.
             threads.record_last_error(error_val);
         }
         Err(Flow::Throw { ref tag, ref value }) => {
             let error_val = Value::list(vec![Value::symbol("no-catch"), *tag, *value]);
-            threads.signal_thread(thread_id, error_val);
+            threads.record_thread_internal_error(thread_id, error_val);
             threads.record_last_error(error_val);
         }
     }
@@ -809,9 +843,12 @@ pub(crate) fn builtin_thread_join(
             vec![Value::string("Cannot join current thread")],
         ));
     }
-    if let Some(error) = ctx.threads.join_thread(id)
-        && let Some(flow) = signal_from_binding_value(error)
-    {
+    // GNU `Fthread_join` (thread.c:1118-1144) re-raises only an error injected
+    // into this thread by `thread-signal` (recorded in `error_symbol`); an
+    // error signalled *inside* the thread function is surfaced via
+    // `thread-last-error`, and join just returns the thread's result.
+    ctx.threads.join_thread(id);
+    if let Some(flow) = ctx.threads.pending_thread_signal(id) {
         return Err(flow);
     }
     Ok(ctx.threads.thread_result(id))

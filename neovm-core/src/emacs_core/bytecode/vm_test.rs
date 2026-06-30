@@ -5862,10 +5862,15 @@ fn vm_make_thread_records_join_error_on_shared_runtime() {
                                  (signal 'error '(99)))
                                "vm-boom"))
                       (published (thread-last-error))
+                      ;; GNU `thread-join` does NOT re-raise an error signalled
+                      ;; inside the thread function (record_thread_error only
+                      ;; publishes thread-last-error; thread.c:753-758,
+                      ;; 1118-1144); it returns the thread's result.  The error
+                      ;; stays visible through thread-last-error.
                       (joined (condition-case join-err
                                   (progn
                                     (thread-join worker)
-                                    nil)
+                                    :no-error)
                                 (error join-err)))
                       (after (thread-last-error)))
                  (list
@@ -5873,9 +5878,7 @@ fn vm_make_thread_records_join_error_on_shared_runtime() {
                   (and (consp published)
                        (eq (car published) 'error)
                        (equal (cdr published) '(99)))
-                  (and (consp joined)
-                       (eq (car joined) 'error)
-                       (equal (cdr joined) '(99)))
+                  (eq joined :no-error)
                   (and (consp after)
                        (eq (car after) 'error)
                        (equal (cdr after) '(99)))))"#
