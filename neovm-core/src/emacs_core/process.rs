@@ -5120,7 +5120,9 @@ impl super::eval::Context {
                 .get(pid)
                 .is_some_and(|process| process.status_notify_pending)
             {
-                self.run_process_status_notification(pid)?;
+                if self.run_process_status_notification(pid)? {
+                    outcome.record_activity(is_target);
+                }
                 continue;
             }
             if self
@@ -5312,16 +5314,14 @@ impl super::eval::Context {
                     outcome.absorb(stderr_outcome);
                 }
 
-                // GNU may observe SIGCHLD before or during the same wait pass
-                // that drains the child's final bytes.  When that happens,
-                // `status_notify' drains leftovers and runs the sentinel before
-                // `accept-process-output' returns, so the default sentinel
-                // message is already visible in the process buffer.  Keep the
-                // probe non-blocking: if the child is still running, the status
-                // notification remains a later wakeup.
-                if self.processes.check_child_exit(pid) {
-                    self.run_process_status_notification(pid)?;
-                }
+                // GNU separates the readable-fd wakeup from later process
+                // status notification.  After draining bytes, make a terminal
+                // child status visible to status accessors, but leave the
+                // sentinel/default status message for a later status-notify
+                // pass.  Running it here appends "Process ... finished" too
+                // early for short-lived filters like `cat'.
+                let _ = self.processes.check_child_exit(pid);
+
                 continue;
             }
 
@@ -5331,23 +5331,27 @@ impl super::eval::Context {
             let exited = self.processes.check_child_exit(pid);
 
             if exited {
-                self.run_process_status_notification(pid)?;
+                if self.run_process_status_notification(pid)? {
+                    outcome.record_activity(is_target);
+                }
             }
         }
 
         Ok(outcome)
     }
 
-    fn run_process_status_notification(&mut self, pid: ProcessId) -> Result<(), Flow> {
+    fn run_process_status_notification(&mut self, pid: ProcessId) -> Result<bool, Flow> {
         // GNU `status_notify` (process.c) drains ALL remaining output from a
         // terminated process before reporting its status and (when
         // `delete-exited-processes' is non-nil) removing it from
         // `Vprocess_alist'.  Mirror the drain here so trailing bytes buffered
         // in the pipe after the child exited are not lost when the process is
         // reaped below.
+        let mut saw_output = false;
         loop {
             match self.processes.read_process_output_result(pid) {
                 ProcessOutputRead::Data(ref data) if !data.is_empty() => {
+                    saw_output = true;
                     let filter = self
                         .processes
                         .get(pid)
@@ -5385,7 +5389,7 @@ impl super::eval::Context {
         if self.delete_exited_processes_enabled() {
             self.processes.reap_exited_process(pid);
         }
-        Ok(())
+        Ok(saw_output)
     }
 }
 

@@ -4172,7 +4172,7 @@ fn accept_process_output_runs_default_process_filter() {
 }
 
 #[test]
-fn accept_process_output_notifies_exit_after_ready_output_for_exited_child() {
+fn accept_process_output_records_exit_after_ready_output_for_exited_child() {
     crate::test_utils::init_test_tracing();
     let echo = find_bin("echo");
     let mut ev = Context::new();
@@ -4211,7 +4211,7 @@ fn accept_process_output_notifies_exit_after_ready_output_for_exited_child() {
     let killed = eval_one_in_context(&mut ev, "(kill-buffer apio-ready-exit-buffer)");
 
     assert_eq!(result, "OK (t exit)");
-    assert_eq!(text, "out\n\nProcess apio-ready-exit finished\n");
+    assert_eq!(text, "out\n");
     assert_eq!(killed, "OK t");
 }
 
