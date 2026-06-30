@@ -5147,7 +5147,6 @@ impl super::eval::Context {
 
             let mut read_result = self.processes.read_process_output_result(pid);
             let mut saw_output = false;
-            let mut saw_eof = false;
             let mut handled_terminal_eof = false;
             loop {
                 match read_result {
@@ -5226,10 +5225,7 @@ impl super::eval::Context {
                         handled_terminal_eof = true;
                         break;
                     }
-                    ProcessOutputRead::Eof => {
-                        saw_eof = true;
-                        break;
-                    }
+                    ProcessOutputRead::Eof => break,
                     ProcessOutputRead::Data(_)
                     | ProcessOutputRead::WouldBlock
                     | ProcessOutputRead::NoSource => break,
@@ -5251,11 +5247,6 @@ impl super::eval::Context {
                     .processes
                     .get(pid)
                     .and_then(|proc| process_value_to_id(&proc.stderrproc));
-                let needs_child_status_followup = is_target
-                    && self.processes.get(pid).is_some_and(|proc| {
-                        proc.kind == ProcessKind::Real
-                            && (proc.child.is_some() || proc.pty_child.is_some())
-                    });
                 if let Some(stderr_id) =
                     associated_stderr_id.filter(|id| self.processes.get(*id).is_some())
                 {
@@ -5271,36 +5262,6 @@ impl super::eval::Context {
                     let stderr_outcome = self
                         .poll_associated_stderr_output_without_status(stderr_id, target_process)?;
                     outcome.absorb(stderr_outcome);
-                } else if let Some(status) = self.processes.poll_child_exit_status(pid) {
-                    self.processes.set_child_exit_status_pending(pid, status);
-                    self.run_process_status_notification(pid)?;
-                } else if saw_eof && self.processes.check_child_exit(pid) {
-                    self.run_process_status_notification(pid)?;
-                } else if needs_child_status_followup {
-                    // GNU wakes `wait_reading_process_output` through its
-                    // SIGCHLD self-pipe after short-lived subprocess output.
-                    // Neomacs has no child-exit wake fd yet, so after targeted
-                    // real-process output do a tiny bounded follow-up poll for
-                    // the main child status.
-                    let deadline = Instant::now() + Duration::from_millis(10);
-                    let mut main_status_notified = false;
-                    loop {
-                        if !main_status_notified {
-                            if let Some(status) = self.processes.poll_child_exit_status(pid) {
-                                self.processes.set_child_exit_status_pending(pid, status);
-                                self.run_process_status_notification(pid)?;
-                                main_status_notified = true;
-                            }
-                        }
-
-                        if main_status_notified || self.processes.get(pid).is_none() {
-                            break;
-                        }
-                        if Instant::now() >= deadline {
-                            break;
-                        }
-                        std::thread::sleep(Duration::from_millis(1));
-                    }
                 }
                 continue;
             }
@@ -12550,10 +12511,11 @@ pub(crate) fn builtin_process_status_impl(
     let Some(id) = resolve_process_for_status_in_state(processes, buffers, &args[0])? else {
         return Ok(Value::NIL);
     };
-    // Match GNU `Fprocess_status` (`src/process.c`): refresh a pending child
-    // status (`update_status`) but do not run the sentinel here.  The later
-    // status-notify pass observes `status_notify_pending` and reports/reaps it.
-    processes.check_child_exit(id);
+    // GNU `Fprocess_status` only converts an already pending raw child status
+    // (`p->raw_status_new` via `update_status`).  It does not probe the OS for
+    // a fresh exit here; doing that collapses GNU's separate "output is ready"
+    // and "process status notification is ready" wakeups for short-lived
+    // subprocesses.
     match processes.get_any(id) {
         Some(proc) => Ok(process_public_status_symbol(proc)),
         None => Ok(Value::NIL),
@@ -13493,7 +13455,9 @@ pub(crate) fn builtin_process_live_p_impl(
     else {
         return Ok(Value::NIL);
     };
-    processes.check_child_exit(id);
+    // Keep this a recorded-state query, like GNU's process predicates.  Wait
+    // paths observe child exits and update `status`; `process-live-p` must not
+    // perform a fresh no-wait child probe on its own.
     let proc = processes.get(id).ok_or_else(|| {
         signal(
             "wrong-type-argument",

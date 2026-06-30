@@ -13,7 +13,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_j0_process_output_via_filter() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"hello world\n\" exit 0 nil)""#]];
+    let expect = expect_test::expect![[r#""OK (\"hello world\n\" run 0 nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (collected)
@@ -53,21 +53,14 @@ fn div_j0_process_plist_get_put() {
 #[test]
 fn div_j0_process_buffer_and_mark() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (t 36 \" *probe-proc-buf*\" \"hi\n\nProcess probe-proc-bm finished\n\")""#
-    ]];
-    // Divergence surfaced 2026-06-27:
-    // GNU Emacs: OK (t 4 " *probe-proc-buf*" "hi\n")
-    // Neomacs:   OK (t 36 " *probe-proc-buf*" "hi\n")
-    // (marker-position (process-mark proc)) is 4 in GNU (end of the 3-char
-    // "hi\n" output) but 36 in Neomacs — the process mark is positioned
-    // incorrectly after process output. Buffer identity and content agree.
+    let expect = expect_test::expect![[r#""OK (t 4 \" *probe-proc-buf*\" \"hi\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (generate-new-buffer " *probe-proc-buf*")))
   (let ((proc (make-process :name "probe-proc-bm"
                             :command (list shell-file-name shell-command-switch "echo hi")
-                            :buffer buf)))
+                            :buffer buf
+                            :connection-type 'pipe)))
     (set-process-query-on-exit-flag proc nil)
     (accept-process-output proc 1)
     (list (eq (process-buffer proc) buf)

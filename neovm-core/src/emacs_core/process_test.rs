@@ -3995,7 +3995,6 @@ fn accept_process_output_runs_timer_before_filter_and_sentinel_like_gnu() {
     assert_eq!(
         format!("{}", events_after_first),
         r#"(timer (filter "out
-") (sentinel "finished
 "))"#
     );
     assert_eq!(
