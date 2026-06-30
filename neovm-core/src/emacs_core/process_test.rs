@@ -4172,7 +4172,7 @@ fn accept_process_output_runs_default_process_filter() {
 }
 
 #[test]
-fn accept_process_output_records_exit_after_ready_output_for_exited_child() {
+fn accept_process_output_keeps_status_pending_after_ready_output() {
     crate::test_utils::init_test_tracing();
     let echo = find_bin("echo");
     let mut ev = Context::new();
@@ -4210,9 +4210,38 @@ fn accept_process_output_records_exit_after_ready_output_for_exited_child() {
         .buffer_string();
     let killed = eval_one_in_context(&mut ev, "(kill-buffer apio-ready-exit-buffer)");
 
-    assert_eq!(result, "OK (t exit)");
+    assert_eq!(result, "OK (t run)");
     assert_eq!(text, "out\n");
     assert_eq!(killed, "OK t");
+}
+
+#[test]
+fn process_live_p_loop_runs_pending_default_sentinel() {
+    crate::test_utils::init_test_tracing();
+    let printf = find_bin("printf");
+    let mut ev = Context::new();
+
+    let result = eval_one_in_context(
+        &mut ev,
+        &format!(
+            r#"(let ((buf (get-buffer-create " *apio-live-loop*")))
+                 (fset 'apio-live-p
+                       (lambda (process)
+                         (and (processp process)
+                              (memq (process-status process)
+                                    '(run open listen connect stop)))))
+                 (let ((proc (start-process "apio-live-loop" buf
+                                            "{printf}" "X%sY" "MID")))
+                   (set-process-query-on-exit-flag proc nil)
+                   (while (apio-live-p proc)
+                     (accept-process-output proc 1))
+                   (prog1 (progn (set-buffer buf) (buffer-string))
+                     (fmakunbound 'apio-live-p)
+                     (kill-buffer buf))))"#
+        ),
+    );
+
+    assert_eq!(result, "OK \"XMIDY\nProcess apio-live-loop finished\n\"");
 }
 
 #[test]

@@ -728,6 +728,9 @@ pub struct Process {
     /// Terminal status has been recorded, but GNU-style status notification
     /// (sentinel/default buffer message and optional reaping) still needs to run.
     pub status_notify_pending: bool,
+    /// Terminal status queued for the next status-notification pass.  GNU keeps
+    /// this as raw child status until `status_notify' publishes it.
+    pub pending_terminal_status: Value,
     pub buffer: Value,
     pub childp: Value,
     /// Queued input entries `(STRING . (OFFSET . LENGTH))`, matching GNU's `write_queue`.
@@ -821,6 +824,7 @@ impl std::fmt::Debug for Process {
             .field("kind", &self.kind)
             .field("proc_type", &self.proc_type)
             .field("status", &self.status)
+            .field("pending_terminal_status", &self.pending_terminal_status)
             .field("buffer", &self.buffer)
             .field("childp", &self.childp)
             .field("pty_master", &self.pty_master.as_ref().map(|_| ".."))
@@ -3128,6 +3132,7 @@ impl ProcessManager {
             proc_type,
             status: process_status_run_value(),
             status_notify_pending: false,
+            pending_terminal_status: Value::NIL,
             buffer,
             childp,
             write_queue: Value::NIL,
@@ -3667,7 +3672,7 @@ impl ProcessManager {
             None => return None,
         };
 
-        if !process_status_is_run(&proc.status) {
+        if proc.status_notify_pending || !process_status_is_run(&proc.status) {
             return None;
         }
 
@@ -3699,7 +3704,7 @@ impl ProcessManager {
 
     fn set_child_exit_status_pending(&mut self, id: ProcessId, status: Value) {
         if let Some(proc) = self.processes.get_mut(&id) {
-            proc.status = status;
+            proc.pending_terminal_status = status;
             proc.status_notify_pending = true;
         }
     }
@@ -3713,6 +3718,7 @@ impl ProcessManager {
     fn clear_status_notify_pending(&mut self, id: ProcessId) {
         if let Some(proc) = self.processes.get_mut(&id) {
             proc.status_notify_pending = false;
+            proc.pending_terminal_status = Value::NIL;
         }
     }
 
@@ -3963,12 +3969,14 @@ impl ProcessManager {
                 if !process_status_is_terminal_for_notify(&proc.status) {
                     proc.status = process_status_exit_value(0);
                 }
-            } else if proc.status_notify_pending || !process_status_is_exit_or_signal(&proc.status)
-            {
+            } else if proc.status_notify_pending && !proc.pending_terminal_status.is_nil() {
+                proc.status = proc.pending_terminal_status;
+            } else if !process_status_is_exit_or_signal(&proc.status) {
                 kill_real_process_child(&mut proc, libc::SIGKILL);
                 proc.status = process_status_signal_value(9);
             }
             proc.status_notify_pending = false;
+            proc.pending_terminal_status = Value::NIL;
 
             proc.tls_stream.take();
             proc.gnutls_initstage = GnutlsInitStage::Empty;
@@ -5371,6 +5379,11 @@ impl super::eval::Context {
             .get(pid)
             .map(|p| p.sentinel)
             .unwrap_or(Value::NIL);
+        if let Some(proc) = self.processes.get_mut(pid)
+            && !proc.pending_terminal_status.is_nil()
+        {
+            proc.status = proc.pending_terminal_status;
+        }
         let exit_msg = self
             .processes
             .get(pid)
@@ -6121,29 +6134,13 @@ fn process_live_status_value(process: &Process) -> Value {
     if process_stopped_for_io(process) {
         return Value::list(vec![Value::symbol("stop")]);
     }
+    if process.status_notify_pending && !process.pending_terminal_status.is_nil() {
+        return process_live_running_status_value(process.kind);
+    }
     let status = process.status;
     let kind = process.kind;
     match ProcessStatusSymbol::from_status_value(status) {
-        Some(ProcessStatusSymbol::Run) => match kind {
-            ProcessKind::Network => Value::list(vec![
-                Value::symbol("listen"),
-                Value::symbol("connect"),
-                Value::symbol("stop"),
-            ]),
-            ProcessKind::Pipe => Value::list(vec![
-                Value::symbol("open"),
-                Value::symbol("listen"),
-                Value::symbol("connect"),
-                Value::symbol("stop"),
-            ]),
-            _ => Value::list(vec![
-                Value::symbol("run"),
-                Value::symbol("open"),
-                Value::symbol("listen"),
-                Value::symbol("connect"),
-                Value::symbol("stop"),
-            ]),
-        },
+        Some(ProcessStatusSymbol::Run) => process_live_running_status_value(kind),
         Some(ProcessStatusSymbol::Stop) => Value::list(vec![Value::symbol("stop")]),
         Some(ProcessStatusSymbol::Open) => Value::list(vec![
             Value::symbol("open"),
@@ -6158,6 +6155,29 @@ fn process_live_status_value(process: &Process) -> Value {
         ]),
         Some(ProcessStatusSymbol::Connect) => Value::list(vec![Value::symbol("connect")]),
         _ => Value::NIL,
+    }
+}
+
+fn process_live_running_status_value(kind: ProcessKind) -> Value {
+    match kind {
+        ProcessKind::Network => Value::list(vec![
+            Value::symbol("listen"),
+            Value::symbol("connect"),
+            Value::symbol("stop"),
+        ]),
+        ProcessKind::Pipe => Value::list(vec![
+            Value::symbol("open"),
+            Value::symbol("listen"),
+            Value::symbol("connect"),
+            Value::symbol("stop"),
+        ]),
+        _ => Value::list(vec![
+            Value::symbol("run"),
+            Value::symbol("open"),
+            Value::symbol("listen"),
+            Value::symbol("connect"),
+            Value::symbol("stop"),
+        ]),
     }
 }
 
@@ -14375,6 +14395,7 @@ impl GcTrace for ProcessManager {
             roots.push(process.command);
             roots.push(process.childp);
             roots.push(process.status);
+            roots.push(process.pending_terminal_status);
             roots.push(process.tty_name);
             roots.push(process.write_queue);
             roots.push(process.filter);
