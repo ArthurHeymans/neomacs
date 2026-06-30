@@ -1934,6 +1934,10 @@ pub struct Context {
             ) -> Result<String, String>,
         >,
     >,
+    /// Smooth scroll (Phase 1): accumulated trackpad pixel-scroll delta
+    /// `(target_frame_id, delta_y)` pending application by the next layout pass,
+    /// which drains it and calls `Engine::pixel_scroll_window`.
+    pub(crate) pending_pixel_scroll: Option<(u64, f32)>,
     /// Host-display bridge for GUI frame realization.
     pub display_host: Option<Box<dyn DisplayHost>>,
     /// Native anchor for the next Lisp-driven menu-bar popup.
@@ -4984,6 +4988,7 @@ impl Context {
             quit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             redisplay_fn: None,
             frame_snapshot_fn: None,
+            pending_pixel_scroll: None,
             display_host: None,
             pending_menu_bar_popup_anchor: None,
             coding_systems: CodingSystemManager::new(),
@@ -5167,6 +5172,7 @@ impl Context {
             quit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             redisplay_fn: None,
             frame_snapshot_fn: None,
+            pending_pixel_scroll: None,
             display_host: None,
             pending_menu_bar_popup_anchor: None,
             coding_systems,

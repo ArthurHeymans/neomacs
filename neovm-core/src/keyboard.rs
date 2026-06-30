@@ -800,6 +800,18 @@ pub enum InputEvent {
         modifiers: Modifiers,
         target_frame_id: u64,
     },
+    /// Trackpad pixel-precise scroll (smooth scrolling, Phase 1). Unlike
+    /// `MouseScroll` (which becomes a wheel event handled by elisp `mwheel`),
+    /// this is accumulated and applied as a sub-line `vscroll` adjustment by the
+    /// layout pass (`Engine::pixel_scroll_window`).
+    PixelScroll {
+        delta_x: f32,
+        delta_y: f32,
+        x: f32,
+        y: f32,
+        modifiers: Modifiers,
+        target_frame_id: u64,
+    },
     /// Popup menu selection.  The display layer reports the selected
     /// zero-based item index; -1 means the menu was cancelled.
     MenuSelection { index: i32 },
@@ -3882,6 +3894,21 @@ impl crate::emacs_core::eval::Context {
                 self.command_loop.store_kbd_macro_event(event);
                 Ok(Some(event))
             }
+            InputEvent::PixelScroll {
+                delta_x: _,
+                delta_y,
+                x: _,
+                y: _,
+                modifiers: _,
+                target_frame_id,
+            } => {
+                // Smooth scroll (Phase 1, T4): accumulate the trackpad pixel delta
+                // for this frame; the layout pass drains it and calls
+                // Engine::pixel_scroll_window before re-laying. Consume the event
+                // (no command); the command loop redisplays when input drains.
+                self.accumulate_pixel_scroll(target_frame_id, delta_y);
+                Ok(None)
+            }
             InputEvent::MenuSelection { index } => {
                 let event = Value::list(vec![
                     Value::symbol("menu-selection"),
@@ -5612,6 +5639,40 @@ fn key_sequence_translation_events(translation: Value) -> Option<Vec<Value>> {
 // ===========================================================================
 // Tests
 // ===========================================================================
+
+impl crate::emacs_core::eval::Context {
+    /// Smooth scroll (Phase 1, T4): accumulate a trackpad pixel-scroll delta for
+    /// `target_frame_id`. Deltas for the same frame sum (sub-pixel precision); a
+    /// delta for a different frame replaces the pending one. Drained + applied by
+    /// the layout pass via `Engine::pixel_scroll_window`.
+    pub(crate) fn accumulate_pixel_scroll(&mut self, target_frame_id: u64, delta_y: f32) {
+        let acc = self
+            .pending_pixel_scroll
+            .map_or(0.0, |(f, d)| if f == target_frame_id { d } else { 0.0 });
+        self.pending_pixel_scroll = Some((target_frame_id, acc + delta_y));
+    }
+}
+
+#[cfg(test)]
+mod pixel_scroll_accumulate_tests {
+    #[test]
+    fn accumulate_pixel_scroll_sums_same_frame_and_replaces_other() {
+        let mut eval = crate::emacs_core::eval::Context::new();
+        eval.accumulate_pixel_scroll(7, 3.5);
+        eval.accumulate_pixel_scroll(7, 2.0);
+        assert_eq!(
+            eval.pending_pixel_scroll,
+            Some((7, 5.5)),
+            "same-frame deltas sum (sub-pixel accumulation)"
+        );
+        eval.accumulate_pixel_scroll(9, -1.0);
+        assert_eq!(
+            eval.pending_pixel_scroll,
+            Some((9, -1.0)),
+            "a different frame replaces the pending delta"
+        );
+    }
+}
 
 #[cfg(test)]
 #[path = "keyboard_test.rs"]
