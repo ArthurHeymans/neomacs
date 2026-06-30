@@ -4317,7 +4317,12 @@ impl Context {
         obarray.set_symbol_value("inhibit-load-charset-map", Value::NIL);
 
         // Terminal/display variables (C-level DEFVAR in official Emacs)
+        // `standard-display-table' is a DEFVAR_LISP in dispnew.c (default nil),
+        // hence special: `(let ((standard-display-table ...)) ...)' must bind it
+        // dynamically so the `standard-display-*' functions (disp-table.el) see
+        // and mutate the binding instead of the global default.
         obarray.set_symbol_value("standard-display-table", Value::NIL);
+        obarray.make_special("standard-display-table");
         // `glyph-table' is a DEFVAR_LISP in dispnew.c, default nil. It must be
         // bound (and special) so `boundp'/`special-variable-p' agree with GNU.
         obarray.set_symbol_value("glyph-table", Value::NIL);
