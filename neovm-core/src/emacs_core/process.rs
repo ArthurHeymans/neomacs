@@ -2111,12 +2111,14 @@ fn process_contact_server_p(proc: &Process) -> bool {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum NetworkSocketOption {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     Bindtodevice,
     Broadcast,
     Dontroute,
     Keepalive,
     Linger,
     Oobinline,
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     Priority,
     Reuseaddr,
     Nodelay,
@@ -2163,12 +2165,14 @@ enum PendingNetworkConnectCompletion {
 impl NetworkSocketOption {
     fn from_keyword(keyword: ProcessKeyword) -> Option<Self> {
         match keyword {
+            #[cfg(any(target_os = "linux", target_os = "android"))]
             ProcessKeyword::Bindtodevice => Some(Self::Bindtodevice),
             ProcessKeyword::Broadcast => Some(Self::Broadcast),
             ProcessKeyword::Dontroute => Some(Self::Dontroute),
             ProcessKeyword::Keepalive => Some(Self::Keepalive),
             ProcessKeyword::Linger => Some(Self::Linger),
             ProcessKeyword::Oobinline => Some(Self::Oobinline),
+            #[cfg(any(target_os = "linux", target_os = "android"))]
             ProcessKeyword::Priority => Some(Self::Priority),
             ProcessKeyword::Reuseaddr => Some(Self::Reuseaddr),
             ProcessKeyword::Nodelay => Some(Self::Nodelay),
@@ -2290,7 +2294,7 @@ fn set_socket_linger_option_raw(fd: RawFd, value: Value) -> std::io::Result<()> 
     setsockopt_raw(fd, libc::SOL_SOCKET, libc::SO_LINGER, &raw)
 }
 
-#[cfg(unix)]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn set_socket_priority_option_raw(fd: RawFd, priority: i32) -> std::io::Result<()> {
     let raw = priority as libc::c_int;
     setsockopt_raw(fd, libc::SOL_SOCKET, libc::SO_PRIORITY, &raw)
@@ -2303,6 +2307,7 @@ fn apply_network_socket_option_to_socket(
 ) -> EvalResult {
     let value = spec.value;
     let result = match spec.option {
+        #[cfg(any(target_os = "linux", target_os = "android"))]
         NetworkSocketOption::Bindtodevice => {
             if value.is_nil() {
                 socket.bind_device(None)
@@ -2319,6 +2324,7 @@ fn apply_network_socket_option_to_socket(
         NetworkSocketOption::Keepalive => socket.set_keepalive(value.is_truthy()),
         NetworkSocketOption::Linger => set_socket_linger_option_raw(socket.as_raw_fd(), value),
         NetworkSocketOption::Oobinline => socket.set_out_of_band_inline(value.is_truthy()),
+        #[cfg(any(target_os = "linux", target_os = "android"))]
         NetworkSocketOption::Priority => {
             let priority = network_option_i32_value(spec.keyword, value)?;
             set_socket_priority_option_raw(socket.as_raw_fd(), priority)
@@ -2549,12 +2555,29 @@ fn udp_unspecified_addr_for(remote: SocketAddr) -> SocketAddr {
 }
 
 fn datagram_zero_address_for(addr: SocketAddr) -> Value {
-    let family_len = std::mem::size_of::<libc::sa_family_t>();
     let raw_len = match addr {
-        SocketAddr::V4(_) => std::mem::size_of::<libc::sockaddr_in>() - family_len,
-        SocketAddr::V6(_) => std::mem::size_of::<libc::sockaddr_in6>() - family_len,
+        SocketAddr::V4(_) => socket_addr_payload_len_v4(),
+        SocketAddr::V6(_) => socket_addr_payload_len_v6(),
     };
     Value::cons(Value::fixnum(0), int_vector(&vec![0_i64; raw_len]))
+}
+
+fn socket_addr_payload_len_v4() -> usize {
+    cfg_select! {
+        unix => {
+            std::mem::size_of::<libc::sockaddr_in>() - std::mem::size_of::<libc::sa_family_t>()
+        }
+        _ => { 14 }
+    }
+}
+
+fn socket_addr_payload_len_v6() -> usize {
+    cfg_select! {
+        unix => {
+            std::mem::size_of::<libc::sockaddr_in6>() - std::mem::size_of::<libc::sa_family_t>()
+        }
+        _ => { 26 }
+    }
 }
 
 #[cfg(unix)]
@@ -3974,12 +3997,12 @@ impl ProcessManager {
     pub fn kill_process(&mut self, id: ProcessId) -> bool {
         if let Some(proc) = self.processes.get_mut(&id) {
             Self::unregister_process_poll_sources(self.wait_backend.poller(), proc);
-            kill_real_process_child(proc, libc::SIGKILL);
+            kill_real_process_child(proc, signal_kill_number());
             proc.tls_stream.take();
             proc.gnutls_initstage = GnutlsInitStage::Empty;
             proc.gnutls_boot_parameters = Value::NIL;
             proc.network_socket.take();
-            proc.status = process_status_signal_value(9);
+            proc.status = process_status_signal_value(signal_kill_number());
             true
         } else {
             false
@@ -4000,8 +4023,8 @@ impl ProcessManager {
             } else if proc.status_notify_pending && !proc.pending_terminal_status.is_nil() {
                 proc.status = proc.pending_terminal_status;
             } else if !process_status_is_exit_or_signal(&proc.status) {
-                kill_real_process_child(&mut proc, libc::SIGKILL);
-                proc.status = process_status_signal_value(9);
+                kill_real_process_child(&mut proc, signal_kill_number());
+                proc.status = process_status_signal_value(signal_kill_number());
             }
             proc.status_notify_pending = false;
             proc.pending_terminal_status = Value::NIL;
@@ -4032,8 +4055,8 @@ impl ProcessManager {
         if proc.kind != ProcessKind::Real || process_status_is_exit_or_signal(&proc.status) {
             return false;
         }
-        kill_real_process_child(proc, libc::SIGHUP);
-        proc.pending_terminal_status = process_status_signal_value(libc::SIGHUP);
+        kill_real_process_child(proc, signal_hup_number());
+        proc.pending_terminal_status = process_status_signal_value(signal_hup_number());
         proc.status_notify_pending = true;
         true
     }
@@ -6648,6 +6671,20 @@ fn kill_real_process_child(proc: &mut Process, signal_num: i32) {
     }
 }
 
+fn signal_hup_number() -> i32 {
+    cfg_select! {
+        unix => { libc::SIGHUP }
+        _ => { 1 }
+    }
+}
+
+fn signal_kill_number() -> i32 {
+    cfg_select! {
+        unix => { libc::SIGKILL }
+        _ => { 9 }
+    }
+}
+
 #[cfg(unix)]
 fn send_signal_to_pid(pid: i64, signal_num: i32) -> i32 {
     unsafe { libc::kill(pid as libc::pid_t, signal_num) }
@@ -6695,7 +6732,9 @@ fn signal_name_number(name: &str) -> Option<i32> {
         "VTALRM" => Some(libc::SIGVTALRM),
         "PROF" => Some(libc::SIGPROF),
         "WINCH" => Some(libc::SIGWINCH),
+        #[cfg(any(target_os = "linux", target_os = "android"))]
         "POLL" | "IO" => Some(libc::SIGPOLL),
+        #[cfg(any(target_os = "linux", target_os = "android"))]
         "PWR" => Some(libc::SIGPWR),
         "SYS" => Some(libc::SIGSYS),
         _ => realtime_signal_name_number(&name),
@@ -12174,7 +12213,7 @@ pub(crate) fn builtin_kill_process_impl(
         if proc.kind != ProcessKind::Real {
             return Err(signal_process_not_subprocess(proc));
         }
-        kill_real_process_child(proc, libc::SIGKILL);
+        kill_real_process_child(proc, signal_kill_number());
     }
     Ok(ret)
 }
@@ -12516,8 +12555,8 @@ fn process_attributes_pid_arg(value: Value) -> Result<i64, Flow> {
             let f = value.xfloat();
             if !f.is_finite()
                 || f.fract() != 0.0
-                || f < libc::pid_t::MIN as f64
-                || f > libc::pid_t::MAX as f64
+                || f < process_id_min() as f64
+                || f > process_id_max() as f64
             {
                 return Err(signal_process_attributes_pid_range_error());
             }
@@ -12525,10 +12564,24 @@ fn process_attributes_pid_arg(value: Value) -> Result<i64, Flow> {
         }
         _ => return Err(signal_wrong_type_numberp(value)),
     };
-    if pid < libc::pid_t::MIN as i64 || pid > libc::pid_t::MAX as i64 {
+    if pid < process_id_min() || pid > process_id_max() {
         return Err(signal_process_attributes_pid_range_error());
     }
     Ok(pid)
+}
+
+fn process_id_min() -> i64 {
+    cfg_select! {
+        unix => { libc::pid_t::MIN as i64 }
+        _ => { i32::MIN as i64 }
+    }
+}
+
+fn process_id_max() -> i64 {
+    cfg_select! {
+        unix => { libc::pid_t::MAX as i64 }
+        _ => { i32::MAX as i64 }
+    }
 }
 
 /// (make-process &rest ARGS) -> process-or-nil
@@ -14533,16 +14586,14 @@ pub(crate) fn make_network_process_subfeatures() -> Value {
     // Advertise only behavior that this runtime actually implements.  Packages
     // use `featurep' to choose code paths, so keep this list tied to backed
     // behavior, not parser acceptance.
-    Value::list(vec![
+    let mut features = vec![
         Value::keyword("nodelay"),
         Value::keyword("reuseaddr"),
-        Value::keyword("priority"),
         Value::keyword("oobinline"),
         Value::keyword("linger"),
         Value::keyword("keepalive"),
         Value::keyword("dontroute"),
         Value::keyword("broadcast"),
-        Value::keyword("bindtodevice"),
         Value::list(vec![Value::keyword("family"), Value::symbol("local")]),
         Value::list(vec![Value::keyword("family"), Value::symbol("ipv4")]),
         Value::list(vec![Value::keyword("family"), Value::symbol("ipv6")]),
@@ -14550,7 +14601,15 @@ pub(crate) fn make_network_process_subfeatures() -> Value {
         Value::list(vec![Value::keyword("server"), Value::T]),
         Value::list(vec![Value::keyword("nowait"), Value::T]),
         Value::list(vec![Value::keyword("type"), Value::symbol("datagram")]),
-    ])
+    ];
+    cfg_select! {
+        any(target_os = "linux", target_os = "android") => {
+            features.insert(2, Value::keyword("priority"));
+            features.insert(8, Value::keyword("bindtodevice"));
+        }
+        _ => {}
+    }
+    Value::list(features)
 }
 
 /// (set-binary-mode STREAM MODE) -> t

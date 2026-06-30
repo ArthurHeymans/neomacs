@@ -5340,14 +5340,28 @@ fn make_network_process_feature_advertisement_is_conservative() {
            (get 'make-network-process 'subfeatures)"#,
     );
 
-    assert_eq!(results[0], "OK (t t t t t t t t nil t t t t t t t t t)");
-    assert_eq!(
-        results[1],
-        "OK (:nodelay :reuseaddr :priority :oobinline :linger :keepalive :dontroute :broadcast :bindtodevice (:family local) (:family ipv4) (:family ipv6) (:service t) (:server t) (:nowait t) (:type datagram))"
-    );
+    let expected_featurep = cfg_select! {
+        any(target_os = "linux", target_os = "android") => {
+            "OK (t t t t t t t t nil t t t t t t t t t)"
+        }
+        _ => {
+            "OK (t t t t t t t t nil t t nil t nil t t t t)"
+        }
+    };
+    let expected_subfeatures = cfg_select! {
+        any(target_os = "linux", target_os = "android") => {
+            "OK (:nodelay :reuseaddr :priority :oobinline :linger :keepalive :dontroute :broadcast :bindtodevice (:family local) (:family ipv4) (:family ipv6) (:service t) (:server t) (:nowait t) (:type datagram))"
+        }
+        _ => {
+            "OK (:nodelay :reuseaddr :oobinline :linger :keepalive :dontroute :broadcast (:family local) (:family ipv4) (:family ipv6) (:service t) (:server t) (:nowait t) (:type datagram))"
+        }
+    };
+    assert_eq!(results[0], expected_featurep);
+    assert_eq!(results[1], expected_subfeatures);
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn set_network_process_option_applies_known_options_and_updates_contact_like_gnu() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(
@@ -5373,6 +5387,7 @@ fn set_network_process_option_applies_known_options_and_updates_contact_like_gnu
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn make_network_process_constructor_socket_options_are_applied_like_gnu() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(
@@ -5399,6 +5414,7 @@ fn make_network_process_constructor_socket_options_are_applied_like_gnu() {
 }
 
 #[test]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 fn set_network_process_option_rejects_bad_values_like_gnu() {
     crate::test_utils::init_test_tracing();
     let results = eval_all(
