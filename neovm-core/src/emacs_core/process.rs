@@ -5322,13 +5322,21 @@ impl super::eval::Context {
                     outcome.absorb(stderr_outcome);
                 }
 
-                // GNU separates the readable-fd wakeup from later process
-                // status notification.  After draining bytes, make a terminal
-                // child status visible to status accessors, but leave the
-                // sentinel/default status message for a later status-notify
-                // pass.  Running it here appends "Process ... finished" too
-                // early for short-lived filters like `cat'.
-                let _ = self.processes.check_child_exit(pid);
+                // GNU separates the readable pipe wakeup from later process
+                // status notification.  After draining pipe bytes, queue a
+                // terminal child status but leave the sentinel/default status
+                // message for a later status-notify pass.  PTY subprocesses are
+                // different: EOF and status commonly arrive with the same wait
+                // that reads the last bytes, and GNU publishes the terminal
+                // status/default sentinel before returning from that wait.
+                let is_pty_process = self
+                    .processes
+                    .get(pid)
+                    .is_some_and(|proc| proc.pty_child.is_some() || proc.pty_reader.is_some());
+                let exited = self.processes.check_child_exit(pid);
+                if exited && is_pty_process {
+                    let _ = self.run_process_status_notification(pid)?;
+                }
 
                 continue;
             }

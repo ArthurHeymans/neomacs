@@ -4216,6 +4216,34 @@ fn accept_process_output_keeps_status_pending_after_ready_output() {
 }
 
 #[test]
+fn accept_process_output_runs_pty_status_notification_after_output() {
+    crate::test_utils::init_test_tracing();
+    let echo = find_bin("echo");
+    let mut ev = Context::new();
+
+    let result = eval_one_in_context(
+        &mut ev,
+        &format!(
+            r#"(let ((buf (get-buffer-create " *apio-pty-finish*")))
+                 (set-buffer buf)
+                 (insert "preexisting")
+                 (let ((proc (make-process :name "apio-pty-finish"
+                                           :buffer buf
+                                           :command (list "{echo}" "process-output"))))
+                   (accept-process-output proc 1)
+                   (list (process-status proc)
+                         (buffer-string)
+                         (kill-buffer buf))))"#
+        ),
+    );
+
+    assert_eq!(
+        result,
+        "OK (exit \"preexistingprocess-output\n\nProcess apio-pty-finish finished\n\" t)"
+    );
+}
+
+#[test]
 fn process_live_p_loop_runs_pending_default_sentinel() {
     crate::test_utils::init_test_tracing();
     let printf = find_bin("printf");
