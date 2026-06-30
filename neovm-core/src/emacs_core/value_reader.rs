@@ -1585,15 +1585,15 @@ impl<'a> Reader<'a> {
                 push_scratch_gc_root(list);
                 let Some(items) = list_to_vec(&list) else {
                     restore_scratch_gc_roots(saved);
-                    return Err(self.error("#(: expected propertized string"));
+                    return Err(self.error("#"));
                 };
                 let Some((&string, rest)) = items.split_first() else {
                     restore_scratch_gc_roots(saved);
-                    return Err(self.error("#(: expected propertized string"));
+                    return Err(self.error("#"));
                 };
                 if !string.is_string() {
                     restore_scratch_gc_roots(saved);
-                    return Err(self.error("#(: first element must be a string"));
+                    return Err(self.error("#"));
                 }
                 if rest.len() % 3 != 0 {
                     restore_scratch_gc_roots(saved);
@@ -1615,15 +1615,22 @@ impl<'a> Reader<'a> {
                     };
                     if !(0 <= start && start <= end && end <= string_len) {
                         restore_scratch_gc_roots(saved);
-                        return Err(self.error("#(: string property range out of bounds"));
+                        // GNU read1 signals `args-out-of-range' with the START
+                        // and END of the offending interval (not an
+                        // invalid-read-syntax).
+                        return Err(self.signal_error(
+                            "args-out-of-range",
+                            vec![Value::fixnum(start), Value::fixnum(end)],
+                            "args-out-of-range",
+                        ));
                     }
                     let Some(plist_items) = list_to_vec(&chunk[2]) else {
                         restore_scratch_gc_roots(saved);
-                        return Err(self.error("#(: invalid string property list"));
+                        return Err(self.error("Invalid string property list"));
                     };
                     if plist_items.len() % 2 != 0 {
                         restore_scratch_gc_roots(saved);
-                        return Err(self.error("#(: invalid string property list"));
+                        return Err(self.error("Invalid string property list"));
                     }
                     runs.push(StringTextPropertyRun {
                         start: start as usize,
