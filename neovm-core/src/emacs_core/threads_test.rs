@@ -42,8 +42,11 @@ fn thread_lifecycle_created_running_finished() {
 
     mgr.finish_thread(id, Value::fixnum(42));
     assert_eq!(mgr.get_thread(id).unwrap().status, ThreadStatus::Finished);
-    assert!(!mgr.thread_alive_p(id));
+    assert!(mgr.thread_alive_p(id));
     assert_eq!(mgr.thread_result(id).as_int(), Some(42));
+
+    mgr.join_thread(id);
+    assert!(!mgr.thread_alive_p(id));
 }
 
 #[test]
@@ -77,6 +80,10 @@ fn all_thread_ids_excludes_finished_thread() {
     assert!(before_join.contains(&id));
 
     mgr.finish_thread(id, Value::fixnum(1));
+    let after_finish = mgr.all_thread_ids();
+    assert!(after_finish.contains(&id));
+
+    mgr.join_thread(id);
     let after_join = mgr.all_thread_ids();
     assert!(!after_join.contains(&id));
     assert!(after_join.contains(&0));

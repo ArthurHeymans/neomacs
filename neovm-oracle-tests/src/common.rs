@@ -188,6 +188,27 @@ const EVAL_PROGRAM_WITH_NORMALIZER: &str = r#"(condition-case err
     (progn
       (defun neovm--oracle-normalize-1 (v seen)
         (cond
+         ;; Opaque handles print with implementation-specific identities:
+         ;; GNU uses addresses for threads/mutexes/condition variables, while
+         ;; Neomacs uses simulated ids.  Normalize to stable semantic tokens
+         ;; before generic cons/vector traversal can copy Neomacs handles.
+         ((and (fboundp 'threadp) (threadp v))
+          (list :thread
+                (and (fboundp 'thread-name) (thread-name v))
+                (and (fboundp 'thread-live-p) (thread-live-p v))))
+         ((and (fboundp 'mutexp) (mutexp v))
+          (list :mutex
+                (and (fboundp 'mutex-name) (mutex-name v))))
+         ((and (fboundp 'condition-variable-p) (condition-variable-p v))
+          (list :condition-variable
+                (and (fboundp 'condition-name) (condition-name v))
+                (and (fboundp 'condition-mutex)
+                     (let ((m (condition-mutex v)))
+                       (and (fboundp 'mutexp)
+                            (mutexp m)
+                            (list :mutex
+                                  (and (fboundp 'mutex-name)
+                                       (mutex-name m))))))))
          ((and (functionp v) (eq (type-of v) 'interpreted-function))
           (let ((args (aref v 0))
                 (body (aref v 1))

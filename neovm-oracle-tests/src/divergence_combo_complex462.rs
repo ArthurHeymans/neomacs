@@ -5,7 +5,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx462_make_mutex_condvar() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (#<mutex test-mutex> void-function t t)""#]];
+    let expect = expect_test::expect![[r#""OK ((:mutex \"test-mutex\") void-function t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (condition-case e (make-mutex "test-mutex") (error (car e)))
       (condition-case e (make-condvar "test-cv") (error (car e)))
@@ -19,7 +19,7 @@ fn div_cx462_make_mutex_condvar() {
 fn div_cx462_thread_basic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (#<thread 0x555555ea5938> nil wrong-number-of-arguments void-function)""#
+        r#""OK ((:thread nil t) nil wrong-number-of-arguments void-function)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"(list (condition-case e (make-thread (lambda () "hello")) (error (car e)))

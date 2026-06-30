@@ -22,7 +22,7 @@ fn div_cx299_process_window_size_availability() {
 #[test]
 fn div_cx299_process_thread_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t #<thread 0x5555559c6020>)""#]];
+    let expect = expect_test::expect![[r#""OK (t (:thread nil t))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

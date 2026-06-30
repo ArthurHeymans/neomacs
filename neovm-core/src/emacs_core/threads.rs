@@ -244,11 +244,13 @@ impl ThreadManager {
         self.threads.get(&id)
     }
 
-    /// Check if a thread is alive (Created or Running).
+    /// Check if a thread is alive from Elisp's point of view.
     pub fn thread_alive_p(&self, id: u64) -> bool {
-        self.threads
-            .get(&id)
-            .is_some_and(|t| t.status == ThreadStatus::Created || t.status == ThreadStatus::Running)
+        self.threads.get(&id).is_some_and(|t| match t.status {
+            ThreadStatus::Created | ThreadStatus::Running => true,
+            ThreadStatus::Finished => !t.joined,
+            ThreadStatus::Signaled => false,
+        })
     }
 
     /// Get thread name.

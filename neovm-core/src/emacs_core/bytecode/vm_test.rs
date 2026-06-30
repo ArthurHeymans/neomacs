@@ -5775,9 +5775,9 @@ fn vm_thread_mutex_and_condition_builtins_use_shared_runtime() {
                   (threadp main)
                   (threadp worker)
                   (equal (thread-name worker) "vm-worker")
-                  (null (thread-live-p worker))
+                  (thread-live-p worker)
                   (consp (memq main threads-before))
-                  (null (memq worker threads-before))
+                  (consp (memq worker threads-before))
                   (null (thread-yield))
                   (null (thread-signal worker 'error '("oops")))
                   (condition-case err
