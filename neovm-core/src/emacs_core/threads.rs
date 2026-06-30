@@ -1138,6 +1138,15 @@ pub(crate) fn builtin_mutex_unlock(
             vec![Value::symbol("mutexp"), args[0]],
         ));
     }
+    // GNU `lisp_mutex_unlock` (thread.c:259-263) signals an error when the
+    // current thread does not own the mutex (including a never-locked mutex,
+    // whose owner is NULL). Match that instead of silently succeeding.
+    if !ctx.threads.mutex_owned_by_current_thread(id) {
+        return Err(signal(
+            "error",
+            vec![Value::string("Cannot unlock mutex owned by another thread")],
+        ));
+    }
     ctx.threads.mutex_unlock(id);
     Ok(Value::NIL)
 }
