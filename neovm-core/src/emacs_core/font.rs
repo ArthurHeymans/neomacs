@@ -409,6 +409,7 @@ fn face_from_font_value(value: &Value) -> Option<RuntimeFace> {
         return None;
     }
 
+    let font_spec = is_font_spec(value);
     let elems = value.as_vector_data().unwrap().clone();
     let mut face = RuntimeFace::new("default");
 
@@ -424,15 +425,27 @@ fn face_from_font_value(value: &Value) -> Option<RuntimeFace> {
         ValueKind::Symbol(id) => FontWidth::from_symbol(resolve_sym(id)),
         _ => None,
     });
-    face.height = font_vector_get_flexible(&elems, "height")
-        .or_else(|| font_vector_get_flexible(&elems, "size"))
-        .and_then(|value| match value.kind() {
-            ValueKind::Fixnum(n) if n > 0 => Some(FaceHeight::Absolute(n as i32)),
-            ValueKind::Float if value.xfloat() > 0.0 => Some(FaceHeight::Relative(value.xfloat())),
-            _ => None,
-        });
+    face.height = if let Some(value) = font_vector_get_flexible(&elems, "height") {
+        face_height_from_value(value)
+    } else if let Some(value) = font_vector_get_flexible(&elems, "size") {
+        if font_spec {
+            font_spec_size_to_face_height(value).and_then(face_height_from_value)
+        } else {
+            face_height_from_value(value)
+        }
+    } else {
+        None
+    };
 
     Some(face)
+}
+
+fn face_height_from_value(value: Value) -> Option<FaceHeight> {
+    match value.kind() {
+        ValueKind::Fixnum(n) if n > 0 => Some(FaceHeight::Absolute(n as i32)),
+        ValueKind::Float if value.xfloat() > 0.0 => Some(FaceHeight::Relative(value.xfloat())),
+        _ => None,
+    }
 }
 
 fn build_frame_font_object_from_resolution(
@@ -4252,6 +4265,14 @@ fn is_reset_like_face_attr_value(value: &Value) -> bool {
     })
 }
 
+fn font_spec_size_to_face_height(size: Value) -> Option<Value> {
+    match size.kind() {
+        ValueKind::Float if size.xfloat() > 0.0 => Some(Value::fixnum(10 * (size.xfloat() as i64))),
+        ValueKind::Fixnum(px) if px > 0 => Some(Value::fixnum(px * 10)),
+        _ => None,
+    }
+}
+
 fn derived_face_attrs_from_font_value(value: &Value) -> Vec<(LFaceAttr, Value)> {
     if !value.is_vector() {
         return Vec::new();
@@ -4260,6 +4281,7 @@ fn derived_face_attrs_from_font_value(value: &Value) -> Vec<(LFaceAttr, Value)> 
         return Vec::new();
     }
 
+    let font_spec = is_font_spec(value);
     let elems = value.as_vector_data().unwrap().clone();
     let mut derived = Vec::new();
 
@@ -4284,10 +4306,16 @@ fn derived_face_attrs_from_font_value(value: &Value) -> Vec<(LFaceAttr, Value)> 
         }
     }
 
-    if let Some(v) = font_vector_get_flexible(&elems, "height")
-        .or_else(|| font_vector_get_flexible(&elems, "size"))
-    {
+    if let Some(v) = font_vector_get_flexible(&elems, "height") {
         derived.push((LFaceAttr::Height, v));
+    } else if let Some(v) = font_vector_get_flexible(&elems, "size") {
+        if font_spec {
+            if let Some(height) = font_spec_size_to_face_height(v) {
+                derived.push((LFaceAttr::Height, height));
+            }
+        } else {
+            derived.push((LFaceAttr::Height, v));
+        }
     }
 
     derived

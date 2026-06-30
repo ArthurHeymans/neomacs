@@ -1770,6 +1770,55 @@ fn internal_set_lisp_face_attribute_font_object_derives_font_related_attrs() {
 }
 
 #[test]
+fn internal_set_lisp_face_attribute_default_font_spec_float_size_derives_absolute_height() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let font_spec = builtin_font_spec(vec![
+        Value::keyword("family"),
+        Value::string("Monospace"),
+        Value::keyword("size"),
+        Value::make_float(13.0),
+        Value::keyword("weight"),
+        Value::symbol("semi-light"),
+    ])
+    .expect("create font spec");
+
+    builtin_internal_set_lisp_face_attribute(
+        &mut eval,
+        vec![Value::symbol("default"), Value::keyword("font"), font_spec],
+    )
+    .expect("font-spec float :size should not become a relative default face height");
+
+    assert_eq!(
+        builtin_internal_get_lisp_face_attribute(
+            &mut eval,
+            vec![Value::symbol("default"), Value::keyword(":family"),]
+        )
+        .expect("default face family")
+        .as_utf8_str(),
+        Some("Monospace")
+    );
+    assert_eq!(
+        builtin_internal_get_lisp_face_attribute(
+            &mut eval,
+            vec![Value::symbol("default"), Value::keyword(":height"),]
+        )
+        .expect("default face height")
+        .as_int(),
+        Some(130)
+    );
+    assert_eq!(
+        builtin_internal_get_lisp_face_attribute(
+            &mut eval,
+            vec![Value::symbol("default"), Value::keyword(":weight"),]
+        )
+        .expect("default face weight")
+        .as_symbol_name(),
+        Some("semi-light")
+    );
+}
+
+#[test]
 fn internal_set_lisp_face_attribute_eval_uses_live_frame_font_parameter_for_default_face() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::Context::new();
