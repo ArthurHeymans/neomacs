@@ -86,7 +86,8 @@ fn div_j2_process_environment_option() {
   (let ((proc (make-process :name "probe-penv"
                             :command (list shell-file-name shell-command-switch "echo $PROBE_ENV_VAR")
                             :buffer buf
-                            :environment '("PROBE_ENV_VAR=testvalue"))))
+                            :environment '("PROBE_ENV_VAR=testvalue")
+                            :sentinel #'ignore)))
     (set-process-query-on-exit-flag proc nil)
     (accept-process-output proc 1))
   (with-current-buffer buf (buffer-string)))

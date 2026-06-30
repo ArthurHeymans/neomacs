@@ -3934,12 +3934,7 @@ impl ProcessManager {
     pub fn kill_process(&mut self, id: ProcessId) -> bool {
         if let Some(proc) = self.processes.get_mut(&id) {
             Self::unregister_process_poll_sources(self.wait_backend.poller(), proc);
-            if let Some(child) = proc.child.as_mut() {
-                let _ = child.kill();
-            }
-            if let Some(pty_child) = proc.pty_child.as_mut() {
-                let _ = pty_child.kill();
-            }
+            kill_real_process_child(proc, libc::SIGKILL);
             proc.tls_stream.take();
             proc.gnutls_initstage = GnutlsInitStage::Empty;
             proc.gnutls_boot_parameters = Value::NIL;
@@ -3964,12 +3959,7 @@ impl ProcessManager {
                 }
             } else if proc.status_notify_pending || !process_status_is_exit_or_signal(&proc.status)
             {
-                if let Some(child) = proc.child.as_mut() {
-                    let _ = child.kill();
-                }
-                if let Some(pty_child) = proc.pty_child.as_mut() {
-                    let _ = pty_child.kill();
-                }
+                kill_real_process_child(&mut proc, libc::SIGKILL);
                 proc.status = process_status_signal_value(9);
             }
             proc.status_notify_pending = false;
@@ -6292,6 +6282,18 @@ fn send_signal_to_process(proc: &Process, signal_num: i32) -> i32 {
     proc.os_pid
         .map(|pid| send_signal_to_pid(pid as i64, signal_num))
         .unwrap_or(-1)
+}
+
+fn kill_real_process_child(proc: &mut Process, signal_num: i32) {
+    if send_signal_to_process(proc, signal_num) == 0 {
+        return;
+    }
+    if let Some(child) = proc.child.as_mut() {
+        let _ = child.kill();
+    }
+    if let Some(pty_child) = proc.pty_child.as_mut() {
+        let _ = pty_child.kill();
+    }
 }
 
 #[cfg(unix)]
@@ -11561,12 +11563,7 @@ pub(crate) fn builtin_kill_process_impl(
         if proc.kind != ProcessKind::Real {
             return Err(signal_process_not_subprocess(proc));
         }
-        if let Some(child) = proc.child.as_mut() {
-            let _ = child.kill();
-        }
-        if let Some(pty_child) = proc.pty_child.as_mut() {
-            let _ = pty_child.kill();
-        }
+        kill_real_process_child(proc, libc::SIGKILL);
     }
     Ok(ret)
 }

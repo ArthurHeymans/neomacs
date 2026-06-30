@@ -156,7 +156,7 @@ fn divergence_two_sequential_processes() {
 fn divergence_call_process_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""INPUT DATA FOR CALLOK (nil nil)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "INPUT DATA FOR CALL")

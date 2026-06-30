@@ -327,7 +327,7 @@ fn div_cx28_overlay_evaporate_narrow_widen() {
 #[test]
 fn div_cx28_process_output_coding_system_after_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"café\" 4 5)""#]];
+    let expect = expect_test::expect![[r#""OK (\"café\nProcess neo-cx28-oc finished\n\" 34 35)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer

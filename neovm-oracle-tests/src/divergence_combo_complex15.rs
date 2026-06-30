@@ -107,7 +107,7 @@ fn div_cx15_set_transient_map_lookup() {
 #[test]
 fn div_cx15_process_buffer_sentinel_combined() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"pre:data\n\" :none)""#]];
+    let expect = expect_test::expect![[r#""OK (\"pre:data\n\" (:sentinel . \"finished\n\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx15-pbs*"))

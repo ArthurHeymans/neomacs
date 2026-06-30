@@ -334,25 +334,25 @@ fn divergence_num_processors_openmp_environment() {
   (equal (num-processors 'bogus) (num-processors t)))"#,
         expect,
     );
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument stringp cons)""#]];
+    let expect = expect_test::expect![[r#""OK 3""#]];
     crate::common::assert_oracle_parity_with_env_expect(
         r#"(num-processors)"#,
         &[("OMP_NUM_THREADS", "3"), ("OMP_THREAD_LIMIT", "0")],
         expect,
     );
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument stringp cons)""#]];
+    let expect = expect_test::expect![[r#""OK 2""#]];
     crate::common::assert_oracle_parity_with_env_expect(
         r#"(num-processors)"#,
         &[("OMP_NUM_THREADS", "3"), ("OMP_THREAD_LIMIT", "2")],
         expect,
     );
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument stringp cons)""#]];
+    let expect = expect_test::expect![[r#""OK 4""#]];
     crate::common::assert_oracle_parity_with_env_expect(
         r#"(num-processors)"#,
         &[("OMP_NUM_THREADS", " 4,8"), ("OMP_THREAD_LIMIT", "0")],
         expect,
     );
-    let expect = expect_test::expect![[r#""ERR (wrong-type-argument stringp cons)""#]];
+    let expect = expect_test::expect![[r#""OK 1""#]];
     crate::common::assert_oracle_parity_with_env_expect(
         r#"(num-processors)"#,
         &[("OMP_NUM_THREADS", "0"), ("OMP_THREAD_LIMIT", "1")],
