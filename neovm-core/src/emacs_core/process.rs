@@ -1643,6 +1643,19 @@ fn gnu_process_status_message(status: Value) -> String {
     }
 }
 
+fn gnu_process_status_message_for_process(proc: &Process) -> String {
+    if proc.kind == ProcessKind::Network
+        && ProcessStatusSymbol::from_status_value(proc.status) == Some(ProcessStatusSymbol::Exit)
+    {
+        return if process_status_code_value(proc.status) == 0 {
+            "deleted\n".to_string()
+        } else {
+            "connection broken by remote peer\n".to_string()
+        };
+    }
+    gnu_process_status_message(proc.status)
+}
+
 fn process_status_core_dumped_value(status: Value) -> bool {
     list_to_vec(&status)
         .and_then(|items| items.get(2).copied())
@@ -4934,7 +4947,7 @@ impl super::eval::Context {
         let message = match message {
             Some(message) => message,
             None => {
-                owned_message = gnu_process_status_message(status);
+                owned_message = gnu_process_status_message_for_process(proc);
                 &owned_message
             }
         };
@@ -5125,7 +5138,7 @@ impl super::eval::Context {
                     let exit_msg = self
                         .processes
                         .get(pid)
-                        .map(|p| gnu_process_status_message(p.status))
+                        .map(gnu_process_status_message_for_process)
                         .unwrap_or_else(|| "finished\n".to_string());
                     self.run_process_sentinel_callback(pid, sentinel, &exit_msg)?;
 
@@ -5224,7 +5237,7 @@ impl super::eval::Context {
         let exit_msg = self
             .processes
             .get(pid)
-            .map(|p| gnu_process_status_message(p.status))
+            .map(gnu_process_status_message_for_process)
             .unwrap_or_else(|| "finished\n".to_string());
         self.processes.clear_status_notify_pending(pid);
         self.run_process_sentinel_callback(pid, sentinel, &exit_msg)?;
@@ -9261,6 +9274,7 @@ pub(crate) fn builtin_make_network_process(
                     }
                     apply_connection_process_flags(proc, noquery, stop);
                 }
+                let notify_tls_open = tls_parameters.is_some();
                 if let Some(parameters) = tls_parameters.clone() {
                     upgrade_process_to_tls::<RustlsBackend>(
                         eval,
@@ -9276,7 +9290,7 @@ pub(crate) fn builtin_make_network_process(
                     .get(id)
                     .map(|p| p.sentinel)
                     .unwrap_or(Value::NIL);
-                if !stop {
+                if notify_tls_open && !stop {
                     eval.run_process_sentinel_callback(id, sentinel, "open\n")?;
                 }
                 return Ok(Value::make_process(id));
@@ -9572,15 +9586,6 @@ pub(crate) fn builtin_make_network_process(
 
                     eval.processes.register_socket_fd(id).ok();
 
-                    let sentinel = eval
-                        .processes
-                        .get(id)
-                        .map(|p| p.sentinel)
-                        .unwrap_or(Value::NIL);
-                    if !stop {
-                        eval.run_process_sentinel_callback(id, sentinel, "open\n")?;
-                    }
-
                     return Ok(Value::make_process(id));
                 }
 
@@ -9772,15 +9777,6 @@ pub(crate) fn builtin_make_network_process(
                 }
 
                 eval.processes.register_socket_fd(id).ok();
-
-                let sentinel = eval
-                    .processes
-                    .get(id)
-                    .map(|p| p.sentinel)
-                    .unwrap_or(Value::NIL);
-                if !stop {
-                    eval.run_process_sentinel_callback(id, sentinel, "open\n")?;
-                }
 
                 return Ok(Value::make_process(id));
             }
@@ -10101,15 +10097,6 @@ pub(crate) fn builtin_make_network_process(
 
                 eval.processes.register_socket_fd(id).ok();
 
-                let sentinel = eval
-                    .processes
-                    .get(id)
-                    .map(|p| p.sentinel)
-                    .unwrap_or(Value::NIL);
-                if !stop {
-                    eval.run_process_sentinel_callback(id, sentinel, "open\n")?;
-                }
-
                 return Ok(Value::make_process(id));
             }
 
@@ -10318,15 +10305,6 @@ pub(crate) fn builtin_make_network_process(
             }
 
             eval.processes.register_socket_fd(id).ok();
-
-            let sentinel = eval
-                .processes
-                .get(id)
-                .map(|p| p.sentinel)
-                .unwrap_or(Value::NIL);
-            if !stop {
-                eval.run_process_sentinel_callback(id, sentinel, "open\n")?;
-            }
 
             return Ok(Value::make_process(id));
         }
@@ -10707,6 +10685,7 @@ pub(crate) fn builtin_make_network_process(
         apply_connection_process_flags(proc, noquery, stop);
     }
 
+    let notify_tls_open = tls_parameters.is_some();
     if let Some(parameters) = tls_parameters {
         upgrade_process_to_tls::<RustlsBackend>(
             eval,
@@ -10719,14 +10698,12 @@ pub(crate) fn builtin_make_network_process(
 
     eval.processes.register_socket_fd(id).ok();
 
-    // Call sentinel with "open\n" to signal successful connection
-    // (GNU Emacs calls the sentinel when a network connection opens).
     let sentinel = eval
         .processes
         .get(id)
         .map(|p| p.sentinel)
         .unwrap_or(Value::NIL);
-    if !stop {
+    if notify_tls_open && !stop {
         eval.run_process_sentinel_callback(id, sentinel, "open\n")?;
     }
 
