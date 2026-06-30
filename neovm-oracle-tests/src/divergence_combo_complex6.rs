@@ -330,7 +330,7 @@ fn div_cx6_with_slots_oref_oset_chain() {
 fn div_cx6_process_connection_type_pipe_vs_pty() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""ERR (file-error \"Unknown connection type\" \"Not a directory\" t)""#
+        r#""ERR (file-missing \"Unknown connection type\" \"No such file or directory\" t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
