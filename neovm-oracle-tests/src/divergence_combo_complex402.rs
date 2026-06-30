@@ -33,14 +33,15 @@ fn div_cx402_face_remapping_add_relative() {
 #[test]
 fn div_cx402_process_buffer_output() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK \"hello from 402\n\nProcess neo-cx402-out killed\"""#]];
+    let expect = expect_test::expect![[r#""OK \"hello from 402\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx402-out*")))
   (let ((proc (make-process :name "neo-cx402-out"
                             :command '("sh" "-c" "echo hello from 402")
                             :connection-type 'pipe :buffer buf)))
+    (set-process-sentinel proc #'ignore)
+    (set-process-query-on-exit-flag proc nil)
     (accept-process-output proc 2)
     (delete-process proc))
   (prog1 (with-current-buffer buf

@@ -32,9 +32,7 @@ fn divergence_save_window_excursion_buffer_switch() {
 fn divergence_temp_buffer_insert_substring() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""ABCDEFGHIJOK ((\"rning\" nil nil) #(\"ABCDEFGHIJ\" 0 5 (face bold)))""#
-    ]];
+    let expect = expect_test::expect![[r#""ERR (args-out-of-range 3 8)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"ABCDEFGHIJ\")
@@ -56,7 +54,9 @@ fn divergence_buffer_list_ordering() {
 
     let expect = expect_test::expect![[r#""OK (3 t)""#]];
     crate::common::assert_oracle_parity_expect(
-        "(let* ((b1 (generate-new-buffer \"*test-bl-1*\"))
+        "(progn
+  (require 'cl-lib)
+  (let* ((b1 (generate-new-buffer \"*test-bl-1*\"))
         (b2 (generate-new-buffer \"*test-bl-2*\"))
         (b3 (generate-new-buffer \"*test-bl-3*\")))
   (with-current-buffer b1 (insert \"one\"))
@@ -70,7 +70,7 @@ fn divergence_buffer_list_ordering() {
     (kill-buffer b1)
     (kill-buffer b2)
     (kill-buffer b3)
-    (list (length order) (>= (length order) 3)))) ",
+    (list (length order) (>= (length order) 3))))) ",
         expect,
     );
 }

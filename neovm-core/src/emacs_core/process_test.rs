@@ -4379,6 +4379,54 @@ fn process_live_p_loop_runs_pending_default_sentinel() {
 }
 
 #[test]
+fn kill_buffer_hangups_attached_real_process() {
+    crate::test_utils::init_test_tracing();
+    let sh = find_bin("sh");
+    let mut ev = Context::new();
+
+    let result = eval_one_in_context(
+        &mut ev,
+        &format!(
+            r#"(let ((buf (get-buffer-create " *apio-kill-buffer-hup*"))
+                     (log nil))
+                 (let ((proc (make-process
+                              :name "apio-kill-buffer-hup"
+                              :buffer buf
+                              :command (list "{sh}" "-c" "read line")
+                              :connection-type 'pipe
+                              :sentinel
+                              (lambda (p e)
+                                (setq log
+                                      (cons (list e
+                                                  (process-status p)
+                                                  (buffer-live-p (process-buffer p)))
+                                            log))))))
+                   (set-process-query-on-exit-flag proc nil)
+                   (kill-buffer buf)
+                   (let ((i 0))
+                     (while (and (memq (process-status proc) '(run open listen connect stop))
+                                 (< i 20))
+                       (accept-process-output proc 0.05)
+                       (setq i (1+ i))))
+                   (prog1 (list (process-status proc)
+                                (memq (process-status proc) '(run open listen connect stop))
+                                (bufferp (process-buffer proc))
+                                (buffer-live-p (process-buffer proc))
+                                (marker-buffer (process-mark proc))
+                                log)
+                     (if (memq (process-status proc) '(run open listen connect stop))
+                         (delete-process proc)
+                       nil))))"#
+        ),
+    );
+
+    assert_eq!(
+        result,
+        "OK (signal nil t nil nil ((\"hangup\n\" signal nil)))"
+    );
+}
+
+#[test]
 fn accept_process_output_restores_current_buffer_and_match_data() {
     crate::test_utils::init_test_tracing();
     let echo = find_bin("echo");

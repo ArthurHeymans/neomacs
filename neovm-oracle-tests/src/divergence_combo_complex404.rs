@@ -170,6 +170,8 @@ fn div_cx404_process_coding_filter_multibyte() {
                             :command '("sh" "-c" "printf 'café\n世界\n'")
                             :connection-type 'pipe :buffer buf
                             :coding 'utf-8-unix)))
+    (set-process-sentinel proc #'ignore)
+    (set-process-query-on-exit-flag proc nil)
     (accept-process-output proc 2))
   (prog1 (with-current-buffer buf
            (string-trim-right (buffer-string)))

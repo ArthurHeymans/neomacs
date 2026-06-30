@@ -9,7 +9,9 @@ fn divergence_call_process_propertize_search() {
 
     let expect = expect_test::expect![[r#""OK (10 nil (#(\"10\" 0 2 (parity even)) even) nil)""#]];
     crate::common::assert_oracle_parity_expect(
-        "(with-temp-buffer
+        "(progn
+  (require 'cl-lib)
+  (with-temp-buffer
   (call-process \"seq\" nil t nil \"1\" \"10\")
   (goto-char 1)
   (while (re-search-forward \"[0-9]+\" nil t)
@@ -24,7 +26,7 @@ fn divergence_call_process_propertize_search() {
     (list (length (nreverse result))
           (= (length (nreverse result)) 10)
           (nth 0 (nreverse result))
-          (nth 1 (nreverse result))))) ",
+          (nth 1 (nreverse result)))))) ",
         expect,
     );
 }

@@ -620,6 +620,8 @@ pub(crate) fn builtin_kill_buffer(eval: &mut super::eval::Context, args: Vec<Val
         .kill_buffer_collect(id)
         .ok_or_else(|| signal("error", vec![Value::string("Buffer does not exist")]))?;
 
+    eval.kill_buffer_processes(id)?;
+
     // Ensure dead-buffer windows continue to point at a live fallback buffer.
     let scratch = if let Some(scratch) = eval.buffers.find_buffer_by_name("*scratch*") {
         scratch

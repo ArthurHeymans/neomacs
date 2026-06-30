@@ -243,6 +243,8 @@ fn div_cx43_process_output_multibyte_narrowed_buffer_coding_mega() {
     (narrow-to-region 1 4))
   (let ((p (make-process :name "neo-cx43-pm" :command '("printf" "%s" "café世界")
                          :buffer buf)))
+    (set-process-sentinel p #'ignore)
+    (set-process-query-on-exit-flag p nil)
     (set-process-coding-system p 'utf-8-unix 'utf-8-unix)
     (accept-process-output p 1))
   (prog1 (with-current-buffer buf

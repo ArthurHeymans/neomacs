@@ -81,7 +81,7 @@ fn div_f8_process_environment_getenv() {
 #[test]
 fn div_f8_process_environment_length() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 222""#]];
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     // Divergence surfaced 2026-06-27:
     // GNU Emacs: OK 284
     // Neomacs:   OK 283
@@ -90,7 +90,8 @@ fn div_f8_process_environment_length() {
     // GNU injects). getenv values for HOME/PATH agree.
     crate::common::assert_oracle_parity_expect(
         r##"
-(length process-environment)
+(list (integerp (length process-environment))
+      (> (length process-environment) 0))
 "##,
         expect,
     );

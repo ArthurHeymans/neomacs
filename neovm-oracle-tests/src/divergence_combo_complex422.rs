@@ -194,6 +194,8 @@ fn div_cx422_process_filter_modify_buffer() {
   (let ((proc (make-process :name "neo-cx422-pf"
                             :command '("echo" "hello")
                             :connection-type 'pipe :buffer buf)))
+    (set-process-sentinel proc #'ignore)
+    (set-process-query-on-exit-flag proc nil)
     (accept-process-output proc 2)
     (prog1 (with-current-buffer buf
              (string-trim-right (buffer-string)))

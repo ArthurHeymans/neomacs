@@ -50,8 +50,10 @@ fn div_cx457_start_process_sync() {
     let expect = expect_test::expect![[r#""OK \"test\"""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(with-temp-buffer
-  (start-process "cx457" (current-buffer) "echo" "test")
-  (accept-process-output (get-process "cx457") 2)
+  (let ((p (start-process "cx457" (current-buffer) "echo" "test")))
+    (set-process-sentinel p #'ignore)
+    (set-process-query-on-exit-flag p nil)
+    (accept-process-output p 2))
   (string-trim-right (buffer-string)))"##,
         expect,
     );

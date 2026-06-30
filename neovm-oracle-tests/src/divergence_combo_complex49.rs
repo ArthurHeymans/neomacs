@@ -90,6 +90,8 @@ fn div_cx49_process_output_decode_encode_roundtrip_through_buffer_mega() {
 (let ((buf (get-buffer-create " *neo-cx49-rt*")))
   (let ((p (make-process :name "neo-cx49-rt" :command '("printf" "%s" "café世界")
                          :buffer buf)))
+    (set-process-sentinel p #'ignore)
+    (set-process-query-on-exit-flag p nil)
     (set-process-coding-system p 'utf-8-unix 'utf-8-unix)
     (accept-process-output p 1))
   (with-current-buffer buf

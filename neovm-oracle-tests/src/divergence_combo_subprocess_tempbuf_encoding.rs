@@ -97,7 +97,7 @@ fn divergence_shell_command_multibyte() {
 fn divergence_call_process_with_multibyte_input() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Input: éàù dataOK (nil nil 11)""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil 11)""#]];
     crate::common::assert_oracle_parity_expect(
         r#"(progn
   (insert "Input: \xc3\xa9\xc3\xa0\xc3\xb9 data")

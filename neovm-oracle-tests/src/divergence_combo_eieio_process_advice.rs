@@ -163,6 +163,7 @@ fn deficiency_defstruct_propertize_undo() {
     let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
+         (require 'cl-lib)\n\
          (cl-defstruct (point3d (:constructor mk-pt3)) x y z)\n\
          (let ((buf (generate-new-buffer \"pt3\"))\n\
          (p (mk-pt3 :x 1 :y 2 :z 3)))\n\
@@ -290,6 +291,7 @@ fn deficiency_cl_loop_hash_marker_buf() {
     let expect = expect_test::expect![[r#""ERR (void-variable buf)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn\n\
+         (require 'cl-lib)\n\
          (let ((buf (generate-new-buffer \"clh\"))\n\
          (tbl (make-hash-table :test 'equal)))\n\
          (with-current-buffer buf\n\

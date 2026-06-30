@@ -4017,6 +4017,27 @@ impl ProcessManager {
         }
     }
 
+    pub(crate) fn process_ids_for_buffer(&self, buffer_id: BufferId) -> Vec<ProcessId> {
+        let buffer = Value::make_buffer(buffer_id);
+        self.processes
+            .iter()
+            .filter_map(|(id, proc)| (proc.buffer == buffer).then_some(*id))
+            .collect()
+    }
+
+    pub(crate) fn hangup_real_process_for_buffer_kill(&mut self, id: ProcessId) -> bool {
+        let Some(proc) = self.processes.get_mut(&id) else {
+            return false;
+        };
+        if proc.kind != ProcessKind::Real || process_status_is_exit_or_signal(&proc.status) {
+            return false;
+        }
+        kill_real_process_child(proc, libc::SIGHUP);
+        proc.pending_terminal_status = process_status_signal_value(libc::SIGHUP);
+        proc.status_notify_pending = true;
+        true
+    }
+
     /// GNU `remove_process` for an already-terminated process (called from
     /// `status_notify` when `delete-exited-processes' is non-nil): drop the
     /// process from the live process table (so `get-process'/`process-list' no
@@ -4787,6 +4808,33 @@ impl super::eval::Context {
     fn delete_exited_processes_enabled(&self) -> bool {
         self.visible_variable_value_or_nil("delete-exited-processes")
             .is_truthy()
+    }
+
+    pub(crate) fn kill_buffer_processes(&mut self, buffer_id: BufferId) -> Result<(), Flow> {
+        for id in self.processes.process_ids_for_buffer(buffer_id) {
+            let Some(kind) = self.processes.get(id).map(|proc| proc.kind) else {
+                continue;
+            };
+            if kind == ProcessKind::Real {
+                self.processes.hangup_real_process_for_buffer_kill(id);
+                continue;
+            }
+
+            let was_live = self.processes.get(id).is_some();
+            let was_terminal = self
+                .processes
+                .get(id)
+                .is_some_and(|proc| process_status_is_terminal_for_notify(&proc.status));
+            let was_pending_notification = self
+                .processes
+                .get(id)
+                .is_some_and(|proc| proc.status_notify_pending);
+            self.processes.delete_process(id);
+            if was_live && (!was_terminal || was_pending_notification) {
+                self.notify_process_status_sentinel(id, None, false)?;
+            }
+        }
+        Ok(())
     }
 
     pub(crate) fn service_pending_timers_with_wait_policy(

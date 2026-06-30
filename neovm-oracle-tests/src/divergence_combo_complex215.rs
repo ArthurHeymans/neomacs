@@ -247,7 +247,9 @@ fn div_cx215_mega_5_all_subsystem_final_chaos_record_eieio_hash_coding_process_t
     let expect = expect_test::expect![[r#""ERR (void-variable weak-ht)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
-(let ((timer-fired nil)
+(progn
+  (require 'cl-lib)
+  (let ((timer-fired nil)
       (env-val (let ((process-environment (cons "NEO_CX215=v3" process-environment)))
                  (string-trim (shell-command-to-string "echo $NEO_CX215"))))
       (exit-code (let ((p (make-process :name "neo-cx215-final-ec"
@@ -300,7 +302,7 @@ fn div_cx215_mega_5_all_subsystem_final_chaos_record_eieio_hash_coding_process_t
               (list snapshot
                     (buffer-live-p buf)
                     (hash-table-count ht)
-                    (aref rec 2)))))))))
+                    (aref rec 2))))))))))
 "##,
         expect,
     );

@@ -26,9 +26,7 @@ fn div_cx40_narrow_word_movement_subword_mega() {
 #[test]
 fn div_cx40_process_coding_narrow_output_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"PRcafé\n\nProcess neo-cx40-pc finished\n\" \"PRcafé\n\nProcess neo-cx40-pc finished\nE\n\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (\"PRcafé\n\" \"PRcafé\nE\n\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((buf (get-buffer-create " *neo-cx40-pc*")))
@@ -37,6 +35,8 @@ fn div_cx40_process_coding_narrow_output_mega() {
     (narrow-to-region 1 3))
   (let ((p (make-process :name "neo-cx40-pc" :command '("echo" "café")
                          :buffer buf)))
+    (set-process-sentinel p #'ignore)
+    (set-process-query-on-exit-flag p nil)
     (set-process-coding-system p 'utf-8-unix 'utf-8-unix)
     (accept-process-output p 1))
   (prog1 (with-current-buffer buf
@@ -148,7 +148,7 @@ fn div_cx40_fileio_coding_markers_undo_mega() {
 #[test]
 fn div_cx40_timer_process_sentinel_filter_mega() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (:t 5 nil)""#]];
+    let expect = expect_test::expect![[r#""OK (:t 5 0)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (timer-fired sentinel-ev filter-data)
@@ -157,7 +157,10 @@ fn div_cx40_timer_process_sentinel_filter_mega() {
                          :buffer nil
                          :filter (lambda (proc str) (setq filter-data str))
                          :sentinel (lambda (proc event) (setq sentinel-ev event)))))
-    (accept-process-output p 2))
+    (let ((i 0))
+      (while (and (not sentinel-ev) (< i 40))
+        (accept-process-output p 0.05)
+        (setq i (1+ i)))))
   (list timer-fired
         (if filter-data (length filter-data) nil)
         (if sentinel-ev (string-match "finished" sentinel-ev) nil)))

@@ -204,6 +204,8 @@ fn div_cx32_process_buffer_with_invisible_text_output() {
     (put-text-property 1 5 'invisible t))
   (let ((p (make-process :name "neo-cx32-it" :command '("echo" "output")
                          :buffer buf)))
+    (set-process-sentinel p #'ignore)
+    (set-process-query-on-exit-flag p nil)
     (accept-process-output p 1))
   (prog1 (with-current-buffer buf (buffer-string))
     (kill-buffer buf)))

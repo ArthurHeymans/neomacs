@@ -278,7 +278,12 @@ fn div_cx27_process_buffer_string_after_multiple_writes() {
   (with-current-buffer buf (erase-buffer))
   (let ((p (make-process :name "neo-cx27-pb" :command '("printf" "%s" "hello\nworld")
                          :buffer buf)))
-    (accept-process-output p 1))
+    (set-process-query-on-exit-flag p nil)
+    (let ((i 0))
+      (while (and (memq (process-status p) '(run open listen connect stop))
+                  (< i 20))
+        (accept-process-output p 0.05)
+        (setq i (1+ i)))))
   (prog1 (with-current-buffer buf
            (list (buffer-string) (count-lines 1 (point-max))))
     (kill-buffer buf)))

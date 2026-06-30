@@ -31,9 +31,8 @@ fn divergence_json_like_parsing() {
 fn divergence_csv_processing_edit() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[
-        r#""name,age,city\nAlice,30,NYC\nBob,25,LA\nCarol,35,ChicagoOK (\"name,age,city\" 3 (\"name\" \"age\" \"city\") t)""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK (\"name,age,city\" 3 (\"name\" \"age\" \"city\") t)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"name,age,city\\nAlice,30,NYC\\nBob,25,LA\\nCarol,35,Chicago\")

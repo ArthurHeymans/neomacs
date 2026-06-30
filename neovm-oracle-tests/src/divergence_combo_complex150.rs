@@ -225,9 +225,7 @@ fn div_cx150_mega_advice_kmacro_register_window_config_buflocal() {
 #[test]
 fn div_cx150_mega_subprocess_marker_overlay_textprop_undo_narrow_env_exitcode_timer_weak_hash() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""ERR (error \"`let' bindings can have only one value-form\" exit-code (let ((p (make-process :name \"neo-cx150-final-ec\" :command '(\"sh\" \"-c\" \"exit 5\"))) (weak-ht (make-hash-table :weakness 'key :test 'eq)))) (puthash (cons 1 nil) :v weak-ht) (garbage-collect) (accept-process-output p 2) (process-exit-status p))""#
-    ]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((timer-fired nil)
@@ -235,7 +233,8 @@ fn div_cx150_mega_subprocess_marker_overlay_textprop_undo_narrow_env_exitcode_ti
                  (string-trim (shell-command-to-string "echo $NEO_CX150"))))
       (exit-code (let ((p (make-process :name "neo-cx150-final-ec"
                                           :command '("sh" "-c" "exit 5")))
-                       (weak-ht (make-hash-table :weakness 'key :test 'eq))))
+                       (weak-ht (make-hash-table :weakness 'key :test 'eq)))
+        (set-process-query-on-exit-flag p nil)
         (puthash (cons 1 nil) :v weak-ht)
         (garbage-collect)
         (accept-process-output p 2)
@@ -251,6 +250,8 @@ fn div_cx150_mega_subprocess_marker_overlay_textprop_undo_narrow_env_exitcode_ti
     (let ((p (make-process :name "neo-cx150-final-p"
                            :command '("sh" "-c" "printf 'FINAL'")
                            :buffer buf)))
+      (set-process-sentinel p #'ignore)
+      (set-process-query-on-exit-flag p nil)
       (set-process-coding-system p 'utf-8-unix 'utf-8-unix)
       (accept-process-output p 1)
       (sit-for 0.05))

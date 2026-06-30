@@ -225,14 +225,19 @@ fn div_cx423_eval_after_load() {
 #[test]
 fn div_cx423_process_send_string() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[r#""OK t""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "neo-cx423-pss"
                           :command '("sh" "-c" "read line; echo ok")
                           :connection-type 'pipe :buffer nil)))
+  (set-process-query-on-exit-flag proc nil)
   (process-send-string proc "data\n")
-  (accept-process-output proc 2)
+  (let ((i 0))
+    (while (and (memq (process-status proc) '(run open listen connect stop))
+                (< i 40))
+      (accept-process-output proc 0.05)
+      (setq i (1+ i))))
   (let ((status (process-status proc)))
     (delete-process proc)
     (eq status 'exit)))

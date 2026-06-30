@@ -151,6 +151,8 @@ fn div_cx543_process_send_string_deep() {
     crate::common::assert_oracle_parity(
         r##"(let ((buf (get-buffer-create " *cx543-ss*")))
   (let ((p (make-process :name "cx543-ss" :command '("cat") :connection-type 'pipe :buffer buf)))
+    (set-process-sentinel p #'ignore)
+    (set-process-query-on-exit-flag p nil)
     (process-send-string p "test\n")
     (process-send-eof p)
     (accept-process-output p 2)

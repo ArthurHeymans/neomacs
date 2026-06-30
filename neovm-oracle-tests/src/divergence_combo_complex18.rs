@@ -30,19 +30,28 @@ fn div_cx18_write_region_visit_arg_content() {
 #[test]
 fn div_cx18_process_exit_and_buffer_content() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"done\n\nProcess neo-cx18-pe exited abnormally with code 3\n\" t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (exit 3 \"done\n\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
-(let ((buf (get-buffer-create " *neo-cx18-pe*")))
+(let ((buf (get-buffer-create " *neo-cx18-pe*"))
+      result)
   (with-current-buffer buf (erase-buffer))
   (let ((p (make-process :name "neo-cx18-pe" :command '("sh" "-c" "echo done; exit 3")
                          :buffer buf)))
-    (accept-process-output p 2))
-  (prog1 (list (with-current-buffer buf (buffer-string))
-               (with-current-buffer buf (buffer-modified-p)))
-    (kill-buffer buf)))
+    (set-process-sentinel p #'ignore)
+    (set-process-query-on-exit-flag p nil)
+    (let ((i 0))
+      (while (and (memq (process-status p) '(run open listen connect stop))
+                  (< i 40))
+        (accept-process-output p 0.05)
+        (setq i (1+ i))))
+    (setq result
+          (list (process-status p)
+                (process-exit-status p)
+                (with-current-buffer buf (buffer-string))
+                (with-current-buffer buf (buffer-modified-p)))))
+  (kill-buffer buf)
+  result)
 "##,
         expect,
     );

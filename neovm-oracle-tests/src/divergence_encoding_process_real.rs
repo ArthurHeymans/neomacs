@@ -7,7 +7,7 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn divergence_encode_decode_region() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
-    let expect = expect_test::expect![[r#""Hello WorldOK (\"Hello World\" 11)""#]];
+    let expect = expect_test::expect![[r#""OK (\"Hello World\" 11)""#]];
     crate::common::assert_oracle_parity_expect(
         "(progn
   (insert \"Hello World\")

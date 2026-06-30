@@ -117,6 +117,11 @@ fn div_j0_process_stderr_separate_buffer() {
                             :buffer outbuf
                             :stderr errbuf)))
     (set-process-query-on-exit-flag proc nil)
+    (set-process-sentinel proc #'ignore)
+    (let ((stderr-proc (get-buffer-process errbuf)))
+      (when stderr-proc
+        (set-process-query-on-exit-flag stderr-proc nil)
+        (set-process-sentinel stderr-proc #'ignore)))
     (accept-process-output proc 1)
     (list (with-current-buffer outbuf (buffer-string))
           (with-current-buffer errbuf (buffer-string)))))

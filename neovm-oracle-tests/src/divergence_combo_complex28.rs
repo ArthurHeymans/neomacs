@@ -327,12 +327,15 @@ fn div_cx28_overlay_evaporate_narrow_widen() {
 #[test]
 fn div_cx28_process_output_coding_system_after_set() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (\"café\nProcess neo-cx28-oc finished\n\" 34 35)""#]];
+    let expect = expect_test::expect![[r#""OK (\"café\" 4 5)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (with-temp-buffer
   (let ((p (make-process :name "neo-cx28-oc" :command '("printf" "caf\\303\\251")
                          :buffer (current-buffer))))
+    ;; The default sentinel is a process-status timing artifact; this case is
+    ;; about decoding after `set-process-coding-system`.
+    (set-process-sentinel p #'ignore)
     (set-process-coding-system p 'utf-8-unix 'utf-8-unix)
     (accept-process-output p 1))
   (list (buffer-string) (length (buffer-string)) (string-bytes (buffer-string))))
