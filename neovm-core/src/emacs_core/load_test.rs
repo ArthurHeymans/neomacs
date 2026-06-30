@@ -434,7 +434,7 @@ fn raw_context_seeds_gnu_callproc_program_name_variables() {
         ("ctags-program-name", "ctags"),
         ("etags-program-name", "etags"),
         ("hexl-program-name", "hexl"),
-        ("emacsclient-program-name", "emacsclient"),
+        ("emacsclient-program-name", "neomacsclient"),
         ("movemail-program-name", "movemail"),
         ("ebrowse-program-name", "ebrowse"),
         ("rcs2log-program-name", "rcs2log"),

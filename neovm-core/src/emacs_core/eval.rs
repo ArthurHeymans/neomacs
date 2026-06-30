@@ -3237,11 +3237,14 @@ impl Context {
         obarray.make_special("process-environment");
         obarray.set_symbol_value("initial-environment", Value::NIL);
         obarray.make_special("initial-environment");
+        // GNU uses "emacsclient" here because the matching client is part of
+        // its installation.  Neomacs must advertise the client it owns, so
+        // package probes do not accidentally select a host GNU emacsclient.
         for (name, program) in [
             ("ctags-program-name", "ctags"),
             ("etags-program-name", "etags"),
             ("hexl-program-name", "hexl"),
-            ("emacsclient-program-name", "emacsclient"),
+            ("emacsclient-program-name", "neomacsclient"),
             ("movemail-program-name", "movemail"),
             ("ebrowse-program-name", "ebrowse"),
             ("rcs2log-program-name", "rcs2log"),

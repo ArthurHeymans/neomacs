@@ -4623,12 +4623,16 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         eval.obarray.make_special("exec-suffixes");
         eval.obarray.make_special("exec-directory");
         // GNU callproc.c: syms_of_callproc defines these Lisp variables
-        // before Lisp files read them as defcustom defaults.
+        // before Lisp files read them as defcustom defaults.  GNU sets
+        // `emacsclient-program-name` to "emacsclient" because it ships a
+        // matching lib-src/emacsclient.  Neomacs ships `neomacsclient`;
+        // advertising the GNU name makes packages pick a host GNU client
+        // that can pass version probes but fail against a Neomacs server.
         for (name, program) in [
             ("ctags-program-name", "ctags"),
             ("etags-program-name", "etags"),
             ("hexl-program-name", "hexl"),
-            ("emacsclient-program-name", "emacsclient"),
+            ("emacsclient-program-name", "neomacsclient"),
             ("movemail-program-name", "movemail"),
             ("ebrowse-program-name", "ebrowse"),
             ("rcs2log-program-name", "rcs2log"),

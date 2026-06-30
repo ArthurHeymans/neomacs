@@ -98,7 +98,7 @@ mkdir -p "$pkg_dir/usr/share/icons/hicolor/128x128/apps"
 mkdir -p "$pkg_dir/usr/share/doc/neomacs"
 
 install -m 0755 "$release_tree/bin/neomacs" "$pkg_dir/usr/bin/neomacs"
-for bin in neomacs-temacs bootstrap-neomacs mock-display; do
+for bin in neomacsclient neomacs-temacs bootstrap-neomacs mock-display; do
   if [[ -x "$release_tree/bin/$bin" ]]; then
     install -m 0755 "$release_tree/bin/$bin" "$pkg_dir/usr/bin/$bin"
   fi

@@ -69,7 +69,7 @@ fi
 
 release_dir="$repo_root/target/release"
 
-for required in "$release_dir/neomacs" "$release_dir/neomacs.pdump"; do
+for required in "$release_dir/neomacs" "$release_dir/neomacsclient" "$release_dir/neomacs.pdump"; do
   if [[ ! -f "$required" ]]; then
     echo "missing required release artifact: $required" >&2
     echo "run cargo xtask fresh-build --release first, or pass --skip-build" >&2
@@ -83,7 +83,7 @@ mkdir -p "$app_bundle/Contents/MacOS"
 mkdir -p "$app_bundle/Contents/Resources/neomacs"
 mkdir -p "$app_bundle/Contents/Frameworks"
 
-for binary in neomacs neomacs-temacs bootstrap-neomacs mock-display; do
+for binary in neomacs neomacsclient neomacs-temacs bootstrap-neomacs mock-display; do
   if [[ -f "$release_dir/$binary" ]]; then
     install -m 0755 "$release_dir/$binary" "$app_bundle/Contents/MacOS/$binary"
   fi

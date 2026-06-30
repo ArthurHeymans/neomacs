@@ -106,7 +106,7 @@ install -d "$payload/usr/share/doc/neomacs"
 
 install -m 0755 "$release_tree/bin/neomacs" "$payload/usr/bin/neomacs"
 extra_bin_files=""
-for bin in neomacs-temacs bootstrap-neomacs mock-display; do
+for bin in neomacsclient neomacs-temacs bootstrap-neomacs mock-display; do
   if [[ -x "$release_tree/bin/$bin" ]]; then
     install -m 0755 "$release_tree/bin/$bin" "$payload/usr/bin/$bin"
     extra_bin_files="${extra_bin_files}/usr/bin/${bin}
