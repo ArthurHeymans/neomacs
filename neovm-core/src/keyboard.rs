@@ -5332,12 +5332,15 @@ impl crate::emacs_core::eval::Context {
                 Value::NIL
             },
         );
-        let last_kbd_macro = self
-            .command_loop
-            .last_kbd_macro()
-            .map(|events| Value::vector(events.to_vec()))
-            .unwrap_or(Value::NIL);
-        self.assign("last-kbd-macro", last_kbd_macro);
+        // GNU stores the recorded macro directly in the variable cell
+        // (KVAR(current_kboard, Vlast_kbd_macro) IS `last-kbd-macro'). Only
+        // publish when a macro was actually recorded; otherwise leave the
+        // variable alone so a user `(setq last-kbd-macro ...)' is preserved
+        // (running a macro must not reset it to nil).
+        if let Some(events) = self.command_loop.last_kbd_macro() {
+            let last_kbd_macro = Value::vector(events.to_vec());
+            self.assign("last-kbd-macro", last_kbd_macro);
+        }
         let executing_kbd_macro = self
             .command_loop
             .keyboard
