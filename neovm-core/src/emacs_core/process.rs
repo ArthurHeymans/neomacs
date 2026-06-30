@@ -725,6 +725,9 @@ pub struct Process {
     pub kind: ProcessKind,
     pub proc_type: Value,
     pub status: Value,
+    /// Terminal status has been recorded, but GNU-style status notification
+    /// (sentinel/default buffer message and optional reaping) still needs to run.
+    pub status_notify_pending: bool,
     pub buffer: Value,
     pub childp: Value,
     /// Queued input entries `(STRING . (OFFSET . LENGTH))`, matching GNU's `write_queue`.
@@ -1542,17 +1545,21 @@ fn process_status_from_exit(status: &std::process::ExitStatus) -> Value {
     {
         use std::os::unix::process::ExitStatusExt;
         if let Some(sig) = status.signal() {
-            return process_status_signal_value(sig);
+            return process_status_signal_value_with_core(sig, status.core_dumped());
         }
     }
     process_status_exit_value(1)
 }
 
 fn process_status_signal_value(signal_num: i32) -> Value {
+    process_status_signal_value_with_core(signal_num, false)
+}
+
+fn process_status_signal_value_with_core(signal_num: i32, core_dumped: bool) -> Value {
     Value::list(vec![
         Value::symbol("signal"),
         Value::fixnum(signal_num as i64),
-        Value::NIL,
+        if core_dumped { Value::T } else { Value::NIL },
     ])
 }
 
@@ -1624,10 +1631,22 @@ fn gnu_process_status_message(status: Value) -> String {
         Some(ProcessStatusSymbol::Signal) | Some(ProcessStatusSymbol::Stop) => {
             let code = process_status_code_value(status);
             let desc = signal_description(code as i32);
-            format!("{desc}\n")
+            let suffix = if process_status_core_dumped_value(status) {
+                " (core dumped)\n"
+            } else {
+                "\n"
+            };
+            format!("{desc}{suffix}")
         }
-        _ => "finished\n".to_string(),
+        Some(symbol) => symbol.name().to_string(),
+        None => "finished\n".to_string(),
     }
+}
+
+fn process_status_core_dumped_value(status: Value) -> bool {
+    list_to_vec(&status)
+        .and_then(|items| items.get(2).copied())
+        .is_some_and(|value| value.is_truthy())
 }
 
 /// strsignal description with the first character down-cased, matching GNU's
@@ -1951,6 +1970,20 @@ fn process_status_allows_send(status: &Value) -> bool {
 
 fn process_status_is_connect(status: &Value) -> bool {
     ProcessStatusSymbol::from_status_value(*status) == Some(ProcessStatusSymbol::Connect)
+}
+
+fn process_status_is_terminal_for_notify(status: &Value) -> bool {
+    matches!(
+        ProcessStatusSymbol::from_status_value(*status),
+        Some(ProcessStatusSymbol::Exit | ProcessStatusSymbol::Signal | ProcessStatusSymbol::Closed)
+    )
+}
+
+fn process_status_is_exit_or_signal(status: &Value) -> bool {
+    matches!(
+        ProcessStatusSymbol::from_status_value(*status),
+        Some(ProcessStatusSymbol::Exit | ProcessStatusSymbol::Signal)
+    )
 }
 
 fn process_status_has_readable_process_io(status: &Value) -> bool {
@@ -3073,6 +3106,7 @@ impl ProcessManager {
             kind,
             proc_type,
             status: process_status_run_value(),
+            status_notify_pending: false,
             buffer,
             childp,
             write_queue: Value::NIL,
@@ -3599,13 +3633,21 @@ impl ProcessManager {
     /// Check if a child process has exited and update its status.
     /// Returns true if the process exited (status changed).
     pub fn check_child_exit(&mut self, id: ProcessId) -> bool {
+        let Some(status) = self.poll_child_exit_status(id) else {
+            return false;
+        };
+        self.set_child_exit_status_pending(id, status);
+        true
+    }
+
+    fn poll_child_exit_status(&mut self, id: ProcessId) -> Option<Value> {
         let proc = match self.processes.get_mut(&id) {
             Some(p) => p,
-            None => return false,
+            None => return None,
         };
 
         if !process_status_is_run(&proc.status) {
-            return false;
+            return None;
         }
 
         // PTY child path.
@@ -3615,32 +3657,35 @@ impl ProcessManager {
                     // Preserve the real exit code and signal-death status, as GNU
                     // does (status_notify decodes WIFSIGNALED/WEXITSTATUS); the
                     // previous `success ? 0 : 1` collapsed every failure to 1.
-                    proc.status = process_status_from_pty_exit(&status);
-                    return true;
+                    return Some(process_status_from_pty_exit(&status));
                 }
-                Ok(None) => return false,
-                Err(_) => {
-                    proc.status = process_status_exit_value(1);
-                    return true;
-                }
+                Ok(None) => return None,
+                Err(_) => return Some(process_status_exit_value(1)),
             }
         }
 
         // Pipe child path.
         let child = match proc.child.as_mut() {
             Some(c) => c,
-            None => return false,
+            None => return None,
         };
         match child.try_wait() {
-            Ok(Some(status)) => {
-                proc.status = process_status_from_exit(&status);
-                true
-            }
-            Ok(None) => false, // Still running
-            Err(_) => {
-                proc.status = process_status_exit_value(1);
-                true
-            }
+            Ok(Some(status)) => Some(process_status_from_exit(&status)),
+            Ok(None) => None, // Still running
+            Err(_) => Some(process_status_exit_value(1)),
+        }
+    }
+
+    fn set_child_exit_status_pending(&mut self, id: ProcessId, status: Value) {
+        if let Some(proc) = self.processes.get_mut(&id) {
+            proc.status = status;
+            proc.status_notify_pending = true;
+        }
+    }
+
+    fn clear_status_notify_pending(&mut self, id: ProcessId) {
+        if let Some(proc) = self.processes.get_mut(&id) {
+            proc.status_notify_pending = false;
         }
     }
 
@@ -3889,17 +3934,29 @@ impl ProcessManager {
     pub fn delete_process(&mut self, id: ProcessId) -> bool {
         if let Some(mut proc) = self.processes.remove(&id) {
             Self::unregister_process_poll_sources(self.wait_backend.poller(), &proc);
-            if let Some(child) = proc.child.as_mut() {
-                let _ = child.kill();
+            if matches!(
+                proc.kind,
+                ProcessKind::Network | ProcessKind::Pipe | ProcessKind::Serial
+            ) {
+                if !process_status_is_terminal_for_notify(&proc.status) {
+                    proc.status = process_status_exit_value(0);
+                }
+            } else if proc.status_notify_pending || !process_status_is_exit_or_signal(&proc.status)
+            {
+                if let Some(child) = proc.child.as_mut() {
+                    let _ = child.kill();
+                }
+                if let Some(pty_child) = proc.pty_child.as_mut() {
+                    let _ = pty_child.kill();
+                }
+                proc.status = process_status_signal_value(9);
             }
-            if let Some(pty_child) = proc.pty_child.as_mut() {
-                let _ = pty_child.kill();
-            }
+            proc.status_notify_pending = false;
+
             proc.tls_stream.take();
             proc.gnutls_initstage = GnutlsInitStage::Empty;
             proc.gnutls_boot_parameters = Value::NIL;
             proc.network_socket.take();
-            proc.status = process_status_signal_value(9);
             self.deleted_processes.insert(id, proc);
             true
         } else {
@@ -4023,6 +4080,9 @@ impl ProcessManager {
         self.processes
             .iter()
             .filter(|(_, p)| {
+                if p.status_notify_pending {
+                    return true;
+                }
                 if !process_has_readable_process_io(p) {
                     return false;
                 }
@@ -4858,6 +4918,36 @@ impl super::eval::Context {
         )
     }
 
+    fn notify_process_status_sentinel(
+        &mut self,
+        pid: ProcessId,
+        message: Option<&str>,
+        reap_terminal: bool,
+    ) -> Result<(), Flow> {
+        let Some(proc) = self.processes.get_any(pid) else {
+            return Ok(());
+        };
+        let sentinel = proc.sentinel;
+        let status = proc.status;
+        let terminal = process_status_is_terminal_for_notify(&status);
+        let owned_message;
+        let message = match message {
+            Some(message) => message,
+            None => {
+                owned_message = gnu_process_status_message(status);
+                &owned_message
+            }
+        };
+
+        self.run_process_sentinel_callback(pid, sentinel, message)?;
+
+        if reap_terminal && terminal && self.delete_exited_processes_enabled() {
+            self.processes.reap_exited_process(pid);
+        }
+
+        Ok(())
+    }
+
     fn run_process_log_callback(
         &mut self,
         log: Value,
@@ -4940,6 +5030,15 @@ impl super::eval::Context {
         let mut outcome = ProcessOutputServiceOutcome::default();
 
         for pid in proc_ids {
+            let is_target = target_process.map_or(true, |target| target == pid);
+            if self
+                .processes
+                .get(pid)
+                .is_some_and(|process| process.status_notify_pending)
+            {
+                self.run_process_status_notification(pid, is_target, &mut outcome)?;
+                continue;
+            }
             if self
                 .processes
                 .get(pid)
@@ -4954,8 +5053,6 @@ impl super::eval::Context {
                 continue;
             }
 
-            let is_target = target_process.map_or(true, |target| target == pid);
-            let mut exited = self.processes.check_child_exit(pid);
             for event in self.processes.accept_network_server_connections(pid) {
                 outcome.record_activity(is_target);
                 self.run_process_log_callback(
@@ -5006,6 +5103,9 @@ impl super::eval::Context {
                         .map(|p| p.filter)
                         .unwrap_or(Value::NIL);
                     self.run_process_filter_callback(pid, filter, data)?;
+                    if let Some(status) = self.processes.poll_child_exit_status(pid) {
+                        self.processes.set_child_exit_status_pending(pid, status);
+                    }
                 }
                 ProcessOutputRead::Eof if is_stderr_pipe => {
                     outcome.record_activity(is_target);
@@ -5064,66 +5164,82 @@ impl super::eval::Context {
                 _ => {}
             }
 
-            // GNU's wait request can observe process output and terminal status
-            // in the same wake cycle. Re-check after reading so short-lived
-            // children that exit immediately after flushing output do not
-            // defer their sentinel to a second accept-process-output call.
-            if !exited {
-                exited = self.processes.check_child_exit(pid);
-            }
+            // GNU keeps subprocess exit bookkeeping separate from output
+            // readiness: a wait that wakes for output reads and filters that
+            // output, then returns; the later status-notify pass reports the
+            // terminal state and runs the sentinel.  Probing `try_wait` here
+            // would collapse those two GNU wakeups and make short-lived
+            // children report "finished" too eagerly.
+            let exited = if matches!(read_result, ProcessOutputRead::Data(ref data) if !data.is_empty())
+            {
+                false
+            } else {
+                self.processes.check_child_exit(pid)
+            };
 
             if exited {
-                outcome.record_activity(is_target);
-
-                // GNU `status_notify` (process.c) drains ALL remaining output
-                // from a terminated process before reporting its status and
-                // (when `delete-exited-processes' is non-nil) removing it from
-                // `Vprocess_alist'.  Mirror the drain here so trailing bytes
-                // buffered in the pipe after the child exited are not lost when
-                // the process is reaped below.
-                loop {
-                    match self.processes.read_process_output_result(pid) {
-                        ProcessOutputRead::Data(ref data) if !data.is_empty() => {
-                            let filter = self
-                                .processes
-                                .get(pid)
-                                .map(|p| p.filter)
-                                .unwrap_or(Value::NIL);
-                            self.run_process_filter_callback(pid, filter, data)?;
-                        }
-                        ProcessOutputRead::Data(_)
-                        | ProcessOutputRead::WouldBlock
-                        | ProcessOutputRead::Eof
-                        | ProcessOutputRead::NoSource => break,
-                    }
-                }
-
-                let sentinel = self
-                    .processes
-                    .get(pid)
-                    .map(|p| p.sentinel)
-                    .unwrap_or(Value::NIL);
-                let exit_msg = self
-                    .processes
-                    .get(pid)
-                    .map(|p| gnu_process_status_message(p.status))
-                    .unwrap_or_else(|| "finished\n".to_string());
-                self.run_process_sentinel_callback(pid, sentinel, &exit_msg)?;
-
-                // GNU `status_notify`: a terminated process (status exit/signal/
-                // closed) is removed from `Vprocess_alist' when
-                // `delete-exited-processes' is non-nil (its default), so that
-                // `get-process'/`process-list' no longer return it.  The process
-                // object itself stays alive for any binding that still holds it
-                // (e.g. `process-status' on the value), which neomacs models by
-                // moving it into the deleted-process table that `get_any' reads.
-                if self.delete_exited_processes_enabled() {
-                    self.processes.reap_exited_process(pid);
-                }
+                self.run_process_status_notification(pid, is_target, &mut outcome)?;
             }
         }
 
         Ok(outcome)
+    }
+
+    fn run_process_status_notification(
+        &mut self,
+        pid: ProcessId,
+        is_target: bool,
+        outcome: &mut ProcessOutputServiceOutcome,
+    ) -> Result<(), Flow> {
+        outcome.record_activity(is_target);
+
+        // GNU `status_notify` (process.c) drains ALL remaining output from a
+        // terminated process before reporting its status and (when
+        // `delete-exited-processes' is non-nil) removing it from
+        // `Vprocess_alist'.  Mirror the drain here so trailing bytes buffered
+        // in the pipe after the child exited are not lost when the process is
+        // reaped below.
+        loop {
+            match self.processes.read_process_output_result(pid) {
+                ProcessOutputRead::Data(ref data) if !data.is_empty() => {
+                    let filter = self
+                        .processes
+                        .get(pid)
+                        .map(|p| p.filter)
+                        .unwrap_or(Value::NIL);
+                    self.run_process_filter_callback(pid, filter, data)?;
+                }
+                ProcessOutputRead::Data(_)
+                | ProcessOutputRead::WouldBlock
+                | ProcessOutputRead::Eof
+                | ProcessOutputRead::NoSource => break,
+            }
+        }
+
+        let sentinel = self
+            .processes
+            .get(pid)
+            .map(|p| p.sentinel)
+            .unwrap_or(Value::NIL);
+        let exit_msg = self
+            .processes
+            .get(pid)
+            .map(|p| gnu_process_status_message(p.status))
+            .unwrap_or_else(|| "finished\n".to_string());
+        self.processes.clear_status_notify_pending(pid);
+        self.run_process_sentinel_callback(pid, sentinel, &exit_msg)?;
+
+        // GNU `status_notify`: a terminated process (status exit/signal/closed)
+        // is removed from `Vprocess_alist' when `delete-exited-processes' is
+        // non-nil (its default), so that `get-process'/`process-list' no longer
+        // return it. The process object itself stays alive for any binding that
+        // still holds it (e.g. `process-status' on the value), which neomacs
+        // models by moving it into the deleted-process table that `get_any`
+        // reads.
+        if self.delete_exited_processes_enabled() {
+            self.processes.reap_exited_process(pid);
+        }
+        Ok(())
     }
 }
 
@@ -6155,6 +6271,23 @@ fn parse_signal_number(value: &Value) -> Result<i32, Flow> {
             }
         }
     }
+}
+
+fn send_signal_to_process(proc: &Process, signal_num: i32) -> i32 {
+    proc.os_pid
+        .map(|pid| send_signal_to_pid(pid as i64, signal_num))
+        .unwrap_or(-1)
+}
+
+#[cfg(unix)]
+fn send_signal_to_pid(pid: i64, signal_num: i32) -> i32 {
+    unsafe { libc::kill(pid as libc::pid_t, signal_num) }
+}
+
+#[cfg(not(unix))]
+fn send_signal_to_pid(pid: i64, signal_num: i32) -> i32 {
+    let _ = signal_num;
+    if pid_exists(pid) { 0 } else { -1 }
 }
 
 #[cfg(unix)]
@@ -7554,12 +7687,7 @@ pub(crate) fn builtin_internal_default_interrupt_process_impl(
             return Err(signal_process_not_subprocess(proc));
         }
         #[cfg(unix)]
-        if let Some(ref child) = proc.child {
-            unsafe {
-                libc::kill(child.id() as i32, libc::SIGINT);
-            }
-        }
-        proc.status = process_status_signal_value(2);
+        let _ = send_signal_to_process(proc, libc::SIGINT);
     }
     Ok(ret)
 }
@@ -7595,9 +7723,11 @@ pub(crate) fn builtin_internal_default_signal_process_impl(
                 if proc.kind != ProcessKind::Real {
                     return Err(signal_cannot_signal_process(proc));
                 }
-                proc.status = process_status_signal_value(signal_num);
+                return Ok(Value::fixnum(
+                    send_signal_to_process(proc, signal_num) as i64
+                ));
             }
-            Ok(Value::fixnum(0))
+            Ok(Value::fixnum(-1))
         }
         SignalProcessTarget::MissingNamedProcess => Ok(Value::NIL),
         SignalProcessTarget::Pid(pid) => Ok(Value::fixnum(if pid_exists(pid) { 0 } else { -1 })),
@@ -11190,7 +11320,38 @@ pub(crate) fn builtin_delete_process(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_delete_process_impl(&mut eval.processes, &eval.buffers, args)
+    if args.len() > 1 {
+        return Err(signal(
+            "wrong-number-of-arguments",
+            vec![
+                Value::symbol("delete-process"),
+                Value::fixnum(args.len() as i64),
+            ],
+        ));
+    }
+    let id = if let Some(process) = args.first() {
+        if process.as_symbol_name() == Some("message") {
+            resolve_get_process_designator_in_state(&eval.processes, &eval.buffers, &Value::NIL)?
+        } else {
+            resolve_get_process_designator_in_state(&eval.processes, &eval.buffers, process)?
+        }
+    } else {
+        resolve_optional_process_or_current_buffer_in_state(&eval.processes, &eval.buffers, None)?
+    };
+    let was_live = eval.processes.get(id).is_some();
+    let was_terminal = eval
+        .processes
+        .get(id)
+        .is_some_and(|proc| process_status_is_terminal_for_notify(&proc.status));
+    let was_pending_notification = eval
+        .processes
+        .get(id)
+        .is_some_and(|proc| proc.status_notify_pending);
+    eval.processes.delete_process(id);
+    if was_live && (!was_terminal || was_pending_notification) {
+        eval.notify_process_status_sentinel(id, None, false)?;
+    }
+    Ok(Value::NIL)
 }
 
 pub(crate) fn builtin_delete_process_impl(
@@ -11225,7 +11386,29 @@ pub(crate) fn builtin_continue_process(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_continue_process_impl(&mut eval.processes, &eval.buffers, args)
+    if args.len() > 2 {
+        return Err(signal(
+            "wrong-number-of-arguments",
+            vec![
+                Value::symbol("continue-process"),
+                Value::fixnum(args.len() as i64),
+            ],
+        ));
+    }
+    let (id, _) = resolve_optional_process_with_explicit_return_in_state(
+        &mut eval.processes,
+        &eval.buffers,
+        args.first(),
+    )?;
+    let ret = builtin_continue_process_impl(&mut eval.processes, &eval.buffers, args)?;
+    if eval
+        .processes
+        .get_any(id)
+        .is_some_and(|proc| proc.kind == ProcessKind::Real && process_status_is_run(&proc.status))
+    {
+        eval.notify_process_status_sentinel(id, Some("run"), false)?;
+    }
+    Ok(ret)
 }
 
 pub(crate) fn builtin_continue_process_impl(
@@ -11311,14 +11494,8 @@ pub(crate) fn builtin_interrupt_process_impl(
         if proc.kind != ProcessKind::Real {
             return Err(signal_process_not_subprocess(proc));
         }
-        // Send SIGINT to actual child process.
         #[cfg(unix)]
-        if let Some(ref child) = proc.child {
-            unsafe {
-                libc::kill(child.id() as i32, libc::SIGINT);
-            }
-        }
-        proc.status = process_status_signal_value(2);
+        let _ = send_signal_to_process(proc, libc::SIGINT);
     }
     Ok(ret)
 }
@@ -11351,11 +11528,12 @@ pub(crate) fn builtin_kill_process_impl(
         if proc.kind != ProcessKind::Real {
             return Err(signal_process_not_subprocess(proc));
         }
-        // Kill the actual child process.
         if let Some(child) = proc.child.as_mut() {
             let _ = child.kill();
         }
-        proc.status = process_status_signal_value(9);
+        if let Some(pty_child) = proc.pty_child.as_mut() {
+            let _ = pty_child.kill();
+        }
     }
     Ok(ret)
 }
@@ -11415,17 +11593,11 @@ pub(crate) fn builtin_signal_process_impl(
                 if proc.kind != ProcessKind::Real {
                     return Err(signal_cannot_signal_process(proc));
                 }
-                // Send actual OS signal to child process.
-                #[cfg(unix)]
-                if let Some(ref child) = proc.child {
-                    let pid = child.id() as i32;
-                    unsafe {
-                        libc::kill(pid, signal_num);
-                    }
-                }
-                proc.status = process_status_signal_value(signal_num);
+                return Ok(Value::fixnum(
+                    send_signal_to_process(proc, signal_num) as i64
+                ));
             }
-            Ok(Value::fixnum(0))
+            Ok(Value::fixnum(-1))
         }
         SignalProcessTarget::MissingNamedProcess => Ok(Value::NIL),
         SignalProcessTarget::Pid(pid) => {
@@ -12033,10 +12205,6 @@ impl AcceptProcessOutputRequest {
 
     fn services_only_target_process_output(self) -> bool {
         self.just_this_one
-    }
-
-    fn target_process_for_follow_up(self) -> Option<ProcessId> {
-        self.target_process
     }
 }
 
@@ -13034,58 +13202,9 @@ pub(crate) fn builtin_accept_process_output(
     };
 
     match eval.wait_for_process_output(request.wait)? {
-        ProcessOutputWaitOutcome::ProcessActivity => {
-            accept_process_output_run_target_follow_up(eval, request)?;
-            Ok(Value::T)
-        }
+        ProcessOutputWaitOutcome::ProcessActivity => Ok(Value::T),
         ProcessOutputWaitOutcome::NoProcessActivity => Ok(Value::NIL),
     }
-}
-
-fn accept_process_output_run_target_follow_up(
-    eval: &mut super::eval::Context,
-    request: AcceptProcessOutputRequest,
-) -> Result<(), Flow> {
-    let Some(target_id) = request.target_process_for_follow_up() else {
-        return Ok(());
-    };
-
-    // GNU's wait_reading_process_output keeps a target-process
-    // accept-process-output call alive for a minimum follow-up cycle after
-    // reading bytes, so a child that exits immediately after flushing output
-    // can run its sentinel before we return.
-    let mut idle_follow_up_polls = 0usize;
-    loop {
-        let events = eval.processes.wait_for_process_events(Duration::ZERO);
-        let target_activity = if events.has_ready_processes() {
-            eval.service_process_output_wait_source_events_have_target_process_activity(
-                request.wait,
-                events,
-            )?
-        } else {
-            eval.service_process_output_wait_once_has_target_process_activity(request.wait)?
-        };
-        if target_activity {
-            idle_follow_up_polls = 0;
-            continue;
-        }
-
-        let target_still_running = eval
-            .processes
-            .get(target_id)
-            .is_some_and(process_has_readable_process_io);
-        if !target_still_running {
-            break;
-        }
-
-        idle_follow_up_polls += 1;
-        if idle_follow_up_polls >= 4 {
-            break;
-        }
-        std::thread::yield_now();
-    }
-
-    Ok(())
 }
 
 /// (get-process NAME) -> process-or-nil
