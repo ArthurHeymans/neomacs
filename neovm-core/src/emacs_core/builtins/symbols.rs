@@ -346,6 +346,13 @@ pub(crate) fn builtin_internal_define_uninitialized_variable(
         )?;
     }
 
+    // GNU `Finternal__define_uninitialized_variable` (eval.c:913) calls
+    // LOADHIST_ATTACH(symbol), recording the bare defvar/defconst symbol on
+    // current-load-list so it appears in the file's `load-history` entry.
+    // `loadhist_attach` self-guards on file-load context, so this is a no-op
+    // outside a load.
+    eval.loadhist_attach(args[0]);
+
     Ok(Value::NIL)
 }
 
