@@ -3273,14 +3273,26 @@ impl crate::emacs_core::eval::Context {
                     .push_key_sequence_input_event(emacs_event);
                 self.publish_current_key_sequence_as_command_keys();
 
-                self.record_input_event(emacs_event);
-                // GNU `keyboard.c:11635-11640` stores the latest raw key
-                // sequence event into `last_nonmenu_event` for ordinary
-                // command dispatch, only preserving an earlier mouse event
-                // when the command came from a mouse popup menu. neomacs does
-                // not synthesize mouse-menu command sequences yet, so keep the
-                // latest raw event here for keyboard/TTY dispatch.
-                self.record_nonmenu_input_event(emacs_event);
+                // GNU `record_char' (keyboard.c) does not push events that come
+                // from a keyboard macro into recent-keys: it is guarded by
+                // `NILP (Vexecuting_kbd_macro)'. So `recent-keys' reflects only
+                // real input, not the replayed macro events.
+                if self
+                    .command_loop
+                    .keyboard
+                    .kboard
+                    .executing_kbd_macro
+                    .is_none()
+                {
+                    self.record_input_event(emacs_event);
+                    // GNU `keyboard.c:11635-11640` stores the latest raw key
+                    // sequence event into `last_nonmenu_event` for ordinary
+                    // command dispatch, only preserving an earlier mouse event
+                    // when the command came from a mouse popup menu. neomacs does
+                    // not synthesize mouse-menu command sequences yet, so keep
+                    // the latest raw event here for keyboard/TTY dispatch.
+                    self.record_nonmenu_input_event(emacs_event);
+                }
 
                 tracing::debug!(
                     "read_key_sequence: event={} starting translation",

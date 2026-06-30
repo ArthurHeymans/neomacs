@@ -184,7 +184,12 @@ fn execute_kbd_macro_events_with_runtime_state(
     count: i64,
     loopfunc: Value,
 ) -> EvalResult {
-    eval.with_executing_kbd_macro_runtime(macro_events.to_vec(), |eval| {
+    // GNU restores the invoking command's key sequence after running a macro,
+    // so the executed macro events do not leak into `this-command-keys'
+    // (`Fexecute_kbd_macro' saves/restores the command-loop key state). Snapshot
+    // it here and restore afterwards.
+    let saved_command_keys = eval.read_command_keys().to_vec();
+    let result = eval.with_executing_kbd_macro_runtime(macro_events.to_vec(), |eval| {
         let mut repeat = count;
         let mut success_count = 0usize;
         loop {
@@ -211,7 +216,9 @@ fn execute_kbd_macro_events_with_runtime_state(
         }
 
         Ok(Value::NIL)
-    })
+    });
+    eval.set_read_command_keys(saved_command_keys);
+    result
 }
 
 fn start_kbd_macro_impl(
