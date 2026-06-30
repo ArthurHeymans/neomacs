@@ -107,15 +107,33 @@ pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
             y,
             modifiers,
             target_frame_id,
+            pixel_precise,
             ..
-        } => Some(KbInputEvent::MouseScroll {
-            delta_x: *delta_x,
-            delta_y: *delta_y,
-            x: *x,
-            y: *y,
-            modifiers: keyboard::render_modifiers_to_modifiers(*modifiers),
-            target_frame_id: *target_frame_id,
-        }),
+        } => {
+            let modifiers = keyboard::render_modifiers_to_modifiers(*modifiers);
+            if *pixel_precise {
+                // Trackpad pixel-precise → smooth scroll (Phase 1, T4): applied as a
+                // sub-line vscroll by the layout pass, not a discrete wheel event.
+                Some(KbInputEvent::PixelScroll {
+                    delta_x: *delta_x,
+                    delta_y: *delta_y,
+                    x: *x,
+                    y: *y,
+                    modifiers,
+                    target_frame_id: *target_frame_id,
+                })
+            } else {
+                // Mouse wheel → discrete wheel event (existing mwheel behavior).
+                Some(KbInputEvent::MouseScroll {
+                    delta_x: *delta_x,
+                    delta_y: *delta_y,
+                    x: *x,
+                    y: *y,
+                    modifiers,
+                    target_frame_id: *target_frame_id,
+                })
+            }
+        }
         DisplayEvent::MenuSelection { index } => {
             Some(KbInputEvent::MenuSelection { index: *index })
         }

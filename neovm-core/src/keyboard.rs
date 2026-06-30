@@ -5651,6 +5651,22 @@ impl crate::emacs_core::eval::Context {
             .map_or(0.0, |(f, d)| if f == target_frame_id { d } else { 0.0 });
         self.pending_pixel_scroll = Some((target_frame_id, acc + delta_y));
     }
+
+    /// Smooth scroll (Phase 1): take the pending trackpad pixel-scroll delta if it
+    /// targets `frame`, clearing it; returns the accumulated `delta_y`. The layout
+    /// pass converts it to pixels and applies it via `Engine::pixel_scroll_window`.
+    pub fn take_pending_pixel_scroll_for_frame(
+        &mut self,
+        frame: crate::window::FrameId,
+    ) -> Option<f32> {
+        match self.pending_pixel_scroll {
+            Some((tf, delta)) if tf == frame.0 => {
+                self.pending_pixel_scroll = None;
+                Some(delta)
+            }
+            _ => None,
+        }
+    }
 }
 
 #[cfg(test)]
