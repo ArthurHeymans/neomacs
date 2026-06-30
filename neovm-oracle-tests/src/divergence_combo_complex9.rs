@@ -181,6 +181,10 @@ fn div_cx9_set_process_coding_then_output_multibyte() {
 (with-temp-buffer
   (let ((p (make-process :name "neo-cx9-spc" :command '("printf" "%s" "café世界")
                          :buffer (current-buffer))))
+    ;; The default sentinel can race with the first `accept-process-output` in
+    ;; GNU and nondeterministically append the process-finished message here.
+    ;; This case is about explicit process decoding, so suppress sentinel text.
+    (set-process-sentinel p #'ignore)
     (set-process-coding-system p 'utf-8-unix 'utf-8-unix)
     (accept-process-output p 1)
     (list (buffer-string) (string-bytes (buffer-string)) (length (buffer-string)))))

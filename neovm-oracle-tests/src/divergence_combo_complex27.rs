@@ -389,6 +389,9 @@ fn div_cx27_process_send_string_then_query_buffer_size() {
 (with-temp-buffer
   (let ((p (make-process :name "neo-cx27-ss" :command '("cat")
                          :buffer (current-buffer) :connection-type 'pipe)))
+    ;; This case asserts bytes echoed through the process, not default sentinel
+    ;; timing.  GNU can append the default finished message in the same wait.
+    (set-process-sentinel p #'ignore)
     (process-send-string p "exactly 30 characters....\n")
     (process-send-eof p)
     (accept-process-output p 1))

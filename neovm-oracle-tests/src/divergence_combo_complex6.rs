@@ -44,6 +44,9 @@ fn div_cx6_set_process_coding_system_output() {
 (with-temp-buffer
   (let ((p (make-process :name "neo-cx6-pc" :command '("echo" "hello")
                          :buffer (current-buffer))))
+    ;; The default sentinel can be delivered in the same wait on GNU.  This
+    ;; case only asserts explicit process-output decoding.
+    (set-process-sentinel p #'ignore)
     (set-process-coding-system p 'utf-8-unix 'utf-8-unix)
     (accept-process-output p 1))
   (buffer-string))

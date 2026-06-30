@@ -4244,6 +4244,112 @@ fn accept_process_output_runs_pty_status_notification_after_output() {
 }
 
 #[test]
+fn accept_process_output_defers_pty_status_after_explicit_coding() {
+    crate::test_utils::init_test_tracing();
+    let echo = find_bin("echo");
+    let mut ev = Context::new();
+
+    let result = eval_one_in_context(
+        &mut ev,
+        &format!(
+            r#"(let ((buf (get-buffer-create " *apio-pty-coding*")))
+                 (set-buffer buf)
+                 (let ((proc (make-process :name "apio-pty-coding"
+                                           :buffer buf
+                                           :command (list "{echo}" "hello"))))
+                   (set-process-query-on-exit-flag proc nil)
+                   (set-process-coding-system proc 'utf-8-unix 'utf-8-unix)
+                   (accept-process-output proc 1)
+                   (prog1 (list (process-status proc) (buffer-string))
+                     (kill-buffer buf))))"#
+        ),
+    );
+
+    assert_eq!(result, "OK (run \"hello\n\")");
+}
+
+#[test]
+fn accept_process_output_decodes_multibyte_before_explicit_coding_status() {
+    crate::test_utils::init_test_tracing();
+    let printf = find_bin("printf");
+    let mut ev = Context::new();
+
+    let result = eval_one_in_context(
+        &mut ev,
+        &format!(
+            r#"(let ((buf (get-buffer-create " *apio-pty-coding-mb*")))
+                 (set-buffer buf)
+                 (let ((proc (make-process :name "apio-pty-coding-mb"
+                                           :buffer buf
+                                           :command (list "{printf}" "%s" "café世界"))))
+                   (set-process-query-on-exit-flag proc nil)
+                   (set-process-coding-system proc 'utf-8-unix 'utf-8-unix)
+                   (accept-process-output proc 1)
+                   (prog1 (list (buffer-string)
+                                (string-bytes (buffer-string))
+                                (length (buffer-string)))
+                     (kill-buffer buf))))"#
+        ),
+    );
+
+    assert_eq!(result, "OK (\"café世界\" 11 6)");
+}
+
+#[test]
+fn accept_process_output_with_temp_buffer_defers_explicit_coding_status() {
+    crate::test_utils::init_test_tracing();
+    let echo = find_bin("echo");
+    let mut ev = Context::new();
+
+    let result = eval_one_in_context(
+        &mut ev,
+        &format!(
+            r#"(let ((buf (get-buffer-create " *apio-pty-coding-temp*")))
+                 (set-buffer buf)
+                 (let ((proc (make-process :name "apio-pty-coding-temp"
+                                           :buffer (current-buffer)
+                                           :command (list "{echo}" "hello"))))
+                   (set-process-query-on-exit-flag proc nil)
+                   (set-process-coding-system proc 'utf-8-unix 'utf-8-unix)
+                   (accept-process-output proc 1))
+                 (prog1 (buffer-string)
+                   (kill-buffer buf)))"#
+        ),
+    );
+
+    assert_eq!(result, "OK \"hello\n\"");
+}
+
+#[test]
+fn second_accept_process_output_publishes_deferred_explicit_coding_status() {
+    crate::test_utils::init_test_tracing();
+    let echo = find_bin("echo");
+    let mut ev = Context::new();
+
+    let result = eval_one_in_context(
+        &mut ev,
+        &format!(
+            r#"(let ((buf (get-buffer-create " *apio-pty-coding-second*")))
+                 (set-buffer buf)
+                 (let ((proc (make-process :name "apio-pty-coding-second"
+                                           :buffer buf
+                                           :command (list "{echo}" "hello"))))
+                   (set-process-query-on-exit-flag proc nil)
+                   (set-process-coding-system proc 'utf-8-unix 'utf-8-unix)
+                   (accept-process-output proc 1)
+                   (accept-process-output proc 1)
+                   (prog1 (list (process-status proc) (buffer-string))
+                     (kill-buffer buf))))"#
+        ),
+    );
+
+    assert_eq!(
+        result,
+        "OK (exit \"hello\n\nProcess apio-pty-coding-second finished\n\")"
+    );
+}
+
+#[test]
 fn process_live_p_loop_runs_pending_default_sentinel() {
     crate::test_utils::init_test_tracing();
     let printf = find_bin("printf");

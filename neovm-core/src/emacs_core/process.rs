@@ -755,6 +755,11 @@ pub struct Process {
     pub coding_decode: Value,
     /// Current encoding coding-system.
     pub coding_encode: Value,
+    /// True once Lisp explicitly changes this process's coding system.
+    pub coding_explicitly_set: bool,
+    /// True after explicit process coding has deferred one terminal status
+    /// notification so Lisp can observe decoded output before the sentinel.
+    pub explicit_coding_status_deferred_once: bool,
     /// Inherit-coding-system flag.
     pub inherit_coding_system_flag: bool,
     /// Attached thread object.
@@ -1819,6 +1824,7 @@ fn set_explicit_process_coding(proc: &mut Process, coding: Value) {
     let (decode, encode) = explicit_process_coding_pair(coding);
     proc.coding_decode = decode;
     proc.coding_encode = encode;
+    proc.coding_explicitly_set = true;
 }
 
 fn copy_process_plist(plist: Value) -> EvalResult {
@@ -1957,6 +1963,13 @@ impl ProcessOutputRead {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProcessOutputDrainDisposition {
+    Output,
+    Blocked,
+    Terminal,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ProcessOutputSource {
     Pty,
     ChildStdout,
@@ -2029,6 +2042,19 @@ fn process_stopped_for_io(proc: &Process) -> bool {
 
 fn process_has_readable_process_io(proc: &Process) -> bool {
     !process_stopped_for_io(proc) && process_status_has_readable_process_io(&proc.status)
+}
+
+fn process_defers_pty_status_after_explicit_coding(proc: &Process) -> bool {
+    proc.coding_explicitly_set && (proc.pty_child.is_some() || proc.pty_reader.is_some())
+}
+
+fn process_should_defer_explicit_coding_status_after_output(
+    proc: &Process,
+    saw_output: bool,
+) -> bool {
+    saw_output
+        && process_defers_pty_status_after_explicit_coding(proc)
+        && !proc.explicit_coding_status_deferred_once
 }
 
 impl super::eval::Context {
@@ -3146,6 +3172,8 @@ impl ProcessManager {
             stderrproc: Value::NIL,
             coding_decode: Value::symbol("utf-8-unix"),
             coding_encode: Value::symbol("utf-8-unix"),
+            coding_explicitly_set: false,
+            explicit_coding_status_deferred_once: false,
             inherit_coding_system_flag: false,
             thread: Value::NIL,
             window_cols: None,
@@ -4949,11 +4977,11 @@ impl super::eval::Context {
         Ok(outcome)
     }
 
-    fn poll_process_stdout_output_without_status(
+    fn poll_process_stdout_output_without_status_detailed(
         &mut self,
         pid: ProcessId,
         target_process: Option<ProcessId>,
-    ) -> Result<(ProcessOutputServiceOutcome, bool), Flow> {
+    ) -> Result<(ProcessOutputServiceOutcome, ProcessOutputDrainDisposition), Flow> {
         let mut outcome = ProcessOutputServiceOutcome::default();
         let mut saw_output = false;
         let is_target = target_process == Some(pid);
@@ -4970,14 +4998,37 @@ impl super::eval::Context {
                         .unwrap_or(Value::NIL);
                     self.run_process_filter_callback(pid, filter, data)?;
                 }
-                ProcessOutputRead::Data(_)
-                | ProcessOutputRead::WouldBlock
-                | ProcessOutputRead::Eof
-                | ProcessOutputRead::NoSource => break,
+                ProcessOutputRead::Data(_) | ProcessOutputRead::WouldBlock => {
+                    let disposition = if saw_output {
+                        ProcessOutputDrainDisposition::Output
+                    } else {
+                        ProcessOutputDrainDisposition::Blocked
+                    };
+                    return Ok((outcome, disposition));
+                }
+                ProcessOutputRead::Eof | ProcessOutputRead::NoSource => {
+                    let disposition = if saw_output {
+                        ProcessOutputDrainDisposition::Output
+                    } else {
+                        ProcessOutputDrainDisposition::Terminal
+                    };
+                    return Ok((outcome, disposition));
+                }
             }
         }
+    }
 
-        Ok((outcome, saw_output))
+    fn poll_process_stdout_output_without_status(
+        &mut self,
+        pid: ProcessId,
+        target_process: Option<ProcessId>,
+    ) -> Result<(ProcessOutputServiceOutcome, bool), Flow> {
+        let (outcome, disposition) =
+            self.poll_process_stdout_output_without_status_detailed(pid, target_process)?;
+        Ok((
+            outcome,
+            disposition == ProcessOutputDrainDisposition::Output,
+        ))
     }
 
     fn run_process_sentinel_callback(
@@ -5128,6 +5179,22 @@ impl super::eval::Context {
                 .get(pid)
                 .is_some_and(|process| process.status_notify_pending)
             {
+                if self
+                    .processes
+                    .get(pid)
+                    .is_some_and(process_defers_pty_status_after_explicit_coding)
+                {
+                    let (pending_outcome, disposition) = self
+                        .poll_process_stdout_output_without_status_detailed(pid, target_process)?;
+                    match disposition {
+                        ProcessOutputDrainDisposition::Output => {
+                            outcome.absorb(pending_outcome);
+                            continue;
+                        }
+                        ProcessOutputDrainDisposition::Blocked => continue,
+                        ProcessOutputDrainDisposition::Terminal => {}
+                    }
+                }
                 if self.run_process_status_notification(pid)? {
                     outcome.record_activity(is_target);
                 }
@@ -5188,6 +5255,7 @@ impl super::eval::Context {
 
             let mut read_result = self.processes.read_process_output_result(pid);
             let mut saw_output = false;
+            let mut saw_eof_after_output = false;
             let mut handled_terminal_eof = false;
             loop {
                 match read_result {
@@ -5283,7 +5351,12 @@ impl super::eval::Context {
                         handled_terminal_eof = true;
                         break;
                     }
-                    ProcessOutputRead::Eof => break,
+                    ProcessOutputRead::Eof => {
+                        if saw_output {
+                            saw_eof_after_output = true;
+                        }
+                        break;
+                    }
                     ProcessOutputRead::Data(_)
                     | ProcessOutputRead::WouldBlock
                     | ProcessOutputRead::NoSource => break,
@@ -5326,15 +5399,23 @@ impl super::eval::Context {
                 // status notification.  After draining pipe bytes, queue a
                 // terminal child status but leave the sentinel/default status
                 // message for a later status-notify pass.  PTY subprocesses are
-                // different: EOF and status commonly arrive with the same wait
-                // that reads the last bytes, and GNU publishes the terminal
-                // status/default sentinel before returning from that wait.
+                // different only when the read side also reported EOF in this
+                // pass: then EOF and status arrived with the same wait, and GNU
+                // publishes the terminal status/default sentinel before
+                // returning from that wait.
                 let is_pty_process = self
                     .processes
                     .get(pid)
                     .is_some_and(|proc| proc.pty_child.is_some() || proc.pty_reader.is_some());
                 let exited = self.processes.check_child_exit(pid);
-                if exited && is_pty_process {
+                if exited && is_pty_process && saw_eof_after_output {
+                    let defer_status_after_output = self
+                        .processes
+                        .get(pid)
+                        .is_some_and(process_defers_pty_status_after_explicit_coding);
+                    if defer_status_after_output {
+                        continue;
+                    }
                     let _ = self.run_process_status_notification(pid)?;
                 }
 
@@ -5347,6 +5428,22 @@ impl super::eval::Context {
             let exited = self.processes.check_child_exit(pid);
 
             if exited {
+                if self
+                    .processes
+                    .get(pid)
+                    .is_some_and(process_defers_pty_status_after_explicit_coding)
+                {
+                    let (pending_outcome, disposition) = self
+                        .poll_process_stdout_output_without_status_detailed(pid, target_process)?;
+                    match disposition {
+                        ProcessOutputDrainDisposition::Output => {
+                            outcome.absorb(pending_outcome);
+                            continue;
+                        }
+                        ProcessOutputDrainDisposition::Blocked => continue,
+                        ProcessOutputDrainDisposition::Terminal => {}
+                    }
+                }
                 if self.run_process_status_notification(pid)? {
                     outcome.record_activity(is_target);
                 }
@@ -5380,6 +5477,12 @@ impl super::eval::Context {
                 | ProcessOutputRead::Eof
                 | ProcessOutputRead::NoSource => break,
             }
+        }
+        if let Some(proc) = self.processes.get_mut(pid)
+            && process_should_defer_explicit_coding_status_after_output(proc, saw_output)
+        {
+            proc.explicit_coding_status_deferred_once = true;
+            return Ok(true);
         }
 
         let sentinel = self
@@ -12627,6 +12730,7 @@ fn builtin_make_process_impl_with_environment(
             if let Some(proc) = processes.get_mut(id) {
                 proc.coding_decode = decode;
                 proc.coding_encode = encode;
+                proc.coding_explicitly_set = true;
             }
         }
     }
@@ -13127,6 +13231,7 @@ pub(crate) fn builtin_set_process_coding_system_impl(
     })?;
     proc.coding_decode = decoding;
     proc.coding_encode = encoding;
+    proc.coding_explicitly_set = true;
     Ok(Value::NIL)
 }
 
@@ -13145,6 +13250,7 @@ pub(crate) fn builtin_set_buffer_process_coding_system(
     })?;
     proc.coding_decode = args[0];
     proc.coding_encode = args[1];
+    proc.coding_explicitly_set = true;
     Ok(Value::NIL)
 }
 
