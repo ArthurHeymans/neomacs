@@ -1854,6 +1854,16 @@ fn compile_charset(
         }
         first = false;
 
+        // GNU `regex-emacs.c`: a `-' that begins a range (a range-start char is
+        // pending) with no following range-end character is a premature end of
+        // the pattern -- e.g. `[a-` -- signalled as "Premature end of regular
+        // expression", not an unmatched-bracket error.
+        if b == b'-' && pending_char.is_some() && *p >= plen {
+            return Err(RegexCompileError {
+                message: "Premature end of regular expression".to_string(),
+            });
+        }
+
         if b == b'-' && *p < plen && pattern[*p] != b']' {
             if let Some(range_start) = pending_char.take() {
                 // Range: range_start - next_char
