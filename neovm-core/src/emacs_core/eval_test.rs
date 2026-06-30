@@ -9554,6 +9554,27 @@ fn after_change_functions_receive_character_old_len() {
 }
 
 #[test]
+fn princ_to_buffer_runs_before_and_after_change_hooks_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(progn
+             (erase-buffer)
+             (setq hook-log nil)
+             (setq before-change-functions
+                   (list (lambda (beg end)
+                           (setq hook-log
+                                 (cons (list 'before beg end) hook-log)))))
+             (setq after-change-functions
+                   (list (lambda (beg end old-len)
+                           (setq hook-log
+                                 (cons (list 'after beg end old-len) hook-log)))))
+             (princ "X" (current-buffer))
+             (list (buffer-string) (nreverse hook-log)))"#,
+    );
+    assert_eq!(result, r#"OK ("X" ((before 1 1) (after 1 2 0)))"#);
+}
+
+#[test]
 fn subst_char_in_region_reports_gnu_first_to_last_changed_after_range() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(

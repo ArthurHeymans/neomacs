@@ -1262,6 +1262,17 @@ fn obarray_all_standard_errors_have_message() {
         "json-error",
         "json-parse-error",
         "json-serialize-error",
+        "treesit-error",
+        "treesit-query-error",
+        "treesit-parse-error",
+        "treesit-range-invalid",
+        "treesit-buffer-too-large",
+        "treesit-load-language-error",
+        "treesit-node-outdated",
+        "treesit-buffer_changed",
+        "treesit-node-buffer-killed",
+        "treesit-parser-deleted",
+        "treesit-invalid-predicate",
         "permission-denied",
         "remote-file-error",
         "recursion-error",
@@ -1293,6 +1304,7 @@ fn obarray_all_standard_errors_include_self_in_conditions() {
         "overflow-error",
         "file-missing",
         "json-parse-error",
+        "treesit-query-error",
     ];
 
     for name in &standard {
@@ -1304,6 +1316,26 @@ fn obarray_all_standard_errors_include_self_in_conditions() {
             name
         );
     }
+}
+
+#[test]
+fn obarray_treesit_query_error_matches_gnu_c_defined_hierarchy() {
+    crate::test_utils::init_test_tracing();
+    let mut ob = Obarray::new();
+    init_standard_errors(&mut ob);
+
+    let message = ob
+        .get_property("treesit-query-error", "error-message")
+        .expect("treesit-query-error should have error-message");
+    assert_eq!(message.to_string(), r#""Query pattern is malformed""#);
+
+    let conds = ob
+        .get_property("treesit-query-error", "error-conditions")
+        .expect("treesit-query-error should have error-conditions");
+    assert_eq!(
+        iter_symbol_list(&conds),
+        vec!["treesit-query-error", "treesit-error", "error"]
+    );
 }
 
 // =======================================================================
@@ -1379,6 +1411,18 @@ fn signal_cons_error_object_unknown_symbol_is_invalid() {
         result,
         r#"OK (error "Invalid error symbol" totally-unknown-sym)"#
     );
+}
+
+#[test]
+fn signal_treesit_query_error_is_valid_and_catchable() {
+    crate::test_utils::init_test_tracing();
+    let result = resignal_eval(
+        r#"(condition-case e
+              (signal 'treesit-query-error (list "bad query"))
+            (treesit-query-error (list 'caught (car e)))
+            (error (list 'wrong (car e) (cadr e))))"#,
+    );
+    assert_eq!(result, "OK (caught treesit-query-error)");
 }
 
 #[test]

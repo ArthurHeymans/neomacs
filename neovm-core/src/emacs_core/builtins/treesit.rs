@@ -2908,6 +2908,30 @@ mod tests {
     }
 
     #[test]
+    fn treesit_query_compile_malformed_query_signals_query_error() {
+        crate::test_utils::init_test_tracing();
+        let mut eval = super::super::eval::Context::new();
+        let language_sym = Value::symbol("json").as_symbol_id().expect("json symbol");
+        eval.treesit.cache_loaded_language(
+            language_sym,
+            runtime::LoadedLanguage {
+                language: Language::new(tree_sitter_json::LANGUAGE),
+                filename: None,
+                _library: None,
+            },
+        );
+
+        let signal = expect_signal(
+            builtin_treesit_query_compile(
+                &mut eval,
+                vec![Value::symbol("json"), Value::string(")"), Value::T],
+            ),
+            "treesit-query-error",
+        );
+        assert_eq!(signal.symbol_name(), "treesit-query-error");
+    }
+
+    #[test]
     fn treesit_predicate_domain_matches_gnu_symbols() {
         assert_eq!(
             TreesitBuiltinPredicate::from_symbol_value(Value::symbol("named")),

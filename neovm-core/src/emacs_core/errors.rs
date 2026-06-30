@@ -489,6 +489,74 @@ pub fn init_standard_errors(obarray: &mut Obarray) {
         &["json-error"],
     );
 
+    // --- treesit-error family (GNU src/treesit.c `syms_of_treesit`) ---
+    register_simple(
+        obarray,
+        "treesit-error",
+        "Generic tree-sitter error",
+        &["error"],
+    );
+    register_simple(
+        obarray,
+        "treesit-query-error",
+        "Query pattern is malformed",
+        &["treesit-error"],
+    );
+    register_simple(
+        obarray,
+        "treesit-parse-error",
+        "Parse failed",
+        &["treesit-error"],
+    );
+    register_simple(
+        obarray,
+        "treesit-range-invalid",
+        "RANGES are invalid: they have to be ordered and should not overlap",
+        &["treesit-error"],
+    );
+    register_simple(
+        obarray,
+        "treesit-buffer-too-large",
+        "Buffer too large (> 4GiB)",
+        &["treesit-error"],
+    );
+    register_simple(
+        obarray,
+        "treesit-load-language-error",
+        "Cannot load language definition",
+        &["treesit-error"],
+    );
+    register_simple(
+        obarray,
+        "treesit-node-outdated",
+        "This node is outdated, please retrieve a new one",
+        &["treesit-error"],
+    );
+    register_simple(
+        obarray,
+        "treesit-buffer_changed",
+        "Buffer content changed, please don't edit buffer in predicate function, etc",
+        &["treesit-error"],
+    );
+    register_simple(
+        obarray,
+        "treesit-node-buffer-killed",
+        "The buffer associated with this node is killed",
+        &["treesit-error"],
+    );
+    register_simple(
+        obarray,
+        "treesit-parser-deleted",
+        "This parser is deleted and cannot be used",
+        &["treesit-error"],
+    );
+    register_simple(
+        obarray,
+        "treesit-invalid-predicate",
+        "Invalid predicate, see `treesit-thing-settings' for valid forms for a predicate",
+        &["treesit-error"],
+    );
+
     // --- remote-file-error (child of file-error) ---
     register_simple(
         obarray,

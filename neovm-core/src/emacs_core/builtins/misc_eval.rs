@@ -1255,30 +1255,175 @@ fn apply_print_target_escape_bindings(
     }
 }
 
+fn insert_print_lisp_string_with_hooks(
+    ctx: &mut crate::emacs_core::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    text: &crate::heap_types::LispString,
+    before_markers: bool,
+) -> Result<(), Flow> {
+    if text.is_empty() {
+        return Ok(());
+    }
+
+    let (insert_pos, insert_char_pos) = ctx
+        .buffers
+        .get(buffer_id)
+        .map(|buf| (buf.point_emacs_byte_pos(), buf.point_char_pos()))
+        .ok_or_else(|| {
+            signal(
+                "error",
+                vec![Value::string("Output buffer no longer exists")],
+            )
+        })?;
+    let change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
+        &ctx.buffers,
+        buffer_id,
+        insert_pos,
+        super::editfns::lisp_string_text_extent(text),
+    )?;
+
+    super::editfns::signal_before_text_change(ctx, change)?;
+    let inserted = if before_markers {
+        ctx.buffers
+            .insert_lisp_string_into_buffer_before_markers(buffer_id, text)
+    } else {
+        ctx.buffers.insert_lisp_string_into_buffer(buffer_id, text)
+    };
+    inserted.ok_or_else(|| {
+        signal(
+            "error",
+            vec![Value::string("Output buffer no longer exists")],
+        )
+    })?;
+    let _ = ctx
+        .buffers
+        .clear_inserted_plain_text_properties_in_char_range(
+            buffer_id,
+            CharRange::from_start_len(insert_char_pos, CharLen::new(text.schars())),
+        );
+    super::editfns::signal_after_text_change(ctx, change)?;
+    Ok(())
+}
+
+fn insert_print_lisp_string_to_buffer_target(
+    ctx: &mut crate::emacs_core::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    text: &crate::heap_types::LispString,
+) -> Result<(), Flow> {
+    if ctx.buffers.get(buffer_id).is_none() {
+        return Err(signal(
+            "error",
+            vec![Value::string("Output buffer no longer exists")],
+        ));
+    }
+
+    let saved_current = ctx.buffers.current_buffer_id();
+    let result = (|| -> Result<(), Flow> {
+        ctx.set_current_buffer_unrecorded(buffer_id)?;
+        insert_print_lisp_string_with_hooks(ctx, buffer_id, text, false)
+    })();
+    if let Some(saved_id) = saved_current {
+        ctx.restore_current_buffer_if_live(saved_id);
+    }
+    result
+}
+
+fn insert_print_lisp_string_to_marker_target(
+    ctx: &mut crate::emacs_core::eval::Context,
+    target: Value,
+    text: &crate::heap_types::LispString,
+) -> Result<(), Flow> {
+    let Some((Some(buffer_id), _, _)) = super::marker::marker_logical_fields(&target) else {
+        return Err(signal(
+            "error",
+            vec![Value::string("Marker does not point anywhere")],
+        ));
+    };
+    let marker_pos = super::marker::marker_position_as_int_with_buffers(&ctx.buffers, &target)?;
+    let Some(buffer) = ctx.buffers.get(buffer_id) else {
+        return Err(signal(
+            "error",
+            vec![Value::string("Output buffer no longer exists")],
+        ));
+    };
+    let min_pos = buffer.point_min_lisp_char_pos().as_i64();
+    let max_pos = buffer.point_max_lisp_char_pos().as_i64();
+    if marker_pos < min_pos || marker_pos > max_pos {
+        return Err(signal(
+            "error",
+            vec![Value::string(
+                "Marker is outside the accessible part of the buffer",
+            )],
+        ));
+    }
+
+    let marker_byte = buffer.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(marker_pos));
+    let old_target_point = buffer.point_emacs_byte_pos();
+    let saved_current = ctx.buffers.current_buffer_id();
+
+    let result = (|| -> Result<(), Flow> {
+        ctx.set_current_buffer_unrecorded(buffer_id)?;
+        let _ = ctx
+            .buffers
+            .goto_buffer_emacs_byte_pos(buffer_id, marker_byte);
+        insert_print_lisp_string_with_hooks(ctx, buffer_id, text, false)?;
+
+        let new_marker_pos = ctx
+            .buffers
+            .get(buffer_id)
+            .map(|buf| buf.point_lisp_char_pos().as_i64())
+            .ok_or_else(|| {
+                signal(
+                    "error",
+                    vec![Value::string("Output buffer no longer exists")],
+                )
+            })?;
+        let _ = super::marker::builtin_set_marker_in_buffers(
+            &mut ctx.buffers,
+            vec![
+                target,
+                Value::fixnum(new_marker_pos),
+                Value::make_buffer(buffer_id),
+            ],
+        )?;
+        Ok(())
+    })();
+
+    if result.is_ok() && ctx.buffers.get(buffer_id).is_some() {
+        let inserted_len = EmacsByteLen::new(text.sbytes());
+        let restore_point = if old_target_point >= marker_byte {
+            old_target_point.add_len(inserted_len)
+        } else {
+            old_target_point
+        };
+        let _ = ctx
+            .buffers
+            .goto_buffer_emacs_byte_pos(buffer_id, restore_point);
+    }
+    if let Some(saved_id) = saved_current {
+        ctx.restore_current_buffer_if_live(saved_id);
+    }
+    result
+}
+
 fn write_print_output_to_target(
     ctx: &mut crate::emacs_core::eval::Context,
     target: Value,
     text: &str,
 ) -> Result<(), Flow> {
+    let text = crate::heap_types::LispString::from_utf8(text);
     match target.kind() {
         // GNU print.c: when printcharfun is t, output goes through
         // setup_echo_area_for_printing.  A preceding message resets
         // message_buf_print, so the next print starts with a fresh echo buffer;
         // later print calls append to that buffer.
         ValueKind::T | ValueKind::Nil => {
-            ctx.append_echo_area_print_runtime_text(text);
+            ctx.append_echo_area_print_lisp_string(&text);
             Ok(())
         }
         ValueKind::Veclike(VecLikeType::Buffer) => {
             let id = target.as_buffer_id().unwrap();
-            if ctx.buffers.get(id).is_none() {
-                return Err(signal(
-                    "error",
-                    vec![Value::string("Output buffer no longer exists")],
-                ));
-            }
-            let _ = ctx.buffers.insert_into_buffer(id, text);
-            Ok(())
+            insert_print_lisp_string_to_buffer_target(ctx, id, &text)
         }
         ValueKind::String => {
             let name = runtime_string_value(target);
@@ -1288,85 +1433,10 @@ fn write_print_output_to_target(
                     vec![Value::string(format!("No buffer named {name}"))],
                 ));
             };
-            if ctx.buffers.get(id).is_none() {
-                return Err(signal(
-                    "error",
-                    vec![Value::string("Output buffer no longer exists")],
-                ));
-            }
-            let _ = ctx.buffers.insert_into_buffer(id, text);
-            Ok(())
+            insert_print_lisp_string_to_buffer_target(ctx, id, &text)
         }
         _other if super::marker::is_marker(&target) => {
-            let Some((Some(buffer_id), _, _)) = super::marker::marker_logical_fields(&target)
-            else {
-                return Err(signal(
-                    "error",
-                    vec![Value::string("Marker does not point anywhere")],
-                ));
-            };
-            let marker_pos =
-                super::marker::marker_position_as_int_with_buffers(&ctx.buffers, &target)?;
-            let Some(buffer) = ctx.buffers.get(buffer_id) else {
-                return Err(signal(
-                    "error",
-                    vec![Value::string("Output buffer no longer exists")],
-                ));
-            };
-            let min_pos = buffer.point_min_lisp_char_pos().as_i64();
-            let max_pos = buffer.point_max_lisp_char_pos().as_i64();
-            if marker_pos < min_pos || marker_pos > max_pos {
-                return Err(signal(
-                    "error",
-                    vec![Value::string(
-                        "Marker is outside the accessible part of the buffer",
-                    )],
-                ));
-            }
-            let marker_byte = buffer.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(marker_pos));
-            let saved_current = ctx.buffers.current_buffer_id();
-            let saved_point = saved_current
-                .and_then(|id| ctx.buffers.get(id).map(|buf| buf.point_emacs_byte_pos()));
-
-            ctx.buffers.switch_current(buffer_id);
-            let _ = ctx
-                .buffers
-                .goto_buffer_emacs_byte_pos(buffer_id, marker_byte);
-            let _ = ctx.buffers.insert_into_buffer(buffer_id, text);
-
-            let new_marker_pos = ctx
-                .buffers
-                .get(buffer_id)
-                .map(|buf| buf.point_lisp_char_pos().as_i64())
-                .ok_or_else(|| {
-                    signal(
-                        "error",
-                        vec![Value::string("Output buffer no longer exists")],
-                    )
-                })?;
-            let _ = super::marker::builtin_set_marker_in_buffers(
-                &mut ctx.buffers,
-                vec![
-                    target,
-                    Value::fixnum(new_marker_pos),
-                    Value::make_buffer(buffer_id),
-                ],
-            )?;
-
-            if let Some(saved_id) = saved_current {
-                ctx.buffers.switch_current(saved_id);
-                if let Some(old_point) = saved_point {
-                    let restore_point = if saved_id == buffer_id && old_point >= marker_byte {
-                        old_point.add_len(EmacsByteLen::new(text.len()))
-                    } else {
-                        old_point
-                    };
-                    let _ = ctx
-                        .buffers
-                        .goto_buffer_emacs_byte_pos(saved_id, restore_point);
-                }
-            }
-            Ok(())
+            insert_print_lisp_string_to_marker_target(ctx, target, &text)
         }
         _ => Ok(()),
     }
@@ -1390,23 +1460,15 @@ fn write_print_bytes_to_target(
     target: Value,
     bytes: &[u8],
 ) -> Result<(), Flow> {
+    let ls = crate::heap_types::LispString::from_emacs_bytes(bytes.to_vec());
     match target.kind() {
         ValueKind::T | ValueKind::Nil => {
-            let ls = crate::heap_types::LispString::from_emacs_bytes(bytes.to_vec());
             ctx.append_echo_area_print_lisp_string(&ls);
             Ok(())
         }
         ValueKind::Veclike(VecLikeType::Buffer) => {
             let id = target.as_buffer_id().unwrap();
-            if ctx.buffers.get(id).is_none() {
-                return Err(signal(
-                    "error",
-                    vec![Value::string("Output buffer no longer exists")],
-                ));
-            }
-            let ls = crate::heap_types::LispString::from_emacs_bytes(bytes.to_vec());
-            let _ = ctx.buffers.insert_lisp_string_into_buffer(id, &ls);
-            Ok(())
+            insert_print_lisp_string_to_buffer_target(ctx, id, &ls)
         }
         ValueKind::String => {
             let name = runtime_string_value(target);
@@ -1416,87 +1478,10 @@ fn write_print_bytes_to_target(
                     vec![Value::string(format!("No buffer named {name}"))],
                 ));
             };
-            if ctx.buffers.get(id).is_none() {
-                return Err(signal(
-                    "error",
-                    vec![Value::string("Output buffer no longer exists")],
-                ));
-            }
-            let ls = crate::heap_types::LispString::from_emacs_bytes(bytes.to_vec());
-            let _ = ctx.buffers.insert_lisp_string_into_buffer(id, &ls);
-            Ok(())
+            insert_print_lisp_string_to_buffer_target(ctx, id, &ls)
         }
         _other if super::marker::is_marker(&target) => {
-            let Some((Some(buffer_id), _, _)) = super::marker::marker_logical_fields(&target)
-            else {
-                return Err(signal(
-                    "error",
-                    vec![Value::string("Marker does not point anywhere")],
-                ));
-            };
-            let marker_pos =
-                super::marker::marker_position_as_int_with_buffers(&ctx.buffers, &target)?;
-            let Some(buffer) = ctx.buffers.get(buffer_id) else {
-                return Err(signal(
-                    "error",
-                    vec![Value::string("Output buffer no longer exists")],
-                ));
-            };
-            let min_pos = buffer.point_min_lisp_char_pos().as_i64();
-            let max_pos = buffer.point_max_lisp_char_pos().as_i64();
-            if marker_pos < min_pos || marker_pos > max_pos {
-                return Err(signal(
-                    "error",
-                    vec![Value::string(
-                        "Marker is outside the accessible part of the buffer",
-                    )],
-                ));
-            }
-            let marker_byte = buffer.lisp_pos_to_emacs_byte_pos(LispCharPos1::new(marker_pos));
-            let saved_current = ctx.buffers.current_buffer_id();
-            let saved_point = saved_current
-                .and_then(|id| ctx.buffers.get(id).map(|buf| buf.point_emacs_byte_pos()));
-
-            ctx.buffers.switch_current(buffer_id);
-            let _ = ctx
-                .buffers
-                .goto_buffer_emacs_byte_pos(buffer_id, marker_byte);
-            let ls = crate::heap_types::LispString::from_emacs_bytes(bytes.to_vec());
-            let _ = ctx.buffers.insert_lisp_string_into_buffer(buffer_id, &ls);
-
-            let new_marker_pos = ctx
-                .buffers
-                .get(buffer_id)
-                .map(|buf| buf.point_lisp_char_pos().as_i64())
-                .ok_or_else(|| {
-                    signal(
-                        "error",
-                        vec![Value::string("Output buffer no longer exists")],
-                    )
-                })?;
-            let _ = super::marker::builtin_set_marker_in_buffers(
-                &mut ctx.buffers,
-                vec![
-                    target,
-                    Value::fixnum(new_marker_pos),
-                    Value::make_buffer(buffer_id),
-                ],
-            )?;
-
-            if let Some(saved_id) = saved_current {
-                ctx.buffers.switch_current(saved_id);
-                if let Some(old_point) = saved_point {
-                    let restore_point = if saved_id == buffer_id && old_point >= marker_byte {
-                        old_point.add_len(EmacsByteLen::new(bytes.len()))
-                    } else {
-                        old_point
-                    };
-                    let _ = ctx
-                        .buffers
-                        .goto_buffer_emacs_byte_pos(saved_id, restore_point);
-                }
-            }
-            Ok(())
+            insert_print_lisp_string_to_marker_target(ctx, target, &ls)
         }
         _ => Ok(()),
     }
