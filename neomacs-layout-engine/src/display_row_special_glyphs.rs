@@ -15,6 +15,7 @@ use crate::display_source::{DisplayItemSource, DisplaySourceContext, SyntheticTe
 use crate::display_status_line::ChromeRowRenderServices;
 use crate::display_text_output_install::install_output_resolved_face;
 use crate::neovm_bridge::ResolvedFace;
+use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
 
@@ -317,7 +318,8 @@ fn install_right_border_from_source_request(
     row: &mut GlyphRow,
     target_col: usize,
     request: TextWindowRightBorder,
-    base_face: &ResolvedFace,
+    border_face: &ResolvedFace,
+    padding_face: &ResolvedFace,
     matrix_cols: usize,
     render_services: &mut ChromeRowRenderServices<'_, '_>,
 ) {
@@ -331,6 +333,7 @@ fn install_right_border_from_source_request(
     trim_display_row_text_to_total_glyph_count(row, before_final_cols);
 
     let mut source_offset = 0usize;
+    let padding_face_id = u32::from(BasicFaceId::Default);
     let leading_padding = before_final_cols.saturating_sub(display_row_total_glyph_count(row));
     if leading_padding > 0 {
         render_right_border_text(
@@ -339,8 +342,8 @@ fn install_right_border_from_source_request(
             RightBorderTextRenderRequest {
                 text: " ".repeat(leading_padding),
                 area: GlyphArea::Text,
-                face_id: request.face_id,
-                base_face,
+                face_id: padding_face_id,
+                base_face: padding_face,
                 char_width: request.char_width,
                 matrix_cols,
                 source_offset,
@@ -358,7 +361,7 @@ fn install_right_border_from_source_request(
                 text: "$".into(),
                 area: GlyphArea::Text,
                 face_id: glyph.face_id,
-                base_face,
+                base_face: padding_face,
                 char_width: request.char_width,
                 matrix_cols,
                 source_offset,
@@ -376,8 +379,8 @@ fn install_right_border_from_source_request(
             RightBorderTextRenderRequest {
                 text: " ".repeat(trailing_padding),
                 area: GlyphArea::Text,
-                face_id: request.face_id,
-                base_face,
+                face_id: padding_face_id,
+                base_face: padding_face,
                 char_width: request.char_width,
                 matrix_cols,
                 source_offset,
@@ -394,7 +397,7 @@ fn install_right_border_from_source_request(
             text: request.ch.to_string(),
             area: GlyphArea::RightMargin,
             face_id: request.face_id,
-            base_face,
+            base_face: border_face,
             char_width: request.char_width,
             matrix_cols,
             source_offset,
@@ -407,7 +410,8 @@ fn install_right_border_from_source_request(
 struct TextWindowRightBorderRowsMutation<'base, 'emit, 'face> {
     render_services: ChromeRowRenderServices<'emit, 'face>,
     request: TextWindowRightBorder,
-    base_face: &'base ResolvedFace,
+    border_face: &'base ResolvedFace,
+    padding_face: &'base ResolvedFace,
 }
 
 impl DisplayWindowRowsMutation for TextWindowRightBorderRowsMutation<'_, '_, '_> {
@@ -416,7 +420,8 @@ impl DisplayWindowRowsMutation for TextWindowRightBorderRowsMutation<'_, '_, '_>
             row,
             matrix_cols.saturating_sub(1),
             self.request,
-            self.base_face,
+            self.border_face,
+            self.padding_face,
             matrix_cols,
             &mut self.render_services,
         );
@@ -447,12 +452,14 @@ pub(crate) fn install_text_window_right_border_rows(
     output_builder: &mut DisplayOutputBuilder,
     render_services: ChromeRowRenderServices<'_, '_>,
     request: TextWindowRightBorder,
-    base_face: &ResolvedFace,
+    border_face: &ResolvedFace,
+    padding_face: &ResolvedFace,
 ) {
     output_builder.apply_last_window_rows_mutation(TextWindowRightBorderRowsMutation {
         render_services,
         request,
-        base_face,
+        border_face,
+        padding_face,
     });
 }
 
@@ -461,6 +468,7 @@ pub(crate) fn install_text_window_terminal_right_border(
     request: TextWindowTerminalRightBorder,
     mut render_services: ChromeRowRenderServices<'_, '_>,
 ) -> u32 {
+    let padding_face = render_services.face_resolver().default_face().clone();
     let border_face = render_services
         .face_resolver()
         .resolve_named_face(request.face_name);
@@ -479,6 +487,7 @@ pub(crate) fn install_text_window_terminal_right_border(
             char_width: request.char_width,
         },
         &border_face,
+        &padding_face,
     );
     border_face_id
 }

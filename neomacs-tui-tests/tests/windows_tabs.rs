@@ -33,6 +33,88 @@ fn wait_for_other_window_after_split(gnu: &mut TuiSession, neo: &mut TuiSession)
     });
 }
 
+fn screen_cells_for_text(
+    screen: &vt100::Screen,
+    needle: &str,
+) -> Vec<(u16, u16, vt100::Color, vt100::Color)> {
+    let (rows, cols) = screen.size();
+    let mut cells = Vec::new();
+    for row in 0..rows.saturating_sub(1) {
+        let text = screen.contents_between(row, 0, row, cols);
+        let mut start = 0usize;
+        while let Some(offset) = text[start..].find(needle) {
+            let col = start + offset;
+            if let Some(cell) = screen.cell(row, col as u16) {
+                cells.push((row, col as u16, cell.fgcolor(), cell.bgcolor()));
+            }
+            start = col + needle.len();
+        }
+    }
+    cells
+}
+
+fn assert_split_buffer_text_has_same_face(session: &TuiSession, needle: &str) {
+    let cells = screen_cells_for_text(session.screen(), needle);
+    assert!(
+        cells.len() >= 2,
+        "{} should show {needle:?} in both split windows; found {cells:?}\n{}",
+        session.name,
+        session.text_grid().join("\n")
+    );
+
+    let first = cells[0];
+    let second = cells[1];
+    assert_eq!(
+        (second.2, second.3),
+        (first.2, first.3),
+        "{} should render {needle:?} with the same face in both split windows; cells={cells:?}\n{}",
+        session.name,
+        session.text_grid().join("\n")
+    );
+}
+
+fn assert_split_blank_body_backgrounds_match(session: &TuiSession) {
+    let (rows, cols) = session.screen().size();
+    let left_col = 4;
+    let right_col = cols / 2 + 4;
+    let mut checked = 0usize;
+    let mut mismatches = Vec::new();
+
+    for row in 4..rows.saturating_sub(2) {
+        let (Some(left), Some(right)) = (
+            session.screen().cell(row, left_col),
+            session.screen().cell(row, right_col),
+        ) else {
+            continue;
+        };
+        if !left.contents().trim().is_empty() || !right.contents().trim().is_empty() {
+            continue;
+        }
+        checked += 1;
+        if left.bgcolor() != right.bgcolor() && mismatches.len() < 8 {
+            mismatches.push(format!(
+                "row {row}: left col {left_col} bg {:?}, right col {right_col} bg {:?}",
+                left.bgcolor(),
+                right.bgcolor()
+            ));
+        }
+    }
+
+    assert!(
+        checked > 10,
+        "{} should have blank cells in both split windows; checked {checked}\n{}",
+        session.name,
+        session.text_grid().join("\n")
+    );
+    assert!(
+        mismatches.is_empty(),
+        "{} split blank body backgrounds differ:\n{}\n{}",
+        session.name,
+        mismatches.join("\n"),
+        session.text_grid().join("\n")
+    );
+}
+
 // ── Tests ──────────────────────────────────────────────────
 #[test]
 fn kill_buffer_and_window_via_cx4_0_restores_single_window() {
@@ -116,6 +198,61 @@ fn tab_bar_new_next_and_close_via_cx_t_prefix() {
     read_both(&mut gnu, &mut neo, Duration::from_secs(1));
 
     assert_pair_nearly_matches("tab_bar_new_next_and_close_via_cx_t_prefix", &gnu, &neo, 2);
+}
+
+#[test]
+fn default_face_remap_renders_same_buffer_consistently_after_cx3_split() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        r##"(progn (require 'face-remap) (erase-buffer) (insert "REMAPPED-SPLIT\nsecond line\n") (goto-char (point-min)) (face-remap-add-relative 'default '(:foreground "#ffffff" :background "#000000")) (redisplay t))"##,
+    );
+    let remapped_text_ready =
+        |grid: &[String]| grid.iter().any(|row| row.contains("REMAPPED-SPLIT"));
+    wait_for_both(
+        &mut gnu,
+        &mut neo,
+        Duration::from_secs(8),
+        remapped_text_ready,
+    );
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    send_both(&mut gnu, &mut neo, "C-x 3");
+    let split_ready = |grid: &[String]| {
+        grid.iter()
+            .filter(|row| row.matches("REMAPPED-SPLIT").count() >= 2)
+            .count()
+            >= 1
+            && grid_has_two_scratch_windows(grid)
+    };
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(8), split_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    assert_split_buffer_text_has_same_face(&gnu, "REMAPPED-SPLIT");
+    assert_split_buffer_text_has_same_face(&neo, "REMAPPED-SPLIT");
+}
+
+#[test]
+fn scratch_comment_face_renders_same_buffer_consistently_after_cx3_split() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    send_both(&mut gnu, &mut neo, "C-x 3");
+    let split_ready = |grid: &[String]| {
+        grid.iter()
+            .filter(|row| row.matches("This buffer is for text").count() >= 2)
+            .count()
+            >= 1
+            && grid_has_two_scratch_windows(grid)
+    };
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(8), split_ready);
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    assert_split_buffer_text_has_same_face(&gnu, "This buffer is for text");
+    assert_split_buffer_text_has_same_face(&neo, "This buffer is for text");
+    assert_split_blank_body_backgrounds_match(&gnu);
+    assert_split_blank_body_backgrounds_match(&neo);
 }
 
 #[test]

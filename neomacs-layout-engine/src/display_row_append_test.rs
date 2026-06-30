@@ -7767,6 +7767,18 @@ fn buffer_text_window_terminal_right_border_request_pads_blank_rows_and_preserve
     assert_eq!(row_text(1), "    ");
     assert_eq!(row_text(2), "Z   ");
     assert_eq!(matrix.rows[0].glyphs[GlyphArea::Text.index()][3].face_id, 0);
+    assert!(
+        matrix.rows[1].glyphs[GlyphArea::Text.index()]
+            .iter()
+            .all(|glyph| glyph.face_id == 0),
+        "right-border padding on blank text rows must keep the default face"
+    );
+    assert!(
+        matrix.rows[2].glyphs[GlyphArea::Text.index()][1..]
+            .iter()
+            .all(|glyph| glyph.face_id == 0),
+        "right-border padding after text must keep the default face"
+    );
     assert!(!matrix.rows[1].displays_text);
     for row in 0..3 {
         let right = &matrix.rows[row].glyphs[GlyphArea::RightMargin.index()];
