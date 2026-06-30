@@ -4941,6 +4941,37 @@ impl super::eval::Context {
         Ok(outcome)
     }
 
+    fn poll_process_stdout_output_without_status(
+        &mut self,
+        pid: ProcessId,
+        target_process: Option<ProcessId>,
+    ) -> Result<(ProcessOutputServiceOutcome, bool), Flow> {
+        let mut outcome = ProcessOutputServiceOutcome::default();
+        let mut saw_output = false;
+        let is_target = target_process == Some(pid);
+
+        loop {
+            match self.processes.read_process_output_result(pid) {
+                ProcessOutputRead::Data(ref data) if !data.is_empty() => {
+                    saw_output = true;
+                    outcome.record_activity(is_target);
+                    let filter = self
+                        .processes
+                        .get(pid)
+                        .map(|p| p.filter)
+                        .unwrap_or(Value::NIL);
+                    self.run_process_filter_callback(pid, filter, data)?;
+                }
+                ProcessOutputRead::Data(_)
+                | ProcessOutputRead::WouldBlock
+                | ProcessOutputRead::Eof
+                | ProcessOutputRead::NoSource => break,
+            }
+        }
+
+        Ok((outcome, saw_output))
+    }
+
     fn run_process_sentinel_callback(
         &mut self,
         pid: ProcessId,
@@ -5164,9 +5195,26 @@ impl super::eval::Context {
                     ProcessOutputRead::Eof if is_stderr_pipe => {
                         if let Some(owner_id) = self.processes.stderr_pipe_owner(pid)
                             && target_process == Some(owner_id)
-                            && split_stderr_owners_with_output.contains(&owner_id)
                         {
-                            break;
+                            if !split_stderr_owners_with_output.contains(&owner_id) {
+                                // The poller can report the split-stderr fd
+                                // before the owner's stdout fd.  GNU's
+                                // targeted wait still reports stdout/stderr
+                                // bytes first and leaves the stderr EOF
+                                // sentinel for a later notification pass.
+                                let (owner_outcome, owner_saw_output) = self
+                                    .poll_process_stdout_output_without_status(
+                                        owner_id,
+                                        target_process,
+                                    )?;
+                                outcome.absorb(owner_outcome);
+                                if owner_saw_output {
+                                    split_stderr_owners_with_output.push(owner_id);
+                                }
+                            }
+                            if split_stderr_owners_with_output.contains(&owner_id) {
+                                break;
+                            }
                         }
                         outcome.record_activity(is_target);
 

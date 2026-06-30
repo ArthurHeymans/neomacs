@@ -18,15 +18,17 @@ fn div_j0_process_output_via_filter() {
         r##"
 (let (collected)
   (let ((proc (make-process :name "probe-proc-out"
-                            :command (list shell-file-name shell-command-switch "echo hello world")
+                            :command (list shell-file-name shell-command-switch
+                                           "printf '%s\\n' 'hello world'; sleep 0.2")
                             :connection-type 'pipe
                             :filter (lambda (_p s) (setq collected (concat collected s))))))
     (set-process-query-on-exit-flag proc nil)
     (accept-process-output proc 1)
-    (list collected
-          (process-status proc)
-          (process-exit-status proc)
-          (process-buffer proc))))
+    (prog1 (list collected
+                 (process-status proc)
+                 (process-exit-status proc)
+                 (process-buffer proc))
+      (delete-process proc))))
 "##,
         expect,
     );
@@ -58,15 +60,18 @@ fn div_j0_process_buffer_and_mark() {
         r##"
 (let ((buf (generate-new-buffer " *probe-proc-buf*")))
   (let ((proc (make-process :name "probe-proc-bm"
-                            :command (list shell-file-name shell-command-switch "echo hi")
+                            :command (list shell-file-name shell-command-switch
+                                           "printf '%s\\n' hi; sleep 0.2")
                             :buffer buf
                             :connection-type 'pipe)))
     (set-process-query-on-exit-flag proc nil)
     (accept-process-output proc 1)
-    (list (eq (process-buffer proc) buf)
-          (marker-position (process-mark proc))
-          (buffer-name (process-buffer proc))
-          (with-current-buffer buf (buffer-string)))))
+    (prog1 (list (eq (process-buffer proc) buf)
+                 (marker-position (process-mark proc))
+                 (buffer-name (process-buffer proc))
+                 (with-current-buffer buf (buffer-string)))
+      (delete-process proc)
+      (kill-buffer buf))))
 "##,
         expect,
     );
