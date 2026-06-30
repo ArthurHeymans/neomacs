@@ -4664,6 +4664,22 @@ impl Context {
         obarray.set_symbol_value("inhibit-changing-match-data", Value::NIL);
         obarray.make_special("inhibit-changing-match-data");
 
+        // --- src/search.c: syms_of_search ---
+        // DEFVAR_LISP, default nil. When non-nil, a regexp substituted for
+        // bunches of spaces in a regexp search. Has no elisp defvar (sibling
+        // `search-whitespace-regexp` is an isearch.el defcustom), so it must be
+        // seeded here; hi-lock.el (highlight-regexp) let-binds it.
+        obarray.set_symbol_value("search-spaces-regexp", Value::NIL);
+        obarray.make_special("search-spaces-regexp");
+
+        // --- src/xdisp.c: syms_of_xdisp ---
+        // DEFVAR_LISP, default nil. Abnormal hook run before redisplaying a
+        // window with scrolling; neomacs drives it from the explicit
+        // run-window-scroll-functions callsites in window_cmds, so seeding the
+        // symbol only makes `boundp` true before any setq/let.
+        obarray.set_symbol_value("window-scroll-functions", Value::NIL);
+        obarray.make_special("window-scroll-functions");
+
         // --- src/casefiddle.c: syms_of_casefiddle ---
         // DEFVAR_BOOL + Fmake_variable_buffer_local, default 0 (nil).
         // Checked by case-conversion functions. Buffer-local via
