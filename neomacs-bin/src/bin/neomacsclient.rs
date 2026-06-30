@@ -1,6 +1,8 @@
 use std::env;
 use std::ffi::OsString;
+use std::fs;
 use std::io::{self, Read, Write};
+use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{self, Command};
 use std::time::Duration;
@@ -51,18 +53,7 @@ fn run(argv: Vec<OsString>) -> Result<(), String> {
         ));
     }
 
-    #[cfg(unix)]
-    {
-        run_unix_client(&prog, options)
-    }
-
-    #[cfg(not(unix))]
-    {
-        let _ = options;
-        Err(format!(
-            "{prog}: neomacsclient currently supports local Unix sockets only"
-        ))
-    }
+    run_client(&prog, options)
 }
 
 fn parse_options(prog: &str, args: impl IntoIterator<Item = OsString>) -> Result<Options, String> {
@@ -191,7 +182,7 @@ Options:
   -q, --quiet                Do not display success messages
   -u, --suppress-output      Do not display return values
   -s, --socket-name SOCKET   Use a local Unix server socket
-  -f, --server-file FILE     TCP auth-file mode, currently unsupported
+-f, --server-file FILE     Use a TCP authentication file
   -a, --alternate-editor CMD Run CMD if the server is not available
   -w, --timeout SECONDS      Wait this many seconds for server replies
   -T, --tramp PREFIX         Prefix absolute file names for Tramp
@@ -199,16 +190,30 @@ Options:
     );
 }
 
-#[cfg(unix)]
-fn run_unix_client(prog: &str, options: Options) -> Result<(), String> {
-    if options.server_file.is_some() || env::var_os("EMACS_SERVER_FILE").is_some() {
-        return fail_or_alternate(
-            prog,
-            &options,
-            "TCP server-file mode is not implemented in neomacsclient yet",
-        );
+fn run_client(prog: &str, options: Options) -> Result<(), String> {
+    if let Some(server_file) = options
+        .server_file
+        .clone()
+        .or_else(|| env::var("EMACS_SERVER_FILE").ok())
+    {
+        return run_tcp_client(prog, options, &server_file);
     }
 
+    #[cfg(unix)]
+    {
+        return run_unix_client(prog, options);
+    }
+
+    #[cfg(not(unix))]
+    {
+        Err(format!(
+            "{prog}: local socket mode is unsupported on this platform; use --server-file"
+        ))
+    }
+}
+
+#[cfg(unix)]
+fn run_unix_client(prog: &str, options: Options) -> Result<(), String> {
     let socket = resolve_socket_path(&options)?;
     let mut stream = match std::os::unix::net::UnixStream::connect(&socket) {
         Ok(stream) => stream,
@@ -232,6 +237,116 @@ fn run_unix_client(prog: &str, options: Options) -> Result<(), String> {
         .map_err(|err| format!("failed to send request to server: {err}"))?;
 
     read_responses(&mut stream, &options)
+}
+
+fn run_tcp_client(prog: &str, options: Options, server_file: &str) -> Result<(), String> {
+    let config = match read_tcp_server_config(server_file) {
+        Ok(config) => config,
+        Err(err) => return fail_or_alternate(prog, &options, &err),
+    };
+    let mut stream = match TcpStream::connect((&*config.host, config.port)) {
+        Ok(stream) => stream,
+        Err(err) => {
+            return fail_or_alternate(
+                prog,
+                &options,
+                &format!("can't connect to {}:{}: {err}", config.host, config.port),
+            );
+        }
+    };
+    if let Some(timeout) = options.timeout {
+        stream
+            .set_read_timeout(Some(timeout))
+            .map_err(|err| format!("failed to set socket timeout: {err}"))?;
+    }
+
+    let mut request = String::new();
+    push_arg_command(&mut request, "-auth", &config.auth_key);
+    request.push_str(&build_request(&options)?);
+    stream
+        .write_all(request.as_bytes())
+        .map_err(|err| format!("failed to send request to server: {err}"))?;
+
+    read_responses(&mut stream, &options)
+}
+
+struct TcpServerConfig {
+    host: String,
+    port: u16,
+    auth_key: String,
+}
+
+fn read_tcp_server_config(server_file: &str) -> Result<TcpServerConfig, String> {
+    let path = resolve_tcp_server_file(server_file)
+        .ok_or_else(|| format!("can't find server file: {server_file}"))?;
+    let contents = fs::read_to_string(&path)
+        .map_err(|err| format!("cannot read server file {}: {err}", path.display()))?;
+    let mut lines = contents.lines();
+    let endpoint = lines
+        .next()
+        .and_then(|line| line.split_whitespace().next())
+        .ok_or_else(|| format!("invalid server file: {}", path.display()))?;
+    let (host, port) = endpoint
+        .rsplit_once(':')
+        .ok_or_else(|| format!("invalid server address in {}", path.display()))?;
+    let port = port
+        .parse::<u16>()
+        .map_err(|_| format!("invalid server port in {}", path.display()))?;
+    let auth_key = lines
+        .next()
+        .ok_or_else(|| format!("cannot read authentication info from {}", path.display()))?
+        .trim_end_matches(['\r', '\n'])
+        .to_string();
+    if auth_key.is_empty() {
+        return Err(format!(
+            "empty authentication info in server file {}",
+            path.display()
+        ));
+    }
+
+    Ok(TcpServerConfig {
+        host: host.to_string(),
+        port,
+        auth_key,
+    })
+}
+
+fn resolve_tcp_server_file(server_file: &str) -> Option<PathBuf> {
+    let path = Path::new(server_file);
+    if path.is_absolute() {
+        return path.exists().then(|| path.to_path_buf());
+    }
+
+    if let Some(home) = env::var_os("HOME") {
+        let emacs_d = PathBuf::from(&home)
+            .join(".emacs.d")
+            .join("server")
+            .join(server_file);
+        if emacs_d.exists() {
+            return Some(emacs_d);
+        }
+    }
+
+    if let Some(xdg) = env::var_os("XDG_CONFIG_HOME") {
+        let xdg_path = PathBuf::from(xdg)
+            .join("emacs")
+            .join("server")
+            .join(server_file);
+        if xdg_path.exists() {
+            return Some(xdg_path);
+        }
+    } else if let Some(home) = env::var_os("HOME") {
+        let config_path = PathBuf::from(home)
+            .join(".config")
+            .join("emacs")
+            .join("server")
+            .join(server_file);
+        if config_path.exists() {
+            return Some(config_path);
+        }
+    }
+
+    None
 }
 
 #[cfg(unix)]
