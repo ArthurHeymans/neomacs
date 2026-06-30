@@ -3487,32 +3487,27 @@ pub(crate) fn builtin_self_insert_command(eval: &mut Context, args: Vec<Value>) 
                 eval,
                 vec![Value::fixnum(start_char), Value::fixnum(end_char)],
             )?;
-            eval.apply(Value::symbol("insert"), vec![Value::string(text.clone())])?;
+            // GNU `internal_self_insert' uses `replace_range (..., inherit=t)'
+            // in overwrite mode (cmds.c), so the replacement inherits text
+            // properties from the surrounding text.
+            eval.apply(
+                Value::symbol("insert-and-inherit"),
+                vec![Value::string(text.clone())],
+            )?;
             eval.apply(
                 Value::symbol("goto-char"),
                 vec![Value::fixnum(start_char + repeats)],
             )?;
         } else {
-            let (insert_pos, target_multibyte) = eval
-                .buffers
-                .get(current_id)
-                .map(|b| (b.point_emacs_byte_pos(), b.get_multibyte()))
-                .unwrap_or((EmacsBytePos::ZERO, true));
-            tracing::info!(
-                "self-insert-command: inserting {:?} at pos {} in buffer {:?}",
-                text,
-                insert_pos.get(),
-                current_id
-            );
-            let change = super::editfns::text_change_for_empty_insertion_at_emacs_byte_pos(
-                &eval.buffers,
-                current_id,
-                insert_pos,
-                TextExtent::from_emacs_bytes(text.as_bytes(), target_multibyte),
+            // GNU `internal_self_insert' inserts with inheritance
+            // (`insert_and_inherit', cmds.c), so a self-inserted character picks
+            // up the rear-sticky text properties of the preceding character.
+            // `insert-and-inherit' runs the before/after-change signals itself
+            // and advances point past the inserted text.
+            eval.apply(
+                Value::symbol("insert-and-inherit"),
+                vec![Value::string(text.clone())],
             )?;
-            super::editfns::signal_before_text_change(eval, change)?;
-            let _ = eval.buffers.insert_into_buffer(current_id, &text);
-            super::editfns::signal_after_text_change(eval, change)?;
         }
     } else {
         tracing::warn!("self-insert-command: no current buffer");
