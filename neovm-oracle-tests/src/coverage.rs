@@ -1,9 +1,9 @@
 //! Coverage checks for oracle parity tests.
 
-use super::common::return_if_neovm_enable_oracle_proptest_not_set;
-
 use std::collections::{BTreeSet, HashSet};
 use std::process::Command;
+
+use super::common::live_oracle_enabled;
 
 use super::coverage_manifest::{
     ORACLE_TESTED_NONPRIMITIVE_NAMES, ORACLE_TESTED_PRIMITIVE_NAMES,
@@ -154,7 +154,12 @@ fn oracle_prop_coverage_manifest_sorted_unique() {
 
 #[test]
 fn oracle_prop_coverage_snapshot() {
-    return_if_neovm_enable_oracle_proptest_not_set!();
+    if !live_oracle_enabled() {
+        tracing::info!(
+            "skipping oracle coverage snapshot: set NEOVM_ORACLE_MODE=verify/refresh/live and provide GNU Emacs"
+        );
+        return;
+    }
 
     let min_primitive_pct = parse_threshold_percent("NEOVM_ORACLE_MIN_PRIMITIVE_COVERAGE_PCT", 2.5);
     let min_special_form_pct =

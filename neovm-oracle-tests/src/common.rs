@@ -1,14 +1,16 @@
 //! Shared oracle helpers for Elisp unit tests.
 //!
-//! These helpers are intentionally test-only and require GNU Emacs
-//! available on PATH (or via `NEOVM_FORCE_ORACLE_PATH`) and a Neomacs
-//! release binary at `target/release/neomacs` (or `NEOVM_BINARY_PATH`).
+//! These helpers are intentionally test-only. The default snapshot mode only
+//! requires a Neomacs release binary at `target/release/neomacs` (or
+//! `NEOVM_BINARY_PATH`). Live oracle modes also require GNU Emacs on PATH (or
+//! via `NEOVM_FORCE_ORACLE_PATH`).
 
 use colored::Colorize;
 use std::io::Write;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 
 /// Maximum virtual address space (in bytes) for each spawned oracle Emacs
 /// process.  This prevents runaway evaluations from consuming unbounded
@@ -38,7 +40,11 @@ fn neomacs_binary_mem_limit_bytes() -> Option<u64> {
 pub(crate) const ORACLE_PROP_CASES: u32 = 10;
 
 pub(crate) fn oracle_prop_enabled() -> bool {
-    true
+    OracleMode::from_env() == OracleMode::Snapshot || oracle_emacs_available()
+}
+
+pub(crate) fn live_oracle_enabled() -> bool {
+    OracleMode::from_env() != OracleMode::Snapshot && oracle_emacs_available()
 }
 
 fn oracle_timing_enabled() -> bool {
@@ -111,6 +117,19 @@ fn oracle_emacs_path() -> String {
         return path;
     }
     "emacs".to_string()
+}
+
+fn oracle_emacs_available() -> bool {
+    static AVAILABLE: OnceLock<bool> = OnceLock::new();
+    *AVAILABLE.get_or_init(|| {
+        Command::new(oracle_emacs_path())
+            .arg("--version")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success())
+    })
 }
 
 fn neomacs_binary_path() -> String {
@@ -423,18 +442,33 @@ fn run_oracle_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<String, 
 }
 
 pub(crate) fn run_oracle_eval(form: &str) -> Result<String, String> {
-    run_oracle_eval_inner(form, &[])
+    match OracleMode::from_env() {
+        OracleMode::Snapshot => run_neomacs_binary_eval_inner(form, &[]),
+        OracleMode::Verify | OracleMode::Refresh | OracleMode::Live => {
+            run_oracle_eval_inner(form, &[])
+        }
+    }
 }
 
 pub(crate) fn run_oracle_eval_with_load(form: &str, load_files: &[&str]) -> Result<String, String> {
-    run_oracle_eval_inner(form, load_files)
+    match OracleMode::from_env() {
+        OracleMode::Snapshot => run_neomacs_binary_eval_inner(form, load_files),
+        OracleMode::Verify | OracleMode::Refresh | OracleMode::Live => {
+            run_oracle_eval_inner(form, load_files)
+        }
+    }
 }
 
 pub(crate) fn run_oracle_eval_with_load_raw(
     form: &str,
     load_files: &[&str],
 ) -> Result<String, String> {
-    run_oracle_eval_inner_raw(form, load_files)
+    match OracleMode::from_env() {
+        OracleMode::Snapshot => run_neomacs_binary_eval_inner_raw(form, load_files),
+        OracleMode::Verify | OracleMode::Refresh | OracleMode::Live => {
+            run_oracle_eval_inner_raw(form, load_files)
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -605,6 +639,15 @@ pub(crate) fn assert_oracle_parity(form: &str) {
     }
     let neomacs_t0 = std::time::Instant::now();
     let neovm = run_neomacs_binary_eval_inner(form, &[]).expect("neomacs binary eval should run");
+    if OracleMode::from_env() == OracleMode::Snapshot {
+        if log_timing {
+            eprintln!(
+                "oracle-timing: neomacs-binary-done {:.3?}",
+                neomacs_t0.elapsed()
+            );
+        }
+        return;
+    }
     if log_timing {
         eprintln!(
             "oracle-timing: neomacs-binary-done {:.3?}",
@@ -727,6 +770,9 @@ pub(crate) fn assert_oracle_parity_with_shared_tempdir(form: &str) {
         .expect("shared oracle tempdir should be created");
     let neovm = run_neomacs_binary_eval_inner_with_tmpdir(form, &[], Some(tmpdir.path()), &[])
         .expect("neomacs binary eval should run");
+    if OracleMode::from_env() == OracleMode::Snapshot {
+        return;
+    }
     let oracle = run_oracle_eval_inner_with_tmpdir(form, &[], Some(tmpdir.path()), &[])
         .expect("oracle eval should run");
     assert_neovm_oracle_parity(&neovm, &oracle, form);
@@ -736,6 +782,9 @@ pub(crate) fn assert_oracle_parity_with_env(form: &str, extra_env: &[(&str, &str
     ensure_nonempty_form(form).expect("form should not be empty");
     let neovm = run_neomacs_binary_eval_inner_with_tmpdir(form, &[], None, extra_env)
         .expect("neomacs binary eval should run");
+    if OracleMode::from_env() == OracleMode::Snapshot {
+        return;
+    }
     let oracle = run_oracle_eval_inner_with_tmpdir(form, &[], None, extra_env)
         .expect("oracle eval should run");
     assert_neovm_oracle_parity(&neovm, &oracle, form);
@@ -744,6 +793,9 @@ pub(crate) fn assert_oracle_parity_with_env(form: &str, extra_env: &[(&str, &str
 pub(crate) fn assert_oracle_parity_with_load(form: &str, load_files: &[&str]) {
     let neovm =
         run_neomacs_binary_eval_inner(form, load_files).expect("neomacs binary eval should run");
+    if OracleMode::from_env() == OracleMode::Snapshot {
+        return;
+    }
     let oracle = run_oracle_eval_with_load(form, load_files).expect("oracle eval should run");
     assert_neovm_oracle_parity(&neovm, &oracle, form);
 }
@@ -751,11 +803,19 @@ pub(crate) fn assert_oracle_parity_with_load(form: &str, load_files: &[&str]) {
 pub(crate) fn assert_oracle_parity_with_load_raw(form: &str, load_files: &[&str]) {
     let neovm = run_neomacs_binary_eval_inner_raw(form, load_files)
         .expect("neomacs binary eval should run");
+    if OracleMode::from_env() == OracleMode::Snapshot {
+        return;
+    }
     let oracle = run_oracle_eval_with_load_raw(form, load_files).expect("oracle eval should run");
     assert_neovm_oracle_parity(&neovm, &oracle, form);
 }
 
 pub(crate) fn eval_oracle_and_neovm(form: &str) -> (String, String) {
+    if OracleMode::from_env() == OracleMode::Snapshot {
+        let neovm =
+            run_neomacs_binary_eval_inner(form, &[]).expect("neomacs binary eval should run");
+        return (neovm.clone(), neovm);
+    }
     let neovm = run_neomacs_binary_eval_inner(form, &[]).expect("neomacs binary eval should run");
     let oracle = run_oracle_eval(form).expect("oracle eval should run");
     (oracle, neovm)
