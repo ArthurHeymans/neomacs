@@ -2794,6 +2794,81 @@ fn current_body_row_metrics_reads_retained_matrix_rows() {
 }
 
 #[test]
+fn pixel_scroll_window_applies_sub_line_vscroll() {
+    // Smooth scroll P1-T3b: a small (sub-row) pixel scroll keeps window-start and
+    // sets vscroll to the negated residual; end-to-end through the mapper + setter.
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    insert_fragmented_current_buffer_text(&mut eval, &text);
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("p1-scroll", 800, 600, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        let window = frame
+            .find_window_mut(selected_window)
+            .expect("selected window");
+        if let neovm_core::window::Window::Leaf { window_start, .. } = window {
+            *window_start = LispCharPos1::ONE;
+        }
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let start_before = match eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .find_window(selected_window)
+        .expect("window")
+    {
+        neovm_core::window::Window::Leaf { window_start, .. } => window_start.as_i64(),
+        _ => panic!("expected leaf"),
+    };
+
+    // Scroll down 3 pixels — smaller than a row, so window-start is unchanged and
+    // vscroll becomes -3.
+    assert_eq!(
+        engine.pixel_scroll_window(&mut eval, selected_window, 3),
+        Some(()),
+        "sub-line pixel scroll applies"
+    );
+
+    match eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .find_window(selected_window)
+        .expect("window")
+    {
+        neovm_core::window::Window::Leaf {
+            window_start,
+            vscroll,
+            ..
+        } => {
+            assert_eq!(
+                window_start.as_i64(),
+                start_before,
+                "sub-line scroll keeps window-start"
+            );
+            assert_eq!(*vscroll, -3, "vscroll = -residual after a 3px scroll");
+        }
+        _ => panic!("expected leaf"),
+    }
+}
+
+#[test]
 fn layout_frame_rust_lays_out_plain_text() {
     let text = "Hello, world!\nThis is a test.\n";
     let trace = layout_trace_for_plain_text(text);
