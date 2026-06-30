@@ -49,7 +49,8 @@ fn div_cx25_process_timer_sentinel_mega() {
   (run-with-timer 0 nil (lambda () (setq timer-fired :timer)))
   (let ((p (make-process :name "neo-cx25-mega" :command '("echo" "done")
                          :sentinel (lambda (proc event) (setq sentinel-fired event)))))
-    (accept-process-output p 2))
+    (accept-process-output p 2)
+    (sit-for 0.05))
   (list timer-fired
         (if sentinel-fired (string-match "finished" sentinel-fired) nil)))
 "##,
