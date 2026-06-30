@@ -13,8 +13,22 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("handle-args-function-alist", Value::NIL);
     obarray.set_symbol_value("inhibit-x-resources", Value::NIL);
     obarray.set_symbol_value("resize-mini-windows", Value::symbol("grow-only"));
-    obarray.set_symbol_value("frame-title-format", Value::string("%b"));
-    obarray.set_symbol_value("icon-title-format", Value::NIL);
+    // GNU `syms_of_xdisp` (xdisp.c:38639-38647) assigns BOTH frame-title-format
+    // and icon-title-format the same structured default: `(multiple-frames "%b"
+    // ("" "%b - GNU Emacs at " system-name))`, where the inner tail's last
+    // element is the `system-name` symbol (resolved at title-render time).
+    let icon_title_name_format = Value::list(vec![
+        Value::string(""),
+        Value::string("%b - GNU Emacs at "),
+        Value::symbol("system-name"),
+    ]);
+    let title_format = Value::list(vec![
+        Value::symbol("multiple-frames"),
+        Value::string("%b"),
+        icon_title_name_format,
+    ]);
+    obarray.set_symbol_value("frame-title-format", title_format);
+    obarray.set_symbol_value("icon-title-format", title_format);
     obarray.set_symbol_value("frame-resize-pixelwise", Value::NIL);
     // GNU frame.c DEFVAR_BOOL (Emacs 31.1), default t: `delete-frame' selects
     // the most recently used frame (vs. the oldest visible one). Exposed here
