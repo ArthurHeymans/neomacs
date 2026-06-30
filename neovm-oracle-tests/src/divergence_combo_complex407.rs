@@ -204,13 +204,17 @@ fn div_cx407_frame_parameters_batch() {
 #[test]
 fn div_cx407_process_status_properties() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (run real nil (foo bar) bar)""#]];
+    let expect = expect_test::expect![[r#""OK (exit real nil (foo bar) bar)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let ((proc (make-process :name "neo-cx407-ps"
                           :command '("sh" "-c" "echo done")
                           :connection-type 'pipe :buffer nil)))
-  (accept-process-output proc 2)
+  (set-process-query-on-exit-flag proc nil)
+  (let ((i 0))
+    (while (and (process-live-p proc) (< i 100))
+      (accept-process-output proc 0.02)
+      (setq i (1+ i))))
   (list (process-status proc)
         (process-type proc)
         (process-get proc 'foo)

@@ -1,8 +1,8 @@
 //! GNU baseline for `make-network-process' feature advertisement.
 //!
-//! Neomacs intentionally advertises a smaller surface until the corresponding
-//! runtime behavior exists.  This oracle test records the GNU surface so future
-//! work can promote Neomacs capabilities deliberately instead of by accident.
+//! These tests keep feature advertisement conservative: record GNU's full
+//! surface, and assert Neomacs only advertises features that have matching
+//! runtime behavior.
 
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
@@ -33,4 +33,20 @@ fn oracle_gnu_make_network_process_advertises_full_linux_surface() {
     ]];
     let oracle = crate::common::run_oracle_eval(form).expect("oracle eval should run");
     expect.assert_eq(&oracle);
+}
+
+#[cfg(unix)]
+#[test]
+fn oracle_make_network_process_seqpacket_featurep_matches_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let expect = expect_test::expect![[r#""OK (t t t nil)""#]];
+    crate::common::assert_oracle_parity_expect(
+        r#"(list
+  (featurep 'make-network-process '(:type seqpacket))
+  (featurep 'make-network-process '(:type datagram))
+  (featurep 'make-network-process '(:family local))
+  (featurep 'make-network-process '(:type raw)))"#,
+        expect,
+    );
 }

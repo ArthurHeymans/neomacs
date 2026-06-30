@@ -14498,10 +14498,9 @@ fn getenv_from_list(varname: &LispString, env_list: Value) -> EnvLookup {
 }
 
 pub(crate) fn make_network_process_subfeatures() -> Value {
-    // Advertise only behavior that this runtime actually implements.  GNU's
-    // surface is still broader (full inet `:type seqpacket`), but packages use
-    // `featurep' to choose code paths.  Keep this list tied to backed behavior,
-    // not parser acceptance.
+    // Advertise only behavior that this runtime actually implements.  Packages
+    // use `featurep' to choose code paths, so keep this list tied to backed
+    // behavior, not parser acceptance.
     Value::list(vec![
         Value::keyword("nodelay"),
         Value::keyword("reuseaddr"),
@@ -14519,6 +14518,8 @@ pub(crate) fn make_network_process_subfeatures() -> Value {
         Value::list(vec![Value::keyword("server"), Value::T]),
         Value::list(vec![Value::keyword("nowait"), Value::T]),
         Value::list(vec![Value::keyword("type"), Value::symbol("datagram")]),
+        #[cfg(unix)]
+        Value::list(vec![Value::keyword("type"), Value::symbol("seqpacket")]),
     ])
 }
 

@@ -41,6 +41,69 @@ fn datagram_udp() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn local_seqpacket_roundtrip() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let expect = expect_test::expect![[r#""OK (listen open t \"ping-seqpacket\")""#]];
+    crate::common::assert_oracle_parity_with_shared_tempdir_expect(
+        r##"(let* ((dir (or (getenv "NEOVM_ORACLE_TEST_TMPDIR") temporary-file-directory))
+       (path (expand-file-name "neo-seqpacket.sock" dir))
+       (srv nil)
+       (cli nil)
+       (accepted nil)
+       (recv nil))
+  (when (file-exists-p path)
+    (delete-file path))
+  (unwind-protect
+      (progn
+        (setq srv
+              (make-network-process
+               :name "neo-seqp-srv"
+               :family 'local
+               :service path
+               :server t
+               :type 'seqpacket
+               :noquery t
+               :log (lambda (_server client _message)
+                      (setq accepted client)
+                      (set-process-query-on-exit-flag client nil)
+                      (set-process-filter client
+                                          (lambda (_proc string)
+                                            (setq recv string))))))
+        (setq cli
+              (make-network-process
+               :name "neo-seqp-cli"
+               :family 'local
+               :service path
+               :type 'seqpacket
+               :noquery t))
+        (let ((i 0))
+          (while (and (null accepted) (< i 100))
+            (accept-process-output nil 0.02)
+            (setq i (1+ i))))
+        (process-send-string cli "ping-seqpacket")
+        (let ((i 0))
+          (while (and (null recv) (< i 100))
+            (accept-process-output nil 0.02)
+            (setq i (1+ i))))
+        (list (process-status srv)
+              (process-status cli)
+              (processp accepted)
+              recv))
+    (when (processp cli)
+      (delete-process cli))
+    (when (processp accepted)
+      (delete-process accepted))
+    (when (processp srv)
+      (delete-process srv))
+    (when (file-exists-p path)
+      (delete-file path))))"##,
+        expect,
+    );
+}
+
 #[test]
 fn proc_buffer_reassign() {
     return_if_neovm_enable_oracle_proptest_not_set!();

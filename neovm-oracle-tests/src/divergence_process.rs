@@ -72,7 +72,9 @@ fn div_proc_make_process_accept_output() {
 (with-temp-buffer
   (let ((p (make-process :name "neo-test" :buffer (current-buffer)
                          :command (list "echo" "output-line"))))
-    (accept-process-output p 2)
+    (set-process-query-on-exit-flag p nil)
+    (while (process-live-p p)
+      (accept-process-output p 1))
     (buffer-string)))
 "##,
         expect,

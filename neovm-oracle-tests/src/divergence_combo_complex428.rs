@@ -286,10 +286,15 @@ fn div_cx428_process_filter_insert() {
                             :filter (lambda (p s)
                                       (with-current-buffer (process-buffer p)
                                         (insert "[" s "]"))))))
-    (accept-process-output proc 2)
-    (delete-process proc)
+    (set-process-query-on-exit-flag proc nil)
+    (let ((i 0))
+      (while (and (process-live-p proc) (< i 100))
+        (accept-process-output proc 0.02)
+        (setq i (1+ i))))
     (prog1 (with-current-buffer buf
              (string-trim-right (buffer-string)))
+      (when (process-live-p proc)
+        (delete-process proc))
       (kill-buffer buf))))
 "##,
         expect,
