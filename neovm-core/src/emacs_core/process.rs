@@ -5084,7 +5084,6 @@ impl super::eval::Context {
                 )?;
             }
 
-            let read_result = self.processes.read_process_output_result(pid);
             let is_network = self
                 .processes
                 .get(pid)
@@ -5104,76 +5103,159 @@ impl super::eval::Context {
                 })
                 .unwrap_or(false);
 
-            match read_result {
-                ProcessOutputRead::Data(ref data) if !data.is_empty() => {
-                    outcome.record_activity(is_target);
+            let mut read_result = self.processes.read_process_output_result(pid);
+            let mut saw_output = false;
+            let mut saw_eof = false;
+            let mut handled_terminal_eof = false;
+            loop {
+                match read_result {
+                    ProcessOutputRead::Data(ref data) if !data.is_empty() => {
+                        saw_output = true;
+                        outcome.record_activity(is_target);
 
-                    let filter = self
-                        .processes
-                        .get(pid)
-                        .map(|p| p.filter)
-                        .unwrap_or(Value::NIL);
-                    self.run_process_filter_callback(pid, filter, data)?;
-                    if let Some(status) = self.processes.poll_child_exit_status(pid) {
-                        self.processes.set_child_exit_status_pending(pid, status);
-                        self.run_process_status_notification(pid)?;
+                        let filter = self
+                            .processes
+                            .get(pid)
+                            .map(|p| p.filter)
+                            .unwrap_or(Value::NIL);
+                        self.run_process_filter_callback(pid, filter, data)?;
+                    }
+                    ProcessOutputRead::Eof if is_stderr_pipe => {
+                        outcome.record_activity(is_target);
+
+                        // Mirror GNU: when the child's stderr EOFs, the stderr
+                        // pipe-process finishes (exit status 0) and runs its
+                        // sentinel, which inserts "Process NAME stderr finished".
+                        self.processes.deactivate_stderr_pipe_process_io(pid);
+                        if let Some(proc) = self.processes.get_mut(pid) {
+                            proc.status = process_status_exit_value(0);
+                        }
+                        let sentinel = self
+                            .processes
+                            .get(pid)
+                            .map(|p| p.sentinel)
+                            .unwrap_or(Value::NIL);
+                        let exit_msg = self
+                            .processes
+                            .get(pid)
+                            .map(gnu_process_status_message_for_process)
+                            .unwrap_or_else(|| "finished\n".to_string());
+                        self.run_process_sentinel_callback(pid, sentinel, &exit_msg)?;
+
+                        // GNU `status_notify`: a terminated process (including the
+                        // implicit stderr pipe-process) is removed from
+                        // `Vprocess_alist' when `delete-exited-processes' is non-nil
+                        // (its default), so `get-process'/`get-buffer-process' no
+                        // longer return it.  Without this the dead "<name> stderr"
+                        // process lingers in the process list, diverging from GNU
+                        // (which returns nil for `get-buffer-process' on the stderr
+                        // buffer once the process has finished).
+                        if self.delete_exited_processes_enabled() {
+                            self.processes.reap_exited_process(pid);
+                        }
+                        handled_terminal_eof = true;
+                        break;
+                    }
+                    ProcessOutputRead::Eof if is_network => {
+                        outcome.record_activity(is_target);
+
+                        if let Some(proc) = self.processes.get_mut(pid) {
+                            proc.status = process_status_exit_value(0);
+                        }
+                        self.processes.deactivate_network_process_io(pid);
+                        let sentinel = self
+                            .processes
+                            .get(pid)
+                            .map(|p| p.sentinel)
+                            .unwrap_or(Value::NIL);
+                        self.run_process_sentinel_callback(
+                            pid,
+                            sentinel,
+                            "connection broken by remote peer\n",
+                        )?;
+                        handled_terminal_eof = true;
+                        break;
+                    }
+                    ProcessOutputRead::Eof => {
+                        saw_eof = true;
+                        break;
+                    }
+                    ProcessOutputRead::Data(_)
+                    | ProcessOutputRead::WouldBlock
+                    | ProcessOutputRead::NoSource => break,
+                }
+
+                // GNU's wait loop does a no-wait follow-up pass after reading
+                // target output (`wait = MINIMUM`), which vacuums up immediately
+                // available bytes and EOF/status transitions before returning.
+                // Keep this non-blocking: stop as soon as the source would block.
+                read_result = self.processes.read_process_output_result(pid);
+            }
+
+            if handled_terminal_eof {
+                continue;
+            }
+
+            if saw_output {
+                let associated_stderr_id = self
+                    .processes
+                    .get(pid)
+                    .and_then(|proc| process_value_to_id(&proc.stderrproc));
+                let needs_child_status_followup = is_target
+                    && self.processes.get(pid).is_some_and(|proc| {
+                        proc.kind == ProcessKind::Real
+                            && (proc.child.is_some() || proc.pty_child.is_some())
+                    });
+                if let Some(status) = self.processes.poll_child_exit_status(pid) {
+                    self.processes.set_child_exit_status_pending(pid, status);
+                    self.run_process_status_notification(pid)?;
+                } else if saw_eof && self.processes.check_child_exit(pid) {
+                    self.run_process_status_notification(pid)?;
+                } else if associated_stderr_id.is_some() || needs_child_status_followup {
+                    // GNU wakes `wait_reading_process_output` through its
+                    // SIGCHLD self-pipe after short-lived subprocess output.
+                    // Neomacs has no child-exit wake fd yet, so after targeted
+                    // real-process output do a tiny bounded follow-up poll for
+                    // the main child status.  If the process has an associated
+                    // "<name> stderr" pipe-process, service that pipe too so a
+                    // single `accept-process-output' observes GNU's stderr EOF
+                    // notification ordering.
+                    let deadline = Instant::now() + Duration::from_millis(10);
+                    let mut main_status_notified = false;
+                    loop {
+                        if let Some(stderr_id) =
+                            associated_stderr_id.filter(|id| self.processes.get(*id).is_some())
+                        {
+                            let stderr_outcome =
+                                self.poll_process_output_for_ids(vec![stderr_id], target_process)?;
+                            outcome.absorb(stderr_outcome);
+                        }
+
+                        if !main_status_notified {
+                            if let Some(status) = self.processes.poll_child_exit_status(pid) {
+                                self.processes.set_child_exit_status_pending(pid, status);
+                                self.run_process_status_notification(pid)?;
+                                main_status_notified = true;
+                            }
+                        }
+
+                        let stderr_active = associated_stderr_id.is_some_and(|stderr_id| {
+                            self.processes
+                                .get(stderr_id)
+                                .is_some_and(process_has_readable_process_io)
+                        });
+                        if (main_status_notified || self.processes.get(pid).is_none())
+                            && !stderr_active
+                        {
+                            break;
+                        }
+                        if Instant::now() >= deadline {
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(1));
                     }
                 }
-                ProcessOutputRead::Eof if is_stderr_pipe => {
-                    outcome.record_activity(is_target);
-
-                    // Mirror GNU: when the child's stderr EOFs, the stderr
-                    // pipe-process finishes (exit status 0) and runs its
-                    // sentinel, which inserts "Process NAME stderr finished".
-                    self.processes.deactivate_stderr_pipe_process_io(pid);
-                    if let Some(proc) = self.processes.get_mut(pid) {
-                        proc.status = process_status_exit_value(0);
-                    }
-                    let sentinel = self
-                        .processes
-                        .get(pid)
-                        .map(|p| p.sentinel)
-                        .unwrap_or(Value::NIL);
-                    let exit_msg = self
-                        .processes
-                        .get(pid)
-                        .map(gnu_process_status_message_for_process)
-                        .unwrap_or_else(|| "finished\n".to_string());
-                    self.run_process_sentinel_callback(pid, sentinel, &exit_msg)?;
-
-                    // GNU `status_notify`: a terminated process (including the
-                    // implicit stderr pipe-process) is removed from
-                    // `Vprocess_alist' when `delete-exited-processes' is non-nil
-                    // (its default), so `get-process'/`get-buffer-process' no
-                    // longer return it.  Without this the dead "<name> stderr"
-                    // process lingers in the process list, diverging from GNU
-                    // (which returns nil for `get-buffer-process' on the stderr
-                    // buffer once the process has finished).
-                    if self.delete_exited_processes_enabled() {
-                        self.processes.reap_exited_process(pid);
-                    }
-                    continue;
-                }
-                ProcessOutputRead::Eof if is_network => {
-                    outcome.record_activity(is_target);
-
-                    if let Some(proc) = self.processes.get_mut(pid) {
-                        proc.status = process_status_exit_value(0);
-                    }
-                    self.processes.deactivate_network_process_io(pid);
-                    let sentinel = self
-                        .processes
-                        .get(pid)
-                        .map(|p| p.sentinel)
-                        .unwrap_or(Value::NIL);
-                    self.run_process_sentinel_callback(
-                        pid,
-                        sentinel,
-                        "connection broken by remote peer\n",
-                    )?;
-                    continue;
-                }
-                _ => {}
+                continue;
             }
 
             // GNU keeps subprocess exit bookkeeping separate from output
@@ -5182,12 +5264,7 @@ impl super::eval::Context {
             // terminal state and runs the sentinel.  Probing `try_wait` here
             // would collapse those two GNU wakeups and make short-lived
             // children report "finished" too eagerly.
-            let exited = if matches!(read_result, ProcessOutputRead::Data(ref data) if !data.is_empty())
-            {
-                false
-            } else {
-                self.processes.check_child_exit(pid)
-            };
+            let exited = self.processes.check_child_exit(pid);
 
             if exited {
                 self.run_process_status_notification(pid)?;
@@ -12414,11 +12491,11 @@ pub(crate) fn builtin_process_status(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_process_status_impl(&eval.processes, &eval.buffers, args)
+    builtin_process_status_impl(&mut eval.processes, &eval.buffers, args)
 }
 
 pub(crate) fn builtin_process_status_impl(
-    processes: &ProcessManager,
+    processes: &mut ProcessManager,
     buffers: &BufferManager,
     args: Vec<Value>,
 ) -> EvalResult {
@@ -12426,10 +12503,10 @@ pub(crate) fn builtin_process_status_impl(
     let Some(id) = resolve_process_for_status_in_state(processes, buffers, &args[0])? else {
         return Ok(Value::NIL);
     };
-    // Match GNU `Fprocess_status` (`src/process.c`): this reports the stored
-    // process status and does not synchronously reap the child. Short-lived
-    // subprocesses therefore remain `run` here until the wait request (for
-    // example `accept-process-output`) observes the exit and updates status.
+    // Match GNU `Fprocess_status` (`src/process.c`): refresh a pending child
+    // status (`update_status`) but do not run the sentinel here.  The later
+    // status-notify pass observes `status_notify_pending` and reports/reaps it.
+    processes.check_child_exit(id);
     match processes.get_any(id) {
         Some(proc) => Ok(process_public_status_symbol(proc)),
         None => Ok(Value::NIL),
@@ -13357,11 +13434,11 @@ pub(crate) fn builtin_process_live_p(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_process_live_p_impl(&eval.processes, args)
+    builtin_process_live_p_impl(&mut eval.processes, args)
 }
 
 pub(crate) fn builtin_process_live_p_impl(
-    processes: &ProcessManager,
+    processes: &mut ProcessManager,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-live-p", &args, 1)?;
@@ -13369,6 +13446,7 @@ pub(crate) fn builtin_process_live_p_impl(
     else {
         return Ok(Value::NIL);
     };
+    processes.check_child_exit(id);
     let proc = processes.get(id).ok_or_else(|| {
         signal(
             "wrong-type-argument",
