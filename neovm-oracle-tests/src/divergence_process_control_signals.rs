@@ -56,7 +56,12 @@ fn proc_list_system_processes() {
     let expect = expect_test::expect![[r#""OK (t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"(let ((ps (list-system-processes)))
-  (list (listp ps) (> (length ps) 0) (cl-every #'integerp ps)))"##,
+  (list (listp ps)
+        (> (length ps) 0)
+        (let ((all-integers t))
+          (dolist (pid ps all-integers)
+            (unless (integerp pid)
+              (setq all-integers nil))))))"##,
         expect,
     );
 }
