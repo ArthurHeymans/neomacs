@@ -6,7 +6,6 @@ use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 
 #[test]
-#[ignore = "DIVERGENCE: signal-process rejects symbolic POSIX signal names (SIGKILL/SIGTERM/...) with \"Undefined signal name\"; GNU resolves the symbol/string to the numeric signal and delivers it."]
 fn divergence_signal_process_symbolic_sigkill() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -24,7 +23,6 @@ fn divergence_signal_process_symbolic_sigkill() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: signal-process rejects symbolic POSIX signal names (SIGKILL/SIGTERM/...) with \"Undefined signal name\"; GNU resolves the symbol/string to the numeric signal and delivers it."]
 fn divergence_signal_process_symbolic_sigterm() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -40,7 +38,6 @@ fn divergence_signal_process_symbolic_sigterm() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: process-exit-status collapses every child exit code >1 to 1 (e.g. exit 42 => GNU 42, neomacs 1); only 0 and 1 round-trip. Regressed by the \"signal exit status\" change."]
 fn divergence_process_exit_status_nonzero_collapses() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
@@ -55,7 +52,6 @@ fn divergence_process_exit_status_nonzero_collapses() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: setenv/process-environment changes are not exported to child processes; the child sees an empty value while GNU passes the new binding."]
 fn divergence_setenv_not_exported_to_subprocess() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 

@@ -74,7 +74,6 @@ fn proc_attributes_self() {
 }
 
 #[test]
-#[ignore = "DIVERGENCE: (signal-process p 0) is a POSIX no-op existence check, but neomacs terminates the process (status 'signal, no longer live); GNU leaves it running."]
 fn divergence_signal_process_signal0_noop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
