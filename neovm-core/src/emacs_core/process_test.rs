@@ -1506,6 +1506,36 @@ fn start_process_with_buffer() {
 }
 
 #[test]
+fn start_process_missing_absolute_program_defers_exit_127() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((log nil))
+             (let ((p (start-process
+                       "neo-start-missing-absolute"
+                       nil
+                       "/nonexistent/neomacs-start-process-missing")))
+               (set-process-sentinel
+                p
+                (lambda (proc event)
+                  (push (list event
+                              (process-status proc)
+                              (process-exit-status proc))
+                        log)))
+               (let ((i 0))
+                 (while (and (< i 20) (null log))
+                   (accept-process-output nil 0.05)
+                   (setq i (1+ i))))
+               (list (process-status p)
+                     (process-exit-status p)
+                     (nreverse log))))"#,
+    );
+    assert_eq!(
+        result,
+        "OK (exit 127 ((\"exited abnormally with code 127\n\" exit 127)))"
+    );
+}
+
+#[test]
 fn start_process_buffer_name_program_and_arg_contracts_match_oracle() {
     crate::test_utils::init_test_tracing();
     let cat = find_bin("cat");

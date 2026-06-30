@@ -1656,6 +1656,14 @@ fn gnu_process_status_message_for_process(proc: &Process) -> String {
     gnu_process_status_message(proc.status)
 }
 
+fn async_process_spawn_failure_exit_code(message: &str) -> i32 {
+    if message.contains("os error 2") || message.contains("No such file") {
+        127
+    } else {
+        126
+    }
+}
+
 fn process_status_core_dumped_value(status: Value) -> bool {
     list_to_vec(&status)
         .and_then(|items| items.get(2).copied())
@@ -11138,21 +11146,18 @@ pub(crate) fn builtin_start_process(
     }
     eval.processes.sync_process_mark(&mut eval.buffers, id)?;
 
-    // Actually spawn the OS process.
     if let Err(e) = eval
         .processes
         .spawn_child_with_environment(id, use_pty, process_environment)
     {
-        // Process creation failed — mark as exited but still return the id
-        // (GNU Emacs signals file-error for missing programs)
-        return Err(signal(
-            "file-missing",
-            vec![
-                Value::string("Searching for program"),
-                Value::string(e),
-                args[2],
-            ],
-        ));
+        // GNU `start-process` creates the process object before the child-side
+        // exec.  An exec failure is then reported as an asynchronous process
+        // exit, so callers can install a sentinel after `start-process`
+        // returns.  Preserve synchronous `exec-path` lookup errors above; this
+        // branch is for failures after the process record exists.
+        let exit_code = async_process_spawn_failure_exit_code(&e);
+        eval.processes
+            .set_child_exit_status_pending(id, process_status_exit_value(exit_code));
     }
 
     Ok(Value::make_process(id))
@@ -12141,11 +12146,15 @@ fn builtin_make_process_impl_with_environment(
         }
     }
 
-    // Spawn the actual OS child process.
     if let Err(e) = processes.spawn_child_with_environment(id, use_pty, process_environment) {
+        if use_pty {
+            let exit_code = async_process_spawn_failure_exit_code(&e);
+            processes.set_child_exit_status_pending(id, process_status_exit_value(exit_code));
+            return Ok(Value::make_process(id));
+        }
         return Err(signal(
             "file-missing",
-            vec![Value::string("Searching for program"), Value::string(e)],
+            vec![Value::string("Doing vfork"), Value::string(e)],
         ));
     }
 
