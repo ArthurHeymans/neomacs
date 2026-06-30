@@ -3293,13 +3293,17 @@ fn process_attributes_pipe_child_args_ttname_and_running_child_match_oracle() {
                  (let* ((attrs (process-attributes (process-id proc)))
                         (args (cdr (assq 'args attrs)))
                         (ttname (cdr (assq 'ttname attrs))))
-                   (list (process-running-child-p proc)
-                         args
-                         ttname))
+                   (and (eq (process-running-child-p proc) t)
+                        ;; GNU's Linux implementation reads live /proc/PID/cmdline
+                        ;; and shell state can expose either the shell invocation
+                        ;; or the final exec'd command.
+                        (or (equal args "/bin/sh -c sleep\\ 0.5")
+                            (equal args "sleep 0.5"))
+                        (equal ttname "")))
                (when (process-live-p proc)
                  (delete-process proc))))"#,
     );
-    assert_eq!(result, "OK (t \"/bin/sh -c sleep\\\\ 0.5\" \"\")");
+    assert_eq!(result, "OK t");
 }
 
 #[test]
@@ -4110,11 +4114,7 @@ fn accept_process_output_runs_gnu_timer_then_internal_timer_before_process_callb
         .eval_symbol("apio-full-order")
         .expect("mixed ordering event list after second wait");
 
-    if after_first == after_sentinel {
-        assert_eq!(second, Value::NIL);
-    } else {
-        assert_eq!(second, Value::T);
-    }
+    assert_eq!(second, Value::NIL);
     assert_eq!(format!("{}", events_after_second), after_sentinel);
 }
 

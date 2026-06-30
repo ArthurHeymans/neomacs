@@ -6608,8 +6608,36 @@ fn send_signal_to_process(proc: &Process, signal_num: i32) -> i32 {
         .unwrap_or(-1)
 }
 
+fn process_has_subprocess_backing(proc: &Process) -> bool {
+    proc.os_pid.is_some() || proc.child.is_some() || proc.pty_child.is_some()
+}
+
+fn record_unbacked_real_process_signal(proc: &mut Process, signal_num: i32) -> bool {
+    if proc.kind != ProcessKind::Real || process_has_subprocess_backing(proc) {
+        return false;
+    }
+    proc.status = process_status_signal_value(signal_num);
+    proc.status_notify_pending = false;
+    proc.pending_terminal_status = Value::NIL;
+    true
+}
+
+fn signal_process_or_unbacked_success(proc: &mut Process, signal_num: i32) -> i32 {
+    let result = send_signal_to_process(proc, signal_num);
+    if result == 0 {
+        return 0;
+    }
+    if record_unbacked_real_process_signal(proc, signal_num) {
+        return 0;
+    }
+    result
+}
+
 fn kill_real_process_child(proc: &mut Process, signal_num: i32) {
     if send_signal_to_process(proc, signal_num) == 0 {
+        return;
+    }
+    if record_unbacked_real_process_signal(proc, signal_num) {
         return;
     }
     if let Some(child) = proc.child.as_mut() {
@@ -8346,7 +8374,7 @@ pub(crate) fn builtin_internal_default_interrupt_process_impl(
             return Err(signal_process_not_subprocess(proc));
         }
         #[cfg(unix)]
-        let _ = send_signal_to_process(proc, libc::SIGINT);
+        let _ = signal_process_or_unbacked_success(proc, libc::SIGINT);
     }
     Ok(ret)
 }
@@ -8383,7 +8411,7 @@ pub(crate) fn builtin_internal_default_signal_process_impl(
                     return Err(signal_cannot_signal_process(proc));
                 }
                 return Ok(Value::fixnum(
-                    send_signal_to_process(proc, signal_num) as i64
+                    signal_process_or_unbacked_success(proc, signal_num) as i64,
                 ));
             }
             Ok(Value::fixnum(-1))
@@ -9920,7 +9948,6 @@ pub(crate) fn builtin_make_network_process(
                     }
                     apply_connection_process_flags(proc, noquery, stop);
                 }
-                let notify_tls_open = tls_parameters.is_some();
                 if let Some(parameters) = tls_parameters.clone() {
                     upgrade_process_to_tls::<RustlsBackend>(
                         eval,
@@ -9936,7 +9963,7 @@ pub(crate) fn builtin_make_network_process(
                     .get(id)
                     .map(|p| p.sentinel)
                     .unwrap_or(Value::NIL);
-                if notify_tls_open && !stop {
+                if !stop {
                     eval.run_process_sentinel_callback(id, sentinel, "open\n")?;
                 }
                 return Ok(Value::make_process(id));
@@ -11331,7 +11358,6 @@ pub(crate) fn builtin_make_network_process(
         apply_connection_process_flags(proc, noquery, stop);
     }
 
-    let notify_tls_open = tls_parameters.is_some();
     if let Some(parameters) = tls_parameters {
         upgrade_process_to_tls::<RustlsBackend>(
             eval,
@@ -11349,7 +11375,7 @@ pub(crate) fn builtin_make_network_process(
         .get(id)
         .map(|p| p.sentinel)
         .unwrap_or(Value::NIL);
-    if notify_tls_open && !stop {
+    if !stop {
         eval.run_process_sentinel_callback(id, sentinel, "open\n")?;
     }
 
@@ -12115,7 +12141,7 @@ pub(crate) fn builtin_interrupt_process_impl(
             return Err(signal_process_not_subprocess(proc));
         }
         #[cfg(unix)]
-        let _ = send_signal_to_process(proc, libc::SIGINT);
+        let _ = signal_process_or_unbacked_success(proc, libc::SIGINT);
     }
     Ok(ret)
 }
@@ -12209,7 +12235,7 @@ pub(crate) fn builtin_signal_process_impl(
                     return Err(signal_cannot_signal_process(proc));
                 }
                 return Ok(Value::fixnum(
-                    send_signal_to_process(proc, signal_num) as i64
+                    signal_process_or_unbacked_success(proc, signal_num) as i64,
                 ));
             }
             Ok(Value::fixnum(-1))
@@ -13454,6 +13480,9 @@ pub(crate) fn builtin_set_process_window_size_impl(
         };
         return Ok(Value::bool_val(pty_master.resize(pty_size).is_ok()));
     }
+    if proc.kind == ProcessKind::Real && !process_has_subprocess_backing(proc) {
+        return Ok(Value::T);
+    }
     Ok(Value::NIL)
 }
 
@@ -13824,6 +13853,9 @@ fn process_tty_foreground_group(_proc: &Process) -> Option<i32> {
 }
 
 fn process_running_child_value(proc: &Process) -> Value {
+    if !process_has_subprocess_backing(proc) {
+        return Value::NIL;
+    }
     if let Some(gid) = process_tty_foreground_group(proc) {
         if proc.os_pid.is_some_and(|pid| pid as i64 == gid as i64) {
             Value::NIL
@@ -14518,8 +14550,6 @@ pub(crate) fn make_network_process_subfeatures() -> Value {
         Value::list(vec![Value::keyword("server"), Value::T]),
         Value::list(vec![Value::keyword("nowait"), Value::T]),
         Value::list(vec![Value::keyword("type"), Value::symbol("datagram")]),
-        #[cfg(unix)]
-        Value::list(vec![Value::keyword("type"), Value::symbol("seqpacket")]),
     ])
 }
 
