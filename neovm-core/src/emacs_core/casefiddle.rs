@@ -599,7 +599,7 @@ fn casify_region_in_state(
     };
 
     for region in regions {
-        let (byte_range, text) = {
+        let (buffer_id, byte_range, text) = {
             let buf = eval
                 .buffers
                 .current_buffer()
@@ -611,9 +611,27 @@ fn casify_region_in_state(
             if super::editfns::buffer_read_only_active_in_state(&eval.obarray, &[], buf) {
                 return Err(signal("buffer-read-only", vec![buf.name_value()]));
             }
+            let buffer_id = eval
+                .buffers
+                .current_buffer_id()
+                .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
             let text = buf.buffer_substring_lisp_string_range(byte_range);
-            (byte_range, text)
+            (buffer_id, byte_range, text)
         };
+
+        // GNU `casify_region` calls `modify_text (start, end)`
+        // (casefiddle.c:540) -> `prepare_to_modify_buffer_1` ->
+        // `verify_interval_modification`, which signals `text-read-only` for any
+        // read-only interval in [start,end) BEFORE any character is cased --
+        // even when the conversion would be a no-op. The buffer-wide
+        // `buffer-read-only` check above is GNU's `Fbarf_if_buffer_read_only`;
+        // this is the text-property half it was missing.
+        crate::emacs_core::textprop::verify_text_read_only_emacs_byte_range_in_state(
+            &eval.obarray,
+            &eval.buffers,
+            buffer_id,
+            byte_range,
+        )?;
 
         // GNU `casify_region` (casefiddle.c) always `modify_text`s the range
         // and records `record_delete (start, ORIGINAL) + record_insert (start,
