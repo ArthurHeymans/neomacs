@@ -313,6 +313,7 @@ pub(crate) fn builtin_call_last_kbd_macro(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    expect_max_args("call-last-kbd-macro", &args, 2)?;
     if eval.command_loop.keyboard.kboard.defining_kbd_macro {
         return Err(signal(
             "error",
@@ -322,8 +323,20 @@ pub(crate) fn builtin_call_last_kbd_macro(
         ));
     }
 
-    let (macro_keys, repeat, loopfunc) =
-        plan_call_last_kbd_macro(eval.command_loop.last_kbd_macro(), &args)?;
+    // GNU `Fcall_last_kbd_macro' (macros.c) executes the Lisp variable
+    // `last-kbd-macro' (KVAR(current_kboard, Vlast_kbd_macro)), not an internal
+    // field, so `(setq last-kbd-macro ...)' then call-last-kbd-macro works. A
+    // nil value signals "No kbd macro has been defined".
+    let last = eval.eval_symbol("last-kbd-macro").unwrap_or(Value::NIL);
+    if last.is_nil() {
+        return Err(signal(
+            "error",
+            vec![Value::string("No kbd macro has been defined")],
+        ));
+    }
+    let macro_keys = resolve_macro_events(eval, &last)?;
+    let repeat = args.first().map_or(1i64, prefix_numeric_value);
+    let loopfunc = args.get(1).copied().unwrap_or(Value::NIL);
     let previous_last_command = eval.eval_symbol("last-command").unwrap_or(Value::NIL);
     let macro_value = Value::vector(macro_keys.clone());
     eval.assign("this-command", previous_last_command);
