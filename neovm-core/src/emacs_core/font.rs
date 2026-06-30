@@ -1003,6 +1003,22 @@ fn font_style_table_for_key(key: &str) -> Option<&'static [(i64, &'static [&'sta
     }
 }
 
+/// GNU `font_style_symbolic (font, prop, for_face=true)` (font.c:471-490):
+/// canonicalize a stored weight/slant/width symbol to the first ("preferred")
+/// name of its style-table row -- the value behind `AREF (elt, 1)`, i.e.
+/// `names[0]`. This is what `Ffont_face_attributes` uses (heavy -> black,
+/// ultra-bold -> extra-bold, normal -> regular). `font-get`/`font-spec`
+/// storage keep the matched alias verbatim (`for_face=false`), so this is
+/// applied only at the face-read boundary. Returns `None` for a symbol that is
+/// not a known style word.
+fn font_style_canonical_for_face(key: &str, name: &str) -> Option<&'static str> {
+    let table = font_style_table_for_key(key)?;
+    table
+        .iter()
+        .find(|(_, names)| names.iter().any(|alias| alias.eq_ignore_ascii_case(name)))
+        .and_then(|(_, names)| names.first().copied())
+}
+
 fn font_style_symbol_from_gnu_code(
     table: &'static [(i64, &'static [&'static str])],
     code: i64,
@@ -1653,12 +1669,22 @@ pub(crate) fn builtin_font_face_attributes(args: Vec<Value>) -> EvalResult {
         }
     }
 
-    // :weight / :slant / :width -- stored as canonical style symbols.
+    // :weight / :slant / :width -- GNU `Ffont_face_attributes` reads these via
+    // the FONT_*_FOR_FACE macros (font_style_symbolic with for_face=true), which
+    // canonicalize the stored alias to its row's preferred name
+    // (heavy -> black, ultra-bold -> extra-bold, normal -> regular). The
+    // storage path keeps the alias verbatim (matching `font-get`), so the
+    // canonicalization happens here, at the face-read boundary.
     for key in ["weight", "slant", "width"] {
         if let Some(val) = font_vector_get_flexible(&elems, key) {
             if !val.is_nil() {
+                let canonical = val
+                    .as_symbol_name()
+                    .and_then(|name| font_style_canonical_for_face(key, name))
+                    .map(Value::symbol)
+                    .unwrap_or(val);
                 plist.push(Value::keyword(key));
-                plist.push(val);
+                plist.push(canonical);
             }
         }
     }
