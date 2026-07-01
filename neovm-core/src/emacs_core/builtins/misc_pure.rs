@@ -102,6 +102,17 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
         return;
     }
 
+    // GNU's `message3` passes the message to `message_dolog` as raw bytes
+    // (`SSDATA`), so the *Messages* log never carries the echo-area text
+    // properties (e.g. the `help-key-binding` face substitute-command-keys
+    // adds). Strip them by rebuilding the string from its bytes.
+    let plain = if msg.is_multibyte() {
+        crate::heap_types::LispString::from_emacs_bytes(msg.as_bytes().to_vec())
+    } else {
+        crate::heap_types::LispString::from_unibyte(msg.as_bytes().to_vec())
+    };
+    let msg = &plain;
+
     // GNU xdisp.c defaults `messages-buffer-name` to "*Messages*" and lets
     // Lisp rebind it to redirect message logging.
     let messages_name = ctx
