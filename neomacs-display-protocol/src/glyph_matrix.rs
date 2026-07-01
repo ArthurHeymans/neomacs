@@ -550,6 +550,21 @@ pub struct BackgroundItem {
     pub color: Color,
 }
 
+/// A rectangular fill painted with a realized face.
+///
+/// This represents redisplay-owned blank cells: areas such as the body text
+/// region of a window whose background comes from buffer-local face remapping.
+/// It is intentionally face-based instead of color-only so TTY backends can
+/// preserve terminal-default foreground/background semantics.
+#[derive(Clone, Debug)]
+pub struct FaceFillItem {
+    pub window_id: DisplayWindowId,
+    pub row_role: GlyphRowRole,
+    pub clip_rect: Option<Rect>,
+    pub bounds: Rect,
+    pub face_id: u32,
+}
+
 /// A window border/divider rectangle.
 #[derive(Clone, Debug)]
 pub struct BorderItem {
@@ -666,6 +681,8 @@ pub struct FrameDisplayState {
     pub transition_hints: Vec<WindowTransitionHint>,
     /// Window background rectangles.
     pub backgrounds: Vec<BackgroundItem>,
+    /// Face-backed rectangular fills for redisplay-owned blank cells.
+    pub face_fills: Vec<FaceFillItem>,
     /// Window border/divider rectangles.
     pub borders: Vec<BorderItem>,
     /// Cursor entries.
@@ -820,6 +837,7 @@ impl FrameDisplayState {
             window_infos: Vec::new(),
             transition_hints: Vec::new(),
             backgrounds: Vec::new(),
+            face_fills: Vec::new(),
             borders: Vec::new(),
             cursors: Vec::new(),
             cursor_effects_by_window: HashMap::new(),
@@ -1143,6 +1161,30 @@ impl FrameDisplayState {
             push(FrameGlyph::Background {
                 bounds: bg.bounds,
                 color: bg.color,
+            });
+        }
+        for fill in &self.face_fills {
+            let face_data = self.resolve_face_for_materialize(fill.face_id);
+            push(FrameGlyph::Stretch {
+                window_id: fill.window_id,
+                row_role: fill.row_role,
+                clip_rect: fill.clip_rect,
+                slot_id: DisplaySlotId::from_pixels(
+                    fill.window_id,
+                    fill.bounds.x,
+                    fill.bounds.y,
+                    self.char_width,
+                    self.char_height,
+                ),
+                bidi_level: 0,
+                x: fill.bounds.x,
+                y: fill.bounds.y,
+                width: fill.bounds.width,
+                height: fill.bounds.height,
+                bg: face_data.bg,
+                face_id: fill.face_id,
+                stipple_id: 0,
+                stipple_fg: None,
             });
         }
 

@@ -2,7 +2,7 @@ use super::*;
 use crate::face::{Face, FaceAttributes, UnderlineStyle};
 use crate::frame_glyphs::{CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor};
 use crate::glyph_matrix::{
-    FrameDisplayState, Glyph, GlyphArea, GlyphMatrix, GlyphRow, WindowMatrixEntry,
+    FaceFillItem, FrameDisplayState, Glyph, GlyphArea, GlyphMatrix, GlyphRow, WindowMatrixEntry,
 };
 use crate::types::{Color, DisplayFrameId, DisplayWindowId, Rect};
 use std::collections::HashMap;
@@ -302,6 +302,48 @@ fn rasterize_respects_matrix_position() {
     assert_eq!(rif.desired.cells[idx].ch, 'A');
     // row=0 col=0 should still be blank.
     assert_eq!(rif.desired.cells[0].ch, ' ');
+}
+
+#[test]
+fn rasterize_face_fill_paints_blank_cells_before_glyphs() {
+    let mut state = FrameDisplayState::new(8, 2, 1.0, 1.0);
+    state.background = Color::from_pixel(0x000000);
+    let mut fill_face = Face::new(7);
+    fill_face.background = Color::from_pixel(0x112233);
+    let mut glyph_face = Face::new(8);
+    glyph_face.background = Color::from_pixel(0x445566);
+    state.faces.insert(7, fill_face);
+    state.faces.insert(8, glyph_face);
+    state.face_fills.push(FaceFillItem {
+        window_id: DisplayWindowId::new(1),
+        row_role: GlyphRowRole::Text,
+        clip_rect: Some(Rect::new(0.0, 0.0, 8.0, 2.0)),
+        bounds: Rect::new(0.0, 0.0, 8.0, 1.0),
+        face_id: 7,
+    });
+
+    let mut matrix = GlyphMatrix::new(1, 6);
+    let mut row = GlyphRow::new(GlyphRowRole::Text);
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('X', 8, 0));
+    matrix.rows[0] = row;
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: 1,
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 8.0, 1.0),
+        text_pixel_bounds: Rect::new(2.0, 0.0, 6.0, 1.0),
+        selected: true,
+    });
+
+    let mut rif = TtyRif::new(8, 2);
+    rif.rasterize(&state);
+
+    assert_eq!(rif.desired.cells[0].ch, ' ');
+    assert_eq!(rif.desired.cells[0].attrs.bg, Some((0x11, 0x22, 0x33)));
+    assert_eq!(rif.desired.cells[1].attrs.bg, Some((0x11, 0x22, 0x33)));
+    assert_eq!(rif.desired.cells[2].ch, 'X');
+    assert_eq!(rif.desired.cells[2].attrs.bg, Some((0x44, 0x55, 0x66)));
+    assert_eq!(rif.desired.cells[7].attrs.bg, Some((0x11, 0x22, 0x33)));
+    assert_eq!(rif.desired.cells[8].attrs.bg, Some((0, 0, 0)));
 }
 
 #[test]

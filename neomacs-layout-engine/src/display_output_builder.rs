@@ -365,6 +365,10 @@ impl DisplayOutputBuilder {
         });
     }
 
+    pub(crate) fn add_output_face_fill(&mut self, item: FaceFillItem) {
+        self.install_output_frame_artifact(OutputFrameArtifactInstallRequest::FaceFill(item));
+    }
+
     pub(crate) fn add_output_border(
         &mut self,
         window_id: i64,

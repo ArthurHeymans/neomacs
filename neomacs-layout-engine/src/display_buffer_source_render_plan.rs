@@ -27,7 +27,9 @@ use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::render_window_chrome_rows;
-use neomacs_display_protocol::types::{Color, Rect};
+use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
+use neomacs_display_protocol::glyph_matrix::FaceFillItem;
+use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::buffer::BufferId;
 use neovm_core::window::{FrameId, WindowId};
 
@@ -424,6 +426,22 @@ impl BufferSourceOutputSetup {
         }
 
         let (mut output, evaluator) = output.into_parts();
+        if !default_face.face().use_default_background && geometry.text_height > 0.0 {
+            let face_id = face_ids.allocate();
+            output.install_resolved_face(face_id, default_face.face(), None);
+            output.builder().add_output_face_fill(FaceFillItem {
+                window_id: DisplayWindowId::new(params.window_id),
+                row_role: GlyphRowRole::Text,
+                clip_rect: Some(params.bounds),
+                bounds: Rect::new(
+                    params.bounds.x,
+                    geometry.text_y,
+                    params.bounds.width,
+                    geometry.text_height,
+                ),
+                face_id,
+            });
+        }
         let mut render_services =
             ChromeRowRenderServices::new(font_metrics, face_resolver, &mut face_ids);
         let mut output_emitter = output_emitter;

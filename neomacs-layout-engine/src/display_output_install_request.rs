@@ -6,7 +6,7 @@ use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor, WindowEffectHint, WindowInfo,
     WindowTransitionHint,
 };
-use neomacs_display_protocol::glyph_matrix::{CursorItem, ScrollBarItem};
+use neomacs_display_protocol::glyph_matrix::{CursorItem, FaceFillItem, ScrollBarItem};
 use neomacs_display_protocol::types::{
     Color, DisplayFrameId, DisplayWindowId, ImageId, Rect, VideoId, XwidgetId,
 };
@@ -197,6 +197,7 @@ pub(crate) enum OutputFrameArtifactInstallRequest {
         bounds: Rect,
         color: Color,
     },
+    FaceFill(FaceFillItem),
     Border {
         window_id: DisplayWindowId,
         x: f32,

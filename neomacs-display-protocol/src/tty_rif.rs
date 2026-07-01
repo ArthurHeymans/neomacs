@@ -361,6 +361,10 @@ impl TtyRif {
             };
         }
 
+        for fill in &state.face_fills {
+            self.rasterize_face_fill(origin_col, origin_row, state, fill);
+        }
+
         for frame_row in &state.frame_chrome_rows {
             let char_w = state.char_width.max(1.0);
             let win_col = origin_col + (frame_row.pixel_bounds.x / char_w) as usize;
@@ -685,6 +689,35 @@ impl TtyRif {
     /// After calling this, the internal buffer is empty.
     pub fn take_output(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.output)
+    }
+
+    fn rasterize_face_fill(
+        &mut self,
+        origin_col: usize,
+        origin_row: usize,
+        state: &FrameDisplayState,
+        fill: &FaceFillItem,
+    ) {
+        let char_w = state.char_width.max(1.0);
+        let char_h = state.char_height.max(1.0);
+        let start_col = origin_col + (fill.bounds.x / char_w).round().max(0.0) as usize;
+        let start_row = origin_row + (fill.bounds.y / char_h).round().max(0.0) as usize;
+        let width_cols = (fill.bounds.width / char_w).ceil().max(0.0) as usize;
+        let height_rows = (fill.bounds.height / char_h).ceil().max(0.0) as usize;
+        if width_cols == 0 || height_rows == 0 {
+            return;
+        }
+
+        let attrs = self.resolve_attrs(fill.face_id);
+        let max_row = start_row
+            .saturating_add(height_rows)
+            .min(self.desired.height);
+        let max_col = start_col.saturating_add(width_cols).min(self.desired.width);
+        for row in start_row..max_row {
+            for col in start_col..max_col {
+                self.desired.set(row, col, ' ', attrs, false);
+            }
+        }
     }
 
     fn rasterize_glyph_row(

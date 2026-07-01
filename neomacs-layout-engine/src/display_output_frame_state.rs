@@ -10,14 +10,15 @@ use neomacs_display_protocol::frame_glyphs::{
     PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
 use neomacs_display_protocol::glyph_matrix::{
-    BackgroundItem, BorderItem, CursorItem, FrameDisplayState, ImageItem, ScrollBarItem, VideoItem,
-    XwidgetItem,
+    BackgroundItem, BorderItem, CursorItem, FaceFillItem, FrameDisplayState, ImageItem,
+    ScrollBarItem, VideoItem, XwidgetItem,
 };
 use neomacs_display_protocol::types::{Color, DisplayFrameId, DisplayWindowId};
 use std::collections::HashMap;
 
 pub(crate) struct OutputFrameBuildState {
     backgrounds: Vec<BackgroundItem>,
+    face_fills: Vec<FaceFillItem>,
     borders: Vec<BorderItem>,
     cursors: Vec<CursorItem>,
     images: Vec<ImageItem>,
@@ -48,6 +49,7 @@ impl OutputFrameBuildState {
     pub(crate) fn new() -> Self {
         Self {
             backgrounds: Vec::new(),
+            face_fills: Vec::new(),
             borders: Vec::new(),
             cursors: Vec::new(),
             images: Vec::new(),
@@ -87,6 +89,7 @@ impl OutputFrameBuildState {
 
     pub(crate) fn reset(&mut self) {
         self.backgrounds.clear();
+        self.face_fills.clear();
         self.borders.clear();
         self.cursors.clear();
         self.images.clear();
@@ -145,6 +148,9 @@ impl OutputFrameBuildState {
         match request {
             OutputFrameArtifactInstallRequest::Background { bounds, color } => {
                 self.backgrounds.push(BackgroundItem { bounds, color });
+            }
+            OutputFrameArtifactInstallRequest::FaceFill(item) => {
+                self.face_fills.push(item);
             }
             OutputFrameArtifactInstallRequest::Border {
                 window_id,
@@ -284,6 +290,7 @@ impl OutputFrameBuildState {
 
     pub(crate) fn install_into(self, state: &mut FrameDisplayState) {
         state.backgrounds = self.backgrounds;
+        state.face_fills = self.face_fills;
         state.borders = self.borders;
         state.cursors = self.cursors;
         state.images = self.images;
