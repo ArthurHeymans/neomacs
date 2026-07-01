@@ -1556,7 +1556,7 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
                 row_extend,
                 row_geometry,
                 progress.row_progress().x(),
-                context.append_surface.right_edge(),
+                context.append_surface.full_text_right_edge(),
                 context.frame_background,
                 false,
                 metrics.row_height(),

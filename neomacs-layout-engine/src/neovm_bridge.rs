@@ -2620,20 +2620,8 @@ impl FaceResolver {
         resolved
     }
 
-    fn apply_inline_face_over(&self, base: &ResolvedFace, face: &NeoFace) -> ResolvedFace {
-        // Resolve `:inherit` first so the inline face's own attributes
-        // below override the inherited ones. Mirrors GNU
-        // `merge_face_vectors` (xfaces.c:2305-2314): inherited attrs are
-        // merged first, then the face's own specified attributes take
-        // precedence.
-        let base_after_inherit = match face.inherit {
-            Some(inherit_ref) => self
-                .resolve_face_value_over(base, &inherit_ref)
-                .unwrap_or_else(|| base.clone()),
-            None => base.clone(),
-        };
-        let mut rf = base_after_inherit;
-
+    fn apply_specified_face_over(&self, base: &ResolvedFace, face: &NeoFace) -> ResolvedFace {
+        let mut rf = base.clone();
         if let Some(c) = &face.foreground {
             rf.fg = color_to_pixel(c);
             rf.use_default_foreground = false;
@@ -2718,63 +2706,82 @@ impl FaceResolver {
         rf
     }
 
+    fn apply_inline_face_over(&self, base: &ResolvedFace, face: &NeoFace) -> ResolvedFace {
+        // Resolve `:inherit` first so the inline face's own attributes
+        // below override the inherited ones. Mirrors GNU
+        // `merge_face_vectors` (xfaces.c:2305-2314): inherited attrs are
+        // merged first, then the face's own specified attributes take
+        // precedence.
+        let base_after_inherit = match face.inherit {
+            Some(inherit_ref) => self
+                .resolve_face_value_over(base, &inherit_ref)
+                .unwrap_or_else(|| base.clone()),
+            None => base.clone(),
+        };
+        self.apply_specified_face_over(&base_after_inherit, face)
+    }
+
+    fn resolve_named_face_overlay_spec(&self, name: &str, depth: usize) -> NeoFace {
+        if depth > 40 {
+            return NeoFace::default();
+        }
+        if name == "default" && depth > 0 {
+            return NeoFace::default();
+        }
+
+        let Some(face) = self.face_table.get(name).cloned() else {
+            return NeoFace::default();
+        };
+        self.resolve_face_overlay_spec(face, depth)
+    }
+
+    fn resolve_face_overlay_spec(&self, mut face: NeoFace, depth: usize) -> NeoFace {
+        if depth > 40 {
+            return NeoFace::default();
+        }
+
+        let parent = match face.inherit.take() {
+            Some(inherit_ref) => self.resolve_face_ref_overlay_spec(inherit_ref, depth + 1),
+            None => NeoFace::default(),
+        };
+        parent.merge(&face)
+    }
+
+    fn resolve_face_ref_overlay_spec(&self, face_ref: Value, depth: usize) -> NeoFace {
+        if depth > 40 || face_ref.is_nil() || face_ref.is_symbol_named("nil") {
+            return NeoFace::default();
+        }
+
+        if let Some(name) = Self::face_name_from_value(&face_ref) {
+            return self.resolve_named_face_overlay_spec(name, depth);
+        }
+
+        let Some(items) = list_to_vec(&face_ref) else {
+            return NeoFace::default();
+        };
+        if items.is_empty() {
+            return NeoFace::default();
+        }
+
+        if let Some(filtered_spec) = self.eval_filtered_face_spec(&items) {
+            return self.resolve_face_ref_overlay_spec(Value::list(filtered_spec), depth + 1);
+        }
+        if Self::face_spec_is_plist(&items) {
+            let face = NeoFace::from_plist("--inline--", &items);
+            return self.resolve_face_overlay_spec(face, depth + 1);
+        }
+
+        let mut result = NeoFace::default();
+        for item in items.iter().rev() {
+            let next = self.resolve_face_ref_overlay_spec(*item, depth + 1);
+            result = result.merge(&next);
+        }
+        result
+    }
+
     fn apply_named_face_over(&self, base: &ResolvedFace, name: &str) -> ResolvedFace {
-        let resolved = self.resolve_named_face(name);
-        let default = self.default_face();
-        let mut merged = base.clone();
-
-        if resolved.fg != default.fg
-            || resolved.use_default_foreground != default.use_default_foreground
-        {
-            merged.fg = resolved.fg;
-            merged.use_default_foreground = resolved.use_default_foreground;
-        }
-        if resolved.bg != default.bg
-            || resolved.use_default_background != default.use_default_background
-        {
-            merged.bg = resolved.bg;
-            merged.use_default_background = resolved.use_default_background;
-        }
-        if !resolved.font_family.is_empty() && resolved.font_family != default.font_family {
-            merged.font_family = resolved.font_family;
-        }
-        if resolved.font_weight != default.font_weight {
-            merged.font_weight = resolved.font_weight;
-        }
-        if resolved.italic != default.italic {
-            merged.italic = resolved.italic;
-        }
-        if resolved.terminal_inverse_video != default.terminal_inverse_video {
-            merged.terminal_inverse_video = resolved.terminal_inverse_video;
-        }
-        if (resolved.font_size - default.font_size).abs() > f32::EPSILON {
-            merged.font_size = resolved.font_size;
-        }
-        if resolved.underline_style != default.underline_style {
-            merged.underline_style = resolved.underline_style;
-            merged.underline_color = resolved.underline_color;
-        }
-        if resolved.strike_through != default.strike_through {
-            merged.strike_through = resolved.strike_through;
-            merged.strike_through_color = resolved.strike_through_color;
-        }
-        if resolved.overline != default.overline {
-            merged.overline = resolved.overline;
-            merged.overline_color = resolved.overline_color;
-        }
-        if resolved.box_type != default.box_type {
-            merged.box_type = resolved.box_type;
-            merged.box_color = resolved.box_color;
-            merged.box_line_width = resolved.box_line_width;
-        }
-        if resolved.extend != default.extend {
-            merged.extend = resolved.extend;
-        }
-        if resolved.overstrike != default.overstrike {
-            merged.overstrike = resolved.overstrike;
-        }
-
-        merged
+        let face = self.resolve_named_face_overlay_spec(name, 0);
+        self.apply_specified_face_over(base, &face)
     }
 
     fn face_name_from_value<'a>(value: &'a Value) -> Option<&'a str> {
@@ -2877,7 +2884,7 @@ impl FaceResolver {
         }
     }
 
-    fn resolve_buffer_face_value_over<B: LayoutBufferView>(
+    fn resolve_buffer_face_value_over_inner<B: LayoutBufferView>(
         &self,
         buffer: &B,
         base: &ResolvedFace,
@@ -2896,8 +2903,12 @@ impl FaceResolver {
                     && let Some(specs) = Self::buffer_face_remapping_specs(buffer, name)
                 {
                     remap_stack.push(name.to_string());
-                    let remapped =
-                        self.resolve_buffer_face_value_over(buffer, base, &specs, remap_stack);
+                    let remapped = self.resolve_buffer_face_value_over_inner(
+                        buffer,
+                        base,
+                        &specs,
+                        remap_stack,
+                    );
                     remap_stack.pop();
                     if remapped.is_some() {
                         return remapped;
@@ -2916,7 +2927,7 @@ impl FaceResolver {
                         return None;
                     }
                     // Recurse into the filtered spec (unwrap the :filtered wrapper)
-                    return self.resolve_buffer_face_value_over(
+                    return self.resolve_buffer_face_value_over_inner(
                         buffer,
                         base,
                         &Value::list(filtered_spec),
@@ -2931,9 +2942,12 @@ impl FaceResolver {
                 let mut current = base.clone();
                 let mut changed = false;
                 for item in items.iter().rev() {
-                    if let Some(next) =
-                        self.resolve_buffer_face_value_over(buffer, &current, item, remap_stack)
-                    {
+                    if let Some(next) = self.resolve_buffer_face_value_over_inner(
+                        buffer,
+                        &current,
+                        item,
+                        remap_stack,
+                    ) {
                         current = next;
                         changed = true;
                     }
@@ -2944,12 +2958,22 @@ impl FaceResolver {
         }
     }
 
+    pub(crate) fn resolve_buffer_face_value_over<B: LayoutBufferView>(
+        &self,
+        buffer: &B,
+        base: &ResolvedFace,
+        val: &Value,
+    ) -> Option<ResolvedFace> {
+        let mut remap_stack = Vec::new();
+        self.resolve_buffer_face_value_over_inner(buffer, base, val, &mut remap_stack)
+    }
+
     pub(crate) fn resolve_buffer_default_face<B: LayoutBufferView>(
         &self,
         buffer: &B,
     ) -> ResolvedFace {
         let mut remap_stack = Vec::new();
-        self.resolve_buffer_face_value_over(
+        self.resolve_buffer_face_value_over_inner(
             buffer,
             &self.default_face,
             &Value::symbol("default"),
@@ -3030,7 +3054,7 @@ impl FaceResolver {
         // 1. Text face property, with font-lock-face fallback.
         if let Some(val) = face_prop.or(font_lock_face_prop) {
             if let Some(next) =
-                self.resolve_buffer_face_value_over(buffer, &resolved, &val, &mut remap_stack)
+                self.resolve_buffer_face_value_over_inner(buffer, &resolved, &val, &mut remap_stack)
             {
                 resolved = next;
             }
@@ -3070,7 +3094,7 @@ impl FaceResolver {
             // are merged later and override earlier ones.
             overlay_faces.sort_by_key(|(pri, _)| *pri);
             for (_pri, face_value) in overlay_faces {
-                if let Some(next) = self.resolve_buffer_face_value_over(
+                if let Some(next) = self.resolve_buffer_face_value_over_inner(
                     buffer,
                     &resolved,
                     &face_value,
@@ -3114,8 +3138,12 @@ impl FaceResolver {
 
         if let Some(face_prop) =
             buffer.layout_text_prop_at_emacs_byte_pos(bytepos, Value::symbol("face"))
-            && let Some(next) =
-                self.resolve_buffer_face_value_over(buffer, &resolved, &face_prop, &mut remap_stack)
+            && let Some(next) = self.resolve_buffer_face_value_over_inner(
+                buffer,
+                &resolved,
+                &face_prop,
+                &mut remap_stack,
+            )
         {
             resolved = next;
         }

@@ -1,3 +1,4 @@
+use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_row_append_context::{
     DisplayRowActiveFaceAppendContext, DisplayRowAppendKind, DisplayRowAppendSurface,
@@ -24,7 +25,7 @@ use crate::display_source_item_append::{
     DisplaySourceSpecialCharAppendPlan, DisplaySourceSpecialCharPreparedAppend,
     DisplaySourceTextCharAppendPlan, DisplaySourceTextCharPreparedAppend,
 };
-use crate::neovm_bridge::LayoutBufferView;
+use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
 use neovm_core::buffer::BufferId;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -73,14 +74,27 @@ pub(crate) fn buffer_source_text_item_append_request<B: LayoutBufferView + ?Size
     Some(DisplaySourceRangeItemAppendRequest::new(item, append_kind))
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct BufferSourceRowAppendContext<'source, 'surface, B: LayoutBufferView + ?Sized> {
     buffer: &'source B,
     buffer_id: BufferId,
     append_surface: &'surface DisplayRowAppendSurface,
     active_face: &'source DisplayRowActiveFaceState,
+    resolved_item_face: Option<BufferSourceResolvedItemFace>,
     glyph_y_offset: f32,
     fallback_metrics: DisplayRowFallbackMetrics,
+}
+
+#[derive(Clone, Debug)]
+struct BufferSourceResolvedItemFace {
+    face_id: u32,
+    face: ResolvedFace,
+}
+
+impl BufferSourceResolvedItemFace {
+    fn new(face_id: u32, face: ResolvedFace) -> Self {
+        Self { face_id, face }
+    }
 }
 
 impl<'source, 'surface, B: LayoutBufferView + ?Sized>
@@ -99,6 +113,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             buffer_id,
             append_surface,
             active_face,
+            resolved_item_face: None,
             glyph_y_offset,
             fallback_metrics,
         }
@@ -121,6 +136,11 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             BufferSourceActiveFaceRowMetrics::from_active_face_row(active_face, row_height_px)
                 .fallback_metrics(),
         )
+    }
+
+    pub(crate) fn with_resolved_item_face(mut self, face_id: u32, face: ResolvedFace) -> Self {
+        self.resolved_item_face = Some(BufferSourceResolvedItemFace::new(face_id, face));
+        self
     }
 
     fn active_face_context<'row>(
@@ -149,6 +169,19 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
             self.active_face.resolved_face(),
             frame,
         )
+    }
+
+    fn source_item_face<'a>(&'a self, item: &DisplayItem) -> (&'a ResolvedFace, u32) {
+        let item_face_id = render_face_ref_id(item.face, self.active_face.face_id());
+        if item_face_id == self.active_face.face_id() {
+            return (self.active_face.resolved_face(), self.active_face.face_id());
+        }
+        if let Some(face) = &self.resolved_item_face
+            && face.face_id == item_face_id
+        {
+            return (&face.face, face.face_id);
+        }
+        (self.active_face.resolved_face(), item_face_id)
     }
 
     fn source_display_item_for_special_source_char(
@@ -362,9 +395,14 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         render_policy: &mut DisplaySourceAppendRenderPolicy,
     ) -> Option<DisplayRowAppendProgress> {
         let frame = self.active_face_context(geometry).active_face_frame();
-        let face_id = self.active_face.face_id();
-        SingleDisplayItemAppendContext::new(self.active_face.resolved_face(), face_id, frame)
-            .render_with_policy(state, item, position, fallback_kind, render_policy)
+        let (base_face, face_id) = self.source_item_face(&item);
+        SingleDisplayItemAppendContext::new(base_face, face_id, frame).render_with_policy(
+            state,
+            item,
+            position,
+            fallback_kind,
+            render_policy,
+        )
     }
 
     pub(crate) fn measure_source_display_item_width_naturally(
@@ -375,8 +413,14 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         position: DisplayRowPosition,
         fallback_kind: DisplayRowAppendKind,
     ) -> Option<f32> {
-        self.item_active_face(geometry)
-            .measure_display_item_width_naturally(state, item, position, fallback_kind)
+        let frame = self.active_face_context(geometry).active_face_frame();
+        let (base_face, face_id) = self.source_item_face(item);
+        SingleDisplayItemAppendContext::new(base_face, face_id, frame).measure_width_naturally(
+            state,
+            item.clone(),
+            position,
+            fallback_kind,
+        )
     }
 
     fn append_source_char_plan_to_text_row(

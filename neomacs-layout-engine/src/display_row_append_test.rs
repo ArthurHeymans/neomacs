@@ -8147,6 +8147,94 @@ fn buffer_text_source_append_context_uses_resolved_render_plan() {
 }
 
 #[test]
+fn buffer_text_source_append_context_uses_resolved_item_face_for_fragment_base() {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.insert("a");
+    }
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("append-buffer-item-face-base", 320, 120, buf_id);
+    let window_id = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    let mut output_emitter =
+        crate::window_output::WindowOutputEmitter::new(frame_id, window_id, 0, 0.0, 0.0);
+    output_emitter.begin_update(&mut eval);
+    output_emitter.begin_text_row(&mut eval, 0, 0, 0.0, 0.0);
+
+    let snapshot = current_buffer_snapshot(&eval, buf_id);
+    let table = FaceTable::new();
+    let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
+    let active_face = test_active_face_state(7, 8.0);
+    let mut item_face = active_face.resolved_face().clone();
+    item_face.fg = 0x0051afef;
+    item_face.bg = 0x00282c34;
+    item_face.use_default_background = false;
+    let surface = test_advance_resolution_surface();
+    let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
+    let mut font_metrics = None;
+    let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
+    builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
+    builder.begin_row(0, GlyphRowRole::Text);
+
+    let append_context = BufferSourceRowAppendContext::new(
+        &snapshot,
+        buf_id,
+        &surface,
+        &active_face,
+        0.0,
+        DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+    )
+    .with_resolved_item_face(32, item_face);
+    let item = buffer_display_item(
+        buf_id,
+        0,
+        1,
+        RenderFaceRef::FaceId(32),
+        DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new("a")),
+    );
+    let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
+
+    append_context
+        .append_source_display_item_to_text_row(
+            &geometry,
+            &mut text_row_source_render_state(
+                &mut builder,
+                &mut output_emitter,
+                &mut eval,
+                &mut font_metrics,
+                &face_resolver,
+            ),
+            item,
+            DisplayRowPosition::new(0.0, 0),
+            DisplayRowAppendKind::SourceText,
+            &mut render_policy,
+        )
+        .expect("appended source item");
+
+    builder
+        .edit_current_row_for_test(|row| {
+            let text = &row.glyphs[GlyphArea::Text.index()];
+            assert_eq!(text.len(), 1);
+            assert_eq!(text[0].face_id, 32);
+        })
+        .expect("current row");
+    let face = builder.faces().get(&32).expect("item face installed");
+    assert_eq!(face.foreground, Color::from_pixel(0x0051afef));
+    assert_eq!(face.background, Color::from_pixel(0x00282c34));
+    assert!(!face.use_default_background);
+}
+
+#[test]
 fn buffer_text_source_append_context_composes_with_current_row_tail() {
     let mut eval = Context::new();
     let buf_id = eval

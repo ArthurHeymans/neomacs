@@ -114,7 +114,7 @@ impl<'a> DisplaySourceResolveParams<'a> {
 
 #[derive(Default)]
 pub(crate) struct DisplaySourceResolveState {
-    face_cache: HashMap<Value, u32>,
+    face_cache: HashMap<DisplayFaceCacheKey, u32>,
     height_face_cache: HashMap<DisplayHeightFaceKey, u32>,
     resolved_faces: HashMap<u32, ResolvedFace>,
 }
@@ -128,15 +128,30 @@ impl DisplaySourceResolveState {
         self.resolved_faces.get(&face_id)
     }
 
-    fn cached_face(&self, face_value: &Value) -> Option<RenderFaceRef> {
+    fn cached_face(&self, base_face_id: u32, face_value: &Value) -> Option<RenderFaceRef> {
         self.face_cache
-            .get(face_value)
+            .get(&DisplayFaceCacheKey {
+                base_face_id,
+                face_value: *face_value,
+            })
             .copied()
             .map(RenderFaceRef::FaceId)
     }
 
-    fn cache_face(&mut self, face_value: Value, face_id: u32, resolved: &ResolvedFace) {
-        self.face_cache.insert(face_value, face_id);
+    fn cache_face(
+        &mut self,
+        base_face_id: u32,
+        face_value: Value,
+        face_id: u32,
+        resolved: &ResolvedFace,
+    ) {
+        self.face_cache.insert(
+            DisplayFaceCacheKey {
+                base_face_id,
+                face_value,
+            },
+            face_id,
+        );
         self.remember_face(face_id, resolved);
     }
 
@@ -179,6 +194,12 @@ impl PendingDisplaySourceFace {
     pub(crate) fn into_parts(self) -> (u32, ResolvedFace) {
         (self.face_id, self.resolved)
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct DisplayFaceCacheKey {
+    base_face_id: u32,
+    face_value: Value,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -540,33 +561,117 @@ impl<'a> DisplaySourcePropertyResolver<'a> {
     }
 }
 
+pub(crate) struct BufferDisplaySourcePropertyResolver<'a, B: LayoutBufferView> {
+    buffer: &'a B,
+    params: DisplaySourceResolveParams<'a>,
+    state: &'a mut DisplaySourceResolveState,
+    face_ids: &'a mut FrameFaceIdAllocator,
+    pending_faces: &'a mut Vec<PendingDisplaySourceFace>,
+}
+
+impl<'a, B: LayoutBufferView> BufferDisplaySourcePropertyResolver<'a, B> {
+    pub(crate) fn new(
+        buffer: &'a B,
+        params: DisplaySourceResolveParams<'a>,
+        state: &'a mut DisplaySourceResolveState,
+        face_ids: &'a mut FrameFaceIdAllocator,
+        pending_faces: &'a mut Vec<PendingDisplaySourceFace>,
+    ) -> Self {
+        let face_basis = params.face_basis();
+        state.remember_face(face_basis.base_face_id(), face_basis.base_face());
+        Self {
+            buffer,
+            params,
+            state,
+            face_ids,
+            pending_faces,
+        }
+    }
+}
+
+fn resolve_source_face_ref(
+    state: &mut DisplaySourceResolveState,
+    face_ids: &mut FrameFaceIdAllocator,
+    pending_faces: &mut Vec<PendingDisplaySourceFace>,
+    face_basis: DisplaySourceFaceBasis<'_>,
+    base: RenderFaceRef,
+    face_value: Value,
+    resolve: impl FnOnce(&ResolvedFace, &Value) -> Option<ResolvedFace>,
+) -> RenderFaceRef {
+    let base_face_id = render_face_ref_id(base, face_basis.base_face_id());
+    if let Some(cached) = state.cached_face(base_face_id, &face_value) {
+        return cached;
+    }
+
+    let base_resolved = state.resolved_face_for(base, face_basis.base_face());
+    let Some(resolved) = resolve(&base_resolved, &face_value) else {
+        return base;
+    };
+
+    if same_resolved_face(&resolved, &base_resolved) {
+        state.cache_face(base_face_id, face_value, base_face_id, &base_resolved);
+        return RenderFaceRef::FaceId(base_face_id);
+    }
+
+    let face_id = face_ids.allocate();
+    state.cache_face(base_face_id, face_value, face_id, &resolved);
+    pending_faces.push(PendingDisplaySourceFace::new(face_id, resolved));
+    RenderFaceRef::FaceId(face_id)
+}
+
 impl DisplayItemFaceResolver for DisplaySourcePropertyResolver<'_> {
     fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef {
         let face_basis = self.params.face_basis();
-        if let Some(cached) = self.state.cached_face(&face_value) {
-            return cached;
-        }
-        let Some(resolved) = face_basis
-            .face_resolver()
-            .resolve_face_value_over(face_basis.base_face(), &face_value)
-        else {
-            return base;
-        };
+        resolve_source_face_ref(
+            self.state,
+            self.face_ids,
+            self.pending_faces,
+            face_basis,
+            base,
+            face_value,
+            |base_resolved, face_value| {
+                face_basis
+                    .face_resolver()
+                    .resolve_face_value_over(base_resolved, face_value)
+            },
+        )
+    }
 
-        if same_resolved_face(&resolved, face_basis.base_face()) {
-            self.state.cache_face(
-                face_value,
-                face_basis.base_face_id(),
-                face_basis.base_face(),
-            );
-            return RenderFaceRef::FaceId(face_basis.base_face_id());
-        }
+    fn resolve_display_media_replacement(
+        &mut self,
+        display_prop: Value,
+        face: RenderFaceRef,
+    ) -> Option<DisplayMediaReplacement> {
+        let face_basis = self.params.face_basis();
+        let fallback = face_basis.fallback_metrics();
+        let resolved_face = self.state.resolved_face_for(face, face_basis.base_face());
+        resolve_display_property_media(
+            &display_prop,
+            self.params.display_host(),
+            &resolved_face,
+            fallback,
+        )
+    }
+}
 
-        let face_id = self.face_ids.allocate();
-        self.state.cache_face(face_value, face_id, &resolved);
-        self.pending_faces
-            .push(PendingDisplaySourceFace::new(face_id, resolved));
-        RenderFaceRef::FaceId(face_id)
+impl<B: LayoutBufferView> DisplayItemFaceResolver for BufferDisplaySourcePropertyResolver<'_, B> {
+    fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef {
+        let face_basis = self.params.face_basis();
+        resolve_source_face_ref(
+            self.state,
+            self.face_ids,
+            self.pending_faces,
+            face_basis,
+            base,
+            face_value,
+            |base_resolved, face_value| {
+                face_basis.face_resolver().resolve_buffer_face_value_over(
+                    self.buffer,
+                    base_resolved,
+                    face_value,
+                )
+            },
+        )
     }
 
     fn resolve_display_media_replacement(
@@ -740,7 +845,7 @@ mod tests {
     use crate::neovm_bridge::LayoutBufferSnapshot;
     use neovm_core::buffer::CharPos0;
     use neovm_core::emacs_core::Context;
-    use neovm_core::face::FaceTable;
+    use neovm_core::face::{Color as NeoColor, Face as NeoFace, FaceTable};
 
     fn test_buffer_snapshot() -> LayoutBufferSnapshot {
         let mut context = Context::new();
@@ -766,6 +871,271 @@ mod tests {
 
     fn test_face_resolver(table: &FaceTable) -> FaceResolver {
         FaceResolver::new(table, 0x00ffffff, 0x000000, 14.0, None)
+    }
+
+    fn face_id(face: RenderFaceRef) -> u32 {
+        match face {
+            RenderFaceRef::FaceId(face_id) => face_id,
+            RenderFaceRef::Inherit => panic!("expected concrete face id"),
+        }
+    }
+
+    fn dashboard_like_face_table() -> FaceTable {
+        let mut table = FaceTable::new();
+
+        let mut blue_title = NeoFace::new("dashboard-title-blue");
+        blue_title.foreground = Some(NeoColor::rgb(0x51, 0xaf, 0xef));
+        table.define("dashboard-title-blue", blue_title);
+
+        let mut purple_title = NeoFace::new("dashboard-title-purple");
+        purple_title.foreground = Some(NeoColor::rgb(0xa9, 0xa1, 0xe1));
+        table.define("dashboard-title-purple", purple_title);
+
+        let mut hl_line = NeoFace::new("dashboard-hl-line");
+        hl_line.background = Some(NeoColor::rgb(0x21, 0x24, 0x2b));
+        hl_line.extend = Some(true);
+        table.define("dashboard-hl-line", hl_line);
+
+        table
+    }
+
+    #[test]
+    fn source_face_resolver_merges_overlay_face_over_current_base_face() {
+        let table = dashboard_like_face_table();
+        let face_resolver = test_face_resolver(&table);
+        let base_face = face_resolver.default_face();
+        let mut resolve_state = DisplaySourceResolveState::default();
+        let mut face_ids = FrameFaceIdAllocator::new(20);
+        let mut pending_faces = Vec::new();
+        let params = DisplaySourceResolveParams::new(
+            DisplaySourceFaceBasis::new(
+                &face_resolver,
+                0,
+                base_face,
+                DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+            ),
+            None,
+        );
+
+        let highlighted_id = {
+            let mut resolver = DisplaySourcePropertyResolver::new(
+                params,
+                &mut resolve_state,
+                &mut face_ids,
+                &mut pending_faces,
+            );
+            let title = DisplayItemFaceResolver::resolve_face_ref(
+                &mut resolver,
+                RenderFaceRef::Inherit,
+                Value::symbol("dashboard-title-blue"),
+            );
+            let highlighted = DisplayItemFaceResolver::resolve_face_ref(
+                &mut resolver,
+                title,
+                Value::symbol("dashboard-hl-line"),
+            );
+            face_id(highlighted)
+        };
+
+        let highlighted = resolve_state
+            .resolved_face(highlighted_id)
+            .expect("highlighted face");
+        assert_eq!(highlighted.fg, 0x0051afef);
+        assert_eq!(highlighted.bg, 0x0021242b);
+        assert!(highlighted.extend);
+    }
+
+    #[test]
+    fn source_face_cache_is_keyed_by_base_face_id() {
+        let table = dashboard_like_face_table();
+        let face_resolver = test_face_resolver(&table);
+        let base_face = face_resolver.default_face();
+        let mut resolve_state = DisplaySourceResolveState::default();
+        let mut face_ids = FrameFaceIdAllocator::new(20);
+        let mut pending_faces = Vec::new();
+        let params = DisplaySourceResolveParams::new(
+            DisplaySourceFaceBasis::new(
+                &face_resolver,
+                0,
+                base_face,
+                DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+            ),
+            None,
+        );
+
+        let (blue_hl_id, purple_hl_id) = {
+            let mut resolver = DisplaySourcePropertyResolver::new(
+                params,
+                &mut resolve_state,
+                &mut face_ids,
+                &mut pending_faces,
+            );
+            let blue = DisplayItemFaceResolver::resolve_face_ref(
+                &mut resolver,
+                RenderFaceRef::Inherit,
+                Value::symbol("dashboard-title-blue"),
+            );
+            let blue_hl = DisplayItemFaceResolver::resolve_face_ref(
+                &mut resolver,
+                blue,
+                Value::symbol("dashboard-hl-line"),
+            );
+            let purple = DisplayItemFaceResolver::resolve_face_ref(
+                &mut resolver,
+                RenderFaceRef::Inherit,
+                Value::symbol("dashboard-title-purple"),
+            );
+            let purple_hl = DisplayItemFaceResolver::resolve_face_ref(
+                &mut resolver,
+                purple,
+                Value::symbol("dashboard-hl-line"),
+            );
+            (face_id(blue_hl), face_id(purple_hl))
+        };
+
+        assert_ne!(blue_hl_id, purple_hl_id);
+        assert_eq!(
+            resolve_state
+                .resolved_face(blue_hl_id)
+                .expect("blue highlight")
+                .fg,
+            0x0051afef
+        );
+        assert_eq!(
+            resolve_state
+                .resolved_face(purple_hl_id)
+                .expect("purple highlight")
+                .fg,
+            0x00a9a1e1
+        );
+    }
+
+    #[test]
+    fn buffer_source_face_resolver_uses_buffer_face_remapping() {
+        let mut context = Context::new();
+        let buf_id = context
+            .buffer_manager()
+            .current_buffer()
+            .expect("current buffer")
+            .id();
+        let remapping = Value::list(vec![Value::list(vec![
+            Value::symbol("dashboard-hl-line"),
+            Value::list(vec![
+                Value::keyword("background"),
+                Value::string("#282c34"),
+                Value::keyword("extend"),
+                Value::T,
+            ]),
+            Value::symbol("dashboard-hl-line"),
+        ])]);
+        {
+            let buffer = context
+                .buffer_manager_mut()
+                .get_mut(buf_id)
+                .expect("current buffer");
+            buffer.insert("abc");
+            buffer.widen();
+            buffer.set_buffer_local("face-remapping-alist", remapping);
+        }
+        let table = dashboard_like_face_table();
+        let face_resolver = test_face_resolver(&table);
+        let buffer = context
+            .buffer_manager()
+            .get(buf_id)
+            .expect("current buffer");
+        let base_face = face_resolver.default_face();
+        let mut resolve_state = DisplaySourceResolveState::default();
+        let mut face_ids = FrameFaceIdAllocator::new(20);
+        let mut pending_faces = Vec::new();
+        let params = DisplaySourceResolveParams::new(
+            DisplaySourceFaceBasis::new(
+                &face_resolver,
+                0,
+                base_face,
+                DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+            ),
+            None,
+        );
+
+        let highlighted_id = {
+            let mut resolver = BufferDisplaySourcePropertyResolver::new(
+                buffer,
+                params,
+                &mut resolve_state,
+                &mut face_ids,
+                &mut pending_faces,
+            );
+            let title = DisplayItemFaceResolver::resolve_face_ref(
+                &mut resolver,
+                RenderFaceRef::Inherit,
+                Value::symbol("dashboard-title-blue"),
+            );
+            let highlighted = DisplayItemFaceResolver::resolve_face_ref(
+                &mut resolver,
+                title,
+                Value::symbol("dashboard-hl-line"),
+            );
+            face_id(highlighted)
+        };
+
+        let highlighted = resolve_state
+            .resolved_face(highlighted_id)
+            .expect("highlighted face");
+        assert_eq!(highlighted.fg, 0x0051afef);
+        assert_eq!(highlighted.bg, 0x00282c34);
+        assert!(highlighted.extend);
+    }
+
+    #[test]
+    fn named_face_background_equal_to_global_default_still_overrides_buffer_default() {
+        let mut context = Context::new();
+        let buf_id = context
+            .buffer_manager()
+            .current_buffer()
+            .expect("current buffer")
+            .id();
+        let remapping = Value::list(vec![Value::list(vec![
+            Value::symbol("default"),
+            Value::list(vec![Value::keyword("background"), Value::string("#21242b")]),
+            Value::symbol("default"),
+        ])]);
+        {
+            let buffer = context
+                .buffer_manager_mut()
+                .get_mut(buf_id)
+                .expect("current buffer");
+            buffer.insert("abc");
+            buffer.widen();
+            buffer.set_buffer_local("face-remapping-alist", remapping);
+        }
+
+        let mut table = FaceTable::new();
+        let mut default = NeoFace::new("default");
+        default.background = Some(NeoColor::rgb(0x28, 0x2c, 0x34));
+        table.define("default", default);
+        let mut selected_line = NeoFace::new("selected-line");
+        selected_line.background = Some(NeoColor::rgb(0x28, 0x2c, 0x34));
+        selected_line.extend = Some(true);
+        table.define("selected-line", selected_line);
+
+        let face_resolver = test_face_resolver(&table);
+        let buffer = context
+            .buffer_manager()
+            .get(buf_id)
+            .expect("current buffer");
+        let buffer_default = face_resolver.resolve_buffer_default_face(buffer);
+        assert_eq!(buffer_default.bg, 0x0021242b);
+
+        let highlighted = face_resolver
+            .resolve_buffer_face_value_over(
+                buffer,
+                &buffer_default,
+                &Value::symbol("selected-line"),
+            )
+            .expect("selected face should resolve");
+
+        assert_eq!(highlighted.bg, 0x00282c34);
+        assert!(highlighted.extend);
     }
 
     #[test]

@@ -13,6 +13,7 @@ use crate::display_buffer_source_row_lifecycle::{
 };
 use crate::display_buffer_source_text_run::BufferSourceTextRunRenderRequest;
 use crate::display_buffer_source_walk::BufferSourceWalk;
+use crate::display_face_ref::render_face_ref_id;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_face_state::DisplayRowActiveFaceState;
 use crate::display_row_geometry::{
@@ -298,7 +299,16 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
                 source_item.item_mut(),
                 nobreak_hint,
             );
-        let buffer_row_append_context = BufferSourceRowAppendContext::from_active_face_row(
+        let item_face_id = render_face_ref_id(source_item.item().face, active_face_state.face_id());
+        let resolved_item_face = (item_face_id != active_face_state.face_id())
+            .then(|| {
+                source_walk
+                    .resolved_source_face(item_face_id)
+                    .cloned()
+                    .map(|face| (item_face_id, face))
+            })
+            .flatten();
+        let mut buffer_row_append_context = BufferSourceRowAppendContext::from_active_face_row(
             buffer,
             self.buffer_id,
             self.append_surface,
@@ -306,6 +316,10 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
             self.glyph_y_offset,
             self.char_h,
         );
+        if let Some((face_id, face)) = resolved_item_face {
+            buffer_row_append_context =
+                buffer_row_append_context.with_resolved_item_face(face_id, face);
+        }
         let append_position = progress.row_position();
         let append_geometry = *row_geometry;
         let text_run_request = BufferSourceTextRunRenderRequest::new(

@@ -3139,6 +3139,71 @@ fn empty_line_extend_cursor_sits_at_text_start_not_window_edge() {
 }
 
 #[test]
+fn line_break_extend_fill_reaches_tty_reserved_right_column() {
+    let mut eval = Context::new();
+    convert_current_buffer_text_backend(&mut eval, BufferTextBackendKind::GapBuffer);
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    {
+        insert_fragmented_current_buffer_text(&mut eval, "x\n");
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        assert!(buffer.put_text_property(0, 1, Value::symbol("face"), extend_face_value()));
+    }
+
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("extend-fill-right-column", 360, 180, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+    let entry = state
+        .window_matrices
+        .iter()
+        .find(|entry| entry.window_id == selected_window.0)
+        .expect("selected window matrix");
+    let row = entry
+        .matrix
+        .rows
+        .iter()
+        .find(|row| row.enabled && row.role == GlyphRowRole::Text)
+        .expect("highlighted text row");
+    let text_glyphs = &row.glyphs[GlyphArea::Text.index()];
+    assert!(
+        matches!(
+            text_glyphs.first().map(|glyph| &glyph.glyph_type),
+            Some(GlyphType::Char { ch: 'x' })
+        ),
+        "first text glyph should be the source character, got {text_glyphs:?}"
+    );
+    let stretch_cols = text_glyphs
+        .iter()
+        .rev()
+        .find_map(|glyph| match glyph.glyph_type {
+            GlyphType::Stretch { width_cols } => Some(width_cols),
+            _ => None,
+        })
+        .expect("line-break :extend fill stretch");
+    assert_eq!(
+        stretch_cols,
+        u16::try_from(entry.matrix.ncols - 1).expect("matrix width fits u16"),
+        "the :extend fill must cover through the full text area, including the \
+         TTY-reserved right column"
+    );
+}
+
+#[test]
 fn layout_frame_rust_line_number_width_matches_gnu_visible_row_width() {
     let trace = backend_layout_trace_with_buffer_and_window_setup(
         BufferTextBackendKind::GapBuffer,

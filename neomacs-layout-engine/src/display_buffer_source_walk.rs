@@ -27,9 +27,11 @@ use crate::display_source::DisplaySourceTextPosition;
 use crate::display_source::{DisplaySourceContext, DisplaySourceStepItem};
 use crate::display_source_item_append::DisplaySourceRowAppendState;
 use crate::display_source_progress::DisplaySourceProgressState;
-use crate::display_source_resolver::{DisplaySourcePropertyResolver, DisplaySourceResolveState};
+use crate::display_source_resolver::{
+    BufferDisplaySourcePropertyResolver, DisplaySourceResolveState,
+};
 use crate::display_source_walk::DisplaySourcePositionConsumption;
-use crate::neovm_bridge::LayoutBufferView;
+use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
 use neovm_core::buffer::{BufferId, CharPos0};
 
 pub(crate) struct BufferSourceWalk<'request, B: LayoutBufferView> {
@@ -127,6 +129,10 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         &mut self.append_state
     }
 
+    pub(crate) fn resolved_source_face(&self, face_id: u32) -> Option<&ResolvedFace> {
+        self.source_resolve_state.resolved_face(face_id)
+    }
+
     pub(crate) fn prepend_pending_render_items<I>(&mut self, items: I)
     where
         I: IntoIterator<Item = DisplaySourceStepItem>,
@@ -172,7 +178,8 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         let mut pending_fringes = Vec::new();
         let source_item = {
             let params = face_resolution_context.source_resolve_params(None);
-            let mut resolver = DisplaySourcePropertyResolver::new(
+            let mut resolver = BufferDisplaySourcePropertyResolver::new(
+                face_resolution_context.buffer(),
                 params,
                 &mut self.source_resolve_state,
                 face_ids,

@@ -88,6 +88,10 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
         }
     }
 
+    pub(crate) fn buffer(&self) -> &'a B {
+        self.buffer
+    }
+
     pub(crate) fn resolve_at_checkpoint(
         &self,
         state: &mut BufferSourceFaceResolutionState<'_, '_>,
