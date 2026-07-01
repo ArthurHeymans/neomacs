@@ -4491,9 +4491,13 @@ pub(crate) fn builtin_set_window_buffer(
                         false,
                     ),
                 ]);
+                // GNU keeps the newly displayed buffer out of the window's
+                // previous buffers (record-window-buffer removes it), so filter
+                // out both the old buffer (re-added at the front below) and the
+                // buffer being switched to.
                 let filtered_prev = filtered_window_prev_buffers(
                     frames.window_prev_buffers(wid),
-                    &[old_buffer_value],
+                    &[old_buffer_value, Value::make_buffer(buf_id)],
                 )?;
                 frames.set_window_next_buffers(wid, Value::NIL);
                 let record_window_history = should_record_window_history_buffer(

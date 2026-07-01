@@ -5823,10 +5823,10 @@ fn set_window_buffer_updates_history_lists_on_real_buffer_switches() {
         "OK (t (\"swb-hist-a\" \"*scratch*\") ((t 7 t 11) (t 1 t 1)))"
     );
     assert_eq!(results[1], "OK (t t)");
-    assert_eq!(
-        results[2],
-        "OK (\"swb-hist-d1\" \"swb-hist-d2\" \"swb-hist-b\")"
-    );
+    // The buffer just switched to is kept out of the window's previous buffers
+    // (GNU `record-window-buffer` semantics), so after d1,d2,d1,d2 the current
+    // buffer d2 is absent and only d1 (plus the earlier b) remain.
+    assert_eq!(results[2], "OK (\"swb-hist-d1\" \"swb-hist-b\")");
 }
 
 #[test]
