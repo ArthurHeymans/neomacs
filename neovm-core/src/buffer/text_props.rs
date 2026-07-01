@@ -286,15 +286,55 @@ fn plist_value_put_replace(plist: &mut Value, key: Value, value: Value) -> bool 
     true
 }
 
+/// Remove KEY from a property list IN PLACE, mirroring GNU `remove_properties`
+/// (src/textprop.c). `text-properties-at` returns the live interval plist, so a
+/// captured snapshot aliases these cons cells; rebuilding the plist (the old
+/// behavior) left that snapshot stale. Head matches advance the plist pointer
+/// without mutating the old head cell; body matches are spliced out via
+/// `set_cdr`. Allocates nothing.
 fn plist_value_remove(plist: &mut Value, key: Value) -> bool {
-    let mut pairs = plist_pairs(*plist);
-    let before = pairs.len();
-    pairs.retain(|(name, _)| !eq_value(name, &key));
-    if pairs.len() == before {
-        return false;
+    let mut changed = false;
+
+    // Phase 1: strip matching pairs at the head (GNU advances
+    // current_plist = XCDR(XCDR(current_plist)) without mutating the old head).
+    let mut current = *plist;
+    while current.is_cons() {
+        let rest = current.cons_cdr();
+        if !rest.is_cons() {
+            break;
+        }
+        if eq_value(&current.cons_car(), &key) {
+            current = rest.cons_cdr();
+            changed = true;
+        } else {
+            break;
+        }
     }
-    *plist = plist_value_from_pairs(&pairs);
-    true
+
+    // Phase 2: splice out body matches in place
+    // (GNU `Fsetcdr (XCDR (tail2), XCDR (XCDR (this)))`).
+    let mut tail = current;
+    while tail.is_cons() {
+        let val_cell = tail.cons_cdr(); // XCDR(tail2)
+        if !val_cell.is_cons() {
+            break;
+        }
+        let this = val_cell.cons_cdr(); // next key cell
+        if this.is_cons() && eq_value(&this.cons_car(), &key) {
+            let this_val = this.cons_cdr();
+            if this_val.is_cons() {
+                val_cell.set_cdr(this_val.cons_cdr());
+                changed = true;
+                continue; // stay on the same tail; another match may follow
+            }
+        }
+        tail = this;
+    }
+
+    if changed {
+        *plist = current;
+    }
+    changed
 }
 
 // ---------------------------------------------------------------------------
