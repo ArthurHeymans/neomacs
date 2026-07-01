@@ -485,7 +485,7 @@ struct FailurePoint {
 
     /// Saved interval-counter overrides at this point.
     /// Keyed by bytecode position of the 2-byte counter field.
-    saved_counters: HashMap<usize, i16>,
+    saved_counters: HashMap<usize, u16>,
 }
 
 // SyntaxClass is imported from crate::emacs_core::syntax.
@@ -506,20 +506,34 @@ fn extract_number(buf: &[u8], pos: usize) -> i16 {
     i16::from_le_bytes([buf[pos], buf[pos + 1]])
 }
 
+/// Store a 2-byte UNSIGNED repeat counter at position in bytecode buffer. GNU
+/// counters are `unsigned short` (0..=RE_DUP_MAX), unlike the signed jump
+/// offsets stored by `store_number`.
+fn store_number_u16(buf: &mut [u8], pos: usize, number: u16) {
+    let bytes = number.to_le_bytes();
+    buf[pos] = bytes[0];
+    buf[pos + 1] = bytes[1];
+}
+
+/// Read a 2-byte UNSIGNED repeat counter from bytecode buffer.
+fn extract_number_u16(buf: &[u8], pos: usize) -> u16 {
+    u16::from_le_bytes([buf[pos], buf[pos + 1]])
+}
+
 /// Read a counter value from the counter table, falling back to the bytecode
 /// if no override has been stored yet.  Used by `succeed_n`, `jump_n`, and
 /// `set_number_at` to emulate GNU's in-place bytecode mutation on immutable
 /// bytecode.
-fn get_counter(counters: &HashMap<usize, i16>, bytecode: &[u8], pos: usize) -> i16 {
+fn get_counter(counters: &HashMap<usize, u16>, bytecode: &[u8], pos: usize) -> u16 {
     counters
         .get(&pos)
         .copied()
-        .unwrap_or_else(|| extract_number(bytecode, pos))
+        .unwrap_or_else(|| extract_number_u16(bytecode, pos))
 }
 
 /// Store a counter value in the mutable counter table (keyed by bytecode
 /// position).
-fn set_counter(counters: &mut HashMap<usize, i16>, pos: usize, val: i16) {
+fn set_counter(counters: &mut HashMap<usize, u16>, pos: usize, val: u16) {
     counters.insert(pos, val);
 }
 
@@ -2336,8 +2350,8 @@ fn checked_i16_offset(offset: isize) -> Result<i16, RegexCompileError> {
     })
 }
 
-fn checked_i16_counter(value: usize) -> Result<i16, RegexCompileError> {
-    i16::try_from(value).map_err(|_| RegexCompileError {
+fn checked_u16_counter(value: usize) -> Result<u16, RegexCompileError> {
+    u16::try_from(value).map_err(|_| RegexCompileError {
         message: "Regular expression too big".to_string(),
     })
 }
@@ -2362,7 +2376,7 @@ fn store_jump2_at(
     count: usize,
 ) -> Result<(), RegexCompileError> {
     store_jump_at(buffer, op_pos, op, target)?;
-    store_number(buffer, op_pos + 3, checked_i16_counter(count)?);
+    store_number_u16(buffer, op_pos + 3, checked_u16_counter(count)?);
     Ok(())
 }
 
@@ -2396,7 +2410,7 @@ fn insert_set_number_at(
     buf.splice_bytecode(at, &[RegexOp::SetNumberAt as u8, 0, 0, 0, 0]);
     let offset = checked_i16_offset(target_counter_offset as isize)?;
     store_number(&mut buf.buffer, at + 1, offset);
-    store_number(&mut buf.buffer, at + 3, checked_i16_counter(value)?);
+    store_number_u16(&mut buf.buffer, at + 3, checked_u16_counter(value)?);
     Ok(())
 }
 
@@ -2747,7 +2761,7 @@ pub(crate) fn re_match(
 
     // Mutable counter table for interval repetition (succeed_n / jump_n / set_number_at).
     // GNU modifies bytecode in-place; we use a side table keyed by bytecode position.
-    let mut counters: HashMap<usize, i16> = HashMap::new();
+    let mut counters: HashMap<usize, u16> = HashMap::new();
 
     // GNU regex-emacs.c:4188-4204 skips all internal register arrays
     // when the pattern has no subexpressions. Register 0 is handled
@@ -3582,7 +3596,7 @@ pub(crate) fn re_match(
                 let count = get_counter(&counters, bytecode, counter_pos);
                 if count != 0 {
                     // Still must succeed more times — decrement & continue
-                    set_counter(&mut counters, counter_pos, count - 1);
+                    set_counter(&mut counters, counter_pos, count.saturating_sub(1));
                     pc += 4;
                 } else {
                     // Counter exhausted — behave like on_failure_jump_loop.
@@ -3617,7 +3631,7 @@ pub(crate) fn re_match(
                 let count = get_counter(&counters, bytecode, counter_pos);
                 if count != 0 {
                     // Decrement counter and perform unconditional jump
-                    set_counter(&mut counters, counter_pos, count - 1);
+                    set_counter(&mut counters, counter_pos, count.saturating_sub(1));
                     let offset = extract_number(bytecode, pc);
                     pc = ((pc as i64) + 2 + (offset as i64)) as usize;
                 } else {
@@ -3631,7 +3645,7 @@ pub(crate) fn re_match(
                 // Used to reset interval counters at the start of a loop.
                 let rel_offset = extract_number(bytecode, pc);
                 pc += 2; // advance past the offset field
-                let value = extract_number(bytecode, pc);
+                let value = extract_number_u16(bytecode, pc);
                 pc += 2; // advance past the value field
                 // Target counter position: relative to position after
                 // the offset field (same convention as GNU).
@@ -3726,7 +3740,7 @@ fn goto_fail(
     fail_stack: &mut Vec<FailurePoint>,
     regstart: &mut [Option<usize>],
     regend: &mut [Option<usize>],
-    counters: &mut HashMap<usize, i16>,
+    counters: &mut HashMap<usize, u16>,
 ) -> Option<()> {
     // Mirrors GNU `regex-emacs.c:5236`: poll quit at the failure /
     // backtrack site. Backtracking loops are the worst offenders for
