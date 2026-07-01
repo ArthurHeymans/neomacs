@@ -3887,6 +3887,7 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
             }
         }
 
+        let sequence = metize_key_sequence(&sequence);
         if !found.iter().any(|existing| *existing == sequence) {
             found.push(sequence);
         }
@@ -3907,6 +3908,31 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
     }
     let out: Vec<Value> = found.iter().map(|seq| Value::vector(seq.clone())).collect();
     Ok(Value::list(out))
+}
+
+/// Collapse an internal `ESC`-prefixed key sequence into GNU's meta-bit form:
+/// the `meta-prefix-char` (ESC, 27) immediately followed by a character event is
+/// replaced by that character with the meta modifier set (dropping the ESC),
+/// mirroring GNU `where_is_internal`'s `is_metized` handling. So `[27 120]`
+/// (ESC x) becomes `[134217848]` (M-x) -- the same collapse GNU applies to both
+/// `M-x` and explicitly-bound `ESC x` sequences in the where-is result.
+fn metize_key_sequence(seq: &[Value]) -> Vec<Value> {
+    let mut out = Vec::with_capacity(seq.len());
+    let mut i = 0;
+    while i < seq.len() {
+        if i + 1 < seq.len() && seq[i].as_fixnum() == Some(27) {
+            if let Some(next) = seq[i + 1].as_fixnum() {
+                if next & KEY_CHAR_META == 0 {
+                    out.push(Value::fixnum(next | KEY_CHAR_META));
+                    i += 2;
+                    continue;
+                }
+            }
+        }
+        out.push(seq[i]);
+        i += 1;
+    }
+    out
 }
 
 /// If `sequence` is a raw `[remap COMMAND]` pseudo-key (a 2-element key
