@@ -917,6 +917,11 @@ fn format_vector_bytes_in_state(
     {
         return super::print::print_value_bytes_with_options(value, options);
     }
+    // GNU prints a window-configuration as the opaque `#<window-configuration>`,
+    // never its internal tagged-vector representation.
+    if super::print::is_window_configuration_value(value) {
+        return b"#<window-configuration>".to_vec();
+    }
     let mut out = Vec::new();
     out.push(b'[');
     let Some(values) = value.as_vector_data() else {
