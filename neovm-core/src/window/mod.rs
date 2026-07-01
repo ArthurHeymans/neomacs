@@ -66,8 +66,6 @@ pub struct RenderFrameTree {
 /// Keep frame and window numeric domains disjoint while both are represented
 /// as Lisp integers.
 pub(crate) const FRAME_ID_BASE: u64 = 1 << 32;
-/// Synthetic window-id domain reserved for per-frame minibuffer windows.
-pub(crate) const MINIBUFFER_WINDOW_ID_BASE: u64 = 1 << 48;
 
 /// GNU `DEFAULT_TOOL_BAR_LABEL_SIZE` in `src/dispextern.h`.
 pub const DEFAULT_TOOL_BAR_LABEL_SIZE: f32 = 14.0;
@@ -1689,8 +1687,11 @@ impl Frame {
         width: u32,
         height: u32,
         mut root_window: Window,
+        minibuffer_window_id: WindowId,
     ) -> Self {
-        let minibuffer_window = WindowId(MINIBUFFER_WINDOW_ID_BASE + id.0);
+        // The minibuffer window id is allocated from the shared window sequence
+        // counter by the caller (right after the root), so it gets #2 like GNU.
+        let minibuffer_window = minibuffer_window_id;
         let minibuffer_buffer_id = root_window.buffer_id().unwrap_or(BufferId(0));
         let minibuffer_height = 16.0_f32.min(height as f32);
         let root_bounds = Rect::new(
@@ -2701,7 +2702,22 @@ impl FrameManager {
         let bounds = Rect::new(0.0, 0.0, width as f32, height as f32);
         let root = Window::new_leaf(window_id, buffer_id, bounds);
 
-        let mut frame = Frame::new(frame_id, name, terminal_id, width, height, root);
+        // GNU `make_frame' creates the root window first, then the minibuffer
+        // window, both drawing from the same global window sequence counter
+        // (frame.c:1228/1232) -> root gets #1, minibuffer #2. Allocate the
+        // minibuffer id from the counter here (immediately after the root) so
+        // neomacs's window numbering matches GNU exactly.
+        let minibuffer_window_id = self.next_window_id();
+
+        let mut frame = Frame::new(
+            frame_id,
+            name,
+            terminal_id,
+            width,
+            height,
+            root,
+            minibuffer_window_id,
+        );
         crate::emacs_core::xfaces::init_frame_lisp_faces(&mut frame);
         let selected_wid = frame.selected_window;
         self.frames.insert(frame_id, frame);
@@ -3183,6 +3199,15 @@ impl FrameManager {
         self.frames.iter().find_map(|(frame_id, frame)| {
             frame.find_window(window_id)?.is_leaf().then_some(*frame_id)
         })
+    }
+
+    /// Return true if WINDOW_ID is the minibuffer window of any live frame.
+    /// (Structural replacement for the old `id >= MINIBUFFER_WINDOW_ID_BASE`
+    /// magic-range check.)
+    pub fn is_minibuffer_window_id(&self, window_id: WindowId) -> bool {
+        self.frames
+            .values()
+            .any(|frame| frame.minibuffer_window == Some(window_id))
     }
 
     /// Return the frame containing a valid window ID, if any.

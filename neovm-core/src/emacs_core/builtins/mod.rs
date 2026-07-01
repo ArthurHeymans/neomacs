@@ -5959,7 +5959,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "set-minibuffer-window",
-        |_ctx, args| builtin_set_minibuffer_window(args),
+        |ctx, args| builtin_set_minibuffer_window(ctx, args),
         1,
         Some(1),
     );

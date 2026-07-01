@@ -3182,11 +3182,16 @@ pub(crate) fn builtin_set_fringe_bitmap_face(
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_set_minibuffer_window(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_set_minibuffer_window(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("set-minibuffer-window", &args, 1)?;
     match args[0].kind() {
         ValueKind::Veclike(VecLikeType::Window)
-            if args[0].as_window_id().unwrap() >= crate::window::MINIBUFFER_WINDOW_ID_BASE =>
+            if eval.frames.is_minibuffer_window_id(crate::window::WindowId(
+                args[0].as_window_id().unwrap(),
+            )) =>
         {
             Ok(Value::NIL)
         }

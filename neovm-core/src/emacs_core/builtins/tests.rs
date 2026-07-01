@@ -6185,15 +6185,23 @@ fn pure_dispatch_set_window_placeholder_cluster_matches_compat_contracts() {
     .expect("builtin set-fringe-bitmap-face should evaluate");
     assert!(set_fringe.is_nil());
 
-    let minibuffer_window_id =
-        crate::window::MINIBUFFER_WINDOW_ID_BASE + crate::window::FRAME_ID_BASE;
-    let set_mini = dispatch_builtin_pure(
-        "set-minibuffer-window",
-        vec![Value::make_window(minibuffer_window_id)],
-    )
-    .expect("builtin set-minibuffer-window should resolve")
-    .expect("builtin set-minibuffer-window should evaluate");
-    assert!(set_mini.is_nil());
+    // set-minibuffer-window now detects the minibuffer structurally (per
+    // frame's `minibuffer_window`) rather than via a magic id range. In the
+    // frame-less pure-dispatch harness no window is a minibuffer window, so a
+    // live window is rejected.
+    let set_mini = dispatch_builtin_pure("set-minibuffer-window", vec![Value::make_window(1)])
+        .expect("builtin set-minibuffer-window should resolve")
+        .expect_err("set-minibuffer-window should reject a non-minibuffer window");
+    match set_mini {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(
+                sig.data,
+                vec![Value::string("Window is not a minibuffer window")]
+            );
+        }
+        other => panic!("expected signal, got: {other:?}"),
+    }
 
     let set_combination = dispatch_builtin_pure(
         "set-window-combination-limit",
@@ -10511,11 +10519,9 @@ fn dispatch_builtin_pure_handles_window_placeholder_accessors() {
 
     // These window functions ARE in pure dispatch (they don't need frame state):
     let root_window_id = 1_u64;
-    let minibuffer_window_id =
-        crate::window::MINIBUFFER_WINDOW_ID_BASE + crate::window::FRAME_ID_BASE;
     // Skip the pure dispatch tests that were removed — the functions
     // are now tested through the eval-backed path in vm_test.rs.
-    let _ = (root_window_id, minibuffer_window_id); // suppress unused
+    let _ = root_window_id; // suppress unused
 
     // Window functions that don't need frame state and ARE in pure dispatch:
     let line_height = dispatch_builtin_pure(
