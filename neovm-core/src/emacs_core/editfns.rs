@@ -402,6 +402,18 @@ pub(crate) fn signal_after_change(
     byte_range: EmacsByteRange,
     old_len: CharLen,
 ) -> Result<(), Flow> {
+    // GNU evaporates overlays that a deletion left empty, independent of the
+    // modification hooks, so do it up front. A pure insertion (old_len == 0)
+    // cannot empty an overlay, so skip it; likewise skip buffers with no
+    // overlays to keep the hot path allocation-free.
+    if old_len.get() > 0 {
+        if let Some(current_id) = ctx.buffers.current_buffer_id() {
+            if buffer_has_overlays(ctx, current_id) {
+                evaporate_emptied_overlays(ctx, current_id);
+            }
+        }
+    }
+
     if inhibit_modification_hooks(ctx) {
         return Ok(());
     }
@@ -513,6 +525,46 @@ pub(crate) fn signal_after_text_change(
     change: TextChange,
 ) -> Result<(), Flow> {
     signal_after_change(ctx, change.after_byte_range(), change.old_char_len())
+}
+
+/// Delete overlays that a deletion left empty and whose `evaporate` property is
+/// non-nil. Unlike the low-level direct-plist evaporation in
+/// `OverlayList::adjust_for_delete_emacs_byte_range`, this resolves `evaporate`
+/// through the overlay's `category` symbol (GNU `overlay-get` semantics), so a
+/// category-inherited evaporate flag is honored. Mirrors GNU deleting empty
+/// evaporate overlays during a buffer deletion.
+fn evaporate_emptied_overlays(
+    ctx: &mut crate::emacs_core::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+) {
+    let empty: Vec<Value> = {
+        let Some(buf) = ctx.buffers.get(buffer_id) else {
+            return;
+        };
+        buf.overlays
+            .overlays_in_gnu_lists_order()
+            .into_iter()
+            .filter(|overlay| {
+                let start = buf.overlays.overlay_start_emacs_byte_pos(*overlay);
+                start.is_some() && start == buf.overlays.overlay_end_emacs_byte_pos(*overlay)
+            })
+            .collect()
+    };
+    let to_delete: Vec<Value> = empty
+        .into_iter()
+        .filter(|overlay| {
+            crate::emacs_core::textprop::lookup_overlay_property(
+                &ctx.obarray,
+                &ctx.buffers,
+                *overlay,
+                Value::symbol("evaporate"),
+            )
+            .is_truthy()
+        })
+        .collect();
+    for overlay in to_delete {
+        ctx.buffers.delete_buffer_overlay(buffer_id, overlay);
+    }
 }
 
 fn finish_treesit_after_buffer_change(
