@@ -2448,12 +2448,17 @@ pub(crate) fn where_is_keymaps_in_context(
     ctx: &mut Context,
     value: Option<&Value>,
 ) -> Result<Vec<Value>, Flow> {
+    // GNU `Fwhere_is_internal' with a nil KEYMAP uses
+    // `Fcurrent_active_maps (Qnil, Qnil)' -- olp = nil, so the overriding maps
+    // (`overriding-local-map' / `overriding-terminal-local-map') are EXCLUDED,
+    // unlike `key-binding' which passes olp = t. So `where-is-internal' never
+    // reports a key bound only in an overriding map.
     match value {
         Some(keymap_arg) if keymap_arg.is_nil() => {
-            Ok(current_active_maps_for_position(ctx, true, None).unwrap_or_default())
+            Ok(current_active_maps_for_position(ctx, false, None).unwrap_or_default())
         }
         Some(keymap_arg) => where_is_explicit_keymaps_in_context(ctx, keymap_arg),
-        None => Ok(current_active_maps_for_position(ctx, true, None).unwrap_or_default()),
+        None => Ok(current_active_maps_for_position(ctx, false, None).unwrap_or_default()),
     }
 }
 
