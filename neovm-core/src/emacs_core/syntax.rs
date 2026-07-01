@@ -2954,6 +2954,34 @@ pub(crate) fn case_symbols_as_words_predicate(
     }
 }
 
+/// Word-boundary predicate for the casing operations (capitalize /
+/// upcase-initials / *-word / *-region). GNU decides word constituency in
+/// `case_ch_is_word` (`src/casefiddle.c`) purely from the buffer syntax table:
+/// `SYNTAX(ch) == Sword`, or `== Ssymbol` when `case-symbols-as-words` is set.
+/// This is what lets a `set-case-syntax-pair` char (which installs *word*
+/// syntax via `modify-syntax-entry`) participate in a word -- Unicode
+/// letterness is irrelevant. Falls back to the standard syntax table when there
+/// is no current buffer (e.g. casing a plain string outside any buffer).
+pub(crate) fn casing_word_predicate(
+    eval: &super::eval::Context,
+) -> impl Fn(u32) -> bool + Copy + 'static {
+    let symbols_as_words = eval
+        .eval_symbol("case-symbols-as-words")
+        .unwrap_or(Value::NIL)
+        .is_truthy();
+    let chartable = eval
+        .buffers
+        .current_buffer()
+        .map(|buf| SyntaxTable::for_buffer(buf).chartable);
+    move |code: u32| {
+        let class = match chartable {
+            Some(table) => syntax_class_at_char_code(&table, code),
+            None => standard_syntax_class_for_code(code),
+        };
+        class == SyntaxClass::Word || (symbols_as_words && class == SyntaxClass::Symbol)
+    }
+}
+
 /// `(syntax-after POS)` — return syntax descriptor for char at POS.
 pub(crate) fn builtin_syntax_after(
     eval: &mut super::eval::Context,

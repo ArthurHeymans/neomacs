@@ -986,14 +986,14 @@ pub(crate) fn downcase_char_code_emacs_compat(code: i64) -> i64 {
     }
 }
 
-/// Build the casing word-constituent predicate (alphanumeric, plus symbol
-/// constituents when `case-symbols-as-words` is set) used for the Greek
-/// final-sigma rule — mirrors GNU `case_ch_is_word(SYNTAX(ch))`.
+/// Build the casing word-constituent predicate used for the Greek final-sigma
+/// rule — mirrors GNU `case_ch_is_word(SYNTAX(ch))`: a char is a word
+/// constituent when its buffer syntax is `Sword` (or `Ssymbol` with
+/// `case-symbols-as-words`), so a `set-case-syntax-pair` char participates too.
 pub(crate) fn casing_word_predicate(
     eval: &crate::emacs_core::eval::Context,
 ) -> impl Fn(u32) -> bool + Copy + 'static {
-    let extra = crate::emacs_core::syntax::case_symbols_as_words_predicate(eval);
-    move |code: u32| char::from_u32(code).is_some_and(char::is_alphanumeric) || extra(code)
+    crate::emacs_core::syntax::casing_word_predicate(eval)
 }
 
 fn downcase_with_word_pred(
