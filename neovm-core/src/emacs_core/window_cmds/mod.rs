@@ -4219,6 +4219,15 @@ pub(crate) fn builtin_select_window(
             ));
         }
     };
+    // GNU `Fselect_window' does `CHECK_LIVE_WINDOW(window)': an internal
+    // (non-leaf) window such as `(window-parent W)' is a valid window but not a
+    // *live* one, so selecting it signals `wrong-type-argument window-live-p'.
+    if !eval.frames.is_live_window_id(wid) {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("window-live-p"), args[0]],
+        ));
+    }
     let (record_selection, run_buffer_list_hook) = {
         let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
         let fid = ensure_selected_frame_id_in_state(frames, buffers);
