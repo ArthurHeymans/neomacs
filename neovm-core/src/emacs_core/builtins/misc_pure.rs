@@ -19,6 +19,80 @@ pub(crate) fn builtin_ignore(_args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
+/// Parse a logged message line into its base text and repeat count: a bare
+/// `"MSG"` -> (MSG, 1); a coalesced `"MSG [K times]"` -> (MSG, K). Mirrors GNU
+/// `message_log_check_duplicate` (xdisp.c).
+fn parse_logged_message_line(line: &[u8]) -> (&[u8], i64) {
+    const SUFFIX: &[u8] = b" times]";
+    if let Some(rest) = line.strip_suffix(SUFFIX) {
+        if let Some(open) = rest.iter().rposition(|&b| b == b'[') {
+            let digits = &rest[open + 1..];
+            if open >= 2
+                && rest[open - 1] == b' '
+                && !digits.is_empty()
+                && digits.iter().all(u8::is_ascii_digit)
+            {
+                if let Ok(k) = std::str::from_utf8(digits).unwrap_or("").parse::<i64>() {
+                    return (&rest[..open - 1], k);
+                }
+            }
+        }
+    }
+    (line, 1)
+}
+
+/// GNU `message_dolog` coalescing: when MSG duplicates the last logged line of
+/// the messages buffer (a bare `MSG` or `MSG [K times]`), return the coalesced
+/// `MSG [N times]` text plus the byte position of that last line's start (so the
+/// caller can delete it before re-logging). Otherwise returns `(MSG,
+/// old_full_end)` for a plain append.
+fn message_log_coalesce(
+    ctx: &super::eval::Context,
+    buf_id: crate::buffer::BufferId,
+    msg: &crate::heap_types::LispString,
+    old_full_end: crate::buffer::EmacsBytePos,
+) -> (crate::heap_types::LispString, crate::buffer::EmacsBytePos) {
+    use crate::buffer::{EmacsBytePos, EmacsByteRange};
+    let no_coalesce = (msg.clone(), old_full_end);
+    let Some(buf) = ctx.buffers.get(buf_id) else {
+        return no_coalesce;
+    };
+    let bob = buf.full_emacs_byte_range().start();
+    if old_full_end <= bob {
+        return no_coalesce;
+    }
+    // Read a tail window large enough to hold `MSG [K times]\n`.
+    let msg_bytes = msg.as_bytes();
+    let window = msg_bytes.len() + 32;
+    let read_start = EmacsBytePos::new(old_full_end.get().saturating_sub(window).max(bob.get()));
+    let tail = buf.buffer_substring_bytes_range(EmacsByteRange::new(read_start, old_full_end));
+    // Each logged message ends with a newline; strip it and isolate the line.
+    let Some((&b'\n', without_nl)) = tail.split_last().map(|(l, r)| (l, r)) else {
+        return no_coalesce;
+    };
+    let (line, line_bol_offset) = match without_nl.iter().rposition(|&b| b == b'\n') {
+        Some(pos) => (&without_nl[pos + 1..], pos + 1),
+        // No earlier newline in the window: only trust it if we read from BOB.
+        None if read_start.get() == bob.get() => (without_nl, 0usize),
+        None => return no_coalesce,
+    };
+    let (base, count) = parse_logged_message_line(line);
+    if base != msg_bytes {
+        return no_coalesce;
+    }
+    let mut new_bytes = msg_bytes.to_vec();
+    new_bytes.extend_from_slice(format!(" [{} times]", count + 1).as_bytes());
+    let new_text = if msg.is_multibyte() {
+        crate::heap_types::LispString::from_emacs_bytes(new_bytes)
+    } else {
+        crate::heap_types::LispString::from_unibyte(new_bytes)
+    };
+    (
+        new_text,
+        EmacsBytePos::new(read_start.get() + line_bol_offset),
+    )
+}
+
 /// Log a message to the *Messages* buffer, matching GNU Emacs message_dolog
 /// in xdisp.c.  Creates the buffer if it doesn't exist.
 fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispString) {
@@ -70,17 +144,34 @@ fn message_dolog(ctx: &mut super::eval::Context, msg: &crate::heap_types::LispSt
             .buffers
             .restore_buffer_emacs_byte_restriction(buf_id, full_range);
     }
+    // GNU `message_dolog` collapses consecutive identical messages into
+    // "MSG [N times]" instead of logging a new line each time.
+    let (log_text, delete_from) = message_log_coalesce(ctx, buf_id, msg, old_full_end);
     if ctx
         .buffers
-        .goto_buffer_emacs_byte_pos(buf_id, old_full_end)
+        .goto_buffer_emacs_byte_pos(buf_id, delete_from)
         .is_some()
     {
+        if delete_from.get() < old_full_end.get() {
+            let del_range = crate::buffer::EmacsByteRange::new(delete_from, old_full_end);
+            if let Ok(edit) =
+                crate::emacs_core::editfns::buffer_edit_range_for_byte_range_in_manager(
+                    &ctx.buffers,
+                    buf_id,
+                    del_range,
+                )
+            {
+                let _ = ctx.buffers.delete_buffer_measured_region(buf_id, edit);
+            }
+        }
         // Issue #131: `*Messages*` content must stay byte-faithful. Always go
         // through the LispString insert path, which performs GNU's
         // `insert_from_string` byte-level multibyte conversion (raw eight-bit
         // bytes preserved as raw-byte chars) instead of a lossy Rust-String
         // round-trip that would corrupt them.
-        let _ = ctx.buffers.insert_lisp_string_into_buffer(buf_id, msg);
+        let _ = ctx
+            .buffers
+            .insert_lisp_string_into_buffer(buf_id, &log_text);
         let _ = ctx.buffers.insert_into_buffer(buf_id, "\n");
     }
 
