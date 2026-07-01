@@ -39,6 +39,47 @@ pub(crate) struct BufferSourceOutputSetup {
     retry_bounds: BufferSourceRetryBounds,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::display_row_metrics::DisplayRowFallbackMetrics;
+    use neovm_core::buffer::{Buffer, BufferId};
+    use neovm_core::emacs_core::Value;
+    use neovm_core::face::FaceTable;
+
+    #[test]
+    fn default_face_plan_uses_buffer_default_face_remap() {
+        let _runtime = neovm_core::emacs_core::Context::new();
+        let table = FaceTable::new();
+        let resolver = FaceResolver::new(&table, 0x000000, 0xFFFFFF, 14.0, None);
+        let mut buffer = Buffer::new(BufferId(42), Value::string("*default-remap*"));
+        buffer.set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("default"),
+                Value::list(vec![
+                    Value::keyword("background"),
+                    Value::string("#000000"),
+                    Value::keyword("foreground"),
+                    Value::string("#ffffff"),
+                ]),
+                Value::symbol("default"),
+            ])]),
+        );
+
+        let plan = BufferSourceDefaultFacePlan::new(
+            &resolver,
+            &buffer,
+            &mut None,
+            false,
+            DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
+        );
+
+        assert_eq!(plan.face().bg, 0x000000);
+        assert_eq!(plan.face().fg, 0xFFFFFF);
+    }
+}
+
 pub(crate) struct BufferSourceDefaultFacePlan {
     face: ResolvedFace,
     metrics: DisplayRowFallbackMetrics,
@@ -135,11 +176,12 @@ impl BufferSourceOutputSetup {
 impl BufferSourceDefaultFacePlan {
     pub(crate) fn new(
         face_resolver: &FaceResolver,
+        buffer: &impl LayoutBufferView,
         font_metrics: &mut Option<FontMetricsService>,
         window_system: bool,
         fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
-        let face = face_resolver.default_face().clone();
+        let face = face_resolver.resolve_buffer_default_face(buffer);
         let metrics = if window_system && let Some(service) = font_metrics {
             let metrics = service.font_metrics(
                 &face.font_family,

@@ -1459,6 +1459,10 @@ pub fn window_params_from_neovm_with_font_sizing(
         0.0
     };
 
+    let buffer_default_face = face_resolver.resolve_buffer_default_face(buffer);
+    let default_fg = buffer_default_face.fg;
+    let default_bg = buffer_default_face.bg;
+
     Some(WindowParams {
         window_id: win_id.0 as i64,
         buffer_id: buffer.id().0,
@@ -2940,7 +2944,10 @@ impl FaceResolver {
         }
     }
 
-    fn resolve_buffer_default_face<B: LayoutBufferView>(&self, buffer: &B) -> ResolvedFace {
+    pub(crate) fn resolve_buffer_default_face<B: LayoutBufferView>(
+        &self,
+        buffer: &B,
+    ) -> ResolvedFace {
         let mut remap_stack = Vec::new();
         self.resolve_buffer_face_value_over(
             buffer,

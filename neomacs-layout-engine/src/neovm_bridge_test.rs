@@ -300,6 +300,64 @@ fn chrome_face_pixel_height_never_shrinks_below_frame_line_height() {
 }
 
 #[test]
+fn window_params_default_colors_follow_buffer_default_face_remap() {
+    let mut evaluator = neovm_core::emacs_core::Context::new();
+    let buf_id = evaluator
+        .buffer_manager_mut()
+        .create_buffer("*default-remap*");
+    let frame_id = evaluator
+        .frame_manager_mut()
+        .create_frame("test", 800, 600, buf_id);
+
+    {
+        let table = evaluator.face_table_mut();
+        let mut default = NeoFace::new("default");
+        default.foreground = Some(NeoColor::rgb(0, 0, 0));
+        default.background = Some(NeoColor::rgb(255, 255, 255));
+        table.define("default", default);
+    }
+
+    evaluator
+        .buffer_manager_mut()
+        .get_mut(buf_id)
+        .expect("buffer")
+        .set_buffer_local(
+            "face-remapping-alist",
+            Value::list(vec![Value::list(vec![
+                Value::symbol("default"),
+                Value::list(vec![
+                    Value::keyword("background"),
+                    Value::string("#000000"),
+                    Value::keyword("foreground"),
+                    Value::string("#ffffff"),
+                ]),
+                Value::symbol("default"),
+            ])]),
+        );
+
+    let frame = evaluator.frame_manager().get(frame_id).unwrap();
+    let buffer = evaluator.buffer_manager().get(buf_id).unwrap();
+    let window = frame.root_window.find(frame.selected_window).unwrap();
+
+    let params = window_params_from_neovm(
+        window,
+        buffer,
+        frame,
+        evaluator.obarray(),
+        evaluator.face_table(),
+        None,
+        true,
+        false,
+        Value::T,
+        Value::NIL,
+    )
+    .expect("leaf window params");
+
+    assert_eq!(params.default_bg, 0x000000);
+    assert_eq!(params.default_fg, 0xFFFFFF);
+}
+
+#[test]
 fn test_window_params_from_neovm_internal_returns_none() {
     use neovm_core::window::SplitDirection;
 

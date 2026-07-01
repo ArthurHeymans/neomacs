@@ -89,6 +89,7 @@ where
         let default_face = state.with_face_services(|face_resolver, font_metrics| {
             BufferSourceDefaultFacePlan::new(
                 face_resolver,
+                buffer,
                 font_metrics,
                 frame_params.window_system,
                 window_metrics,
