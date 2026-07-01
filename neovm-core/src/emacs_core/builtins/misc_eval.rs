@@ -894,6 +894,32 @@ pub(crate) fn inherited_text_properties_for_inserted_range_in_state(
     let default_nonsticky =
         buffer_local_or_global_symbol_value(obarray, buf, "text-property-default-nonsticky");
 
+    // GNU `adjust_intervals_for_insertion` (src/intervals.c): inserting into the
+    // MIDDLE of a single uniform interval extends that interval, so the inserted
+    // text inherits its full plist verbatim -- including the front-sticky /
+    // rear-nonsticky meta entries -- rather than the between-intervals sticky
+    // merge below. This only applies strictly interior (both neighbors present,
+    // never at point-min/point-max) and when the two neighbors carry the same
+    // property set (our proxy for "one interval", since neomacs coalesces equal
+    // adjacent intervals). A real property that is rear-nonsticky (by value or
+    // by `text-property-default-nonsticky`) forces a split, so fall through to
+    // the merge in that case.
+    if !left_props.is_empty() && !right_props.is_empty() && left_map == right_map {
+        let forces_split = left_props.iter().any(|(name, _)| {
+            if *name == Value::symbol("front-sticky") || *name == Value::symbol("rear-nonsticky") {
+                return false;
+            }
+            let default_rear_nonsticky = default_nonsticky
+                .as_ref()
+                .and_then(|value| assq_cdr(value, *name))
+                .is_some_and(|v| v.is_truthy());
+            matches_rear_nonsticky(left_rear, *name) || default_rear_nonsticky
+        });
+        if !forces_split {
+            return left_props.clone();
+        }
+    }
+
     let mut merged_props = Vec::new();
     let mut front_sticky = Vec::new();
     let mut rear_nonsticky = Vec::new();
