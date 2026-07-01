@@ -2295,6 +2295,16 @@ fn parse_interval(
         Some(min) // \{n\} — exact count
     };
 
+    // GNU's GET_UNSIGNED_NUMBER (regex-emacs.c) rejects a repeat count that
+    // exceeds RE_DUP_MAX (0xffff) with `(invalid-regexp "Invalid content of
+    // \\{\\}")` while reading the number -- not the generic "too big".
+    const RE_DUP_MAX: usize = 0xffff;
+    if min > RE_DUP_MAX || max.is_some_and(|m| m > RE_DUP_MAX) {
+        return Err(RegexCompileError {
+            message: "Invalid content of \\{\\}".to_string(),
+        });
+    }
+
     // GNU regex-emacs.c:2390 rejects a descending interval where a finite
     // upper bound is smaller than the lower bound (e.g. `a\{2,1\}`), signaling
     // `(invalid-regexp "Invalid content of \\{\\}")`.  An unbounded `\{n,\}`
