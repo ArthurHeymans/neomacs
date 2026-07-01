@@ -55,7 +55,9 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
     obarray.set_symbol_value("buffer-undo-list", Value::NIL);
     obarray.set_symbol_value("buffer-display-table", Value::NIL);
     obarray.set_symbol_value("enable-multibyte-characters", Value::T);
-    obarray.set_symbol_value("default-enable-multibyte-characters", Value::T);
+    // `default-enable-multibyte-characters' was removed in Emacs 31 (only a
+    // comment in mule-cmds.el mentions it); GNU leaves it unbound, so neomacs
+    // must not seed it.
     obarray.set_symbol_value("find-file-hook", Value::NIL);
     obarray.set_symbol_value("find-file-not-found-functions", Value::NIL);
     obarray.set_symbol_value("major-mode", Value::symbol("fundamental-mode"));
