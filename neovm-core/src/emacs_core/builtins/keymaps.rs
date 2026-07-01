@@ -210,9 +210,7 @@ pub(crate) fn builtin_accessible_keymaps_impl(obarray: &Obarray, args: &[Value])
 
     // Collect all accessible keymaps
     let mut all_out = Vec::new();
-    let mut prefix = Vec::new();
-    let mut seen = Vec::new();
-    list_keymap_accessible(&keymap, &mut prefix, &mut all_out, &mut seen);
+    list_keymap_accessible(&keymap, &mut all_out);
 
     // If prefix argument is provided, filter results
     if let Some(prefix_arg) = args.get(1) {

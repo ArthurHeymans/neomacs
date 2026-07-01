@@ -590,7 +590,7 @@ fn list_keymap_for_each_binding_stops_before_direct_sparse_parent() {
 }
 
 #[test]
-fn list_keymap_accessible_does_not_descend_into_direct_sparse_parent() {
+fn list_keymap_accessible_descends_into_direct_sparse_parent() {
     crate::test_utils::init_test_tracing();
     let parent = make_sparse_list_keymap();
     let prefix_map = make_sparse_list_keymap();
@@ -599,12 +599,18 @@ fn list_keymap_accessible_does_not_descend_into_direct_sparse_parent() {
     list_keymap_define(parent, Value::fixnum('a' as i64), prefix_map);
     list_keymap_set_parent(child, parent);
 
-    let mut prefix = Vec::new();
     let mut out = Vec::new();
-    let mut seen = Vec::new();
-    list_keymap_accessible(&child, &mut prefix, &mut out, &mut seen);
+    list_keymap_accessible(&child, &mut out);
 
-    assert_eq!(out.len(), 1);
+    // GNU `accessible-keymaps` follows the parent (via map_keymap), so the
+    // parent's `a` prefix map is listed under [?a]. GNU prints ([] [97]).
+    assert_eq!(out.len(), 2);
+    assert_eq!(out[0].cons_car().as_vector_data().unwrap().len(), 0);
+    let second_prefix = out[1].cons_car();
+    let second_prefix = second_prefix.as_vector_data().unwrap();
+    assert_eq!(second_prefix.len(), 1);
+    assert_eq!(second_prefix[0], Value::fixnum('a' as i64));
+    assert!(keymap_value_eq(&out[1].cons_cdr(), &prefix_map));
 }
 
 #[test]

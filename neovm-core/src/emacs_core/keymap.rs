@@ -3281,59 +3281,90 @@ fn copy_char_table_for_keymap(ct: &Value, depth: usize) -> Value {
     copied
 }
 
-/// Collect all accessible sub-keymaps with their key prefixes.
-pub fn list_keymap_accessible(
-    keymap: &Value,
-    prefix: &mut Vec<Value>,
-    out: &mut Vec<Value>,
-    seen: &mut Vec<Value>,
-) {
-    // Detect cycles: check if we've seen this exact keymap object
-    for s in seen.iter() {
-        if keymap_value_eq(s, keymap) {
-            return;
-        }
-    }
-    seen.push(*keymap);
-
-    // Add current keymap
-    out.push(Value::cons(Value::vector(prefix.clone()), *keymap));
-
-    if !keymap.is_cons() {
-        return;
-    };
-    let pair_car = keymap.cons_car();
-    let pair_cdr = keymap.cons_cdr();
-    if !KeymapMarker::Keymap.is_value(pair_car) {
-        return;
-    }
-
-    // Scan alist entries for prefix keymaps
-    let mut cursor = pair_cdr;
-    while cursor.is_cons() {
-        if is_list_keymap(&cursor) {
+/// Walk KEYMAP's own bindings and those of its parent chain, mirroring GNU
+/// `map_keymap`: it reports embedded/prefix keymaps as ordinary bindings
+/// (without descending into them) and then FOLLOWS the parent keymap. Bounded
+/// against self-referential parents by walking each map object at most once.
+fn map_keymap_following_parents<F>(keymap: &Value, mut f: F)
+where
+    F: FnMut(Value, Value),
+{
+    let mut map = *keymap;
+    let mut seen_maps: Vec<Value> = Vec::new();
+    while is_list_keymap(&map) {
+        if seen_maps.iter().any(|m| keymap_value_eq(m, &map)) {
             break;
         }
-        let entry_car = cursor.cons_car();
-        let entry_cdr = cursor.cons_cdr();
+        seen_maps.push(map);
 
-        if entry_car.is_cons() {
-            let binding_car = entry_car.cons_car();
-            let binding_cdr = entry_car.cons_cdr();
-            if is_list_keymap(&binding_cdr) {
-                prefix.push(binding_car);
-                list_keymap_accessible(&binding_cdr, prefix, out, seen);
-                prefix.pop();
+        let Some(mut cursor) = keymap_binding_spine(&map) else {
+            break;
+        };
+        while cursor.is_cons() {
+            if is_list_keymap(&cursor) {
+                break; // reached the parent keymap
+            }
+            let entry_car = cursor.cons_car();
+            let entry_cdr = cursor.cons_cdr();
+
+            if super::chartable::is_char_table(&entry_car) {
+                super::chartable::for_each_non_nil_char_table_run(&entry_car, &mut f);
+            }
+            if entry_car.is_cons() {
+                f(entry_car.cons_car(), entry_car.cons_cdr());
+            }
+
+            if is_list_keymap(&entry_cdr) {
+                break; // the parent follows; handled by the outer loop
+            }
+            cursor = entry_cdr;
+        }
+        map = get_keymap_tail_parent(&map);
+    }
+}
+
+/// Collect all accessible sub-keymaps with their key prefixes, mirroring GNU
+/// `Faccessible_keymaps` (keymap.c). This is a breadth-first walk over a growing
+/// queue of `(prefix, map)` pairs: for each queued map we scan its bindings
+/// (following parents, per GNU `map_keymap`) and enqueue every prefix sub-map.
+/// A map is enqueued again under a longer/unrelated prefix, but skipped when an
+/// already-queued strict-prefix path reaches the same map (GNU's cycle rule),
+/// which both matches GNU's duplicate listings and terminates on cycles.
+pub fn list_keymap_accessible(keymap: &Value, out: &mut Vec<Value>) {
+    let mut maps: Vec<(Vec<Value>, Value)> = vec![(Vec::new(), *keymap)];
+    let mut i = 0;
+    while i < maps.len() {
+        let thisseq = maps[i].0.clone();
+        let thismap = maps[i].1;
+        i += 1;
+
+        let mut found: Vec<(Vec<Value>, Value)> = Vec::new();
+        map_keymap_following_parents(&thismap, |event, def| {
+            if is_list_keymap(&def) {
+                let mut newseq = thisseq.clone();
+                newseq.push(event);
+                found.push((newseq, def));
+            }
+        });
+
+        for (newseq, submap) in found {
+            let is_cycle = maps.iter().any(|(prefix, map)| {
+                keymap_value_eq(map, &submap)
+                    && prefix.len() < newseq.len()
+                    && prefix
+                        .iter()
+                        .zip(newseq.iter())
+                        .all(|(a, b)| a.bits() == b.bits())
+            });
+            if !is_cycle {
+                maps.push((newseq, submap));
             }
         }
-
-        if is_list_keymap(&entry_cdr) {
-            break; // parent keymap, don't descend
-        }
-        cursor = entry_cdr;
     }
 
-    seen.pop();
+    for (prefix, map) in &maps {
+        out.push(Value::cons(Value::vector(prefix.clone()), *map));
+    }
 }
 
 /// Check if two keymap values are the same object (by cons cell identity).
