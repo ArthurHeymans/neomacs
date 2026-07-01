@@ -12256,7 +12256,11 @@ fn build_tab_bar_display_roots_transient_string_across_gc() {
     eval.eval_str(
         r#"
           (require 'tab-bar)
-          (setq tab-bar-show 1)
+          ;; Keep this GC-rooting test independent from tab-bar's display
+          ;; resizing and close-button formatting.
+          (setq tab-bar-show 1
+                tab-bar-auto-width nil
+                tab-bar-close-button-show nil)
           (tab-bar-mode 1)
           (select-frame layout-target-frame)
           (switch-to-buffer (get-buffer-create "*tab-root*"))
@@ -12269,15 +12273,23 @@ fn build_tab_bar_display_roots_transient_string_across_gc() {
 
     let gc_roots = ScratchGcRootScope::new();
     let tab_bar = build_tab_bar_display(&mut eval, frame_id.0, &gc_roots).expect("tab-bar display");
+    let before_gc = tab_bar
+        .text
+        .as_runtime_string_owned()
+        .expect("tab-bar text should be built before exact GC");
+    assert!(
+        before_gc.contains("*tab-root*") && before_gc.contains("*tab-second*"),
+        "expected full tab-bar labels before exact GC, got {before_gc:?}"
+    );
     eval.gc_collect_exact();
 
     let text = tab_bar
         .text
         .as_runtime_string_owned()
         .expect("tab-bar text should survive exact GC");
-    assert!(
-        text.contains("*tab-root*") || text.contains("tab-root"),
-        "expected tab-bar label after exact GC, got {text:?}"
+    assert_eq!(
+        text, before_gc,
+        "tab-bar text should remain unchanged after exact GC"
     );
     let props =
         neovm_core::emacs_core::value::get_string_text_properties_table_for_value(tab_bar.text)
