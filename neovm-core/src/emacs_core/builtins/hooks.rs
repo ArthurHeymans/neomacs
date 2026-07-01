@@ -880,6 +880,55 @@ pub(crate) fn builtin_set_window_configuration(
         } else {
             None
         };
+        // GNU `Fset_window_configuration` (window.c) substitutes a live buffer via
+        // `other_buffer_safely` for any restored window whose saved buffer was
+        // killed, instead of leaving a dead buffer in the window (which would
+        // signal "Selecting deleted buffer" on the next redisplay).
+        let dead_leaf_windows: Vec<crate::window::WindowId> = eval
+            .frames
+            .get(snapshot.frame_id)
+            .map(|frame| {
+                frame
+                    .window_list()
+                    .into_iter()
+                    .filter_map(|wid| match frame.find_window(wid) {
+                        Some(crate::window::Window::Leaf { buffer_id, .. }) => {
+                            Some((wid, *buffer_id))
+                        }
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|(_, buffer_id)| eval.buffers.get(*buffer_id).is_none())
+            .map(|(wid, _)| wid)
+            .collect();
+        if !dead_leaf_windows.is_empty() {
+            let avoid = eval
+                .buffers
+                .current_buffer_id()
+                .map(Value::make_buffer)
+                .unwrap_or(Value::NIL);
+            let substitute = super::buffers::other_buffer_impl_in_state(
+                &mut eval.frames,
+                &mut eval.buffers,
+                vec![avoid, Value::NIL, Value::NIL],
+            )
+            .ok()
+            .and_then(|value| value.as_buffer_id());
+            if let Some(substitute) = substitute {
+                if let Some(frame) = eval.frames.get_mut(snapshot.frame_id) {
+                    for wid in dead_leaf_windows {
+                        if let Some(crate::window::Window::Leaf { buffer_id, .. }) =
+                            frame.find_window_mut(wid)
+                        {
+                            *buffer_id = substitute;
+                        }
+                    }
+                }
+            }
+        }
         if let Some((buffer_id, point)) = selected_window_state {
             if let Some(buffer) = eval.buffers.get(buffer_id) {
                 let byte_pos = buffer.lisp_pos_to_emacs_byte_pos(point);
