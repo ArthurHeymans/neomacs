@@ -1815,17 +1815,24 @@ pub(crate) fn builtin_x_export_frames(args: Vec<Value>) -> EvalResult {
     }
 }
 
-/// (x-focus-frame FRAME &optional NO-ACTIVATE) -> error in batch/no-X context.
-pub(crate) fn builtin_x_focus_frame(args: Vec<Value>) -> EvalResult {
+/// (x-focus-frame FRAME &optional NO-ACTIVATE) -> nil for live GUI frames.
+pub(crate) fn builtin_x_focus_frame(eval: &mut Context, args: Vec<Value>) -> EvalResult {
     expect_range_args("x-focus-frame", &args, 1, 2)?;
-    let frame = &args[0];
-    if frame.is_nil() || frame.is_frame() {
-        Err(x_window_system_frame_error())
+    let fid = super::window_cmds::resolve_frame_id_in_state(
+        &mut eval.frames,
+        &mut eval.buffers,
+        args.first(),
+        "frame-live-p",
+    )?;
+    if eval
+        .frames
+        .get(fid)
+        .and_then(|frame| frame.effective_window_system())
+        .is_some_and(gui_window_system_active_value)
+    {
+        Ok(Value::NIL)
     } else {
-        Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("frame-live-p"), *frame],
-        ))
+        Err(x_window_system_frame_error())
     }
 }
 

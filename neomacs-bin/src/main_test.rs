@@ -1763,6 +1763,28 @@ fn pdump_preserves_neo_term_generic_methods() {
 }
 
 #[test]
+fn neo_win_registers_neo_display_format() {
+    let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
+        .expect("cached bootstrap evaluator");
+
+    let rendered = eval
+        .eval_str(
+            r#"
+        (progn
+          (load "term/neo-win.el" nil t)
+          (list
+           (window-system-for-display ":0")
+           (window-system-for-display "neo")
+           (cdr (car display-format-alist))))
+        "#,
+        )
+        .map(|value| print_value_with_eval(&mut eval, &value))
+        .unwrap_or_else(|err| format!("{err:?}"));
+
+    assert_eq!(rendered, "(neo neo neo)");
+}
+
+#[test]
 fn neo_window_system_initialization_defers_neomacs_only_setup_until_window_setup_hook() {
     let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
         .expect("cached bootstrap evaluator");

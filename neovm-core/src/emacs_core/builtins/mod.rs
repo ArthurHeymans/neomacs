@@ -8923,7 +8923,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "x-focus-frame",
-        |_ctx, args| super::display::builtin_x_focus_frame(args),
+        |ctx, args| super::display::builtin_x_focus_frame(ctx, args),
         1,
         Some(2),
     );

@@ -16,6 +16,7 @@ struct Options {
     suppress_output: bool,
     eval: bool,
     create_frame: bool,
+    tty: bool,
     reuse_frame: bool,
     socket_name: Option<String>,
     server_file: Option<String>,
@@ -91,6 +92,7 @@ fn parse_options(prog: &str, args: impl IntoIterator<Item = OsString>) -> Result
             }
             "-t" | "-nw" | "--tty" | "--nw" | "--no-window-system" => {
                 options.create_frame = true;
+                options.tty = true;
             }
             "-c" | "--create-frame" => options.create_frame = true,
             "-r" | "--reuse-frame" => {
@@ -391,6 +393,7 @@ fn build_request(options: &Options) -> Result<String, String> {
     if !cwd.ends_with('/') {
         cwd.push('/');
     }
+    let display = effective_display(options);
 
     push_command(&mut request, "-dir");
     if let Some(prefix) = &options.tramp_prefix {
@@ -405,7 +408,7 @@ fn build_request(options: &Options) -> Result<String, String> {
     if !options.create_frame || options.reuse_frame {
         push_flag(&mut request, "-current-frame");
     }
-    if let Some(display) = &options.display {
+    if let Some(display) = &display {
         push_arg_command(&mut request, "-display", display);
     }
     if let Some(parent_id) = &options.parent_id {
@@ -414,7 +417,7 @@ fn build_request(options: &Options) -> Result<String, String> {
     if let Some(frame_parameters) = &options.frame_parameters {
         push_arg_command(&mut request, "-frame-parameters", frame_parameters);
     }
-    if options.create_frame && options.display.is_some() {
+    if options.create_frame && !options.tty && display.is_some() {
         push_flag(&mut request, "-window-system");
     }
 
@@ -451,6 +454,27 @@ fn build_request(options: &Options) -> Result<String, String> {
 
     request.push('\n');
     Ok(request)
+}
+
+fn effective_display(options: &Options) -> Option<String> {
+    if let Some(display) = options
+        .display
+        .as_ref()
+        .filter(|display| !display.is_empty())
+    {
+        return Some(display.clone());
+    }
+    if options.create_frame && !options.tty {
+        return env::var("WAYLAND_DISPLAY")
+            .ok()
+            .filter(|display| !display.is_empty())
+            .or_else(|| {
+                env::var("DISPLAY")
+                    .ok()
+                    .filter(|display| !display.is_empty())
+            });
+    }
+    None
 }
 
 fn push_flag(request: &mut String, flag: &str) {

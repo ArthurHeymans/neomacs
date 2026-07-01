@@ -65,6 +65,8 @@
 (defvar x-display-name nil
   "The display name specifying the display to connect to.")
 
+(add-to-list 'display-format-alist '(".*" . neo))
+
 (defun neomacs--window-setup ()
   "Finish Neomacs GUI setup after GNU startup completes frame setup."
   (remove-hook 'window-setup-hook #'neomacs--window-setup)

@@ -2672,12 +2672,14 @@ fn x_frame_mouse_and_dnd_batch_semantics() {
         other => panic!("expected wrong-number-of-arguments signal, got {other:?}"),
     }
 
+    let mut focus_eval = crate::emacs_core::Context::new();
+    let focus_frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut focus_eval);
     for args in [
         vec![Value::NIL],
-        vec![Value::make_frame(1)],
+        vec![Value::make_frame(focus_frame_id.0)],
         vec![Value::NIL, Value::NIL],
     ] {
-        match builtin_x_focus_frame(args) {
+        match builtin_x_focus_frame(&mut focus_eval, args) {
             Err(Flow::Signal(sig)) => {
                 assert_eq!(sig.symbol_name(), "error");
                 assert_eq!(
@@ -2688,8 +2690,8 @@ fn x_frame_mouse_and_dnd_batch_semantics() {
             other => panic!("expected error signal, got {other:?}"),
         }
     }
-    for arg in [Value::fixnum(1), Value::string("x"), term] {
-        match builtin_x_focus_frame(vec![arg]) {
+    for arg in [Value::fixnum(999999), Value::string("x"), term] {
+        match builtin_x_focus_frame(&mut focus_eval, vec![arg]) {
             Err(Flow::Signal(sig)) => {
                 assert_eq!(sig.symbol_name(), "wrong-type-argument");
                 assert_eq!(sig.data, vec![Value::symbol("frame-live-p"), arg]);
@@ -2697,7 +2699,7 @@ fn x_frame_mouse_and_dnd_batch_semantics() {
             other => panic!("expected wrong-type-argument signal, got {other:?}"),
         }
     }
-    match builtin_x_focus_frame(vec![]) {
+    match builtin_x_focus_frame(&mut focus_eval, vec![]) {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "wrong-number-of-arguments"),
         other => panic!("expected wrong-number-of-arguments signal, got {other:?}"),
     }
@@ -2866,6 +2868,49 @@ fn eval_x_display_pixel_queries_use_selected_gui_display() {
         builtin_x_display_pixel_height(&mut eval, vec![Value::make_frame(frame_id.0)]).unwrap(),
         Value::fixnum(25)
     );
+}
+
+#[test]
+fn x_focus_frame_accepts_live_neomacs_gui_frame() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_window_system(Some(Value::symbol(gui_window_system_symbol())));
+
+    assert_eq!(
+        builtin_x_focus_frame(&mut eval, vec![Value::make_frame(frame_id.0)]).unwrap(),
+        Value::NIL
+    );
+    assert_eq!(
+        builtin_x_focus_frame(&mut eval, vec![Value::NIL]).unwrap(),
+        Value::NIL
+    );
+}
+
+#[test]
+fn x_focus_frame_rejects_live_tty_frame() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    eval.frames
+        .get_mut(frame_id)
+        .expect("selected frame")
+        .set_window_system(None);
+
+    let err = builtin_x_focus_frame(&mut eval, vec![Value::make_frame(frame_id.0)]).unwrap_err();
+    match err {
+        Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(
+                sig.data,
+                vec![Value::string("Window system frame should be used")]
+            );
+        }
+        other => panic!("expected error signal, got {other:?}"),
+    }
 }
 
 #[test]
