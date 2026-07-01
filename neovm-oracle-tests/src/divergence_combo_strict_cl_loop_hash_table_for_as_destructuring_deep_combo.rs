@@ -21,7 +21,9 @@ fn div_v8_cl_loop_hash_keys_values_using() {
                        collect (cons k v))
               (lambda (a b) (string< (symbol-name (car a)) (symbol-name (car b)))))))
 "##;
-    let expect = expect_test::expect![[r#""OK ((apple banana cherry) (1 2 3) ((apple . 1) (banana . 2) (cherry . 3)))""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((apple banana cherry) (1 2 3) ((apple . 1) (banana . 2) (cherry . 3)))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -37,7 +39,9 @@ fn div_v8_cl_loop_for_as_then_repeat_sum() {
                sum x into total
                finally (return (list squares total))))
 "##;
-    let expect = expect_test::expect![[r#""OK ((1 2 4 8 16) 10 ((1 10 100) (2 20 200) (3 30 300)) (55 15))""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((1 2 4 8 16) 10 ((1 10 100) (2 20 200) (3 30 300)) (55 15))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -57,6 +61,7 @@ fn div_v8_cl_loop_nested_dolist_accumulate_conditional() {
                end
                finally (return (list evens even-count))))
 "##;
-    let expect = expect_test::expect![[r#""OK ((1 4 9 16 25 36) (0 0 0 1 10 100 2 20 200) ((2 4 6) 3))""#]];
+    let expect =
+        expect_test::expect![[r#""OK ((1 4 9 16 25 36) (0 0 0 1 10 100 2 20 200) ((2 4 6) 3))""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -46,7 +46,9 @@ fn div_v8_delete_region_merge_adjacent_face_prop() {
           (get-text-property 5 'face)
           (get-text-property 6 'face))))
 "##;
-    let expect = expect_test::expect![[r#""OK ((bold bold nil) #(\"AAAAACCCCC\" 0 5 (face bold) 5 10 (face bold)) bold bold bold)""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((bold bold nil) #(\"AAAAACCCCC\" 0 5 (face bold) 5 10 (face bold)) bold bold bold)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -68,6 +70,8 @@ fn div_v8_copy_region_as_kill_with_text_properties() {
           (text-properties-at 1)
           (text-properties-at 7))))
 "##;
-    let expect = expect_test::expect![[r#""OK (#(\"Hello World\" 0 5 (weight heavy face bold) 6 10 (face italic) 10 11 (rear-nonsticky t face italic)) bold italic heavy (weight heavy face bold) (face italic))""#]];
+    let expect = expect_test::expect![[
+        r#""OK (#(\"Hello World\" 0 5 (weight heavy face bold) 6 10 (face italic) 10 11 (rear-nonsticky t face italic)) bold italic heavy (weight heavy face bold) (face italic))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
