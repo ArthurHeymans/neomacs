@@ -9893,7 +9893,12 @@ impl Context {
             }
             if !binding.is_cons() {
                 self.restore_specpdl_roots(specpdl_root_scope);
-                return Err(signal("wrong-type-argument", vec![]));
+                // GNU takes `(car elt)` of a non-symbol binding, so a non-list
+                // element signals `(wrong-type-argument listp ELT)`.
+                return Err(signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("listp"), binding],
+                ));
             }
             let head = self.unwrap_symbol(binding.cons_car());
             let Some(id) = head.as_symbol_id() else {
@@ -10072,7 +10077,12 @@ impl Context {
                     };
                     (id, value)
                 } else {
-                    return Err(signal("wrong-type-argument", vec![]));
+                    // GNU takes `(car elt)`, so a non-list element signals
+                    // `(wrong-type-argument listp ELT)`.
+                    return Err(signal(
+                        "wrong-type-argument",
+                        vec![Value::symbol("listp"), binding],
+                    ));
                 };
 
                 if let Some(name) = let_constant_error_name(&self.obarray, id) {
