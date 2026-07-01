@@ -1703,7 +1703,7 @@ impl TaggedHeap {
                         VecLikeType::ByteCode => {
                             Self::bytecode_object_bytes(&*(ptr as *const ByteCodeObj))
                         }
-                        VecLikeType::Record => {
+                        VecLikeType::Record | VecLikeType::WindowConfiguration => {
                             Self::record_object_bytes(&*(ptr as *const RecordObj))
                         }
                         VecLikeType::Overlay => size_of::<OverlayObj>(),
@@ -2110,6 +2110,21 @@ impl TaggedHeap {
         self.add_memory_use_count(MemoryUseCountSlot::VectorCells, items.len() as u64);
         let obj = Box::new(RecordObj {
             header: VecLikeHeader::new(VecLikeType::Record),
+            data: items.into(),
+        });
+        let ptr = Box::into_raw(obj);
+        self.link_veclike(ptr as *mut VecLikeHeader);
+        self.allocated_count += 1;
+        self.note_allocation_bytes(unsafe { Self::record_object_bytes(&*ptr) });
+        unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
+    }
+
+    /// Allocate a window configuration. Structurally a record (`{header, data}`)
+    /// but tagged `WindowConfiguration` so it is a distinct pseudovector type.
+    pub fn alloc_window_configuration(&mut self, items: Vec<TaggedValue>) -> TaggedValue {
+        self.add_memory_use_count(MemoryUseCountSlot::VectorCells, items.len() as u64);
+        let obj = Box::new(RecordObj {
+            header: VecLikeHeader::new(VecLikeType::WindowConfiguration),
             data: items.into(),
         });
         let ptr = Box::into_raw(obj);
@@ -3101,7 +3116,7 @@ impl TaggedHeap {
         let mut out = Vec::new();
         unsafe {
             match (*ptr).type_tag {
-                VecLikeType::Vector | VecLikeType::Record => {
+                VecLikeType::Vector | VecLikeType::Record | VecLikeType::WindowConfiguration => {
                     out.extend((*(ptr as *const VectorObj)).data.iter().copied());
                 }
                 VecLikeType::CharTable => {
@@ -4225,7 +4240,7 @@ impl TaggedHeap {
                     }
                 }
             }
-            VecLikeType::Record => {
+            VecLikeType::Record | VecLikeType::WindowConfiguration => {
                 let obj = ptr as *const RecordObj;
                 for val in unsafe { (*obj).data.iter_atomic() } {
                     if val.is_heap_object() {
@@ -4569,7 +4584,9 @@ impl TaggedHeap {
                     VecLikeType::ByteCode => unsafe {
                         drop(Box::from_raw(ptr as *mut ByteCodeObj))
                     },
-                    VecLikeType::Record => unsafe { drop(Box::from_raw(ptr as *mut RecordObj)) },
+                    VecLikeType::Record | VecLikeType::WindowConfiguration => unsafe {
+                        drop(Box::from_raw(ptr as *mut RecordObj))
+                    },
                     VecLikeType::Overlay => unsafe { drop(Box::from_raw(ptr as *mut OverlayObj)) },
                     VecLikeType::Marker => unsafe { drop(Box::from_raw(ptr as *mut MarkerObj)) },
                     VecLikeType::Buffer => unsafe { drop(Box::from_raw(ptr as *mut BufferObj)) },

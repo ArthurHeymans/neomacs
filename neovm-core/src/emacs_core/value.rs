@@ -1443,6 +1443,12 @@ impl TaggedValue {
         with_tagged_heap(|h| h.alloc_record(values))
     }
 
+    /// Allocate a window-configuration pseudovector (distinct type tag, same
+    /// `{header, data}` storage as a record).
+    pub fn make_window_configuration(values: Vec<Value>) -> Self {
+        with_tagged_heap(|h| h.alloc_window_configuration(values))
+    }
+
     /// Allocate a lambda. Converts LambdaData to a Value vector for GC safety.
     pub fn make_lambda(data: LambdaData) -> Self {
         with_tagged_heap(|h| h.alloc_lambda_from_data(data))
@@ -2028,6 +2034,18 @@ impl TaggedValue {
     /// Get record elements.
     pub fn as_record_data(self) -> Option<&'static LispValueSlice> {
         if self.is_record() {
+            let ptr = self.as_veclike_ptr().unwrap() as *const RecordObj;
+            Some(unsafe { LispValueSlice::from_slice((*ptr).data.as_slice()) })
+        } else {
+            None
+        }
+    }
+
+    /// Borrow the data slots of a window-configuration pseudovector. Distinct
+    /// from `as_vector_data`/`as_record_data` so that a window-configuration is
+    /// never mistaken for a vector or a record by the type predicates.
+    pub fn as_window_configuration_data(self) -> Option<&'static LispValueSlice> {
+        if self.is_window_configuration() {
             let ptr = self.as_veclike_ptr().unwrap() as *const RecordObj;
             Some(unsafe { LispValueSlice::from_slice((*ptr).data.as_slice()) })
         } else {

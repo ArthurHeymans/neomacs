@@ -816,6 +816,13 @@ impl TaggedValue {
         self.veclike_type() == Some(VecLikeType::Record)
     }
 
+    /// True if this value is a window configuration (veclike with the
+    /// WindowConfiguration type tag). Opaque to vector/array/sequence predicates.
+    #[inline]
+    pub fn is_window_configuration(self) -> bool {
+        self.veclike_type() == Some(VecLikeType::WindowConfiguration)
+    }
+
     /// True if this value is a hash table.
     #[inline]
     pub fn is_hash_table(self) -> bool {
@@ -883,6 +890,7 @@ impl TaggedValue {
                 VecLikeType::Macro => "macro",
                 VecLikeType::ByteCode => "byte-code",
                 VecLikeType::Record => "record",
+                VecLikeType::WindowConfiguration => "window-configuration",
                 VecLikeType::Overlay => "overlay",
                 VecLikeType::Marker => "marker",
                 VecLikeType::Buffer => "buffer",

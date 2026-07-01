@@ -204,6 +204,10 @@ pub enum VecLikeType {
     HashTable = 14,
     /// Obarray object (GNU `PVEC_OBARRAY`).
     Obarray = 15,
+    /// Saved window configuration (GNU `PVEC_WINDOW_CONFIGURATION`). Stored with
+    /// the same `{header, data}` layout as a record, but a distinct type tag so
+    /// it is opaque to the vector/array/sequence predicates (as in GNU).
+    WindowConfiguration = 17,
     /// Built-in function (like GNU's PVEC_SUBR).
     Subr = 18,
     /// Embedded widget model object (GNU `PVEC_XWIDGET`).
@@ -241,6 +245,7 @@ impl VecLikeType {
             Self::Buffer => GnuPvecType::Buffer,
             Self::HashTable => GnuPvecType::HashTable,
             Self::Obarray => GnuPvecType::Obarray,
+            Self::WindowConfiguration => GnuPvecType::WindowConfiguration,
             Self::Subr => GnuPvecType::Subr,
             Self::Xwidget => GnuPvecType::Xwidget,
             Self::XwidgetView => GnuPvecType::XwidgetView,

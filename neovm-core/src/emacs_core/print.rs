@@ -946,14 +946,6 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
                 });
                 return;
             }
-            // A window-configuration is stored as a tagged vector
-            // `[window-configuration FRAME SERIAL ROOTS]`, but GNU prints it as
-            // the opaque pseudovector `#<window-configuration>` (its internals
-            // are never surfaced).
-            if is_window_configuration_value(value) {
-                out.push_str("#<window-configuration>");
-                return;
-            }
             with_default_cycle_guard(value, out, state, |out, state| {
                 state.depth += 1;
                 out.push('[');
@@ -1049,6 +1041,9 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
         ValueKind::Veclike(VecLikeType::Window) => {
             let wid = value.as_window_id().unwrap();
             write!(out, "#<window {}>", wid).unwrap();
+        }
+        ValueKind::Veclike(VecLikeType::WindowConfiguration) => {
+            out.push_str("#<window-configuration>");
         }
         ValueKind::Veclike(VecLikeType::Frame) => {
             let fid = value.as_frame_id().unwrap();
@@ -1276,14 +1271,10 @@ fn value_is_symbol_named(value: &Value, name: &str) -> bool {
     matches!(value.kind(), ValueKind::Symbol(id) if symbol_id_is(id, name))
 }
 
-/// A window-configuration is stored as a tagged vector whose first element is
-/// the `window-configuration` symbol (hooks.rs `make_window_configuration_value`).
-/// GNU prints it as the opaque pseudovector `#<window-configuration>`.
+/// GNU prints a window-configuration as the opaque pseudovector
+/// `#<window-configuration>`; detect it by its distinct type tag.
 pub(crate) fn is_window_configuration_value(value: &Value) -> bool {
-    value.as_vector_data().is_some_and(|v| {
-        v.first()
-            .is_some_and(|tag| value_is_symbol_named(tag, "window-configuration"))
-    })
+    value.is_window_configuration()
 }
 
 #[derive(Clone, Copy)]
@@ -1976,11 +1967,6 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
                 pop_bytes_cycle_object(pushed);
                 return;
             }
-            if is_window_configuration_value(value) {
-                out.extend_from_slice(b"#<window-configuration>");
-                pop_bytes_cycle_object(pushed);
-                return;
-            }
             out.push(b'[');
             let items = value.as_vector_data().unwrap().clone();
             for (idx, item) in items.iter().enumerate() {
@@ -2083,6 +2069,9 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
             out.extend_from_slice(
                 format!("#<window {}>", value.as_window_id().unwrap()).as_bytes(),
             );
+        }
+        ValueKind::Veclike(VecLikeType::WindowConfiguration) => {
+            out.extend_from_slice(b"#<window-configuration>");
         }
         ValueKind::Veclike(VecLikeType::Frame) => {
             out.extend_from_slice(format_frame_handle(value.as_frame_id().unwrap()).as_bytes());

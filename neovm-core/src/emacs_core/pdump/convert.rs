@@ -224,7 +224,8 @@ impl DumpEncoder {
             ValueKind::Veclike(VecLikeType::SubCharTable) => {
                 DumpValue::SubCharTable(dump_heap_ref(self.value_to_heap_ref(v)))
             }
-            ValueKind::Veclike(VecLikeType::Record) => {
+            ValueKind::Veclike(VecLikeType::Record)
+            | ValueKind::Veclike(VecLikeType::WindowConfiguration) => {
                 DumpValue::Record(dump_heap_ref(self.value_to_heap_ref(v)))
             }
             ValueKind::Veclike(VecLikeType::HashTable) => {
@@ -2536,6 +2537,17 @@ fn dump_heap_object_from_value(encoder: &mut DumpEncoder, value: Value) -> DumpH
             value
                 .as_record_data()
                 .expect("record")
+                .iter()
+                .map(|item| encoder.dump_value(item))
+                .collect(),
+        ),
+        // A window-configuration is structurally a record; serialize its slots
+        // the same way. (Runtime-only objects are not part of the loadup dump,
+        // but this keeps the encoder total instead of silently dumping `Free`.)
+        ValueKind::Veclike(VecLikeType::WindowConfiguration) => DumpHeapObject::Record(
+            value
+                .as_window_configuration_data()
+                .expect("window-configuration")
                 .iter()
                 .map(|item| encoder.dump_value(item))
                 .collect(),

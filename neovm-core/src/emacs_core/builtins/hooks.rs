@@ -621,11 +621,11 @@ pub(super) fn reset_hooks_thread_locals() {
 }
 
 fn window_configuration_parts_from_value(value: &Value) -> Option<(Value, i64)> {
-    if !value.is_vector() {
-        return None;
-    };
-    let items = value.as_vector_data()?;
-    if items.len() != 4 || items[0].as_symbol_name() != Some(WINDOW_CONFIGURATION_TAG) {
+    // A window-configuration is its own pseudovector type, read via the
+    // type-gated accessor (never `as_vector_data`, so it stays opaque to
+    // `vectorp`). Slot 0 holds the tag symbol; slots 1/2 the frame and serial.
+    let items = value.as_window_configuration_data()?;
+    if items.len() != 4 {
         return None;
     }
     match (items[1].kind(), items[2].kind()) {
@@ -653,7 +653,7 @@ fn make_window_configuration_value(frame: Value, serial: i64, roots: Value) -> V
     // saved Lisp values are traced as part of the object.  Neomacs keeps the
     // Rust window tree in a serial side table; this hidden slot makes the
     // object's GC ownership match GNU's saved-data ownership.
-    Value::vector(vec![
+    Value::make_window_configuration(vec![
         Value::symbol(WINDOW_CONFIGURATION_TAG),
         frame,
         Value::fixnum(serial),
@@ -663,9 +663,9 @@ fn make_window_configuration_value(frame: Value, serial: i64, roots: Value) -> V
 
 pub(crate) fn builtin_window_configuration_p(args: Vec<Value>) -> EvalResult {
     expect_args("window-configuration-p", &args, 1)?;
-    Ok(Value::bool_val(
-        window_configuration_frame_from_value(&args[0]).is_some(),
-    ))
+    // GNU: t exactly for the window-configuration pseudovector -- a pure tag
+    // check, independent of the saved contents.
+    Ok(Value::bool_val(args[0].is_window_configuration()))
 }
 
 pub(crate) fn builtin_window_configuration_frame(args: Vec<Value>) -> EvalResult {
