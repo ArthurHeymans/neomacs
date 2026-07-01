@@ -3879,8 +3879,11 @@ pub(crate) fn builtin_where_is_internal(eval: &mut Context, args: Vec<Value>) ->
                         0,
                     );
                 }
-                // Preserve GNU ordering: `nconc2 (Freverse (seqs), remapped_sequences)`.
-                seqs.reverse();
+                // `collect_where_is_sequences_value` already returns sequences
+                // in the public `where-is-internal` order.  GNU reverses here
+                // because its lower-level `where_is_internal` helper returns
+                // the internal cons order; reversing here would make later
+                // global bindings outrank earlier active maps.
                 seqs.append(&mut remapped_sequences);
                 remapped_sequences = seqs;
                 continue;

@@ -4817,6 +4817,30 @@ fn where_is_internal_remap_target_key_sequence_is_resolved() {
 }
 
 #[test]
+fn where_is_internal_remapped_current_active_maps_preserve_active_map_order() {
+    crate::test_utils::init_test_tracing();
+    // Doom's dashboard asks `(where-is-internal 'bookmark-jump nil t)`.
+    // `bookmark-jump` is remapped to `consult-bookmark`, but the visible
+    // binding still comes from the earlier active minor/emulation map.  GNU
+    // preserves that active-map order when expanding remapped sequences.
+    let result = eval_one(
+        r#"(let ((global-map (make-sparse-keymap))
+                 (minor-map (make-sparse-keymap))
+                 (minor-mode-map-alist nil)
+                 (demo-mode t))
+             (use-global-map global-map)
+             (define-key minor-map [32 13] 'bookmark-jump)
+             (define-key global-map [24 114 98] 'bookmark-jump)
+             (define-key global-map [remap bookmark-jump] 'consult-bookmark)
+             (setq minor-mode-map-alist (list (cons 'demo-mode minor-map)))
+             (list (key-description (where-is-internal 'bookmark-jump nil t))
+                   (key-description (where-is-internal 'consult-bookmark nil t))
+                   (key-description (where-is-internal 'bookmark-jump nil t nil t))))"#,
+    );
+    assert_eq!(result, r#"OK ("SPC RET" "SPC RET" "SPC RET")"#);
+}
+
+#[test]
 fn where_is_internal_filters_raw_remap_pseudo_key_from_results() {
     crate::test_utils::init_test_tracing();
     // next-line is bound to "n", and forward-char is remapped to next-line.
