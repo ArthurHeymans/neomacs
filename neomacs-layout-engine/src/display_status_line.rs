@@ -418,6 +418,7 @@ pub(crate) struct WindowChromeDisplayRowRequest<'face> {
     pub(crate) display_row_index: usize,
     pub(crate) output: ChromeRowOutput,
     pub(crate) bounds: Rect,
+    pub(crate) text_area_left_px: f32,
     pub(crate) metrics: DisplayRowFallbackMetrics,
     pub(crate) tab_policy: DisplayTabPolicy,
     pub(crate) base_face: &'face ResolvedFace,
@@ -590,6 +591,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
             params.tab_width,
             &params.tab_stop_list,
         );
+        let text_area_left_px = (params.text_bounds.x - params.bounds.x).max(0.0);
         let target_cols = self.target_cols();
         let mut measured = WindowChromeMeasuredHeights {
             tab_line_height: self.tab_line_height,
@@ -620,6 +622,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                         params.bounds.width,
                         self.tab_line_height,
                     ),
+                    text_area_left_px,
                     metrics: self.metrics,
                     tab_policy: chrome_tab_policy.clone(),
                     base_face: self
@@ -661,6 +664,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                         params.bounds.width,
                         self.header_line_height,
                     ),
+                    text_area_left_px,
                     metrics: self.metrics,
                     tab_policy: chrome_tab_policy.clone(),
                     base_face: self.header_line_face.expect(
@@ -713,6 +717,7 @@ impl<'face, 'params> WindowChromeRowsRenderRequest<'face, 'params> {
                         params.bounds.width,
                         self.mode_line_height,
                     ),
+                    text_area_left_px,
                     metrics: self.metrics,
                     tab_policy: chrome_tab_policy,
                     base_face: self
@@ -903,7 +908,8 @@ impl<'face> WindowChromeDisplayRowRequest<'face> {
         let render_request = self
             .lisp_string_row_request()
             .with_symbol_values(self.symbol_values)
-            .render_request(face_ids);
+            .render_request(face_ids)
+            .with_chrome_text_area_left_px(self.text_area_left_px);
         let row = ChromeDisplayRowRenderRequest {
             owner: DisplayRowOwner::WindowChrome {
                 window_id: self.window_id,

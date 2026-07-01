@@ -1236,6 +1236,20 @@ fn render_lisp_display_row_output_with_symbols(
     role: GlyphRowRole,
     symbol_values: std::collections::HashMap<String, Value>,
 ) -> RenderedDisplayRow {
+    render_lisp_display_row_output_with_symbols_and_chrome_text_area_left(
+        rendered,
+        role,
+        symbol_values,
+        0.0,
+    )
+}
+
+fn render_lisp_display_row_output_with_symbols_and_chrome_text_area_left(
+    rendered: Value,
+    role: GlyphRowRole,
+    symbol_values: std::collections::HashMap<String, Value>,
+    chrome_text_area_left_px: f32,
+) -> RenderedDisplayRow {
     let mut font_metrics = None;
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
     let table = FaceTable::new();
@@ -1254,7 +1268,8 @@ fn render_lisp_display_row_output_with_symbols(
         resolver.default_face(),
         role,
         symbol_values,
-    );
+    )
+    .with_chrome_text_area_left_px(chrome_text_area_left_px);
     render_lisp_string_row(&mut renderer, request, rendered, &resolver, &mut face_ids)
         .expect("display source row")
 }
@@ -2677,6 +2692,59 @@ fn mode_line_align_to_fringe_region_now_resolves_to_window_edge() {
     assert_eq!(
         stretch.pixel_width, 232.0,
         "align-to right-fringe stretch must end at the window right edge (x=240)"
+    );
+}
+
+/// Doom-modeline computes TTY right alignment as a one-element pixel list,
+/// e.g. `(space :align-to (96))`, after subtracting window margins in Lisp.
+/// GNU's mode-line renderer then adds `window_box_left_offset(TEXT_AREA)` for
+/// this raw numeric target. With a 40px left text-area offset, the target is
+/// 136px instead of 96px, so the stretch after "L" spans 128px / 16 cols.
+#[test]
+fn mode_line_pixel_align_to_adds_window_text_area_left_offset() {
+    let _eval = Context::new();
+    let rendered = Value::string_with_text_properties(
+        "L R",
+        vec![neovm_core::emacs_core::value::StringTextPropertyRun {
+            start: 1,
+            end: 2,
+            plist: Value::list(vec![
+                Value::symbol("display"),
+                Value::list(vec![
+                    Value::symbol("space"),
+                    Value::keyword("align-to"),
+                    Value::list(vec![Value::fixnum(96)]),
+                ]),
+            ]),
+        }],
+    );
+
+    let row = render_lisp_display_row_output_with_symbols_and_chrome_text_area_left(
+        rendered,
+        GlyphRowRole::ModeLine,
+        std::collections::HashMap::new(),
+        40.0,
+    )
+    .into_row();
+
+    assert_eq!(row.role, GlyphRowRole::ModeLine);
+    assert_eq!(
+        row_text_expanding_stretches(&row),
+        format!("L{}R", " ".repeat(16))
+    );
+    let stretch = row.glyphs[1]
+        .iter()
+        .find(|glyph| matches!(glyph.glyph_type, GlyphType::Stretch { .. }))
+        .expect("numeric align-to should emit a stretch glyph");
+    assert_eq!(
+        stretch.glyph_type,
+        GlyphType::Stretch { width_cols: 16 },
+        "mode-line numeric align-to must include the text-area left offset: {:?}",
+        row.glyphs[1]
+    );
+    assert_eq!(
+        stretch.pixel_width, 128.0,
+        "target should be 96px + 40px text-area offset, minus current x=8px"
     );
 }
 

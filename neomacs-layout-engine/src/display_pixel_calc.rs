@@ -188,15 +188,15 @@ impl PixelCalcContext {
     /// tab-line, tab-bar) from its row-local geometry.
     ///
     /// In GNU Emacs a mode/header/tab line is rendered across the full
-    /// window box; for `(space …)` purposes its text area spans the entire
-    /// row width with no fringes, margins or scroll bar inside it (those
-    /// areas are not part of the chrome row's own coordinate space). The
-    /// row's left edge is the origin, so `text_area_left == 0` and
-    /// `text_area_right == text_area_width == width_px`. This makes region
-    /// symbols (`text`, `left`, `right`, `center`) resolve to real
-    /// positions while fringe/margin/scroll-bar symbols resolve to 0 — the
-    /// same way GNU resolves them for a window with no fringes/margins
-    /// (e.g. on a TTY frame).
+    /// window box; for `(space …)` region symbols its text area spans the
+    /// entire row width with no fringes, margins or scroll bar inside it
+    /// (those areas are not part of the chrome row's own coordinate space).
+    /// The row's left edge is the origin, so the default context has
+    /// `text_area_left == 0` and `text_area_right == text_area_width ==
+    /// width_px`. Window chrome callers may override `text_area_left` with
+    /// `window_box_left_offset(TEXT_AREA)`, because GNU adds that offset for
+    /// raw numeric `:align-to` targets while keeping already resolved region
+    /// coordinates unchanged.
     ///
     /// `frame_column_width`/`face_font_width` are the row's character cell
     /// width and `frame_line_height`/`face_font_height` its row height, so

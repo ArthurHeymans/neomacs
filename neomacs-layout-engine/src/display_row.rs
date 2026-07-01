@@ -220,6 +220,13 @@ impl<'a> DisplayRowLispStringSourceRenderRequest<'a> {
         Self::from_value(row_request, value)
     }
 
+    pub(crate) fn with_chrome_text_area_left_px(mut self, text_area_left_px: f32) -> Self {
+        self.row_request = self
+            .row_request
+            .with_chrome_text_area_left_px(text_area_left_px);
+        self
+    }
+
     fn into_render_parts(
         self,
     ) -> (
@@ -359,6 +366,7 @@ struct DisplayRowRenderPlan<'a> {
     base_face_id: u32,
     base_face: &'a ResolvedFace,
     role: GlyphRowRole,
+    chrome_text_area_left_px: f32,
     symbol_values: std::collections::HashMap<String, Value>,
 }
 
@@ -369,6 +377,7 @@ pub(crate) struct DisplayRowSourceRenderRequest<'a> {
     base_face_id: u32,
     base_face: &'a ResolvedFace,
     role: GlyphRowRole,
+    chrome_text_area_left_px: f32,
     symbol_values: std::collections::HashMap<String, Value>,
 }
 
@@ -387,6 +396,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
             base_face_id,
             base_face,
             role,
+            chrome_text_area_left_px: 0.0,
             symbol_values: std::collections::HashMap::new(),
         }
     }
@@ -411,6 +421,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
             base_face_id,
             base_face,
             role,
+            chrome_text_area_left_px: 0.0,
             symbol_values,
         }
     }
@@ -461,6 +472,11 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
 
     pub(crate) fn with_render_bounds(mut self, render_bounds: DisplayRowRenderBounds) -> Self {
         self.render_bounds = render_bounds;
+        self
+    }
+
+    pub(crate) fn with_chrome_text_area_left_px(mut self, text_area_left_px: f32) -> Self {
+        self.chrome_text_area_left_px = text_area_left_px.max(0.0);
         self
     }
 
@@ -627,6 +643,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
             base_face_id: self.base_face_id,
             base_face: self.base_face,
             role: self.role,
+            chrome_text_area_left_px: self.chrome_text_area_left_px,
             symbol_values: self.symbol_values,
         }
     }
@@ -809,6 +826,7 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
             base_face_id,
             base_face,
             role,
+            chrome_text_area_left_px,
             symbol_values,
         } = plan;
         context.face_ids().reserve_after(base_face_id);
@@ -831,12 +849,18 @@ impl<'metrics> DisplayRowRenderer<'metrics> {
         // authority the buffer text path uses. Region symbols (`text`,
         // `right`, …) now reach real window-region positions instead of the
         // 0.0 the retired `length_expr_pixels` evaluator returned.
-        let pixel_calc = PixelCalcContext::for_chrome_row(
+        let mut pixel_calc = PixelCalcContext::for_chrome_row(
             geometry.width(),
             char_width,
             geometry.height(),
             symbol_values,
         );
+        if matches!(
+            role,
+            GlyphRowRole::ModeLine | GlyphRowRole::HeaderLine | GlyphRowRole::TabLine
+        ) {
+            pixel_calc.text_area_left = f64::from(chrome_text_area_left_px.max(0.0));
+        }
         let row_ascent = row_face
             .metrics
             .ascent_px()

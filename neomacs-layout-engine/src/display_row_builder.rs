@@ -1559,8 +1559,10 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                 // `*align_to == -1`, then takes the difference from the current
                 // pen X. We mirror the buffer text path exactly (see
                 // `DisplayReplacementSpaceWidthPolicy::resolve`), substituting
-                // the chrome row's pen X as `current_x` and the row's left edge
-                // (`origin_x_px`) as `content_x`.
+                // the chrome row's pen X as `current_x`. For window chrome
+                // rows, GNU then adds `window_box_left_offset (TEXT_AREA)` to
+                // raw numeric targets; region-symbol targets have already set
+                // `align_to >= 0` and keep the resolved region coordinate.
                 let prop = expr.to_lisp_value();
                 let mut align_to: i32 = -1;
                 let pixels = calc_pixel_width_or_height(
@@ -1570,10 +1572,19 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
                     Some(&mut align_to),
                 )?;
                 let content_x = self.layout.tab_policy.origin_x_px;
+                let raw_align_base_x = if align_to < 0
+                    && matches!(
+                        self.layout.role,
+                        GlyphRowRole::ModeLine | GlyphRowRole::HeaderLine | GlyphRowRole::TabLine
+                    ) {
+                    self.layout.pixel_calc.text_area_left as f32
+                } else {
+                    content_x
+                };
                 let target_x = if align_to >= 0 {
                     align_to as f32 + pixels as f32
                 } else {
-                    content_x + pixels as f32
+                    raw_align_base_x + pixels as f32
                 };
                 let current =
                     self.layout.tab_policy.origin_x_px + self.current_text_metrics().width_px();

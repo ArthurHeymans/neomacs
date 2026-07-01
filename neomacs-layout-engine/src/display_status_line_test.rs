@@ -78,6 +78,7 @@ fn window_chrome_display_row_request_renders_measured_lifecycle_row() {
         display_row_index: 3,
         output: ChromeRowOutput::new(3, 24.0),
         bounds: neomacs_display_protocol::types::Rect::new(0.0, 24.0, 96.0, 16.0),
+        text_area_left_px: 0.0,
         metrics: crate::display_row_metrics::DisplayRowFallbackMetrics::from_default_face_extents(
             8.0, 16.0, 12.0,
         ),
@@ -132,6 +133,7 @@ fn window_chrome_mode_line_row_grows_for_tall_display_element() {
         display_row_index: 1,
         output: ChromeRowOutput::new(1, 0.0),
         bounds: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 240.0, allocated_height),
+        text_area_left_px: 0.0,
         metrics: DisplayRowFallbackMetrics::from_default_face_extents(8.0, allocated_height, 12.0),
         tab_policy: DisplayTabPolicy::every(8),
         base_face: &base_face,
@@ -166,6 +168,7 @@ fn window_chrome_mode_line_row_grows_for_tall_display_element() {
         display_row_index: 1,
         output: ChromeRowOutput::new(1, 0.0),
         bounds: neomacs_display_protocol::types::Rect::new(0.0, 0.0, 240.0, allocated_height),
+        text_area_left_px: 0.0,
         metrics: DisplayRowFallbackMetrics::from_default_face_extents(8.0, allocated_height, 12.0),
         tab_policy: DisplayTabPolicy::every(8),
         base_face: &base_face,
