@@ -4685,6 +4685,72 @@ impl Context {
         obarray.set_symbol_value("window-scroll-functions", Value::NIL);
         obarray.make_special("window-scroll-functions");
 
+        // --- src/alloc.c: syms_of_alloc ---
+        // GC accounting DEFVAR_INTs (monotonic allocation counters). neomacs
+        // does not track them yet, so seed 0 so `boundp' agrees with GNU.
+        for name in [
+            "cons-cells-consed",
+            "floats-consed",
+            "vector-cells-consed",
+            "symbols-consed",
+            "string-chars-consed",
+            "intervals-consed",
+        ] {
+            obarray.set_symbol_value(name, Value::fixnum(0));
+            obarray.make_special(name);
+        }
+        // DEFVAR_INT, default 65536 (bignum digit-width limit).
+        obarray.set_symbol_value("integer-width", Value::fixnum(65536));
+        obarray.make_special("integer-width");
+
+        // --- src/frame.c: syms_of_frame ---
+        // DEFVAR_LISP, default 20 (minimum frame alpha/opacity).
+        obarray.set_symbol_value("frame-alpha-lower-limit", Value::fixnum(20));
+        obarray.make_special("frame-alpha-lower-limit");
+        // DEFVAR_LISP, default nil (function to adjust reported mouse position).
+        obarray.set_symbol_value("mouse-position-function", Value::NIL);
+        obarray.make_special("mouse-position-function");
+
+        // --- src/keymap.c: syms_of_keymap ---
+        // DEFVAR_LISP, default nil (preferred modifier for `where-is').
+        obarray.set_symbol_value("where-is-preferred-modifier", Value::NIL);
+        obarray.make_special("where-is-preferred-modifier");
+
+        // --- src/coding.c: syms_of_coding ---
+        // DEFVAR_BOOL, default nil.
+        obarray.set_symbol_value("coding-system-require-warning", Value::NIL);
+        obarray.make_special("coding-system-require-warning");
+        obarray.set_symbol_value("inhibit-iso-escape-detection", Value::NIL);
+        obarray.make_special("inhibit-iso-escape-detection");
+        // `coding-category-utf-8' holds the coding system for the UTF-8 detection
+        // category; its default is the `utf-8' coding system symbol.
+        obarray.set_symbol_value("coding-category-utf-8", Value::symbol("utf-8"));
+        obarray.make_special("coding-category-utf-8");
+
+        // --- src/lread.c: syms_of_lread ---
+        // DEFVAR_BOOL, default nil.
+        obarray.set_symbol_value("load-dangerous-libraries", Value::NIL);
+        obarray.make_special("load-dangerous-libraries");
+
+        // --- src/xdisp.c: syms_of_xdisp ---
+        // DEFVAR_BOOL, default nil.
+        obarray.set_symbol_value("redisplay-skip-fontification-on-input", Value::NIL);
+        obarray.make_special("redisplay-skip-fontification-on-input");
+
+        // --- src/charset.c: syms_of_charset ---
+        // `charset-list' is a DEFVAR_LISP (the list of defined charsets), NOT a
+        // function -- GNU signals void-function for `(charset-list)'. Seed the
+        // variable so `boundp' agrees; the neomacs registry populates the
+        // ordered list separately.
+        obarray.set_symbol_value("charset-list", Value::NIL);
+        obarray.make_special("charset-list");
+
+        // --- src/minibuf.c: read-buffer history ---
+        // `buffer-name-history' is the minibuffer history list for buffer names,
+        // default nil.
+        obarray.set_symbol_value("buffer-name-history", Value::NIL);
+        obarray.make_special("buffer-name-history");
+
         // --- src/casefiddle.c: syms_of_casefiddle ---
         // DEFVAR_BOOL + Fmake_variable_buffer_local, default 0 (nil).
         // Checked by case-conversion functions. Buffer-local via
