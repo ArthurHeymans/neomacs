@@ -1483,6 +1483,105 @@ fn bytes_equal_ascii_case_fold(left: &[u8], right: &[u8]) -> bool {
             .all(|(l, r)| l.eq_ignore_ascii_case(r))
 }
 
+/// Decode the next character at byte offset `at`. In a unibyte target every
+/// byte is its own character (raw bytes must not be decoded as multibyte leads,
+/// see the unibyte note in `literal_find_emacs_bytes`); in a multibyte target
+/// decode one Emacs char.
+fn next_char_at(text: &[u8], at: usize, multibyte: bool) -> (u32, usize) {
+    if multibyte {
+        let (code, len) = crate::emacs_core::emacs_char::string_char(&text[at..]);
+        (code, len.max(1))
+    } else {
+        (text[at] as u32, 1)
+    }
+}
+
+/// Canonicalize `literal` char-by-char through the buffer case-canon table.
+fn canon_fold_pattern(literal: &[u8], multibyte: bool, trt: &CaseTranslation) -> Vec<u32> {
+    let mut pat = Vec::new();
+    let mut i = 0;
+    while i < literal.len() {
+        let (code, len) = next_char_at(literal, i, multibyte);
+        pat.push(trt.translate(code));
+        i += len;
+    }
+    pat
+}
+
+/// True if `pat` (already canonicalized) matches `text` at byte offset `at`,
+/// canonicalizing each text char through `trt`. Returns the end byte offset.
+fn canon_fold_match_at(
+    text: &[u8],
+    at: usize,
+    pat: &[u32],
+    multibyte: bool,
+    trt: &CaseTranslation,
+) -> Option<usize> {
+    let mut ti = at;
+    for &pc in pat {
+        if ti >= text.len() {
+            return None;
+        }
+        let (code, len) = next_char_at(text, ti, multibyte);
+        if trt.translate(code) != pc {
+            return None;
+        }
+        ti += len;
+    }
+    Some(ti)
+}
+
+/// Forward literal search that folds through the buffer's case-canon table
+/// (used only when a custom `set-case-syntax-pair` table is installed). GNU's
+/// `simple_search` canonicalizes each char through the search `trt`.
+fn canon_fold_literal_find(
+    text: &[u8],
+    literal: &[u8],
+    multibyte: bool,
+    trt: &CaseTranslation,
+) -> Option<MatchGroup> {
+    let pat = canon_fold_pattern(literal, multibyte, trt);
+    if pat.is_empty() {
+        return Some(MatchGroup::new(0, 0));
+    }
+    let mut at = 0;
+    loop {
+        if let Some(end) = canon_fold_match_at(text, at, &pat, multibyte, trt) {
+            return Some(MatchGroup::new(at, end));
+        }
+        if at >= text.len() {
+            return None;
+        }
+        let (_code, len) = next_char_at(text, at, multibyte);
+        at += len;
+    }
+}
+
+/// Backward analogue of `canon_fold_literal_find`: returns the rightmost match.
+fn canon_fold_literal_rfind(
+    text: &[u8],
+    literal: &[u8],
+    multibyte: bool,
+    trt: &CaseTranslation,
+) -> Option<MatchGroup> {
+    let pat = canon_fold_pattern(literal, multibyte, trt);
+    if pat.is_empty() {
+        return Some(MatchGroup::new(text.len(), text.len()));
+    }
+    let mut last = None;
+    let mut at = 0;
+    loop {
+        if let Some(end) = canon_fold_match_at(text, at, &pat, multibyte, trt) {
+            last = Some(MatchGroup::new(at, end));
+        }
+        if at >= text.len() {
+            return last;
+        }
+        let (_code, len) = next_char_at(text, at, multibyte);
+        at += len;
+    }
+}
+
 fn literal_find_emacs_bytes(
     text: &[u8],
     literal: &[u8],
@@ -1683,9 +1782,19 @@ pub fn search_forward(
 
     let multibyte = buf.get_multibyte();
     let literal = coerce_pattern_to_buffer_bytes(pattern, multibyte);
-    let found = with_buffer_emacs_bytes(buf, EmacsByteRange::new(start, limit), |text| {
-        literal_find_emacs_bytes(text, &literal, multibyte, case_fold)
-    });
+    // A custom `set-case-syntax-pair` table folds custom pairs (e.g. [/])
+    // during search; route through the buffer's case-canon table then, else
+    // keep the fast hardwired ASCII/Unicode folding.
+    let translation = buffer_search_translation(buf, case_fold);
+    let found =
+        with_buffer_emacs_bytes(
+            buf,
+            EmacsByteRange::new(start, limit),
+            |text| match &translation {
+                Some(trt) => canon_fold_literal_find(text, &literal, multibyte, trt),
+                None => literal_find_emacs_bytes(text, &literal, multibyte, case_fold),
+            },
+        );
 
     if let Some(found) = found {
         let matched = found.shift(start.get());
@@ -1738,9 +1847,16 @@ pub fn search_backward(
 
     let multibyte = buf.get_multibyte();
     let literal = coerce_pattern_to_buffer_bytes(pattern, multibyte);
-    let found = with_buffer_emacs_bytes(buf, EmacsByteRange::new(limit, end), |text| {
-        literal_rfind_emacs_bytes(text, &literal, multibyte, case_fold)
-    });
+    let translation = buffer_search_translation(buf, case_fold);
+    let found =
+        with_buffer_emacs_bytes(
+            buf,
+            EmacsByteRange::new(limit, end),
+            |text| match &translation {
+                Some(trt) => canon_fold_literal_rfind(text, &literal, multibyte, trt),
+                None => literal_rfind_emacs_bytes(text, &literal, multibyte, case_fold),
+            },
+        );
 
     if let Some(found) = found {
         let matched = found.shift(limit.get());
@@ -1970,6 +2086,17 @@ pub fn re_search_backward_with_posix(
     }
 }
 
+/// Build the case-fold translate table for a search in `buf`: the buffer's
+/// case-canon table (GNU's search `trt`) when a custom `set-case-syntax-pair`
+/// table is installed, else `None` so the engine's fast hardwired folding is
+/// used. Mirrors GNU search.c installing `BVAR (current_buffer, case_canon_table)`.
+fn buffer_search_translation(buf: &Buffer, case_fold: bool) -> Option<CaseTranslation> {
+    if !case_fold {
+        return None;
+    }
+    crate::emacs_core::casetab::buffer_case_canon_table(buf).map(CaseTranslation::from_char_table)
+}
+
 pub(crate) fn re_search_forward_lisp_with_posix(
     buf: &mut Buffer,
     pattern: &LispString,
@@ -2000,7 +2127,14 @@ pub(crate) fn re_search_forward_lisp_with_posix(
     let start_rel = start.get() - region_start.get();
     let limit_rel = limit.get() - region_start.get();
     let buffer_id = buf.id;
-    let compiled = compile_lisp_pattern_with_posix(pattern, case_fold, posix, buf.get_multibyte())?;
+    let translation = buffer_search_translation(buf, case_fold);
+    let compiled = compile_lisp_pattern_with_posix_translation(
+        pattern,
+        case_fold,
+        posix,
+        buf.get_multibyte(),
+        translation,
+    )?;
     let syn = buffer_syntax_lookup(buf);
 
     if let Some((_pos, regs)) = with_buffer_emacs_bytes(buf, accessible.range(), |text| {
@@ -2054,7 +2188,13 @@ pub(crate) fn re_search_backward_lisp_with_posix(
     let start_rel = end.get() - region_start.get();
     let limit_rel = limit.get() - region_start.get();
     let buffer_id = buf.id;
-    let compiled = compile_lisp_pattern_with_posix(pattern, case_fold, posix, buf.get_multibyte())?;
+    let compiled = compile_lisp_pattern_with_posix_translation(
+        pattern,
+        case_fold,
+        posix,
+        buf.get_multibyte(),
+        buffer_search_translation(buf, case_fold),
+    )?;
     let syn = buffer_syntax_lookup(buf);
 
     if let Some((_pos, regs)) = with_buffer_emacs_bytes(buf, accessible.range(), |text| {
@@ -2172,7 +2312,13 @@ pub(crate) fn looking_at_lisp_with_posix(
     let region_start = accessible.start();
     let start_rel = start.get() - region_start.get();
     let buffer_id = buf.id;
-    let compiled = compile_lisp_pattern_with_posix(pattern, case_fold, posix, buf.get_multibyte())?;
+    let compiled = compile_lisp_pattern_with_posix_translation(
+        pattern,
+        case_fold,
+        posix,
+        buf.get_multibyte(),
+        buffer_search_translation(buf, case_fold),
+    )?;
     let syn = buffer_syntax_lookup(buf);
 
     if let Some((_end, regs)) = with_buffer_emacs_bytes(buf, accessible.range(), |text| {

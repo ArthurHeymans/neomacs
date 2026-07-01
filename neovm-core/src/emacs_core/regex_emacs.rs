@@ -309,7 +309,7 @@ impl CaseTranslation {
         self.table.map_or(0, |table| table.bits())
     }
 
-    fn translate(&self, c: u32) -> u32 {
+    pub(crate) fn translate(&self, c: u32) -> u32 {
         if let Some(translated) = self.byte.get(c as usize).copied() {
             return translated;
         }

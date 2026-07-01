@@ -504,6 +504,30 @@ pub(crate) fn current_case_canon_table(
     Ok(case_table_extra(table, 1))
 }
 
+/// The case-fold canon char-table to use as the search translate table for a
+/// search in `buf` -- GNU's `BVAR (current_buffer, case_canon_table)` used as
+/// the search `trt`. Returns `None` when `buf` uses the standard case table
+/// (the hot default path), so the search engine keeps its fast hardwired
+/// Unicode folding; returns `Some(canon)` only when a custom
+/// `set-case-syntax-pair` table is installed, so a custom pair (e.g. `[`/`]`)
+/// folds during search just as `char-equal` already does.
+pub(crate) fn buffer_case_canon_table(buf: &crate::buffer::Buffer) -> Option<Value> {
+    use crate::buffer::buffer::BUFFER_SLOT_CASE_TABLE;
+    let table = buf.slots[BUFFER_SLOT_CASE_TABLE.index()];
+    if !is_case_table(&table) {
+        return None;
+    }
+    // Standard table (by object identity): fold via the hardwired path.
+    let standard = STANDARD_CASE_TABLE_OBJECT.with(|slot| *slot.borrow());
+    if standard.is_some_and(|s| s.bits() == table.bits()) {
+        return None;
+    }
+    // Custom table: the canon subsidiary lives in extras[1] (derived by
+    // `set-case-table`). Only use it if it is a usable char-table.
+    let canon = case_table_extra(table, 1);
+    super::chartable::is_char_table(&canon).then_some(canon)
+}
+
 /// Which subsidiary case char-table to consult for a per-buffer override.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CaseMap {
