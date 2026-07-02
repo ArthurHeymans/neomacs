@@ -1134,6 +1134,11 @@ pub struct TaggedHeap {
     /// this owner a dumped object?" test in the write-barrier hot path.
     dump_addr_lo: usize,
     dump_addr_hi: usize,
+    /// One-time flag: this heap has completed a full stop-the-world collection
+    /// (its bootstrap cycle). A dump-less heap runs the concurrent collector
+    /// from its second cycle on — the same one-STW-bootstrap-then-concurrent
+    /// shape as the dump path; see `should_run_concurrent`.
+    bootstrap_collected: bool,
 
     // --- Incremental marking state (step 7). Active on every partitioned cycle
     // (after the first-cycle promotion); the first cycle and no-dump heaps stay
@@ -1290,6 +1295,7 @@ impl TaggedHeap {
             // (`extend_dump_span`); a bare/no-dump heap stays on full mark-sweep.
             partition_dump: false,
             dump_blackened: false,
+            bootstrap_collected: false,
             mapped_remembered: FxHashSet::default(),
             mark_in_progress: false,
             incremental_mark_us: 0,
@@ -3675,6 +3681,12 @@ impl TaggedHeap {
         // A full-heap collection subsumes any remembered-set bookkeeping.
         self.clear_dirty_owners();
         self.clear_dirty_writes();
+
+        // A full STW cycle has completed: the heap now has consistent live
+        // accounting and an empty gray queue, the baseline the concurrent
+        // collector starts from. Dump-less heaps run concurrent marking from
+        // the next safe-point collection on (`should_run_concurrent`).
+        self.bootstrap_collected = true;
     }
 
     /// Drain the gray queue, marking and tracing all reachable objects.
@@ -3704,11 +3716,28 @@ impl TaggedHeap {
     // mutator runs; only two short stop-the-world handshakes (start + finish).
     // ---------------------------------------------------------------------
 
-    /// True if a concurrent mark should drive THIS collection: a partitioned
-    /// post-dump heap (the young/old split bounds what is traced). The first
-    /// cycle and no-dump heaps fall to the STW full path instead.
+    /// True if a concurrent mark should drive THIS collection.
+    ///
+    /// Dump heaps: a partitioned post-dump heap whose first partition cycle
+    /// has promoted + blackened the image (the young/old split bounds what is
+    /// traced); that first cycle falls to the STW full path.
+    ///
+    /// Dump-less heaps: after the first completed STW collection — the same
+    /// one-STW-bootstrap-then-concurrent shape as the dump path. Nothing
+    /// tenures without a dump, so every cycle re-clears and re-marks the whole
+    /// young heap (correct, just unpartitioned), and the concurrent job's dump
+    /// checks never match (`dump_addr_lo/hi` stay MAX/0) while the
+    /// remembered-set seeding is skipped entirely (`partition_dump` is false).
+    ///
+    /// A heap that registers a dump AFTER dump-less cycles switches back to
+    /// the dump rule: the first partition cycle must be the STW full trace
+    /// that promotes + blackens the image, regardless of earlier bootstraps.
     pub fn should_run_concurrent(&self) -> bool {
-        self.partition_dump && self.dump_blackened
+        if self.partition_dump {
+            self.dump_blackened
+        } else {
+            self.bootstrap_collected
+        }
     }
 
     /// True while the background GC thread is marking (between the start and
@@ -4900,6 +4929,15 @@ impl TaggedHeap {
 
 impl Drop for TaggedHeap {
     fn drop(&mut self) {
+        // A live concurrent mark holds start-of-cycle snapshots into this
+        // heap (cons blocks + their mark bitmaps, vector backings, the
+        // Context obarray) on the GC thread. Reclaim exclusive ownership
+        // BEFORE freeing anything it can still read. `tagged_heap` is the
+        // first `Context` field, so this join also runs before the obarray
+        // drops. No-op when no mark is in flight.
+        if self.concurrent_mark_running {
+            self.join_concurrent_mark();
+        }
         // Free all non-cons objects via every intrusive list: young, tenured,
         // and any objects detached for an in-flight deferred sweep.
         for mut current in [
@@ -5107,6 +5145,110 @@ mod ownership_tests {
         heap.finish_incremental_sweep_now();
         assert!(!heap.sweep_in_progress());
         assert_eq!(heap.sweep_stats().noncons_freed, 0, "all floats are live");
+    }
+
+    /// Gap 3: a dump-less heap enables the concurrent collector after its
+    /// first completed STW collection (the bootstrap), and a full concurrent
+    /// cycle on such a heap retains the rooted live set and reclaims garbage
+    /// (mirrors `collect_exact_retains_rooted_and_frees_unrooted`). The dump
+    /// span is empty (`dump_addr_lo/hi` = MAX/0), so the GC thread's dump
+    /// check must never match and the remembered-set seeding must no-op.
+    #[test]
+    fn dumpless_heap_enables_concurrent_after_bootstrap_and_collects() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // Fresh dump-less heap: the first collection must be the STW bootstrap.
+        assert!(!heap.should_run_concurrent());
+
+        const N: i64 = 10_000;
+        // Rooted list: rooted_head -> cons(N-1) -> ... -> cons(0) -> fixnum(0).
+        let mut rooted = TaggedValue::fixnum(0);
+        for i in 0..N {
+            rooted = heap.alloc_cons(TaggedValue::fixnum(i), rooted);
+        }
+        let rooted_head = rooted;
+        heap.collect_exact(std::iter::once(rooted_head));
+        assert!(
+            heap.should_run_concurrent(),
+            "the completed STW bootstrap must enable concurrent marking"
+        );
+
+        // Allocation churn after the bootstrap: garbage for the concurrent
+        // cycle to reclaim.
+        let mut unrooted = TaggedValue::fixnum(0);
+        for i in 0..N {
+            unrooted = heap.alloc_cons(TaggedValue::fixnum(1_000_000 + i), unrooted);
+        }
+        let _unrooted_head = unrooted;
+        let before = heap.cons_live_count;
+
+        // One full concurrent cycle, mirroring the driver's state machine:
+        // start handshake -> GC thread marks -> STW termination -> deferred
+        // sweep drained.
+        heap.concurrent_begin();
+        heap.seed_root(rooted_head);
+        heap.launch_concurrent_mark();
+        assert!(heap.concurrent_mark_running());
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(rooted_head);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+
+        // The unrooted churn was reclaimed...
+        let after = heap.cons_live_count;
+        assert!(
+            after < before,
+            "the concurrent cycle must reclaim garbage (before={before}, after={after})",
+        );
+        // ...and the rooted spine survives, fully readable.
+        let mut node = rooted_head;
+        let mut count = 0i64;
+        while node.is_cons() {
+            let car = unsafe { (*node.xcons_ptr()).load_car() };
+            assert_eq!(
+                car.0,
+                TaggedValue::fixnum(N - 1 - count).0,
+                "rooted car intact at index {count}",
+            );
+            node = unsafe { (*node.xcons_ptr()).load_cdr() };
+            count += 1;
+        }
+        assert_eq!(count, N, "the whole rooted list survived the concurrent cycle");
+    }
+
+    /// Gap 3 drop safety: dropping a heap while the GC thread is still
+    /// concurrently marking it must stop + join the GC thread before any
+    /// storage it can read is freed (dump-less heaps now reach this state at
+    /// every safe-point collection after bootstrap, e.g. a test Context
+    /// dropped mid-mark).
+    #[test]
+    fn dropping_heap_mid_concurrent_mark_joins_gc_thread() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // A long spine so the GC thread is genuinely still marking at drop.
+        const N: i64 = 300_000;
+        let mut list = TaggedValue::fixnum(0);
+        for i in 0..N {
+            list = heap.alloc_cons(TaggedValue::fixnum(i), list);
+        }
+        heap.concurrent_begin();
+        heap.seed_root(list);
+        heap.launch_concurrent_mark();
+        assert!(heap.concurrent_mark_running());
+        // Drop with the mark in flight; under TSAN/ASAN a missing join is a
+        // use-after-free the sanitizer catches, and the join panics if the GC
+        // thread is gone.
+        drop(heap);
     }
 
     /// Workstream A path-collapse safety net (characterization): a forced

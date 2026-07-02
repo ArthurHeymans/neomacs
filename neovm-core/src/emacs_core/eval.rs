@@ -7078,11 +7078,16 @@ impl Context {
         self.gc_collect_from_current_roots_impl(true);
     }
 
-    /// Safe-point GC entry. Uses incremental marking on partitioned cycles
-    /// (one bounded slice per call, once a pdump is loaded and blackened);
-    /// otherwise a stop-the-world collection (no-dump heaps, first cycle).
+    /// Safe-point GC entry. Uses concurrent marking after the heap's
+    /// bootstrap cycle (and, for dump heaps, once the pdump is blackened);
+    /// the first cycle runs a stop-the-world collection.
+    ///
+    /// Exact-GC stress mode always collects synchronously to completion: its
+    /// purpose is a deterministic missing-root shakeout at every
+    /// allocation-bearing safe point, which an asynchronous concurrent cycle
+    /// would both defer and de-randomize.
     fn gc_collect_from_current_roots(&mut self) {
-        self.gc_collect_from_current_roots_impl(false);
+        self.gc_collect_from_current_roots_impl(self.gc_stress);
     }
 
     /// Drive a collection from the current roots.

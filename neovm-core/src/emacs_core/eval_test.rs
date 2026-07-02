@@ -14884,6 +14884,50 @@ fn gc_safe_point_uses_exact_root_tracing() {
 }
 
 #[test]
+fn gc_safe_point_runs_concurrent_cycles_without_a_dump() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    // A rooted structure that must survive every cycle.
+    ev.eval_str_each("(setq gc-concurrent-root (cons 7 8))");
+    // Small threshold so safe points trigger collections immediately.
+    ev.tagged_heap.set_gc_threshold(1024);
+    // Bootstrap: the first completed safe-point collection is stop-the-world.
+    while ev.gc_count == 0 {
+        ev.eval_str_each("(make-list 64 0)");
+        ev.gc_safe_point();
+    }
+    assert!(
+        ev.tagged_heap.should_run_concurrent(),
+        "a dump-less heap must enable the concurrent collector after bootstrap"
+    );
+
+    // Churn through more safe points until another cycle completes. With
+    // `should_run_concurrent` true and no forced GC, the only completing
+    // path is concurrent mark -> STW termination -> deferred sweep slices,
+    // so `gc_count` advancing proves a full concurrent cycle ran.
+    let bootstrap_count = ev.gc_count;
+    let mut saw_mark_overlap = false;
+    for _ in 0..50_000 {
+        ev.eval_str_each("(make-list 64 0)");
+        ev.gc_safe_point();
+        // Opportunistic: a mark observed in flight between safe points.
+        saw_mark_overlap |= ev.tagged_heap.concurrent_mark_running();
+        if ev.gc_count > bootstrap_count {
+            break;
+        }
+    }
+    assert!(
+        ev.gc_count > bootstrap_count,
+        "a concurrent cycle must terminate and complete its deferred sweep \
+         (gc_count={}, bootstrap_count={bootstrap_count}, overlap_seen={saw_mark_overlap})",
+        ev.gc_count,
+    );
+    // The rooted structure survived the concurrent cycles.
+    let results = ev.eval_str_each("(car gc-concurrent-root)");
+    assert_eq!(format_eval_result(&results[0]), "OK 7");
+}
+
+#[test]
 fn gc_safe_point_exact_inside_extra_root_scope_retains_explicit_slice() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
