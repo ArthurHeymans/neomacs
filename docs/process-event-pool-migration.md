@@ -127,7 +127,22 @@ Oracle trajectory: pre-audit clean baseline 131 fails → **121** after S1–S4a
 `network_client_open_delete_sentinels`), zero regressions across five clean
 idle full-suite gates.
 
-## 4. IN FLIGHT — S4b + S6 (in tree, uncommitted at time of writing)
+## 4. LANDED — S4b + S6 (commit `e53ccc2d5` lineage, pushed 2026-07-02)
+
+Final form includes two refinements discovered during gating: (a) the
+observation-point decode is PASSIVE — `process_effective_status` reads a
+status already reaped by a wait iteration's poll; actively `try_wait`-ing at
+`process-status` was tried and reverted because it let
+`(while (process-live-p p) (accept-process-output p))` exit between waits
+before any wait delivered the pending sentinel (cx423 process-send-eof caught
+this); (b) the wait delivers the terminal notification in the SAME pass that
+saw output + EOF + a reaped exit for pipes as well as ptys (was pty-gated).
+kill-buffer's hangup no longer synthesizes a pending (signal . SIGHUP) at
+send time — GNU only sends. Final gate: clean idle full regression, 129 fails
+where every non-baseline name passed standalone x3 except the two documented
+repeat-timer coin-flips. Historical in-flight notes below.
+
+### (historical) S4b + S6 in-tree state
 
 These two interlock: S4b (only output completes waits) removes the hazard that
 previously made S6's observation-time polling unsafe (a poll that parked a
