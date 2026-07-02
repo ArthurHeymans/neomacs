@@ -114,3 +114,72 @@ fn read_process_output_carries_split_decode_sequences_between_chunks() {
         expect,
     );
 }
+
+#[test]
+fn process_send_string_reenters_wait_and_runs_filter_when_write_blocks() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let expect = expect_test::expect![[r#""OK (t 4 262144)""#]];
+    crate::common::assert_oracle_parity_expect(
+        r#"
+(let* ((python (or (executable-find "python3")
+                   (error "python3 not found")))
+       (script (concat
+                "import os, sys\n"
+                "os.write(1, b'O' * 262144)\n"
+                "sys.stdout.flush()\n"
+                "sys.stdin.buffer.read()\n"))
+       (events nil)
+       (p nil))
+  (unwind-protect
+      (progn
+        (setq p
+              (make-process
+               :name "send-reentrant-oracle"
+               :buffer nil
+               :connection-type 'pipe
+               :command (list python "-c" script)
+               :filter (lambda (_proc string)
+                         (push (length string) events))))
+        (process-send-string p (make-string 262144 ?x))
+        (list (> (apply #'+ events) 0)
+              (length events)
+              (apply #'+ events)))
+    (when p
+      (ignore-errors
+        (delete-process p)))))
+"#,
+        expect,
+    );
+}
+
+#[test]
+fn process_send_string_rejects_network_server_like_gnu() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let expect = expect_test::expect![[
+        r#""OK (error \"Process send-listener-oracle not running: listen\")""#
+    ]];
+    crate::common::assert_oracle_parity_expect(
+        r#"
+(let ((server nil))
+  (unwind-protect
+      (progn
+        (setq server
+              (make-network-process
+               :name "send-listener-oracle"
+               :server t
+               :host 'local
+               :service 0
+               :noquery t))
+        (condition-case err
+            (process-send-string server "x")
+          (error
+           (list (car err) (cadr err)))))
+    (when server
+      (ignore-errors
+        (delete-process server)))))
+"#,
+        expect,
+    );
+}

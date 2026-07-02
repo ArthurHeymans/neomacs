@@ -386,6 +386,23 @@ impl TlsStream {
         write_result.and(restore_result)
     }
 
+    pub(crate) fn write_process_input_once(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.set_nonblocking(true)?;
+        match self {
+            Self::Rustls(stream) => match stream.inner.write(bytes) {
+                Ok(n) => {
+                    match stream.inner.flush() {
+                        Ok(()) => {}
+                        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {}
+                        Err(err) => return Err(err),
+                    }
+                    Ok(n)
+                }
+                Err(err) => Err(err),
+            },
+        }
+    }
+
     pub(crate) fn read_process_output(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self {
             Self::Rustls(stream) => rustls_read_process_output(stream, buf),

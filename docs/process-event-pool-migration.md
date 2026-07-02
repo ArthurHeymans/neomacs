@@ -106,7 +106,7 @@ Key contract points verified empirically this cycle:
 | D8 | seqpacket not advertised in `featurep 'make-network-process` though fully implemented | **FIXED** `69b874f9b` |
 | D9 | Child exit observed only inside wait iterations; `process-status` stale outside waits (the load-flaky family's root cause) | **IN TREE — S6** (see §4) |
 | D10 | Fixed 4096-byte reads; no `read-process-output-max`; no adaptive read buffering | **FIXED — S7** |
-| D11 | `process-send-string` = `write_all`+`flush`; never re-enters the wait; `write_queue` field exists unused | **OPEN — S8** |
+| D11 | `process-send-string` = `write_all`+`flush`; never re-enters the wait; `write_queue` field exists unused | **FIXED — S8** |
 | D12 | DNS always blocking, even for `:nowait` | **OPEN — S9** |
 | D13 | 50ms polling cap per wait iteration instead of exact timeouts | **OPEN — S9** |
 | D14 | Lisp threads: mutex ownership error where GNU blocks; dynamic `let` leaks across threads; `all-threads` misses blocked workers; `thread-signal` handler detail | **OPEN — S10** (separate subsystem) |
@@ -334,26 +334,69 @@ Validated gates for this slice:
   documented display-backend baseline failure
   `div_v3_window_margins_fringes_body_width_combo`.
 
+## 4.3. LANDED — S8 (current in-tree state)
+
+S8 implemented GNU's `send_process` write-queue and re-entrant wait behavior:
+
+- `write_queue` entries now use GNU's shape `(STRING . (OFFSET . LENGTH))`.
+  New sends append to an existing queue; blocked remainders are pushed back to
+  the front before waiting.
+- `process-send-string` and `process-send-region` encode through the process's
+  input coding system, queue the bytes, then flush through a single
+  re-entrant path. On `EAGAIN` / `WouldBlock`, the flush registers writable
+  interest and waits for up to 20ms with `wait_for_process_output`, so filters,
+  sentinels, timers, and async connect completion can run during the send just
+  as GNU permits.
+- Pipe child stdin is switched to non-blocking mode before writes. PTY writers,
+  TLS streams, stream sockets, seqpacket streams, UDP sockets, and Unix-domain
+  sockets all use single-attempt writes/sends through the same queue flush.
+- The event-pool writable path now flushes non-empty process write queues as
+  well as pending `:nowait` connects. Once a queue drains, writable interest is
+  removed and readable interest is kept.
+- `BrokenPipe` during a write publishes GNU's network-style broken output
+  status `(exit . 256)` and signals `"Process NAME no longer connected to
+  pipe; closed it"`. Real no-output-source records still signal a closed fd;
+  harness-only records keep their queued data so bytecode shared-runtime unit
+  tests can exercise the Lisp-visible queue shape without an OS child.
+- Sends to listener/server processes are rejected before entering the write
+  queue, using GNU's `status_message`-style reason text (`listen`, with no
+  trailing newline).
+- Successful writes reset adaptive read delay when
+  `process-adaptive-read-buffering` is `t`, matching GNU's
+  `p->read_output_delay = 0` reset in `send_process`.
+
+Validated gates for this slice:
+
+- GNU source study: `process.c` `send_process`, `write_queue_push`,
+  `write_queue_pop`, `status_message`, and the `wait_reading_process_output`
+  re-entry call used after `EAGAIN`.
+- Live probes in `./tmp`: GNU and release Neomacs both return `(t 4 262144)`
+  for `send-reentrant-probe.el`, proving that `process-send-string` drains
+  child output via the filter while the send itself is still in progress.
+  `send-listener-probe.el` matches GNU exactly:
+  `(error "Process send-listener-probe not running: listen")`.
+- Focused unit tests for write-queue shape, process designators, region
+  sends, and re-entrant blocked writes passed:
+  `process_manager_send_input`,
+  `builtin_process_send_string_preserves_raw_unibyte_write_queue_entries`,
+  `process_send_string_accepts_get_process_designators_like_gnu`,
+  `process_send_region_accepts_get_process_designators_like_gnu`, and
+  `process_send_string_reenters_wait_and_runs_filter_when_write_blocks`.
+  The listener/server rejection regression
+  `process_send_string_rejects_network_server_like_gnu` also passed.
+- Focused oracle test
+  `process_wait_semantics::process_send_string_reenters_wait_and_runs_filter_when_write_blocks`
+  passed with inline GNU expectation `"OK (t 4 262144)"`; listener/server
+  oracle
+  `process_wait_semantics::process_send_string_rejects_network_server_like_gnu`
+  passed with the exact GNU not-running message.
+- `cargo nextest run -p neovm-core -E 'test(process) or test(wait)'
+  --no-fail-fast`: 289/289 passed.
+- Process/network/timer oracle family: 258 run, 257 passed. The only failure
+  was the documented display-backend baseline
+  `div_v3_window_margins_fringes_body_width_combo`.
+
 ## 5. REMAINING SLICES — detailed execution guidance
-
-### S8 — send_process write queue + re-entrant wait (D11)
-
-- GNU `send_process` (process.c:6712): loop writes; on EAGAIN push the
-  remainder onto `p->write_queue` and call
-  `wait_reading_process_output(0, 20*1000*1000 ns, 0, 0, Qnil, NULL, 0)` —
-  filters/sentinels can run during `process-send-string`. EPIPE ⇒ status
-  `(exit . 256)`, deactivate, signal error. Datagrams use `sendto` whole.
-- neomacs today: `process_send_string` does blocking `write_all` + `flush`
-  (process.rs ~224) — can deadlock when the child's stdin pipe is full and
-  the child is itself blocked writing output (nobody drains). The
-  `write_queue` field exists but is unused.
-- Implementation: non-blocking writes on unix (`O_NONBLOCK` on the child
-  stdin fd / socket), EAGAIN → queue + bounded re-entrant wait; the wait's
-  writable-fd path already exists for `:nowait` connects — extend to flush
-  write queues when fds become writable.
-- Risk: re-entrancy — filters running inside `process-send-string` is a GNU
-  contract but new for neomacs callers; gate broadly (jsonrpc/eglot flows in
-  TUI tests).
 
 ### S9 — async DNS + exact timeouts (D12, D13)
 

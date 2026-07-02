@@ -239,6 +239,78 @@ impl NetworkSocket {
         }
     }
 
+    fn write_input_once(
+        &mut self,
+        bytes: &[u8],
+        datagram_addr: Option<SocketAddr>,
+        #[cfg(unix)] datagram_unix_path: Option<std::path::PathBuf>,
+    ) -> Option<std::io::Result<usize>> {
+        match self {
+            Self::TcpStream(stream) => Some(stream.write(bytes)),
+            Self::TcpListener(_) => None,
+            Self::UdpSocket(socket) => Some(match datagram_addr {
+                Some(addr) => socket.send_to(bytes, addr),
+                None => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "No datagram address",
+                )),
+            }),
+            #[cfg(unix)]
+            Self::SeqpacketStream(socket) => Some(socket.write(bytes)),
+            #[cfg(unix)]
+            Self::SeqpacketListener(_) => None,
+            #[cfg(unix)]
+            Self::UnixStream(stream) => Some(stream.write(bytes)),
+            #[cfg(unix)]
+            Self::UnixListener(_) => None,
+            #[cfg(unix)]
+            Self::UnixDatagram(socket) => Some(match datagram_unix_path {
+                Some(path) => socket.send_to(bytes, path),
+                None => Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "No datagram address",
+                )),
+            }),
+        }
+    }
+
+    fn modify_interest(
+        &self,
+        poller: &polling::Poller,
+        id: ProcessId,
+        event: polling::Event,
+    ) -> Result<(), String> {
+        match self {
+            Self::TcpStream(stream) => ProcessManager::modify_poll_source(poller, stream, event),
+            Self::TcpListener(listener) => ProcessManager::modify_poll_source(
+                poller,
+                listener,
+                polling::Event::readable(id as usize),
+            ),
+            Self::UdpSocket(socket) => ProcessManager::modify_poll_source(poller, socket, event),
+            #[cfg(unix)]
+            Self::SeqpacketStream(socket) => {
+                ProcessManager::modify_poll_source(poller, socket, event)
+            }
+            #[cfg(unix)]
+            Self::SeqpacketListener(socket) => ProcessManager::modify_poll_source(
+                poller,
+                socket,
+                polling::Event::readable(id as usize),
+            ),
+            #[cfg(unix)]
+            Self::UnixStream(stream) => ProcessManager::modify_poll_source(poller, stream, event),
+            #[cfg(unix)]
+            Self::UnixListener(listener) => ProcessManager::modify_poll_source(
+                poller,
+                listener,
+                polling::Event::readable(id as usize),
+            ),
+            #[cfg(unix)]
+            Self::UnixDatagram(socket) => ProcessManager::modify_poll_source(poller, socket, event),
+        }
+    }
+
     fn shutdown_write(&self) -> Option<std::io::Result<()>> {
         match self {
             Self::TcpStream(stream) => Some(stream.shutdown(Shutdown::Write)),
@@ -1057,7 +1129,10 @@ impl ProcessWaitBackend {
                                 if event.readable && process_has_readable_process_io(process) {
                                     ready_processes.push(id);
                                 }
-                                if event.writable && process.pending_network_connect.is_some() {
+                                if event.writable
+                                    && (process.pending_network_connect.is_some()
+                                        || !process.write_queue.is_nil())
+                                {
                                     writable_processes.push(id);
                                 }
                             }
@@ -1522,6 +1597,13 @@ fn update_process_adaptive_read_buffering(proc: &mut Process, nbytes: usize, ful
     proc.read_output_skip = delay_ms > 0;
 }
 
+fn reset_adaptive_read_delay_after_process_write(proc: &mut Process) {
+    if proc.read_output_delay > Duration::ZERO && proc.adaptive_read_buffering == 1 {
+        proc.read_output_delay = Duration::ZERO;
+        proc.read_output_skip = false;
+    }
+}
+
 fn process_output_read_from_io_result(
     proc: &mut Process,
     result: std::io::Result<usize>,
@@ -1682,12 +1764,60 @@ fn process_status_connect_value() -> Value {
     Value::symbol("connect")
 }
 
-fn write_queue_push(queue: Value, input_obj: Value, front: bool) -> Value {
-    let len = input_obj
-        .as_lisp_string()
-        .map(|string| string.sbytes() as i64)
-        .unwrap_or(0);
-    let entry = Value::cons(input_obj, Value::cons(Value::fixnum(0), Value::fixnum(len)));
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProcessWriteFlush {
+    Drained,
+    Blocked,
+    NoSource,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProcessWriteAttempt {
+    Written(usize),
+    WouldBlock,
+    NoSource,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProcessWriteInterest {
+    Readable,
+    ReadableAndWritable,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ProcessWriteQueueEntry {
+    object: Value,
+    offset: usize,
+    len: usize,
+}
+
+impl ProcessWriteQueueEntry {
+    fn bytes(self) -> Option<Vec<u8>> {
+        let string = self.object.as_lisp_string()?;
+        let bytes = string.as_bytes();
+        let start = self.offset.min(bytes.len());
+        let end = start.saturating_add(self.len).min(bytes.len());
+        Some(bytes[start..end].to_vec())
+    }
+
+    fn advance(self, written: usize) -> Self {
+        let written = written.min(self.len);
+        Self {
+            object: self.object,
+            offset: self.offset.saturating_add(written),
+            len: self.len.saturating_sub(written),
+        }
+    }
+}
+
+fn write_queue_push_entry(queue: Value, entry: ProcessWriteQueueEntry, front: bool) -> Value {
+    let entry = Value::cons(
+        entry.object,
+        Value::cons(
+            Value::fixnum(entry.offset as i64),
+            Value::fixnum(entry.len as i64),
+        ),
+    );
     let mut entries = list_to_vec(&queue).unwrap_or_default();
     if front {
         entries.insert(0, entry);
@@ -1695,6 +1825,45 @@ fn write_queue_push(queue: Value, input_obj: Value, front: bool) -> Value {
         entries.push(entry);
     }
     Value::list(entries)
+}
+
+fn write_queue_push(queue: Value, input_obj: Value, front: bool) -> Value {
+    let len = input_obj
+        .as_lisp_string()
+        .map(|string| string.sbytes())
+        .unwrap_or(0);
+    write_queue_push_entry(
+        queue,
+        ProcessWriteQueueEntry {
+            object: input_obj,
+            offset: 0,
+            len,
+        },
+        front,
+    )
+}
+
+fn write_queue_pop(queue: Value) -> (Value, Option<ProcessWriteQueueEntry>) {
+    if queue.is_nil() {
+        return (Value::NIL, None);
+    }
+    let entries = list_to_vec(&queue).unwrap_or_default();
+    let Some((entry, rest)) = entries.split_first() else {
+        return (Value::NIL, None);
+    };
+    let object = entry.cons_car();
+    let offset_len = entry.cons_cdr();
+    let offset = offset_len.cons_car().as_fixnum().unwrap_or(0).max(0) as usize;
+    let len = offset_len.cons_cdr().as_fixnum().unwrap_or(0).max(0) as usize;
+    let rest = Value::list(rest.to_vec());
+    (
+        rest,
+        Some(ProcessWriteQueueEntry {
+            object,
+            offset,
+            len,
+        }),
+    )
 }
 
 fn parse_make_network_tls_parameters(
@@ -2247,6 +2416,15 @@ fn process_status_allows_send(status: &Value) -> bool {
     )
 }
 
+fn process_is_listening(proc: &Process) -> bool {
+    ProcessStatusSymbol::from_status_value(process_public_status_symbol(proc))
+        == Some(ProcessStatusSymbol::Listen)
+}
+
+fn process_allows_send(proc: &Process) -> bool {
+    !process_is_listening(proc) && process_status_allows_send(&proc.status)
+}
+
 fn process_status_is_connect(status: &Value) -> bool {
     ProcessStatusSymbol::from_status_value(*status) == Some(ProcessStatusSymbol::Connect)
 }
@@ -2298,6 +2476,14 @@ fn process_should_defer_explicit_coding_status_after_output(
         && !proc.explicit_coding_status_deferred_once
 }
 
+fn process_is_harness_record_without_write_source(proc: &Process) -> bool {
+    proc.os_pid.is_none()
+        && proc.child.is_none()
+        && proc.pty_writer.is_none()
+        && proc.tls_stream.is_none()
+        && proc.network_socket.is_none()
+}
+
 impl super::eval::Context {
     fn wait_while_network_process_connecting(&mut self, id: ProcessId) -> Result<(), Flow> {
         while self.processes.get(id).is_some_and(|proc| {
@@ -2311,6 +2497,50 @@ impl super::eval::Context {
             ))?;
         }
         Ok(())
+    }
+
+    fn send_process_input_reentrant(
+        &mut self,
+        id: ProcessId,
+        input: &LispString,
+    ) -> Result<(), Flow> {
+        if !self.processes.queue_input(id, input)? {
+            return Err(signal("error", vec![Value::string("Process not found")]));
+        }
+
+        loop {
+            match self.processes.flush_process_write_queue(id)? {
+                ProcessWriteFlush::Drained => return Ok(()),
+                ProcessWriteFlush::NoSource => {
+                    if self
+                        .processes
+                        .get_any(id)
+                        .is_some_and(process_is_harness_record_without_write_source)
+                    {
+                        return Ok(());
+                    }
+                    let name = self
+                        .processes
+                        .get_any(id)
+                        .map(|proc| process_name_runtime(proc.name))
+                        .unwrap_or_else(|| id.to_string());
+                    return Err(signal(
+                        "error",
+                        vec![Value::string(format!(
+                            "Output file descriptor of {name} is closed"
+                        ))],
+                    ));
+                }
+                ProcessWriteFlush::Blocked => {
+                    let _ = self.wait_for_process_output(ProcessOutputWaitRequest::new(
+                        ProcessOutputWaitTiming::For(Duration::from_millis(20)),
+                        None,
+                        false,
+                        true,
+                    ))?;
+                }
+            }
+        }
     }
 }
 
@@ -3168,6 +3398,16 @@ impl ProcessManager {
         }
     }
 
+    fn modify_poll_source(
+        poller: &polling::Poller,
+        source: impl polling::AsSource,
+        event: polling::Event,
+    ) -> Result<(), String> {
+        poller
+            .modify_with_mode(source, event, polling::PollMode::Level)
+            .map_err(|e| format!("Failed to modify process fd interest: {e}"))
+    }
+
     #[cfg(unix)]
     fn register_readable_raw_fd(
         poller: &polling::Poller,
@@ -3179,6 +3419,26 @@ impl ProcessManager {
         // from the poller.
         let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(fd) };
         Self::register_readable_source(poller, &borrowed, id)
+    }
+
+    #[cfg(unix)]
+    fn register_writable_raw_fd(
+        poller: &polling::Poller,
+        fd: std::os::unix::io::RawFd,
+        id: ProcessId,
+    ) -> Result<(), String> {
+        let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(fd) };
+        Self::register_writable_source(poller, &borrowed, id)
+    }
+
+    #[cfg(unix)]
+    fn modify_raw_fd_interest(
+        poller: &polling::Poller,
+        fd: std::os::unix::io::RawFd,
+        event: polling::Event,
+    ) -> Result<(), String> {
+        let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(fd) };
+        Self::modify_poll_source(poller, &borrowed, event)
     }
 
     #[cfg(unix)]
@@ -3272,6 +3532,49 @@ impl ProcessManager {
         // See `register_child_stdout_with_poller`.
     }
 
+    #[cfg(unix)]
+    fn register_child_stdin_writable_with_poller(
+        poller: &polling::Poller,
+        stdin: &std::process::ChildStdin,
+        id: ProcessId,
+    ) {
+        use std::os::unix::io::AsRawFd;
+        let fd = stdin.as_raw_fd();
+        unsafe {
+            let flags = libc::fcntl(fd, libc::F_GETFL);
+            libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+        }
+        let _ = Self::register_writable_raw_fd(poller, fd, id);
+    }
+
+    #[cfg(not(unix))]
+    fn register_child_stdin_writable_with_poller(
+        _poller: &polling::Poller,
+        _stdin: &std::process::ChildStdin,
+        _id: ProcessId,
+    ) {
+        // Windows subprocess stdin is not integrated into the poller yet.
+    }
+
+    #[cfg(unix)]
+    fn unregister_child_stdin_writable_from_poller(
+        poller: &polling::Poller,
+        stdin: &std::process::ChildStdin,
+    ) {
+        use std::os::unix::io::AsRawFd;
+        let fd = stdin.as_raw_fd();
+        let borrowed = unsafe { std::os::unix::io::BorrowedFd::borrow_raw(fd) };
+        let _ = poller.delete(&borrowed);
+    }
+
+    #[cfg(not(unix))]
+    fn unregister_child_stdin_writable_from_poller(
+        _poller: &polling::Poller,
+        _stdin: &std::process::ChildStdin,
+    ) {
+        // See `register_child_stdin_writable_with_poller`.
+    }
+
     fn unregister_process_poll_sources(poller: Option<&polling::Poller>, proc: &Process) {
         let Some(poller) = poller else {
             return;
@@ -3282,6 +3585,9 @@ impl ProcessManager {
         }
         if let Some(stderr) = proc.child_stderr.as_ref() {
             Self::unregister_child_stderr_from_poller(poller, stderr);
+        }
+        if let Some(stdin) = proc.child.as_ref().and_then(|child| child.stdin.as_ref()) {
+            Self::unregister_child_stdin_writable_from_poller(poller, stdin);
         }
         if let Some(tls) = proc.tls_stream.as_ref() {
             let _ = poller.delete(tls.tcp_stream());
@@ -4563,65 +4869,156 @@ impl ProcessManager {
             .map(|p| p.id)
     }
 
-    /// Queue input for a process.
+    /// Queue input for a process and try to flush it once.
     pub fn send_input(&mut self, id: ProcessId, input: &LispString) -> Result<bool, Flow> {
+        if !self.queue_input(id, input)? {
+            return Ok(false);
+        }
+        let _ = self.flush_process_write_queue(id)?;
+        Ok(true)
+    }
+
+    fn queue_input(&mut self, id: ProcessId, input: &LispString) -> Result<bool, Flow> {
+        let Some(proc) = self.processes.get_mut(&id) else {
+            return Ok(false);
+        };
+        proc.write_queue =
+            write_queue_push(proc.write_queue, Value::heap_string(input.clone()), false);
+        Ok(true)
+    }
+
+    fn write_queue_is_empty(&self, id: ProcessId) -> bool {
+        self.processes
+            .get(&id)
+            .is_none_or(|proc| proc.write_queue.is_nil())
+    }
+
+    fn flush_process_write_queue(&mut self, id: ProcessId) -> Result<ProcessWriteFlush, Flow> {
+        if self.write_queue_is_empty(id) {
+            self.update_process_write_interest(id, ProcessWriteInterest::Readable);
+            return Ok(ProcessWriteFlush::Drained);
+        }
+
+        loop {
+            let Some(entry) = self.pop_process_write_queue(id) else {
+                self.update_process_write_interest(id, ProcessWriteInterest::Readable);
+                return Ok(ProcessWriteFlush::Drained);
+            };
+            if entry.len == 0 {
+                continue;
+            }
+            let Some(bytes) = entry.bytes() else {
+                continue;
+            };
+            if bytes.is_empty() {
+                continue;
+            }
+
+            match self.write_process_input_once(id, &bytes)? {
+                ProcessWriteAttempt::Written(0) | ProcessWriteAttempt::WouldBlock => {
+                    self.push_process_write_queue_entry(id, entry, true);
+                    self.update_process_write_interest(
+                        id,
+                        ProcessWriteInterest::ReadableAndWritable,
+                    );
+                    return Ok(ProcessWriteFlush::Blocked);
+                }
+                ProcessWriteAttempt::Written(n) if n < bytes.len() => {
+                    self.push_process_write_queue_entry(id, entry.advance(n), true);
+                    continue;
+                }
+                ProcessWriteAttempt::Written(_) => continue,
+                ProcessWriteAttempt::NoSource => {
+                    self.push_process_write_queue_entry(id, entry, true);
+                    return Ok(ProcessWriteFlush::NoSource);
+                }
+            }
+        }
+    }
+
+    fn pop_process_write_queue(&mut self, id: ProcessId) -> Option<ProcessWriteQueueEntry> {
+        let proc = self.processes.get_mut(&id)?;
+        let (queue, entry) = write_queue_pop(proc.write_queue);
+        proc.write_queue = queue;
+        entry
+    }
+
+    fn push_process_write_queue_entry(
+        &mut self,
+        id: ProcessId,
+        entry: ProcessWriteQueueEntry,
+        front: bool,
+    ) {
         if let Some(proc) = self.processes.get_mut(&id) {
-            proc.write_queue =
-                write_queue_push(proc.write_queue, Value::heap_string(input.clone()), false);
-            let input_bytes = input.as_bytes();
-            // Write to PTY master if this is a PTY process.
-            if let Some(ref mut pty_writer) = proc.pty_writer {
-                use std::io::Write;
-                let _ = pty_writer.write_all(input_bytes);
-                let _ = pty_writer.flush();
-            } else if let Some(ref mut child) = proc.child {
-                // Write to actual child stdin if available (pipe mode).
-                if let Some(ref mut stdin) = child.stdin {
-                    use std::io::Write;
-                    let _ = stdin.write_all(input_bytes);
-                    let _ = stdin.flush();
+            proc.write_queue = write_queue_push_entry(proc.write_queue, entry, front);
+        }
+    }
+
+    fn write_process_input_once(
+        &mut self,
+        id: ProcessId,
+        bytes: &[u8],
+    ) -> Result<ProcessWriteAttempt, Flow> {
+        let Some(proc) = self.processes.get_mut(&id) else {
+            return Ok(ProcessWriteAttempt::NoSource);
+        };
+
+        let result = if let Some(ref mut pty_writer) = proc.pty_writer {
+            pty_writer.write(bytes)
+        } else if let Some(ref mut child) = proc.child {
+            let Some(ref mut stdin) = child.stdin else {
+                return Ok(ProcessWriteAttempt::NoSource);
+            };
+            #[cfg(unix)]
+            {
+                use std::os::unix::io::AsRawFd;
+                let fd = stdin.as_raw_fd();
+                unsafe {
+                    let flags = libc::fcntl(fd, libc::F_GETFL);
+                    libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
                 }
             }
-            // Write to TLS stream or plain socket for network processes.
-            if let Some(ref mut tls) = proc.tls_stream {
-                tls.write_all_process_input(input_bytes)
-                    .map_err(|err| signal_process_io("Writing to process", None, err))?;
-            } else if let Some(socket) = proc.network_socket.as_mut() {
-                let datagram_address = proc.datagram_socket_addr;
+            stdin.write(bytes)
+        } else if let Some(ref mut tls) = proc.tls_stream {
+            tls.write_process_input_once(bytes)
+        } else if let Some(socket) = proc.network_socket.as_mut() {
+            let datagram_address = proc.datagram_socket_addr;
+            #[cfg(unix)]
+            let datagram_unix_path = proc.datagram_unix_path.clone();
+            match socket.write_input_once(
+                bytes,
+                datagram_address,
                 #[cfg(unix)]
-                let datagram_unix_path = proc.datagram_unix_path.clone();
-                match socket {
-                    NetworkSocket::UdpSocket(socket) => {
-                        let Some(addr) = datagram_address else {
-                            return Err(signal(
-                                "error",
-                                vec![Value::string("No datagram address")],
-                            ));
-                        };
-                        socket
-                            .send_to(input_bytes, addr)
-                            .map_err(|err| signal_process_io("Sending datagram", None, err))?;
-                    }
-                    #[cfg(unix)]
-                    NetworkSocket::UnixDatagram(socket) => {
-                        let Some(path) = datagram_unix_path else {
-                            return Err(signal(
-                                "error",
-                                vec![Value::string("No datagram address")],
-                            ));
-                        };
-                        socket
-                            .send_to(input_bytes, path)
-                            .map_err(|err| signal_process_io("Sending datagram", None, err))?;
-                    }
-                    _ => {
-                        let _ = socket.write_stream_input(input_bytes);
-                    }
-                }
+                datagram_unix_path,
+            ) {
+                Some(result) => result,
+                None => return Ok(ProcessWriteAttempt::NoSource),
             }
-            Ok(true)
         } else {
-            Ok(false)
+            return Ok(ProcessWriteAttempt::NoSource);
+        };
+
+        match result {
+            Ok(n) => {
+                if n > 0 {
+                    reset_adaptive_read_delay_after_process_write(proc);
+                }
+                Ok(ProcessWriteAttempt::Written(n))
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                Ok(ProcessWriteAttempt::WouldBlock)
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
+                proc.status = process_status_exit_value(256);
+                Err(signal(
+                    "error",
+                    vec![Value::string(format!(
+                        "Process {} no longer connected to pipe; closed it",
+                        process_name_runtime(proc.name)
+                    ))],
+                ))
+            }
+            Err(err) => Err(signal_process_io("Writing to process", None, err)),
         }
     }
 
@@ -4648,6 +5045,52 @@ impl ProcessManager {
             socket.register_writable(poller, id)?;
         }
         Ok(())
+    }
+
+    fn update_process_write_interest(&self, id: ProcessId, interest: ProcessWriteInterest) {
+        let Some(poller) = self.wait_backend.poller() else {
+            return;
+        };
+        let Some(proc) = self.processes.get(&id) else {
+            return;
+        };
+
+        if let Some(stdin) = proc.child.as_ref().and_then(|child| child.stdin.as_ref()) {
+            match interest {
+                ProcessWriteInterest::Readable => {
+                    Self::unregister_child_stdin_writable_from_poller(poller, stdin);
+                }
+                ProcessWriteInterest::ReadableAndWritable => {
+                    Self::register_child_stdin_writable_with_poller(poller, stdin, id);
+                }
+            }
+            return;
+        }
+
+        let wants_write = matches!(interest, ProcessWriteInterest::ReadableAndWritable)
+            || proc.pending_network_connect.is_some();
+        let event = if wants_write {
+            polling::Event::all(id as usize)
+        } else {
+            polling::Event::readable(id as usize)
+        };
+
+        if let Some(tls) = proc.tls_stream.as_ref() {
+            let _ = Self::modify_poll_source(poller, tls.tcp_stream(), event);
+            return;
+        }
+        if let Some(socket) = proc.network_socket.as_ref() {
+            let _ = socket.modify_interest(poller, id, event);
+            return;
+        }
+        #[cfg(unix)]
+        if let Some(master) = proc
+            .pty_master
+            .as_ref()
+            .and_then(|master| master.as_raw_fd())
+        {
+            let _ = Self::modify_raw_fd_interest(poller, master, event);
+        }
     }
 
     fn update_tcp_client_contact(
@@ -5555,7 +5998,6 @@ impl super::eval::Context {
 
         let writable_processes = request.ready_processes(events.writable_processes_ref().to_vec());
         for pid in writable_processes {
-            let is_target = target_process.map_or(true, |target| target == pid);
             match self.processes.complete_pending_network_connect(pid)? {
                 PendingNetworkConnectCompletion::None => {}
                 PendingNetworkConnectCompletion::Retrying => {
@@ -5575,6 +6017,12 @@ impl super::eval::Context {
                         &format!("failed with code {code}\n"),
                     )?;
                 }
+            }
+            match self.processes.flush_process_write_queue(pid)? {
+                ProcessWriteFlush::Drained | ProcessWriteFlush::Blocked => {
+                    outcome.record_serviced();
+                }
+                ProcessWriteFlush::NoSource => {}
             }
         }
 
@@ -6388,15 +6836,11 @@ fn signal_cannot_signal_process(proc: &Process) -> Flow {
     )
 }
 
-fn stale_process_not_running_reason(status: &Value) -> &'static str {
-    match ProcessStatusSymbol::from_status_value(*status) {
-        Some(ProcessStatusSymbol::Signal) => "killed",
-        Some(ProcessStatusSymbol::Exit) => "finished",
-        Some(ProcessStatusSymbol::Stop) => "stopped",
-        Some(ProcessStatusSymbol::Run) => "inactive",
-        Some(ProcessStatusSymbol::Connect) => "connect",
-        Some(ProcessStatusSymbol::Failed) => "failed",
-        _ => "inactive",
+fn process_not_running_reason(proc: &Process) -> String {
+    if process_is_listening(proc) {
+        "listen".to_string()
+    } else {
+        gnu_process_status_message_for_process(proc)
     }
 }
 
@@ -6410,14 +6854,14 @@ fn signal_process_not_running_in_manager(processes: &ProcessManager, id: Process
         .map(|proc| {
             (
                 process_name_runtime(proc.name),
-                stale_process_not_running_reason(&proc.status),
+                process_not_running_reason(proc),
             )
         })
-        .unwrap_or_else(|| (id.to_string(), "inactive"));
+        .unwrap_or_else(|| (id.to_string(), "inactive".to_string()));
     signal(
         "error",
         vec![Value::string(format!(
-            "Process {name} not running: {reason}\n"
+            "Process {name} not running: {reason}"
         ))],
     )
 }
@@ -13460,14 +13904,28 @@ pub(crate) fn builtin_process_send_string(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    if args.len() == 2 {
-        if let Ok(id) =
-            resolve_get_process_designator_in_state(&eval.processes, &eval.buffers, &args[0])
-        {
-            eval.wait_while_network_process_connecting(id)?;
+    expect_args("process-send-string", &args, 2)?;
+    let input = args[1]
+        .as_lisp_string()
+        .cloned()
+        .ok_or_else(|| signal_wrong_type_string(args[1]))?;
+    if let Some(id) = process_value_to_id(&args[0]) {
+        if is_stale_process_id_designator_in_manager(&eval.processes, &args[0]) {
+            return Err(signal_process_not_running_in_manager(&eval.processes, id));
         }
     }
-    builtin_process_send_string_impl(&mut eval.processes, &eval.buffers, args)
+    let id = resolve_get_process_designator_in_state(&eval.processes, &eval.buffers, &args[0])?;
+    eval.wait_while_network_process_connecting(id)?;
+    if eval
+        .processes
+        .get(id)
+        .is_some_and(|proc| !process_allows_send(proc))
+    {
+        return Err(signal_process_not_running_in_manager(&eval.processes, id));
+    }
+    let encoded = encode_process_send_input(&eval.processes, id, &input);
+    eval.send_process_input_reentrant(id, &encoded)?;
+    Ok(Value::NIL)
 }
 
 pub(crate) fn builtin_process_send_string_impl(
@@ -13488,7 +13946,7 @@ pub(crate) fn builtin_process_send_string_impl(
     let id = resolve_get_process_designator_in_state(processes, buffers, &args[0])?;
     if processes
         .get(id)
-        .is_some_and(|proc| !process_status_allows_send(&proc.status))
+        .is_some_and(|proc| !process_allows_send(proc))
     {
         return Err(signal_process_not_running_in_manager(processes, id));
     }
@@ -14167,14 +14625,39 @@ pub(crate) fn builtin_process_send_region(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    if args.len() == 3 {
-        if let Ok(id) =
-            resolve_get_process_designator_in_state(&eval.processes, &eval.buffers, &args[0])
-        {
-            eval.wait_while_network_process_connecting(id)?;
+    expect_args("process-send-region", &args, 3)?;
+
+    if let Some(id) = process_value_to_id(&args[0]) {
+        if is_stale_process_id_designator_in_manager(&eval.processes, &args[0]) {
+            let _ = super::position::LispRegionArgs::from_values(&eval.buffers, args[1], args[2])?;
+            return Err(signal_process_not_running_in_manager(&eval.processes, id));
         }
     }
-    builtin_process_send_region_impl(&mut eval.processes, &mut eval.buffers, args)
+
+    let id = resolve_get_process_designator_in_state(&eval.processes, &eval.buffers, &args[0])?;
+    eval.wait_while_network_process_connecting(id)?;
+    if eval
+        .processes
+        .get(id)
+        .is_some_and(|proc| !process_allows_send(proc))
+    {
+        return Err(signal_process_not_running_in_manager(&eval.processes, id));
+    }
+    let region_args =
+        super::position::LispRegionArgs::from_values(&eval.buffers, args[1], args[2])?;
+
+    let region_text = {
+        let buf = eval
+            .buffers
+            .current_buffer()
+            .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
+        let region = checked_region_bytes(buf, region_args)?;
+        buf.buffer_substring_lisp_string_range(region)
+    };
+
+    let encoded = encode_process_send_input(&eval.processes, id, &region_text);
+    eval.send_process_input_reentrant(id, &encoded)?;
+    Ok(Value::NIL)
 }
 
 pub(crate) fn builtin_process_send_region_impl(
@@ -14194,7 +14677,7 @@ pub(crate) fn builtin_process_send_region_impl(
     let id = resolve_get_process_designator_in_state(processes, buffers, &args[0])?;
     if processes
         .get(id)
-        .is_some_and(|proc| !process_status_allows_send(&proc.status))
+        .is_some_and(|proc| !process_allows_send(proc))
     {
         return Err(signal_process_not_running_in_manager(processes, id));
     }

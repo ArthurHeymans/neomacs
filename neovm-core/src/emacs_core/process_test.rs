@@ -1766,6 +1766,39 @@ fn process_send_string_test() {
 }
 
 #[test]
+fn process_send_string_reenters_wait_and_runs_filter_when_write_blocks() {
+    crate::test_utils::init_test_tracing();
+    let python = find_bin("python3");
+    let result = eval_one(&format!(
+        r#"(let* ((script (concat
+                          "import os, sys\n"
+                          "os.write(1, b'O' * 262144)\n"
+                          "sys.stdout.flush()\n"
+                          "sys.stdin.buffer.read()\n"))
+                  (events nil)
+                  (p nil))
+             (unwind-protect
+                 (progn
+                   (setq p
+                         (make-process
+                          :name "send-reentrant-unit"
+                          :buffer nil
+                          :connection-type 'pipe
+                          :command (list "{python}" "-c" script)
+                          :filter (lambda (_ string)
+                                    (push (length string) events))))
+                   (process-send-string p (make-string 262144 ?x))
+                   (list (> (apply #'+ events) 0)
+                         (length events)
+                         (apply #'+ events)))
+               (when p
+                 (ignore-errors
+                   (delete-process p)))))"#
+    ));
+    assert_eq!(result, "OK (t 4 262144)");
+}
+
+#[test]
 fn process_exit_status_initial() {
     crate::test_utils::init_test_tracing();
     let echo = find_bin("echo");
@@ -5978,6 +6011,41 @@ fn make_network_process_stop_server_defers_accept_until_continue_like_gnu() {
         results[0],
         "OK ((stop (stop) nil) listen (listen connect stop) \"hello-stop-server\")"
     );
+}
+
+#[test]
+fn process_send_string_rejects_network_server_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut pm = ProcessManager::new();
+    let buffers = crate::buffer::BufferManager::new();
+    let id = pm.create_process_with_kind(
+        "send-listener-unit".into(),
+        Value::NIL,
+        "network".into(),
+        vec![],
+        ProcessKind::Network,
+    );
+    pm.get_mut(id).expect("server process").childp = Value::list(vec![
+        ProcessKeyword::Server.value(),
+        Value::T,
+        ProcessKeyword::Service.value(),
+        Value::fixnum(0),
+    ]);
+
+    match builtin_process_send_string_impl(
+        &mut pm,
+        &buffers,
+        vec![Value::make_process(id), Value::string("x")],
+    ) {
+        Err(Flow::Signal(sig)) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(
+                sig.data.first().and_then(|value| value.as_utf8_str()),
+                Some("Process send-listener-unit not running: listen")
+            );
+        }
+        other => panic!("expected listener send error, got {other:?}"),
+    }
 }
 
 #[test]
