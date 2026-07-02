@@ -2571,13 +2571,9 @@ pub(crate) fn builtin_window_left_column(
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-valid-p")?;
     let w = get_window(frames, fid, wid)?;
-    let cw = frames.get(fid).map(|f| f.char_width).unwrap_or(8.0);
-    let left = if cw > 0.0 {
-        (w.bounds().x / cw) as i64
-    } else {
-        0
-    };
-    Ok(Value::fixnum(left))
+    // GNU `Fwindow_left_column` returns `w->left_col` directly. See
+    // `Window::left_col`.
+    Ok(Value::fixnum(w.left_col()))
 }
 /// `(window-top-line &optional WINDOW)` -> integer.
 pub(crate) fn builtin_window_top_line(
@@ -2590,13 +2586,11 @@ pub(crate) fn builtin_window_top_line(
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-valid-p")?;
     let w = get_window(frames, fid, wid)?;
-    let ch = frames.get(fid).map(|f| f.char_height).unwrap_or(16.0);
-    let top = if ch > 0.0 {
-        (w.bounds().y / ch) as i64
-    } else {
-        0
-    };
-    Ok(Value::fixnum(top))
+    // GNU `Fwindow_top_line` returns `w->top_line` directly (the stored
+    // character-line edge maintained by the resize passes, decoupled from pixel
+    // geometry -- it includes FRAME_TOP_MARGIN, which has no pixel height in
+    // batch). See `Window::top_line`.
+    Ok(Value::fixnum(w.top_line()))
 }
 /// `(window-pixel-left &optional WINDOW)` -> integer.
 ///
@@ -8503,6 +8497,15 @@ pub(crate) fn builtin_window_resize_apply_total(
     let cw = frame.char_width;
     let ch = frame.char_height;
 
+    // GNU `Fwindow_resize_apply_total` (window.c:5016) roots the character-line
+    // geometry at the frame's top margin: `r->left_col = 0; r->top_line =
+    // FRAME_TOP_MARGIN(f)`. In batch the margin is a line count with no pixel
+    // height, so the root's top_line sits below the menu/tab-bar rows while its
+    // pixel top stays 0. The recursive pass then flows the char edges to
+    // children.
+    let top_margin = frame.frame_top_margin();
+    frame.root_window.set_left_col(0);
+    frame.root_window.set_top_line(top_margin);
     crate::window::window_resize_apply_total(&mut frame.root_window, horflag, cw, ch);
 
     // Handle minibuffer window — its `new_total` lives on the

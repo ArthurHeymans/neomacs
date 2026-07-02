@@ -694,30 +694,40 @@ fn window_tree_layout_equal(a: &crate::window::Window, b: &crate::window::Window
             Window::Leaf {
                 buffer_id: ba,
                 bounds: bounds_a,
+                top_line: tla,
+                left_col: lca,
                 ..
             },
             Window::Leaf {
                 buffer_id: bb,
                 bounds: bounds_b,
+                top_line: tlb,
+                left_col: lcb,
                 ..
             },
-        ) => ba == bb && bounds_a == bounds_b,
+        ) => ba == bb && bounds_a == bounds_b && tla == tlb && lca == lcb,
         (
             Window::Internal {
                 direction: da,
                 children: ca,
                 bounds: bounds_a,
+                top_line: tla,
+                left_col: lca,
                 ..
             },
             Window::Internal {
                 direction: db,
                 children: cb,
                 bounds: bounds_b,
+                top_line: tlb,
+                left_col: lcb,
                 ..
             },
         ) => {
             da == db
                 && bounds_a == bounds_b
+                && tla == tlb
+                && lca == lcb
                 && ca.len() == cb.len()
                 && ca
                     .iter()
