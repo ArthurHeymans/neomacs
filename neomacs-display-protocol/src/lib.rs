@@ -9,6 +9,7 @@ pub mod glyph_matrix;
 pub mod gradient;
 pub mod scene;
 pub mod scroll_animation;
+pub mod snapshot_text;
 pub mod transition_policy;
 pub mod types;
 pub mod ui_types;
