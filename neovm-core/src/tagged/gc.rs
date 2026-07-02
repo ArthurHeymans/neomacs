@@ -1226,6 +1226,156 @@ pub(crate) struct SweepStats {
     pub mark_us: u64,
 }
 
+/// One root group's cost inside a `seed_all_context_roots` call:
+/// `(name, wall µs enumerating+seeding the group, values the group visited)`.
+/// The count is the enumeration volume (every value fed to the seeding sink,
+/// BEFORE the non-heap-object / mapped-root filters), which is what the walk's
+/// O() actually scales with.
+pub(crate) type RootGroup = (&'static str, u64, usize);
+
+/// Per-group decomposition of one `seed_all_context_roots` call (one root
+/// handshake's context-root seeding). Built fresh each call by the evaluator.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct RootSeedBreakdown {
+    /// Whole-call wall time (all groups + thread-local + marker heads).
+    pub total_us: u64,
+    /// Ordered per-group `(name, µs, values visited)` records.
+    pub groups: Vec<RootGroup>,
+}
+
+impl RootSeedBreakdown {
+    /// Compact `name=USus/COUNT` rendering of the nonzero groups, for the
+    /// `NEOVM_GC_TRACE` handshake lines.
+    pub(crate) fn format_nonzero(&self) -> String {
+        let mut out = String::new();
+        for &(name, us, count) in &self.groups {
+            if us == 0 && count == 0 {
+                continue;
+            }
+            if !out.is_empty() {
+                out.push(' ');
+            }
+            out.push_str(&format!("{name}={us}us/{count}"));
+        }
+        out
+    }
+
+    /// Count for a named group (0 if absent) — test/probe convenience.
+    #[cfg(test)]
+    pub(crate) fn group_count(&self, name: &str) -> usize {
+        self.groups
+            .iter()
+            .find(|(n, _, _)| *n == name)
+            .map(|&(_, _, c)| c)
+            .unwrap_or(0)
+    }
+}
+
+/// STW pause instrumentation for the concurrent collector's TWO handshakes —
+/// the START handshake (`start_concurrent_mark`: clear marks, obarray
+/// snapshot, root seeding, cons/vector snapshots, job assembly) and the
+/// TERMINATION handshake (`terminate_concurrent_mark`: join+fold, root
+/// re-seeding, residual drain, weak/finalizer/marker post-passes) — each
+/// decomposed per phase and per root GROUP, plus once-per-handshake O() size
+/// probes. Sibling of [`SweepStats`]; diagnostics only (no behavior).
+/// Heap-side phases are recorded where they run in this file; the evaluator
+/// records the context-root breakdown and the context-side probes via
+/// `handshake_stats_mut`.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct HandshakeStats {
+    // --- START handshake (once per concurrent cycle) ---
+    /// Lifetime count of concurrent start handshakes (`concurrent_begin`).
+    pub start_count: usize,
+    /// Whole start-handshake pause (µs) and its lifetime max.
+    pub last_start_total_us: u64,
+    pub max_start_total_us: u64,
+    /// `begin_collection` mark-bit clearing (young non-cons + cons blocks).
+    pub last_start_clear_us: u64,
+    /// `seed_internal_runtime_roots` at start (registries + doomed queue).
+    pub last_start_runtime_us: u64,
+    pub last_start_runtime_roots: usize,
+    /// `seed_mapped_remembered` at start (dump remembered-set re-scan).
+    pub last_start_remembered_us: u64,
+    pub last_start_remembered_roots: usize,
+    /// `obarray.scan_snapshot()` capture.
+    pub last_start_obsnap_us: u64,
+    /// `seed_all_context_roots` at start, per group.
+    pub last_start_roots: RootSeedBreakdown,
+    /// `launch_concurrent_mark` phases: cons-block base snapshot, vector
+    /// backing snapshot, and the residual job assembly + thread send.
+    pub last_start_conssnap_us: u64,
+    pub last_start_vecsnap_us: u64,
+    pub last_start_jobasm_us: u64,
+
+    // --- TERMINATION handshake (once per concurrent cycle) ---
+    /// Lifetime count of termination reseeds
+    /// (`reseed_runtime_and_remembered_roots`).
+    pub term_count: usize,
+    /// The whole pre-drain roots lump (join → reseed → ctx roots → new
+    /// symbols), as printed by the existing `roots=` trace field, + max.
+    pub last_term_roots_total_us: u64,
+    pub max_term_roots_total_us: u64,
+    /// `join_concurrent_mark` total (stop signal + thread exit wait + the
+    /// SATB/deferred fold; the fold alone is `SweepStats::
+    /// last_termination_fold_us`).
+    pub last_term_join_us: u64,
+    /// `seed_internal_runtime_roots` at termination.
+    pub last_term_runtime_us: u64,
+    pub last_term_runtime_roots: usize,
+    /// `seed_mapped_remembered` at termination.
+    pub last_term_remembered_us: u64,
+    pub last_term_remembered_roots: usize,
+    /// `seed_all_context_roots` at termination, per group.
+    pub last_term_ctxroots: RootSeedBreakdown,
+    /// Stage 1b residual: `trace_new_symbol_cells` over mid-cycle interns.
+    pub last_term_newsyms_us: u64,
+    pub last_term_newsyms_roots: usize,
+    /// `incremental_finish` post-drain passes: doomed-finalizer scan, weak
+    /// hash-table sweep, dead-marker unchaining.
+    pub last_term_finalizer_us: u64,
+    pub last_term_weak_us: u64,
+    pub last_term_unchain_us: u64,
+
+    // --- O() size probes (refreshed at each handshake) ---
+    /// JIT COMPILED cache: total cached entries / total reloc slots walked.
+    pub probe_jit_compiled_entries: usize,
+    pub probe_jit_reloc_slots: usize,
+    /// `mapped_remembered.len()` — the dump remembered set (never cleared).
+    pub probe_mapped_remembered: usize,
+    /// Bytecode operand-stack buffer depth (`bc_buf`).
+    pub probe_bc_buf_depth: usize,
+    /// Binding-stack depth (`specpdl`).
+    pub probe_specpdl_depth: usize,
+    /// Obarray logical slots + chunk count (start snapshot / current).
+    pub probe_obarray_slots: usize,
+    pub probe_obarray_chunks: usize,
+    /// Vector-backing snapshot length (Tier B, captured at start).
+    pub probe_vector_snapshot_len: usize,
+    /// Owned cons blocks snapshotted at start.
+    pub probe_cons_blocks: usize,
+    /// Live buffers (= marker chain-head slots installed).
+    pub probe_buffer_count: usize,
+}
+
+impl HandshakeStats {
+    /// Compact probe rendering for the `NEOVM_GC_TRACE` handshake lines.
+    pub(crate) fn format_probes(&self) -> String {
+        format!(
+            "jit={}/{} rem={} bc={} spec={} obslots={} obchunks={} vecs={} consblk={} bufs={}",
+            self.probe_jit_compiled_entries,
+            self.probe_jit_reloc_slots,
+            self.probe_mapped_remembered,
+            self.probe_bc_buf_depth,
+            self.probe_specpdl_depth,
+            self.probe_obarray_slots,
+            self.probe_obarray_chunks,
+            self.probe_vector_snapshot_len,
+            self.probe_cons_blocks,
+            self.probe_buffer_count,
+        )
+    }
+}
+
 // ---------------------------------------------------------------------------
 // TaggedHeap — the main GC-managed heap
 // ---------------------------------------------------------------------------
@@ -1528,6 +1678,18 @@ pub struct TaggedHeap {
     max_termination_kinds: DrainKinds,
     last_termination_fold_us: u64,
     termination_count: usize,
+    /// Handshake-pause decomposition (per phase, per root group, size probes).
+    /// Heap-side phases are written where they run; the evaluator fills the
+    /// context-root breakdowns + context-side probes via `handshake_stats_mut`.
+    handshake: HandshakeStats,
+    /// Scratch: last `seed_internal_runtime_roots` cost/volume. Written every
+    /// call; routed to the start or termination slot by `concurrent_begin` /
+    /// `reseed_runtime_and_remembered_roots` (which know which handshake ran).
+    last_runtime_seed_us: u64,
+    last_runtime_seed_roots: usize,
+    /// Scratch: last `seed_mapped_remembered` cost/volume (owners re-scanned).
+    last_remembered_seed_us: u64,
+    last_remembered_seed_roots: usize,
 }
 
 impl TaggedHeap {
@@ -1615,6 +1777,11 @@ impl TaggedHeap {
             max_termination_kinds: DrainKinds::default(),
             last_termination_fold_us: 0,
             termination_count: 0,
+            handshake: HandshakeStats::default(),
+            last_runtime_seed_us: 0,
+            last_runtime_seed_roots: 0,
+            last_remembered_seed_us: 0,
+            last_remembered_seed_roots: 0,
             dump_addr_lo: usize::MAX,
             dump_addr_hi: 0,
         }
@@ -1699,6 +1866,18 @@ impl TaggedHeap {
             termination_count: self.termination_count,
             mark_us: self.sweep_mark_us,
         }
+    }
+
+    /// Handshake-pause instrumentation snapshot (per phase, per root group,
+    /// size probes). Sibling of `sweep_stats`.
+    pub(crate) fn handshake_stats(&self) -> HandshakeStats {
+        self.handshake.clone()
+    }
+
+    /// Mutable access for the evaluator to record the context-side handshake
+    /// parts (root-group breakdowns, whole-pause totals, context probes).
+    pub(crate) fn handshake_stats_mut(&mut self) -> &mut HandshakeStats {
+        &mut self.handshake
     }
 
     #[inline]
@@ -3126,7 +3305,15 @@ impl TaggedHeap {
     /// enqueue their children directly. Mapped children are already black and
     /// are skipped when popped; only heap children get marked.
     fn seed_mapped_remembered(&mut self) {
+        // Handshake instrumentation: owners re-scanned + wall cost, routed to
+        // the start/termination slot by the caller. The remembered set is
+        // append-only (never cleared), so this count is the monotonic-growth
+        // probe as well.
+        let seed_t0 = std::time::Instant::now();
+        self.last_remembered_seed_roots = self.mapped_remembered.len();
+        self.handshake.probe_mapped_remembered = self.mapped_remembered.len();
         if self.mapped_remembered.is_empty() {
+            self.last_remembered_seed_us = 0;
             return;
         }
         let owners: Vec<TaggedValue> = self
@@ -3137,6 +3324,7 @@ impl TaggedHeap {
         for owner in owners {
             self.push_value_children_to_gray(owner, "remembered-dump-child");
         }
+        self.last_remembered_seed_us = seed_t0.elapsed().as_micros() as u64;
     }
 
     /// Push every heap child of `owner` onto the gray queue (re-trace its
@@ -3642,6 +3830,7 @@ impl TaggedHeap {
     }
 
     fn seed_internal_runtime_roots(&mut self) {
+        let seed_t0 = std::time::Instant::now();
         // Static subr objects are leaked process/thread runtime objects, matching
         // GNU's static `Lisp_Subr` storage. They are not swept by this heap.
         let roots: Vec<(TaggedValue, &'static str)> = self
@@ -3678,11 +3867,16 @@ impl TaggedHeap {
             )
             .collect();
 
+        // Handshake instrumentation: enumeration volume + wall cost, routed to
+        // the start/termination slot by the caller (`concurrent_begin` /
+        // `reseed_runtime_and_remembered_roots`).
+        self.last_runtime_seed_roots = roots.len();
         for (value, origin) in roots {
             if value.is_heap_object() {
                 self.push_gray(value, origin);
             }
         }
+        self.last_runtime_seed_us = seed_t0.elapsed().as_micros() as u64;
     }
 
     pub(crate) fn complete_collection(&mut self) {
@@ -4087,7 +4281,20 @@ impl TaggedHeap {
     /// `launch_concurrent_mark`. No Steele owner-tracking: the concurrent SATB
     /// barrier (keyed on `concurrent_mark_running`) preserves the snapshot.
     pub(crate) fn concurrent_begin(&mut self) {
+        // Zero the seeding scratch so a skipped `seed_mapped_remembered`
+        // (non-partitioned heap) does not leave a stale previous value in the
+        // start slots filled below.
+        self.last_remembered_seed_us = 0;
+        self.last_remembered_seed_roots = 0;
         self.begin_collection();
+        // Route this handshake's `begin_collection` phase costs to the START
+        // slots (this entry point is exclusively the concurrent start).
+        self.handshake.start_count += 1;
+        self.handshake.last_start_clear_us = self.last_clear_us;
+        self.handshake.last_start_runtime_us = self.last_runtime_seed_us;
+        self.handshake.last_start_runtime_roots = self.last_runtime_seed_roots;
+        self.handshake.last_start_remembered_us = self.last_remembered_seed_us;
+        self.handshake.last_start_remembered_roots = self.last_remembered_seed_roots;
         self.mark_in_progress = true;
         self.incremental_mark_us = 0;
     }
@@ -4121,10 +4328,14 @@ impl TaggedHeap {
         // Immutable snapshot of owned cons-block bases — read-only on the GC
         // thread. New blocks allocated during marking are absent, which is fine:
         // their conses allocate-black and never enter the GC's gray queue.
+        let conssnap_t0 = std::time::Instant::now();
         let mut owned = std::collections::HashSet::with_capacity(self.cons_blocks.len());
         for block in &self.cons_blocks {
             owned.insert(block.base_addr());
         }
+        self.handshake.last_start_conssnap_us = conssnap_t0.elapsed().as_micros() as u64;
+        self.handshake.probe_cons_blocks = self.cons_blocks.len();
+        let vecsnap_t0 = std::time::Instant::now();
         // Stage 2 Tier B CONCURRENT VECTOR SCAN: snapshot every
         // OWNED/Mapped vector backing AT THIS world-stopped point (same instant the
         // cons `owned_bases` snapshot is taken and the roots are seeded), so the GC
@@ -4155,6 +4366,10 @@ impl TaggedHeap {
             }
             Some(snap)
         };
+        self.handshake.last_start_vecsnap_us = vecsnap_t0.elapsed().as_micros() as u64;
+        self.handshake.probe_vector_snapshot_len =
+            vectors.as_ref().map(|snap| snap.len()).unwrap_or(0);
+        let jobasm_t0 = std::time::Instant::now();
         let gray = std::mem::take(&mut self.gray_queue);
         let (exited_tx, exited_rx) = std::sync::mpsc::channel();
         self.gc_done
@@ -4188,12 +4403,14 @@ impl TaggedHeap {
         gc_thread()
             .send(GcRequest::ConcurrentMark(job))
             .expect("neovm-gc thread is gone");
+        self.handshake.last_start_jobasm_us = jobasm_t0.elapsed().as_micros() as u64;
     }
 
     /// Stop the GC thread and fold its residual work back into the gray queue so
     /// the caller can finish marking stop-the-world. After this, the heap is
     /// owned exclusively by the mutator again (the GC thread has exited its loop).
     pub(crate) fn join_concurrent_mark(&mut self) {
+        let join_t0 = std::time::Instant::now();
         self.gc_stop
             .store(true, std::sync::atomic::Ordering::Release);
         if let Some(rx) = self.gc_exited.take() {
@@ -4244,6 +4461,9 @@ impl TaggedHeap {
         let retired = std::mem::take(&mut self.retired_vector_buffers);
         drop(retired);
         self.concurrent_cloned_vectors.clear();
+        // Whole join cost (stop signal + GC-thread exit wait + the fold above);
+        // the fold alone stays separately visible as `last_termination_fold_us`.
+        self.handshake.last_term_join_us = join_t0.elapsed().as_micros() as u64;
     }
 
     /// SATB barrier path for concurrent marking: append the owner's current
@@ -4348,10 +4568,21 @@ impl TaggedHeap {
     /// otherwise an object that became reachable only through one of these roots
     /// during the marking window is left unmarked and swept while live.
     pub(crate) fn reseed_runtime_and_remembered_roots(&mut self) {
+        // Zero the remembered scratch so the skip branch below does not leave
+        // a stale previous value in the termination slots filled after.
+        self.last_remembered_seed_us = 0;
+        self.last_remembered_seed_roots = 0;
         self.seed_internal_runtime_roots();
         if self.partition_dump && self.dump_blackened {
             self.seed_mapped_remembered();
         }
+        // Route this handshake's reseed costs to the TERMINATION slots (this
+        // entry point is exclusively the concurrent termination).
+        self.handshake.term_count += 1;
+        self.handshake.last_term_runtime_us = self.last_runtime_seed_us;
+        self.handshake.last_term_runtime_roots = self.last_runtime_seed_roots;
+        self.handshake.last_term_remembered_us = self.last_remembered_seed_us;
+        self.handshake.last_term_remembered_roots = self.last_remembered_seed_roots;
     }
 
     /// Drain ALL remaining marking work to a fixpoint (no budget). Used at mark
@@ -4380,14 +4611,18 @@ impl TaggedHeap {
         // here would mean finalizers silently never run under the concurrent
         // collector). The main mark has drained — the termination handshake
         // already traced the deferred veclikes — so marks are final.
+        let finalizer_t0 = std::time::Instant::now();
         self.mark_and_queue_doomed_finalizers();
+        self.handshake.last_term_finalizer_us = finalizer_t0.elapsed().as_micros() as u64;
         // Resolve weak hash tables (GNU mark_and_sweep_weak_table_contents): mark
         // entries that survive per their table's weakness, then drop the rest. This
         // mirrors `complete_collection` and MUST run on the concurrent/incremental
         // termination too — otherwise a weak table's only-weakly-reachable entries
         // are neither marked nor removed, so they are swept while still referenced
         // by the table (UAF). The main mark has already drained at this point.
+        let weak_t0 = std::time::Instant::now();
         self.mark_and_sweep_weak_tables();
+        self.handshake.last_term_weak_us = weak_t0.elapsed().as_micros() as u64;
 
         // Dump-partition safety gate (marks still intact). Same as
         // `finalize_collection`'s, run before any object is freed.
@@ -4400,7 +4635,9 @@ impl TaggedHeap {
         }
         // Unchain dead markers before the sweep frees them (mirrors GNU
         // sweep_buffer -> unchain_dead_markers). Reads marks, which are intact.
+        let unchain_t0 = std::time::Instant::now();
         self.unchain_dead_markers();
+        self.handshake.last_term_unchain_us = unchain_t0.elapsed().as_micros() as u64;
 
         // Begin the deferred sweep. Detach the young non-cons list (new non-cons
         // allocations link onto a fresh `all_objects` and are not swept this
@@ -5761,6 +5998,69 @@ mod ownership_tests {
         heap.finish_incremental_sweep_now();
         assert!(!heap.sweep_in_progress());
         assert_eq!(heap.sweep_stats().noncons_freed, 0, "all floats are live");
+    }
+
+    /// Handshake instrumentation (root-scan floor probe): a concurrent cycle
+    /// must populate the heap-side `HandshakeStats` phases — the start
+    /// handshake counter + cons/vector snapshot probes recorded by
+    /// `concurrent_begin`/`launch_concurrent_mark`, and the termination
+    /// counter + join cost recorded by `reseed_runtime_and_remembered_roots`/
+    /// `join_concurrent_mark`. Heap-level only: the per-group context-root
+    /// breakdown is evaluator-side and covered by
+    /// `eval_test::gc_concurrent_handshake_stats_populate_per_group`.
+    #[test]
+    fn concurrent_handshake_records_heap_side_phases() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // A rooted spine with a vector so the Tier B vector snapshot has at
+        // least one entry to count.
+        let vec = heap.alloc_vector(vec![TaggedValue::fixnum(3); 4]);
+        let mut list = heap.alloc_cons(vec, TaggedValue::fixnum(0));
+        for i in 0..100 {
+            list = heap.alloc_cons(TaggedValue::fixnum(i), list);
+        }
+        let root = list;
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(root);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+
+        let hs = heap.handshake_stats();
+        assert_eq!(hs.start_count, 1, "one concurrent start handshake ran");
+        assert_eq!(hs.term_count, 1, "one termination reseed ran");
+        assert!(
+            hs.probe_cons_blocks >= 1,
+            "the cons-base snapshot walked at least one owned block"
+        );
+        assert!(
+            hs.probe_vector_snapshot_len >= 1,
+            "the Tier B snapshot captured the allocated vector (len={})",
+            hs.probe_vector_snapshot_len,
+        );
+        assert_eq!(
+            hs.probe_mapped_remembered, 0,
+            "no dump partition on a bare heap"
+        );
+        assert_eq!(
+            hs.last_term_remembered_roots, 0,
+            "termination reseed saw no remembered owners on a bare heap"
+        );
+        // µs fields can legitimately round to 0 on a tiny heap; the counters
+        // above prove the recording points fired. The max tracks the last.
+        assert!(hs.max_start_total_us >= hs.last_start_total_us);
+        assert!(hs.max_term_roots_total_us >= hs.last_term_roots_total_us);
     }
 
     /// Termination-drain kind probe: a concurrent cycle over a rooted spine

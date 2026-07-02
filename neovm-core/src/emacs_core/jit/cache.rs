@@ -190,6 +190,23 @@ pub(crate) fn collect_jit_reloc_gc_roots(roots: &mut Vec<Value>) {
     });
 }
 
+/// GC handshake size probe: `(total COMPILED cache entries, total reloc slots
+/// the root walk visits)` — the O() inputs of `collect_jit_reloc_gc_roots`.
+/// Read-only; called once per handshake OUTSIDE the timed pause window.
+pub(crate) fn compiled_cache_probe() -> (usize, usize) {
+    COMPILED.with(|c| {
+        let cache = c.borrow();
+        let slots = cache
+            .values()
+            .map(|entry| match entry {
+                CacheEntry::Compiled(leaf) => leaf.reloc_values().len(),
+                _ => 0,
+            })
+            .sum();
+        (cache.len(), slots)
+    })
+}
+
 /// R2-C3: insert AOT-prepopulated leaves into `COMPILED` so the loadup set serves
 /// native FROM CALL 1. `leaves` is `(compiled_id, CompiledLeaf)` built by
 /// `aot::prepopulate_aot_from_preload` from the preload `.so`. Returns how many

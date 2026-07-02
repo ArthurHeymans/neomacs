@@ -1162,14 +1162,23 @@ thread_local! {
 /// walks the Evaluator struct and its sub-managers).  This function calls each
 /// module's `collect_*_gc_roots` helper to ensure those Values are marked as
 /// live during garbage collection.
-fn collect_thread_local_gc_roots(roots: &mut Vec<(Value, &'static str)>, heap_id: usize) {
+fn collect_thread_local_gc_roots(
+    roots: &mut Vec<(Value, &'static str)>,
+    heap_id: usize,
+    stats: &mut Vec<crate::tagged::gc::RootGroup>,
+) {
     fn collect_group(
         roots: &mut Vec<(Value, &'static str)>,
         origin: &'static str,
+        stats: &mut Vec<crate::tagged::gc::RootGroup>,
         collect: impl FnOnce(&mut Vec<Value>),
     ) {
+        // GC handshake instrumentation: per-side-table build cost + volume
+        // (the JIT reloc walk in particular scales with the COMPILED cache).
+        let t0 = std::time::Instant::now();
         let mut group = Vec::new();
         collect(&mut group);
+        stats.push((origin, t0.elapsed().as_micros() as u64, group.len()));
         roots.extend(group.into_iter().map(|root| (root, origin)));
     }
 
@@ -1179,61 +1188,83 @@ fn collect_thread_local_gc_roots(roots: &mut Vec<(Value, &'static str)>, heap_id
     collect_group(
         roots,
         "jit-reloc-thread-local",
+        stats,
         super::jit::cache::collect_jit_reloc_gc_roots,
     );
     collect_group(
         roots,
         "syntax-thread-local",
+        stats,
         super::syntax::collect_syntax_gc_roots,
     );
     collect_group(
         roots,
         "casetab-thread-local",
+        stats,
         super::casetab::collect_casetab_gc_roots,
     );
     collect_group(
         roots,
         "category-thread-local",
+        stats,
         super::category::collect_category_gc_roots,
     );
     collect_group(
         roots,
         "terminal-thread-local",
+        stats,
         super::terminal::pure::collect_terminal_gc_roots,
     );
     collect_group(
         roots,
         "font-thread-local",
+        stats,
         super::font::collect_font_gc_roots,
     );
     collect_group(
         roots,
         "charset-thread-local",
+        stats,
         super::charset::collect_charset_gc_roots,
     );
-    collect_group(roots, "ccl-thread-local", super::ccl::collect_ccl_gc_roots);
+    collect_group(
+        roots,
+        "ccl-thread-local",
+        stats,
+        super::ccl::collect_ccl_gc_roots,
+    );
     collect_group(
         roots,
         "dynamic-module-thread-local",
+        stats,
         super::dynamic_module::collect_dynamic_module_gc_roots,
     );
     collect_group(
         roots,
         "hash-table-test-thread-local",
+        stats,
         super::builtins::collections::collect_hash_table_test_alias_gc_roots,
     );
-    collect_group(roots, "symbol-name-thread-local", |group| {
+    collect_group(roots, "symbol-name-thread-local", stats, |group| {
         super::intern::collect_symbol_name_gc_roots(group, heap_id)
     });
+    let scratch_t0 = std::time::Instant::now();
+    let mut scratch_count = 0usize;
     SCRATCH_GC_ROOTS.with(|scratch| {
+        let scratch = scratch.borrow();
+        scratch_count = scratch.len();
         roots.extend(
             scratch
-                .borrow()
                 .iter()
                 .copied()
                 .map(|root| (root, "scratch-thread-local")),
         )
     });
+    stats.push((
+        "scratch-thread-local",
+        scratch_t0.elapsed().as_micros() as u64,
+        scratch_count,
+    ));
 }
 
 pub fn save_scratch_gc_roots() -> usize {
@@ -5223,15 +5254,23 @@ impl Context {
 
     /// Enumerate every live `Value` reference in the evaluator and all
     /// sub-managers without materializing a single temporary root vector.
-    fn trace_roots(&self, visit: &mut dyn FnMut(Value)) {
+    /// Enumerate every evaluator/context root into `visit`, announcing each
+    /// root GROUP boundary via `group(name)` immediately before that group's
+    /// values are visited. The group seam is diagnostics-only: the GC
+    /// handshake instrumentation brackets per-group timings around the
+    /// boundaries; enumeration order and content are unchanged.
+    fn trace_roots(&self, group: &mut dyn FnMut(&'static str), visit: &mut dyn FnMut(Value)) {
+        group("vm_frames");
         for frame in &self.vm_root_frames {
             for root in frame.roots.iter().copied() {
                 visit(root);
             }
         }
+        group("treesit");
         for root in self.treesit.roots() {
             visit(root);
         }
+        group("bc");
         for root in self.bc_buf.iter().copied() {
             visit(root);
         }
@@ -5240,6 +5279,7 @@ impl Context {
                 visit(frame.fun);
             }
         }
+        group("handlers");
         for frame in &self.condition_stack {
             match frame {
                 ConditionFrame::Catch { tag, .. } => visit(*tag),
@@ -5255,6 +5295,7 @@ impl Context {
                 ConditionFrame::SkipConditions { .. } => {}
             }
         }
+        group("specpdl");
         for entry in &self.specpdl {
             match entry {
                 SpecBinding::Let {
@@ -5288,6 +5329,7 @@ impl Context {
                 _ => {}
             }
         }
+        group("misc");
         visit(self.lexenv);
         visit(self.quit_flag);
         visit(self.inhibit_quit);
@@ -5339,13 +5381,21 @@ impl Context {
         if self.standard_category_table.is_heap_object() {
             visit(self.standard_category_table);
         }
+        // Full ~all-interned-symbols walk on STW collections; only the
+        // BLV-pool residual under `ObarraySymbolCellSkipGuard` (both
+        // concurrent handshakes).
+        group("obarray");
         self.obarray.trace_roots_with(visit);
+        group("proc_timer");
         self.processes.trace_roots_with(visit);
         self.watchers.trace_roots_with(visit);
+        group("reg_custom");
         self.registers.trace_roots_with(visit);
         self.custom.trace_roots_with(visit);
         self.autoloads.trace_roots_with(visit);
+        group("buffers");
         self.buffers.trace_roots_with(visit);
+        group("ui_misc");
         self.xwidgets.trace_roots_with(visit);
         self.face_table.trace_roots_with(visit);
         self.threads.trace_roots_with(visit);
@@ -5354,6 +5404,7 @@ impl Context {
         self.modes.trace_roots_with(visit);
         self.frames.trace_roots_with(visit);
         self.coding_systems.trace_roots_with(visit);
+        group("match_data");
         if let Some(ref md) = self.match_data
             && let Some(crate::emacs_core::regex::SearchedString::Heap(val)) = md.searched_string()
         {
@@ -7186,41 +7237,101 @@ impl Context {
     /// clear marks, so it is safe to call both at incremental start and again
     /// at mark termination (re-snapshotting roots).
     ///
+    /// Returns the per-group cost/volume breakdown of this seed (diagnostics
+    /// only — seeding order and content are unchanged). Groups are the
+    /// `trace_roots` sections, the per-side-table thread-local collects, the
+    /// thread-local seed loop (`tl_seed`), and the marker-chain-head install
+    /// (`marker_heads`, whose count is the live-buffer count).
+    ///
     /// Safety: caller holds exclusive `&mut self`; `heap_ptr` aliases
     /// `self.tagged_heap`. Root enumeration only reads Context state.
-    unsafe fn seed_all_context_roots(&mut self, heap_ptr: *mut crate::tagged::gc::TaggedHeap) {
+    unsafe fn seed_all_context_roots(
+        &mut self,
+        heap_ptr: *mut crate::tagged::gc::TaggedHeap,
+    ) -> crate::tagged::gc::RootSeedBreakdown {
+        use std::cell::{Cell, RefCell};
+        let seed_t0 = std::time::Instant::now();
+        // Per-group recorder shared by the two `trace_roots` closures via
+        // interior mutability (both need it: the boundary closure closes the
+        // running group, the visit closure counts values).
+        let groups: RefCell<Vec<crate::tagged::gc::RootGroup>> =
+            RefCell::new(Vec::with_capacity(32));
+        let cur_name: Cell<Option<&'static str>> = Cell::new(None);
+        let cur_t0: Cell<std::time::Instant> = Cell::new(seed_t0);
+        let cur_count: Cell<usize> = Cell::new(0);
+        let close_group = || {
+            if let Some(name) = cur_name.get() {
+                groups.borrow_mut().push((
+                    name,
+                    cur_t0.get().elapsed().as_micros() as u64,
+                    cur_count.get(),
+                ));
+            }
+        };
         #[cfg(debug_assertions)]
         let mut root_index = 0usize;
-        self.trace_roots(&mut |root| {
-            #[cfg(debug_assertions)]
-            {
-                let origin = format!("context-root#{root_index}");
-                root_index += 1;
-                unsafe {
-                    (*heap_ptr).seed_root_with_origin(root, &origin);
+        self.trace_roots(
+            &mut |name| {
+                close_group();
+                cur_name.set(Some(name));
+                cur_count.set(0);
+                cur_t0.set(std::time::Instant::now());
+            },
+            &mut |root| {
+                cur_count.set(cur_count.get() + 1);
+                #[cfg(debug_assertions)]
+                {
+                    let origin = format!("context-root#{root_index}");
+                    root_index += 1;
+                    unsafe {
+                        (*heap_ptr).seed_root_with_origin(root, &origin);
+                    }
                 }
-            }
-            #[cfg(not(debug_assertions))]
-            {
-                unsafe {
-                    (*heap_ptr).seed_root(root);
+                #[cfg(not(debug_assertions))]
+                {
+                    unsafe {
+                        (*heap_ptr).seed_root(root);
+                    }
                 }
-            }
-        });
+            },
+        );
+        close_group();
+        let mut groups = groups.into_inner();
         let heap_identity = unsafe { (*heap_ptr).identity() };
         let mut thread_local_roots = Vec::new();
-        collect_thread_local_gc_roots(&mut thread_local_roots, heap_identity);
+        collect_thread_local_gc_roots(&mut thread_local_roots, heap_identity, &mut groups);
+        let tl_seed_t0 = std::time::Instant::now();
+        let tl_seed_count = thread_local_roots.len();
         for (root, origin) in thread_local_roots {
             unsafe {
                 (*heap_ptr).seed_root_with_origin(root, origin);
             }
         }
+        groups.push((
+            "tl_seed",
+            tl_seed_t0.elapsed().as_micros() as u64,
+            tl_seed_count,
+        ));
         // Install per-buffer marker-chain head slots so `unchain_dead_markers`
         // can splice unmarked markers out of every live chain before sweep.
         // Mirrors GNU `sweep_buffer → unchain_dead_markers` (alloc.c).
-        let chain_heads = self.buffers.collect_marker_chain_head_slots();
+        let heads_t0 = std::time::Instant::now();
+        // Safety: stop-the-world GC — no concurrent borrows of the buffer
+        // storage exist (the pre-refactor body relied on the enclosing
+        // `unsafe fn` for this same call).
+        let chain_heads = unsafe { self.buffers.collect_marker_chain_head_slots() };
+        let heads_count = chain_heads.len();
         unsafe {
             (*heap_ptr).set_marker_chain_head_slots(chain_heads);
+        }
+        groups.push((
+            "marker_heads",
+            heads_t0.elapsed().as_micros() as u64,
+            heads_count,
+        ));
+        crate::tagged::gc::RootSeedBreakdown {
+            total_us: seed_t0.elapsed().as_micros() as u64,
+            groups,
         }
     }
 
@@ -7228,8 +7339,16 @@ impl Context {
     /// complete root snapshot into the gray queue, then hand it to the GC thread.
     /// Returns immediately — the mutator runs while the GC thread marks conses.
     ///
+    /// The whole handshake and each phase are timed into `HandshakeStats`
+    /// (clear/runtime/remembered are recorded heap-side by `concurrent_begin`;
+    /// conssnap/vecsnap/jobasm by `launch_concurrent_mark`) and printed under
+    /// `NEOVM_GC_TRACE=1`. Size probes are refreshed AFTER the pause is
+    /// stamped so probe collection never inflates the measured pause.
+    ///
     /// Safety: as `seed_all_context_roots`.
     unsafe fn start_concurrent_mark(&mut self, heap_ptr: *mut crate::tagged::gc::TaggedHeap) {
+        let start_t0 = std::time::Instant::now();
+        let (obsnap_us, roots_breakdown, ob_slots, ob_chunks);
         unsafe {
             (*heap_ptr).concurrent_begin();
             // CONCURRENT OBARRAY SCAN (Stage 1b). Capture the obarray chunk snapshot
@@ -7241,13 +7360,61 @@ impl Context {
             // scoped to just the seed, keeps the start seed from also pushing the
             // symbol cells the GC thread now owns (the BLV pool + non-obarray roots
             // still seed normally).
+            let obsnap_t0 = std::time::Instant::now();
             let snap = self.obarray.scan_snapshot();
+            obsnap_us = obsnap_t0.elapsed().as_micros() as u64;
+            ob_slots = snap.n_slots();
+            ob_chunks = snap.n_chunks();
             (*heap_ptr).set_pending_obarray_scan(snap);
             {
                 let _skip = crate::emacs_core::symbol::ObarraySymbolCellSkipGuard::new();
-                self.seed_all_context_roots(heap_ptr);
+                roots_breakdown = self.seed_all_context_roots(heap_ptr);
             }
             (*heap_ptr).launch_concurrent_mark();
+        }
+        let total_us = start_t0.elapsed().as_micros() as u64;
+        // Pause is stamped; stats bookkeeping + probes below are off-pause.
+        #[cfg(feature = "jit")]
+        let (jit_entries, jit_slots) = crate::emacs_core::jit::cache::compiled_cache_probe();
+        #[cfg(not(feature = "jit"))]
+        let (jit_entries, jit_slots) = (0usize, 0usize);
+        let bc_depth = self.bc_buf.len();
+        let specpdl_depth = self.specpdl.len();
+        let hs = unsafe { (*heap_ptr).handshake_stats_mut() };
+        hs.last_start_obsnap_us = obsnap_us;
+        hs.last_start_roots = roots_breakdown;
+        hs.last_start_total_us = total_us;
+        hs.max_start_total_us = hs.max_start_total_us.max(total_us);
+        hs.probe_obarray_slots = ob_slots;
+        hs.probe_obarray_chunks = ob_chunks;
+        hs.probe_bc_buf_depth = bc_depth;
+        hs.probe_specpdl_depth = specpdl_depth;
+        hs.probe_jit_compiled_entries = jit_entries;
+        hs.probe_jit_reloc_slots = jit_slots;
+        hs.probe_buffer_count = hs
+            .last_start_roots
+            .groups
+            .iter()
+            .find(|(name, _, _)| *name == "marker_heads")
+            .map(|&(_, _, count)| count)
+            .unwrap_or(0);
+        if std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
+            eprintln!(
+                "NEOVM_GC concurrent_start {total_us}us [clear={}us runtime={}us({}) \
+                 remembered={}us({}) obsnap={obsnap_us}us roots={}us conssnap={}us \
+                 vecsnap={}us jobasm={}us groups[{}] probes[{}]]",
+                hs.last_start_clear_us,
+                hs.last_start_runtime_us,
+                hs.last_start_runtime_roots,
+                hs.last_start_remembered_us,
+                hs.last_start_remembered_roots,
+                hs.last_start_roots.total_us,
+                hs.last_start_conssnap_us,
+                hs.last_start_vecsnap_us,
+                hs.last_start_jobasm_us,
+                hs.last_start_roots.format_nonzero(),
+                hs.format_probes(),
+            );
         }
     }
 
@@ -7259,9 +7426,17 @@ impl Context {
     /// veclike/string traces and any roots that appeared during the window.
     ///
     /// Safety: as `seed_all_context_roots`.
+    /// Every phase of the pre-drain `roots=` lump is timed into
+    /// `HandshakeStats` (join/fold heap-side; runtime+remembered by
+    /// `reseed_runtime_and_remembered_roots`; the context re-seed per group;
+    /// the Stage 1b new-symbol residual here) along with the post-drain
+    /// finalizer/weak/unchain passes (heap-side, in `incremental_finish`).
+    /// Probes are refreshed after the pause is stamped.
     unsafe fn terminate_concurrent_mark(&mut self, heap_ptr: *mut crate::tagged::gc::TaggedHeap) {
         let term_t0 = std::time::Instant::now();
         let (roots_us, drain_us);
+        let (ctxroots_breakdown, newsyms_us);
+        let mut newsyms_roots = 0usize;
         unsafe {
             // Reclaim exclusive heap ownership: stop the GC thread and fold its
             // residual SATB + deferred work back into the gray queue.
@@ -7275,7 +7450,7 @@ impl Context {
                 // + every non-obarray Context root, and restores full-scan on drop
                 // so the start seed + STW full-collection seeds are unaffected.
                 let _skip = crate::emacs_core::symbol::ObarraySymbolCellSkipGuard::new();
-                self.seed_all_context_roots(heap_ptr);
+                ctxroots_breakdown = self.seed_all_context_roots(heap_ptr);
             }
             // Stage 1b CONCURRENT OBARRAY SCAN termination residual: the GC thread's
             // scan covered only the symbol cells present at the start snapshot (slots
@@ -7287,9 +7462,11 @@ impl Context {
             // obarray un-skipped" fallback: it preserves the Stage 1a win (no full
             // ~450k-symbol walk) while staying correct. `None` only if no start
             // snapshot was captured, in which case the residual is skipped.
+            let newsyms_t0 = std::time::Instant::now();
             if let Some(start_slots) = (*heap_ptr).take_concurrent_obarray_start_slots() {
                 self.obarray
                     .trace_new_symbol_cells(start_slots, &mut |root| {
+                        newsyms_roots += 1;
                         #[cfg(debug_assertions)]
                         {
                             (*heap_ptr).seed_root_with_origin(root, "stage1b-new-symbol");
@@ -7300,6 +7477,7 @@ impl Context {
                         }
                     });
             }
+            newsyms_us = newsyms_t0.elapsed().as_micros() as u64;
             roots_us = term_t0.elapsed().as_micros();
             let bytes_before = (*heap_ptr).live_bytes();
             let pause_t0 = std::time::Instant::now();
@@ -7307,17 +7485,58 @@ impl Context {
             drain_us = pause_t0.elapsed().as_micros();
             (*heap_ptr).incremental_finish(bytes_before, pause_t0);
         }
+        // Pause work done; stats bookkeeping + probes below are off-pause.
+        #[cfg(feature = "jit")]
+        let (jit_entries, jit_slots) = crate::emacs_core::jit::cache::compiled_cache_probe();
+        #[cfg(not(feature = "jit"))]
+        let (jit_entries, jit_slots) = (0usize, 0usize);
+        let bc_depth = self.bc_buf.len();
+        let specpdl_depth = self.specpdl.len();
+        let ob_slots = self.obarray.current_slot_len();
+        let hs = unsafe { (*heap_ptr).handshake_stats_mut() };
+        hs.last_term_ctxroots = ctxroots_breakdown;
+        hs.last_term_newsyms_us = newsyms_us;
+        hs.last_term_newsyms_roots = newsyms_roots;
+        hs.last_term_roots_total_us = roots_us as u64;
+        hs.max_term_roots_total_us = hs.max_term_roots_total_us.max(roots_us as u64);
+        hs.probe_bc_buf_depth = bc_depth;
+        hs.probe_specpdl_depth = specpdl_depth;
+        hs.probe_obarray_slots = ob_slots;
+        hs.probe_jit_compiled_entries = jit_entries;
+        hs.probe_jit_reloc_slots = jit_slots;
+        hs.probe_buffer_count = hs
+            .last_term_ctxroots
+            .groups
+            .iter()
+            .find(|(name, _, _)| *name == "marker_heads")
+            .map(|&(_, _, count)| count)
+            .unwrap_or(0);
         if std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
             let stats = self.tagged_heap.sweep_stats();
+            let hs = self.tagged_heap.handshake_stats();
             eprintln!(
                 "NEOVM_GC concurrent_termination {}us [roots={roots_us}us drain={drain_us}us \
-                 fold={}us deferred={} satb={} str_claimed={} kinds[{}]]",
+                 fold={}us deferred={} satb={} str_claimed={} kinds[{}] join={}us \
+                 runtime={}us({}) remembered={}us({}) ctxroots={}us newsyms={newsyms_us}us({}) \
+                 finalizer={}us weak={}us unchain={}us groups[{}] probes[{}]]",
                 term_t0.elapsed().as_micros(),
                 stats.last_termination_fold_us,
                 stats.last_termination_deferred,
                 stats.last_termination_satb,
                 stats.last_concurrent_str_claimed,
                 stats.last_termination_kinds,
+                hs.last_term_join_us,
+                hs.last_term_runtime_us,
+                hs.last_term_runtime_roots,
+                hs.last_term_remembered_us,
+                hs.last_term_remembered_roots,
+                hs.last_term_ctxroots.total_us,
+                newsyms_roots,
+                hs.last_term_finalizer_us,
+                hs.last_term_weak_us,
+                hs.last_term_unchain_us,
+                hs.last_term_ctxroots.format_nonzero(),
+                hs.format_probes(),
             );
         }
     }

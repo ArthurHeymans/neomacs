@@ -15424,6 +15424,76 @@ fn gc_safe_point_runs_concurrent_cycles_without_a_dump() {
     assert_eq!(format_eval_result(&results[0]), "OK 7");
 }
 
+/// Handshake instrumentation (root-scan floor probe): a full concurrent cycle
+/// driven through the evaluator must populate `HandshakeStats` end to end —
+/// both handshake counters, the whole-pause start total, the per-GROUP
+/// context-root breakdowns on BOTH handshakes (with nonzero counts for the
+/// groups this heap actually has), and the context-side size probes.
+#[test]
+fn gc_concurrent_handshake_stats_populate_per_group() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.eval_str_each("(setq gc-handshake-root (cons 1 2))");
+    ev.tagged_heap.set_gc_threshold(1024);
+    // Bootstrap STW cycle first; then churn until a concurrent cycle
+    // completes (same driver as `gc_safe_point_runs_concurrent_cycles_
+    // without_a_dump`).
+    while ev.gc_count == 0 {
+        ev.eval_str_each("(make-list 64 0)");
+        ev.gc_safe_point();
+    }
+    assert!(ev.tagged_heap.should_run_concurrent());
+    let bootstrap_count = ev.gc_count;
+    for _ in 0..50_000 {
+        ev.eval_str_each("(make-list 64 0)");
+        ev.gc_safe_point();
+        if ev.gc_count > bootstrap_count {
+            break;
+        }
+    }
+    assert!(ev.gc_count > bootstrap_count, "no concurrent cycle completed");
+
+    let hs = ev.tagged_heap.handshake_stats();
+    assert!(hs.start_count >= 1, "start handshake never recorded");
+    assert!(hs.term_count >= 1, "termination handshake never recorded");
+    assert!(
+        hs.last_start_total_us > 0,
+        "whole start pause must be timed"
+    );
+    assert!(hs.max_start_total_us >= hs.last_start_total_us);
+    assert!(hs.max_term_roots_total_us >= hs.last_term_roots_total_us);
+    for (which, breakdown) in [
+        ("start", &hs.last_start_roots),
+        ("termination", &hs.last_term_ctxroots),
+    ] {
+        assert!(
+            !breakdown.groups.is_empty(),
+            "{which}: per-group breakdown empty"
+        );
+        // `misc` visits lexenv/quit-flag/inhibit-quit unconditionally.
+        assert!(
+            breakdown.group_count("misc") >= 3,
+            "{which}: misc group must visit the unconditional singletons \
+             (count={})",
+            breakdown.group_count("misc"),
+        );
+        // At least one live buffer's marker chain head is installed.
+        assert!(
+            breakdown.group_count("marker_heads") >= 1,
+            "{which}: marker_heads count = live buffers must be >= 1"
+        );
+    }
+    // Context-side size probes.
+    assert!(hs.probe_obarray_slots > 0, "obarray slots probe empty");
+    assert!(hs.probe_obarray_chunks > 0, "obarray chunks probe empty");
+    assert!(hs.probe_buffer_count >= 1, "buffer count probe empty");
+    assert!(
+        hs.probe_vector_snapshot_len > 0,
+        "a bootstrapped dump-less heap owns vectors; Tier B snapshot empty"
+    );
+    assert!(hs.probe_cons_blocks > 0, "cons block probe empty");
+}
+
 #[test]
 fn gc_safe_point_exact_inside_extra_root_scope_retains_explicit_slice() {
     crate::test_utils::init_test_tracing();
@@ -17333,6 +17403,11 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
     .expect("probe setup");
 
     let mut captures: Vec<crate::tagged::gc::SweepStats> = Vec::new();
+    // Handshake decomposition snapshot per captured cycle (same poll instant;
+    // the start-side fields belong to the just-terminated cycle unless the
+    // NEXT cycle already started within the same chunk — an attribution skew
+    // that washes out of the medians).
+    let mut hs_captures: Vec<crate::tagged::gc::HandshakeStats> = Vec::new();
     let mut missed = 0usize;
     let mut seen = ev.tagged_heap.sweep_stats().termination_count;
     let start_collections = ev.tagged_heap.gc_collections();
@@ -17345,6 +17420,7 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
             missed += stats.termination_count - seen - 1;
             seen = stats.termination_count;
             captures.push(stats);
+            hs_captures.push(ev.tagged_heap.handshake_stats());
         }
     }
 
@@ -17393,9 +17469,106 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
         med(|s| s.last_termination_kinds.other as u64),
         ev.tagged_heap.sweep_stats().max_termination_kinds,
     );
+
+    // --- HANDSHAKE decomposition (root-scan floor probe): per-phase and
+    // per-group medians/maxima across the captured cycles, for BOTH STW
+    // handshakes, plus the O() size probes. ---
+    let hmed = |f: &dyn Fn(&crate::tagged::gc::HandshakeStats) -> u64| {
+        let mut v: Vec<u64> = hs_captures.iter().map(f).collect();
+        drain_probe_median(&mut v)
+    };
+    let hmax = |f: &dyn Fn(&crate::tagged::gc::HandshakeStats) -> u64| {
+        hs_captures.iter().map(f).max().unwrap_or(0)
+    };
+    // Per-group aggregation: name -> (us samples, count samples), separately
+    // for the start and termination context-root breakdowns.
+    let group_table = |select: &dyn Fn(
+        &crate::tagged::gc::HandshakeStats,
+    )
+        -> &crate::tagged::gc::RootSeedBreakdown| {
+        let mut agg: std::collections::BTreeMap<&'static str, (Vec<u64>, Vec<u64>)> =
+            std::collections::BTreeMap::new();
+        for hs in &hs_captures {
+            for &(name, us, count) in &select(hs).groups {
+                let entry = agg.entry(name).or_default();
+                entry.0.push(us);
+                entry.1.push(count as u64);
+            }
+        }
+        let mut rows: Vec<(u64, u64, u64, &'static str)> = agg
+            .into_iter()
+            .map(|(name, (mut us, mut counts))| {
+                let med_us = drain_probe_median(&mut us);
+                let max_us = us.iter().copied().max().unwrap_or(0);
+                let med_count = drain_probe_median(&mut counts);
+                (med_us, max_us, med_count, name)
+            })
+            .collect();
+        rows.sort_by(|a, b| b.cmp(a)); // by median us desc
+        let mut out = String::new();
+        for (med_us, max_us, med_count, name) in rows {
+            out.push_str(&format!(
+                "    {name}: med={med_us}us max={max_us}us med_count={med_count}\n"
+            ));
+        }
+        out
+    };
+    let handshake_summary = format!(
+        "HANDSHAKE start: total med={}us max={} | clear med={} runtime med={}({}) \
+         remembered med={}({}) obsnap med={} ctxroots med={} conssnap med={} \
+         vecsnap med={} jobasm med={}\n\
+         start groups (med us / max us / med count):\n{}\
+         HANDSHAKE termination: roots-lump med={}us max={} | join med={} fold med={} \
+         runtime med={}({}) remembered med={}({}) ctxroots med={} newsyms med={}({}) \
+         drain med={} finalizer med={} weak med={} unchain med={}\n\
+         termination groups (med us / max us / med count):\n{}\
+         probes (median): jit={}/{} rem={} bc={} spec={} obslots={} obchunks={} \
+         vecs={} consblk={} bufs={}\n",
+        hmed(&|h| h.last_start_total_us),
+        hmax(&|h| h.last_start_total_us),
+        hmed(&|h| h.last_start_clear_us),
+        hmed(&|h| h.last_start_runtime_us),
+        hmed(&|h| h.last_start_runtime_roots as u64),
+        hmed(&|h| h.last_start_remembered_us),
+        hmed(&|h| h.last_start_remembered_roots as u64),
+        hmed(&|h| h.last_start_obsnap_us),
+        hmed(&|h| h.last_start_roots.total_us),
+        hmed(&|h| h.last_start_conssnap_us),
+        hmed(&|h| h.last_start_vecsnap_us),
+        hmed(&|h| h.last_start_jobasm_us),
+        group_table(&|h| &h.last_start_roots),
+        hmed(&|h| h.last_term_roots_total_us),
+        hmax(&|h| h.last_term_roots_total_us),
+        hmed(&|h| h.last_term_join_us),
+        med(|s| s.last_termination_fold_us),
+        hmed(&|h| h.last_term_runtime_us),
+        hmed(&|h| h.last_term_runtime_roots as u64),
+        hmed(&|h| h.last_term_remembered_us),
+        hmed(&|h| h.last_term_remembered_roots as u64),
+        hmed(&|h| h.last_term_ctxroots.total_us),
+        hmed(&|h| h.last_term_newsyms_us),
+        hmed(&|h| h.last_term_newsyms_roots as u64),
+        med(|s| s.mark_us),
+        hmed(&|h| h.last_term_finalizer_us),
+        hmed(&|h| h.last_term_weak_us),
+        hmed(&|h| h.last_term_unchain_us),
+        group_table(&|h| &h.last_term_ctxroots),
+        hmed(&|h| h.probe_jit_compiled_entries as u64),
+        hmed(&|h| h.probe_jit_reloc_slots as u64),
+        hmed(&|h| h.probe_mapped_remembered as u64),
+        hmed(&|h| h.probe_bc_buf_depth as u64),
+        hmed(&|h| h.probe_specpdl_depth as u64),
+        hmed(&|h| h.probe_obarray_slots as u64),
+        hmed(&|h| h.probe_obarray_chunks as u64),
+        hmed(&|h| h.probe_vector_snapshot_len as u64),
+        hmed(&|h| h.probe_cons_blocks as u64),
+        hmed(&|h| h.probe_buffer_count as u64),
+    );
     // Like the other profiling aids, report via panic! so the dump surfaces
     // under nextest's capture (NOT a failure).
-    panic!("DRAIN-KINDS PROFILE (profiling aid, not a failure)\n{lines}{summary}");
+    panic!(
+        "DRAIN-KINDS PROFILE (profiling aid, not a failure)\n{lines}{summary}{handshake_summary}"
+    );
 }
 
 /// Which kinds dominate the concurrent GC's STW termination drain — the
