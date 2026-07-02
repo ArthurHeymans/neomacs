@@ -14561,6 +14561,69 @@ fn jit_bench_subr() {
     );
 }
 
+/// Predicate-call benchmark: a loop calling the primitive `recordp` via the
+/// general `Op::Call` path each iteration — the byte-compile workload's shape
+/// (recordp / symbol-with-pos-p / keywordp arrive as generic `Op::Call`s, not
+/// inlined predicate opcodes). Isolates the Gap-1 predicate fast-path shim: a
+/// speculated `recordp` site collapses to quit-poll + epoch check + tag test,
+/// vs the full generic protocol (bc_buf arg push, backtrace frame, subr entry
+/// resolution + dispatch). Same loop skeleton as [`jit_bench_subr_value`], so
+/// the two are directly comparable.
+#[cfg(feature = "jit")]
+fn jit_bench_pred_value(tier: BenchTier) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    f.ops = vec![
+        Op::StackRef(0),   // 0  [n n]      <- loop head
+        Op::Constant(0),   // 1  [n n 0]
+        Op::Gtr,           // 2  [n c]
+        Op::GotoIfNil(12), // 3  [n]
+        Op::Constant(1),   // 4  'recordp   [n recordp]
+        Op::Constant(2),   // 5  '(a b c)   [n recordp list]
+        Op::Call(1),       // 6  [n nil]    <- predicate call via general dispatch
+        Op::Pop,           // 7  [n]
+        Op::StackRef(0),   // 8  [n n]
+        Op::Sub1,          // 9  [n n-1]    inlined decrement
+        Op::StackSet(1),   // 10 [n-1]
+        Op::Goto(0),       // 11 backedge
+        Op::StackRef(0),   // 12 [n n]
+        Op::Return,        // 13
+    ];
+    f.constants = vec![
+        Value::make_int(0),
+        Value::symbol("recordp"),
+        Value::list_from_slice(&[Value::symbol("a"), Value::symbol("b"), Value::symbol("c")]),
+    ];
+    f.max_stack = 16;
+    tier.apply(&f.runtime);
+    Value::make_bytecode(f)
+}
+
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_pred() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let native = jit_bench_pred_value(BenchTier::Hot);
+    let cold = jit_bench_pred_value(BenchTier::Cold);
+    let n = 2_000_000i64;
+    let want = Value::make_int(0);
+    let nat = jit_bench_min(&mut ev, native, n, want, 9);
+    let int = jit_bench_min(&mut ev, cold, n, want, 9);
+    panic!(
+        "BENCH pred-loop(2M recordp-calls): native {nat:?} interp {int:?} -> {:.2}x",
+        int.as_secs_f64() / nat.as_secs_f64()
+    );
+}
+
 /// Allocation-throughput benchmark: a loop that conses one `(n . n)` cell per
 /// iteration and immediately discards it (garbage), churning the cons allocator
 /// and the GC without growing the live heap. Isolates allocation + collection
