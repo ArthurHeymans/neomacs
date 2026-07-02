@@ -6900,3 +6900,99 @@ fn process_defvars_match_gnu_defaults() {
         "OK (t nil (internal-default-interrupt-process) (internal-default-signal-process) nil 65536 t 1 t t t)"
     );
 }
+
+#[test]
+fn read_process_output_max_limits_filter_chunks_and_snapshots_at_creation() {
+    crate::test_utils::init_test_tracing();
+    let result = runtime_startup_eval_one(
+        r#"(let ((chunks nil)
+                 (p nil))
+             (unwind-protect
+                 (progn
+                   (let ((read-process-output-max 5)
+                         (process-connection-type nil))
+                     (setq p
+                           (make-process
+                            :name "readmax-unit"
+                            :buffer nil
+                            :connection-type 'pipe
+                            :command (list "/bin/sh" "-c" "printf 0123456789abcdef")
+                            :filter (lambda (_ string)
+                                      (push (length string) chunks)))))
+                   (setq read-process-output-max 1000)
+                   (while (process-live-p p)
+                     (accept-process-output p 1))
+                   (while (accept-process-output p 0))
+                   (nreverse chunks))
+               (when p
+                 (ignore-errors
+                   (delete-process p)))))"#,
+    );
+
+    assert_eq!(result, "OK (5 5 5 1)");
+}
+
+#[test]
+fn read_process_output_carries_split_decode_sequences_between_chunks() {
+    crate::test_utils::init_test_tracing();
+    let result = runtime_startup_eval_one(
+        r#"(let ((process-connection-type nil))
+             (let ((probe
+                    (lambda (script coding)
+                      (let ((chunks nil)
+                            (p nil))
+                        (unwind-protect
+                            (progn
+                              (let ((read-process-output-max 1))
+                                (setq p
+                                      (make-process
+                                       :name "readmax-utf8-unit"
+                                       :buffer nil
+                                       :connection-type 'pipe
+                                       :coding coding
+                                       :command (list "/bin/sh" "-c" script)
+                                       :filter (lambda (_ string)
+                                                 (push (list (length string)
+                                                             (string-to-list string))
+                                                       chunks)))))
+                              (while (process-live-p p)
+                                (accept-process-output p 1))
+                              (while (accept-process-output p 0))
+                              (nreverse chunks))
+                          (when p
+                            (ignore-errors
+                              (delete-process p))))))))
+               (list (funcall probe "printf '\\303\\251X'" 'utf-8-unix)
+                     (funcall probe "printf '\\303'" 'utf-8-unix)
+                     (funcall probe "printf '\\r\\nX'" 'utf-8-dos))))"#,
+    );
+
+    assert_eq!(
+        result,
+        "OK (((1 (233)) (1 (88))) ((1 (4194243))) ((1 (10)) (1 (88))))"
+    );
+}
+
+#[test]
+fn adaptive_read_buffering_updates_delay_with_gnu_thresholds() {
+    let mut processes = ProcessManager::new();
+    processes.set_default_read_config(ProcessReadConfig {
+        readmax: 1024,
+        adaptive_read_buffering: 1,
+    });
+    let id = processes.create_process("adaptive-read".into(), Value::NIL, "prog".into(), vec![]);
+    let process = processes.get_mut(id).expect("process");
+
+    update_process_adaptive_read_buffering(process, 42, false);
+    assert_eq!(process.read_output_delay, Duration::from_millis(20));
+    assert!(process.read_output_skip);
+
+    process.read_output_skip = false;
+    update_process_adaptive_read_buffering(process, 1024, true);
+    assert_eq!(process.read_output_delay, Duration::from_millis(10));
+    assert!(process.read_output_skip);
+
+    update_process_adaptive_read_buffering(process, 1024, true);
+    assert_eq!(process.read_output_delay, Duration::ZERO);
+    assert!(!process.read_output_skip);
+}

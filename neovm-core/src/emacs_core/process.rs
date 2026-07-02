@@ -287,6 +287,27 @@ use crate::window::FrameManager;
 /// Unique identifier for a process.
 pub type ProcessId = u64;
 
+const DEFAULT_READ_PROCESS_OUTPUT_MAX: usize = 65_536;
+const READ_PROCESS_OUTPUT_MAX_CEILING: usize = i32::MAX as usize;
+const READ_OUTPUT_DELAY_INCREMENT_MS: u64 = 10;
+const READ_OUTPUT_DELAY_MAX_MS: u64 = READ_OUTPUT_DELAY_INCREMENT_MS * 5;
+const READ_OUTPUT_DELAY_MAX_MAX_MS: u64 = READ_OUTPUT_DELAY_INCREMENT_MS * 7;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ProcessReadConfig {
+    readmax: usize,
+    adaptive_read_buffering: u8,
+}
+
+impl Default for ProcessReadConfig {
+    fn default() -> Self {
+        Self {
+            readmax: DEFAULT_READ_PROCESS_OUTPUT_MAX,
+            adaptive_read_buffering: 0,
+        }
+    }
+}
+
 thread_local! {
     /// Name registry keyed by process id, used by the printer to render
     /// `#<process NAME>` without threading a `ProcessManager` into the
@@ -757,6 +778,14 @@ pub struct Process {
     pub childp: Value,
     /// Queued input entries `(STRING . (OFFSET . LENGTH))`, matching GNU's `write_queue`.
     pub write_queue: Value,
+    /// Maximum bytes read by one `read_process_output` pass.
+    pub readmax: usize,
+    /// GNU's tri-state adaptive read buffering flag: 0=nil, 1=t, 2=other non-nil.
+    pub adaptive_read_buffering: u8,
+    /// Current adaptive read delay.
+    pub read_output_delay: Duration,
+    /// Whether the next non-targeted service pass should skip this process once.
+    pub read_output_skip: bool,
     /// Captured stdout.
     pub stdout: String,
     /// Captured stderr.
@@ -775,6 +804,8 @@ pub struct Process {
     pub stderrproc: Value,
     /// Current decoding coding-system.
     pub coding_decode: Value,
+    /// Incomplete bytes carried across process output reads for streaming decoders.
+    pub decoding_carryover: Vec<u8>,
     /// Current encoding coding-system.
     pub coding_encode: Value,
     /// True once Lisp explicitly changes this process's coding system.
@@ -874,6 +905,7 @@ pub struct ProcessManager {
     processes: HashMap<ProcessId, Process>,
     deleted_processes: HashMap<ProcessId, Process>,
     next_id: ProcessId,
+    default_read_config: ProcessReadConfig,
     /// Environment variable overrides (for `setenv`/`getenv`).
     env_overrides: HashMap<LispString, Option<LispString>>,
     wait_backend: ProcessWaitBackend,
@@ -1349,6 +1381,70 @@ fn process_coding_is_binary(coding: Value) -> bool {
         )
 }
 
+fn process_coding_uses_utf8_carryover(coding: Value) -> bool {
+    let name = process_coding_symbol_name(coding);
+    name == "emacs-internal"
+        || name == "mule-utf-8"
+        || name == "cp65001"
+        || name.starts_with("utf-8")
+        || name.starts_with("prefer-utf-8")
+        || name.starts_with("undecided")
+}
+
+fn process_coding_uses_dos_eol_carryover(coding: Value) -> bool {
+    let name = process_coding_symbol_name(coding);
+    name == "dos" || name.ends_with("-dos")
+}
+
+fn utf8_expected_sequence_len(lead: u8) -> Option<usize> {
+    match lead {
+        0xC2..=0xDF => Some(2),
+        0xE0..=0xEF => Some(3),
+        0xF0..=0xF7 => Some(4),
+        0xF8..=0xFB => Some(5),
+        _ => None,
+    }
+}
+
+fn utf8_complete_prefix_len(bytes: &[u8]) -> usize {
+    let len = bytes.len();
+    let max_suffix = len.min(5);
+    for suffix_len in 1..=max_suffix {
+        let start = len - suffix_len;
+        let lead = bytes[start];
+        if let Some(expected) = utf8_expected_sequence_len(lead) {
+            let suffix = &bytes[start + 1..];
+            if suffix_len < expected && suffix.iter().all(|byte| (byte & 0xC0) == 0x80) {
+                return start;
+            }
+            return len;
+        }
+        if (lead & 0xC0) != 0x80 {
+            return len;
+        }
+    }
+    len
+}
+
+fn process_output_decode_prefix_len(coding: Value, bytes: &[u8], flush: bool) -> usize {
+    if flush {
+        return bytes.len();
+    }
+
+    let mut decode_len = if process_coding_uses_utf8_carryover(coding) {
+        utf8_complete_prefix_len(bytes)
+    } else {
+        bytes.len()
+    };
+    if process_coding_uses_dos_eol_carryover(coding)
+        && decode_len > 0
+        && bytes[decode_len - 1] == b'\r'
+    {
+        decode_len -= 1;
+    }
+    decode_len
+}
+
 /// Encode the data passed to `process-send-string`/`process-send-region`
 /// through a process's ENCODE coding system, mirroring GNU `send_process`
 /// (src/process.c).  A `binary`/`raw-text`/`no-conversion`/nil encode coding
@@ -1371,14 +1467,28 @@ fn encode_process_send_input(
     LispString::from_unibyte(bytes)
 }
 
-fn decode_process_output_bytes(bytes: &[u8], coding: Value) -> LispString {
+fn decode_process_output_bytes(proc: &mut Process, bytes: &[u8], flush: bool) -> LispString {
+    let coding = proc.coding_decode;
     if process_coding_is_binary(coding) {
+        proc.decoding_carryover.clear();
         LispString::from_unibyte(bytes.to_vec())
     } else {
+        let mut combined = Vec::with_capacity(proc.decoding_carryover.len() + bytes.len());
+        combined.append(&mut proc.decoding_carryover);
+        combined.extend_from_slice(bytes);
+        let decode_len = process_output_decode_prefix_len(coding, &combined, flush);
+        if decode_len < combined.len() {
+            proc.decoding_carryover
+                .extend_from_slice(&combined[decode_len..]);
+        }
+
         // Issue #131: decode straight to Emacs bytes so process output keeps real
         // PUA glyphs and eight-bit raw bytes instead of round-tripping through the
         // lossy storage-string form (the old `from_utf8(decode_bytes(..))`).
-        crate::encoding::decode_bytes_to_lisp_string(bytes, process_coding_symbol_name(coding))
+        crate::encoding::decode_bytes_to_lisp_string(
+            &combined[..decode_len],
+            process_coding_symbol_name(coding),
+        )
     }
 }
 
@@ -1389,6 +1499,54 @@ fn process_output_runtime_string(output: &LispString) -> String {
     // `read_process_output` as a `LispString`. A lossy UTF-8 rendering here
     // keeps real Unicode (incl. PUA) and avoids the buggy storage-string form.
     crate::emacs_core::emacs_char::to_utf8_lossy(output.as_bytes())
+}
+
+fn process_read_buffer_len(proc: &Process) -> usize {
+    proc.readmax.clamp(1, READ_PROCESS_OUTPUT_MAX_CEILING)
+}
+
+fn update_process_adaptive_read_buffering(proc: &mut Process, nbytes: usize, full_read: bool) {
+    if nbytes == 0 || proc.adaptive_read_buffering == 0 {
+        return;
+    }
+
+    let mut delay_ms = proc.read_output_delay.as_millis().min(u64::MAX as u128) as u64;
+    if nbytes < 256 {
+        delay_ms =
+            (delay_ms + 2 * READ_OUTPUT_DELAY_INCREMENT_MS).min(READ_OUTPUT_DELAY_MAX_MAX_MS);
+    } else if delay_ms > 0 && full_read {
+        delay_ms = delay_ms.saturating_sub(READ_OUTPUT_DELAY_INCREMENT_MS);
+    }
+
+    proc.read_output_delay = Duration::from_millis(delay_ms);
+    proc.read_output_skip = delay_ms > 0;
+}
+
+fn process_output_read_from_io_result(
+    proc: &mut Process,
+    result: std::io::Result<usize>,
+    bytes: &[u8],
+    full_read_len: usize,
+) -> ProcessOutputRead {
+    match result {
+        Ok(0) if proc.decoding_carryover.is_empty() => ProcessOutputRead::Eof,
+        Ok(0) => {
+            let bytes_read = proc.decoding_carryover.len();
+            ProcessOutputRead::Data {
+                data: decode_process_output_bytes(proc, &[], true),
+                bytes_read,
+            }
+        }
+        Ok(n) => {
+            update_process_adaptive_read_buffering(proc, n, n == full_read_len);
+            ProcessOutputRead::Data {
+                data: decode_process_output_bytes(proc, &bytes[..n], false),
+                bytes_read: n,
+            }
+        }
+        Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => ProcessOutputRead::WouldBlock,
+        Err(_) => ProcessOutputRead::Eof,
+    }
 }
 
 #[cfg(unix)]
@@ -1826,6 +1984,7 @@ fn set_network_process_coding(
 ) {
     let (decode, encode) = network_process_coding_pair(coding, default_coding, buffer_multibyte);
     proc.coding_decode = decode;
+    proc.decoding_carryover.clear();
     proc.coding_encode = encode;
 }
 
@@ -1868,6 +2027,7 @@ fn set_explicit_process_coding(proc: &mut Process, coding: Value) {
     }
     let (decode, encode) = explicit_process_coding_pair(coding);
     proc.coding_decode = decode;
+    proc.decoding_carryover.clear();
     proc.coding_encode = encode;
     proc.coding_explicitly_set = true;
 }
@@ -1978,29 +2138,23 @@ fn configure_serial_contact(current: Value, contact: Value) -> EvalResult {
 
 #[derive(Debug)]
 enum ProcessOutputRead {
-    Data(LispString),
+    Data { data: LispString, bytes_read: usize },
     WouldBlock,
     Eof,
     NoSource,
 }
 
 impl ProcessOutputRead {
-    fn from_io_result(
-        result: std::io::Result<usize>,
-        bytes: &[u8],
-        coding: Value,
-    ) -> ProcessOutputRead {
-        match result {
-            Ok(0) => Self::Eof,
-            Ok(n) => Self::Data(decode_process_output_bytes(&bytes[..n], coding)),
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => Self::WouldBlock,
-            Err(_) => Self::Eof,
+    fn data(&self) -> Option<&LispString> {
+        match self {
+            Self::Data { data, .. } => Some(data),
+            Self::WouldBlock | Self::Eof | Self::NoSource => None,
         }
     }
 
     fn into_legacy_option(self) -> Option<LispString> {
         match self {
-            Self::Data(data) => Some(data),
+            Self::Data { data, .. } => Some(data),
             Self::WouldBlock => Some(LispString::from_utf8("")),
             Self::Eof | Self::NoSource => None,
         }
@@ -3151,9 +3305,39 @@ impl ProcessManager {
             processes: HashMap::new(),
             deleted_processes: HashMap::new(),
             next_id: 1,
+            default_read_config: ProcessReadConfig::default(),
             env_overrides: HashMap::new(),
             wait_backend: ProcessWaitBackend::new(),
         }
+    }
+
+    fn set_default_read_config(&mut self, config: ProcessReadConfig) {
+        self.default_read_config = config;
+    }
+
+    pub(crate) fn adaptive_read_timeout(&self) -> Option<Duration> {
+        self.processes
+            .values()
+            .filter(|process| process.adaptive_read_buffering != 0)
+            .filter_map(|process| {
+                (!process.read_output_delay.is_zero()).then_some(process.read_output_delay)
+            })
+            .min()
+            .map(|delay| delay.min(Duration::from_millis(READ_OUTPUT_DELAY_MAX_MS)))
+    }
+
+    fn clear_adaptive_read_skip_if_needed(&mut self, id: ProcessId) -> bool {
+        let Some(proc) = self.processes.get_mut(&id) else {
+            return false;
+        };
+        if proc.adaptive_read_buffering == 0
+            || proc.read_output_delay.is_zero()
+            || !proc.read_output_skip
+        {
+            return false;
+        }
+        proc.read_output_skip = false;
+        true
     }
 
     /// Create a new process record.  Returns the process id.
@@ -3259,6 +3443,7 @@ impl ProcessManager {
         } else {
             Value::NIL
         };
+        let read_config = self.default_read_config;
         let proc = Process {
             id,
             name: process_name_lisp_value(&name),
@@ -3272,6 +3457,10 @@ impl ProcessManager {
             buffer,
             childp,
             write_queue: Value::NIL,
+            readmax: read_config.readmax,
+            adaptive_read_buffering: read_config.adaptive_read_buffering,
+            read_output_delay: Duration::ZERO,
+            read_output_skip: false,
             stdout: String::new(),
             stderr: String::new(),
             query_on_exit_flag: true,
@@ -3281,6 +3470,7 @@ impl ProcessManager {
             plist: Value::NIL,
             stderrproc: Value::NIL,
             coding_decode: Value::symbol("utf-8-unix"),
+            decoding_carryover: Vec::new(),
             coding_encode: Value::symbol("utf-8-unix"),
             coding_explicitly_set: false,
             explicit_coding_status_deferred_once: false,
@@ -3889,6 +4079,7 @@ impl ProcessManager {
         let Some(proc) = self.processes.get_mut(&id) else {
             return ProcessOutputRead::NoSource;
         };
+        let read_len = process_read_buffer_len(proc);
         let Some(stdout) = proc.child_stdout.as_mut() else {
             return ProcessOutputRead::NoSource;
         };
@@ -3905,10 +4096,11 @@ impl ProcessManager {
             }
         }
 
-        let mut buf = vec![0u8; 4096];
-        let read =
-            ProcessOutputRead::from_io_result(stdout.read(&mut buf), &buf, proc.coding_decode);
-        if let ProcessOutputRead::Data(ref data) = read {
+        let mut buf = vec![0u8; read_len];
+        let full_read_len = buf.len();
+        let result = stdout.read(&mut buf);
+        let read = process_output_read_from_io_result(proc, result, &buf, full_read_len);
+        if let Some(data) = read.data() {
             proc.stdout.push_str(&process_output_runtime_string(data));
         }
         read
@@ -3923,6 +4115,7 @@ impl ProcessManager {
         let Some(proc) = self.processes.get_mut(&id) else {
             return ProcessOutputRead::NoSource;
         };
+        let read_len = process_read_buffer_len(proc);
         let Some(stderr) = proc.child_stderr.as_mut() else {
             return ProcessOutputRead::NoSource;
         };
@@ -3937,10 +4130,11 @@ impl ProcessManager {
             }
         }
 
-        let mut buf = vec![0u8; 4096];
-        let read =
-            ProcessOutputRead::from_io_result(stderr.read(&mut buf), &buf, proc.coding_decode);
-        if let ProcessOutputRead::Data(ref data) = read {
+        let mut buf = vec![0u8; read_len];
+        let full_read_len = buf.len();
+        let result = stderr.read(&mut buf);
+        let read = process_output_read_from_io_result(proc, result, &buf, full_read_len);
+        if let Some(data) = read.data() {
             proc.stderr.push_str(&process_output_runtime_string(data));
         }
         read
@@ -3953,14 +4147,16 @@ impl ProcessManager {
         let Some(proc) = self.processes.get_mut(&id) else {
             return ProcessOutputRead::NoSource;
         };
+        let read_len = process_read_buffer_len(proc);
         let Some(reader) = proc.pty_reader.as_mut() else {
             return ProcessOutputRead::NoSource;
         };
 
-        let mut buf = vec![0u8; 4096];
-        let read =
-            ProcessOutputRead::from_io_result(reader.read(&mut buf), &buf, proc.coding_decode);
-        if let ProcessOutputRead::Data(ref data) = read {
+        let mut buf = vec![0u8; read_len];
+        let full_read_len = buf.len();
+        let result = reader.read(&mut buf);
+        let read = process_output_read_from_io_result(proc, result, &buf, full_read_len);
+        if let Some(data) = read.data() {
             proc.stdout.push_str(&process_output_runtime_string(data));
         }
         read
@@ -3971,62 +4167,88 @@ impl ProcessManager {
             return ProcessOutputRead::NoSource;
         };
 
+        let read_len = process_read_buffer_len(proc);
         if let Some(ref mut tls) = proc.tls_stream {
-            let mut buf = vec![0u8; 4096];
-            let read = ProcessOutputRead::from_io_result(
-                tls.read_process_output(&mut buf),
-                &buf,
-                proc.coding_decode,
-            );
-            if let ProcessOutputRead::Data(ref data) = read {
+            let mut buf = vec![0u8; read_len];
+            let full_read_len = buf.len();
+            let result = tls.read_process_output(&mut buf);
+            let read = process_output_read_from_io_result(proc, result, &buf, full_read_len);
+            if let Some(data) = read.data() {
                 proc.stdout.push_str(&process_output_runtime_string(data));
             }
             return read;
         }
 
-        if let Some(socket) = proc.network_socket.as_mut() {
-            let mut buf = vec![0u8; 4096];
-            let read = match socket.read_stream_output(&mut buf) {
-                Some(result) => ProcessOutputRead::from_io_result(result, &buf, proc.coding_decode),
-                None => match socket {
-                    NetworkSocket::UdpSocket(socket) => match socket.recv_from(&mut buf) {
-                        Ok((n, addr)) => {
-                            proc.datagram_socket_addr = Some(addr);
-                            proc.datagram_address = socket_addr_to_lisp_value(addr);
-                            ProcessOutputRead::Data(decode_process_output_bytes(
-                                &buf[..n],
-                                proc.coding_decode,
-                            ))
+        if proc.network_socket.is_some() {
+            enum RawNetworkRead {
+                Stream(std::io::Result<usize>),
+                Udp(std::io::Result<(usize, SocketAddr)>),
+                #[cfg(unix)]
+                UnixDatagram(std::io::Result<(usize, UnixSocketAddr)>),
+                Unsupported,
+            }
+
+            let mut buf = vec![0u8; read_len];
+            let full_read_len = buf.len();
+            let raw_read = {
+                let socket = proc.network_socket.as_mut().expect("checked above");
+                match socket.read_stream_output(&mut buf) {
+                    Some(result) => RawNetworkRead::Stream(result),
+                    None => match socket {
+                        NetworkSocket::UdpSocket(socket) => {
+                            RawNetworkRead::Udp(socket.recv_from(&mut buf))
                         }
-                        Err(ref err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                            ProcessOutputRead::WouldBlock
+                        #[cfg(unix)]
+                        NetworkSocket::UnixDatagram(socket) => {
+                            RawNetworkRead::UnixDatagram(socket.recv_from(&mut buf))
                         }
-                        Err(_) => ProcessOutputRead::Eof,
+                        _ => RawNetworkRead::Unsupported,
                     },
-                    #[cfg(unix)]
-                    NetworkSocket::UnixDatagram(socket) => match socket.recv_from(&mut buf) {
-                        Ok((n, addr)) => {
-                            if let Some(path) = addr.as_pathname() {
-                                let path = path.to_path_buf();
-                                proc.datagram_unix_path = Some(path.clone());
-                                proc.datagram_address = Value::heap_string(
-                                    crate::emacs_core::fileio::path_to_lisp_file_name(&path),
-                                );
-                            }
-                            ProcessOutputRead::Data(decode_process_output_bytes(
-                                &buf[..n],
-                                proc.coding_decode,
-                            ))
-                        }
-                        Err(ref err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                            ProcessOutputRead::WouldBlock
-                        }
-                        Err(_) => ProcessOutputRead::Eof,
-                    },
-                    _ => ProcessOutputRead::WouldBlock,
-                },
+                }
             };
-            if let ProcessOutputRead::Data(ref data) = read {
+            let read = match raw_read {
+                RawNetworkRead::Stream(result) => {
+                    process_output_read_from_io_result(proc, result, &buf, full_read_len)
+                }
+                RawNetworkRead::Udp(result) => match result {
+                    Ok((n, addr)) => {
+                        update_process_adaptive_read_buffering(proc, n, n == full_read_len);
+                        proc.datagram_socket_addr = Some(addr);
+                        proc.datagram_address = socket_addr_to_lisp_value(addr);
+                        ProcessOutputRead::Data {
+                            data: decode_process_output_bytes(proc, &buf[..n], false),
+                            bytes_read: n,
+                        }
+                    }
+                    Err(ref err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                        ProcessOutputRead::WouldBlock
+                    }
+                    Err(_) => ProcessOutputRead::Eof,
+                },
+                #[cfg(unix)]
+                RawNetworkRead::UnixDatagram(result) => match result {
+                    Ok((n, addr)) => {
+                        update_process_adaptive_read_buffering(proc, n, n == full_read_len);
+                        if let Some(path) = addr.as_pathname() {
+                            let path = path.to_path_buf();
+                            proc.datagram_unix_path = Some(path.clone());
+                            proc.datagram_address = Value::heap_string(
+                                crate::emacs_core::fileio::path_to_lisp_file_name(&path),
+                            );
+                        }
+                        ProcessOutputRead::Data {
+                            data: decode_process_output_bytes(proc, &buf[..n], false),
+                            bytes_read: n,
+                        }
+                    }
+                    Err(ref err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                        ProcessOutputRead::WouldBlock
+                    }
+                    Err(_) => ProcessOutputRead::Eof,
+                },
+                RawNetworkRead::Unsupported => ProcessOutputRead::WouldBlock,
+            };
+            if let Some(data) = read.data() {
                 proc.stdout.push_str(&process_output_runtime_string(data));
             }
             return read;
@@ -4868,6 +5090,9 @@ impl ProcessManager {
                 client.inherit_coding_system_flag = inherit_coding_system_flag;
                 client.thread = server_thread;
                 client.query_on_exit_flag = query_on_exit_flag;
+                client.adaptive_read_buffering = 0;
+                client.read_output_delay = Duration::ZERO;
+                client.read_output_skip = false;
             }
             self.register_socket_fd(client_id).ok();
 
@@ -4942,6 +5167,32 @@ fn dedupe_process_ids(process_ids: impl IntoIterator<Item = ProcessId>) -> Vec<P
 }
 
 impl super::eval::Context {
+    fn visible_process_read_config(&self) -> ProcessReadConfig {
+        let readmax = self
+            .visible_variable_value_or_nil("read-process-output-max")
+            .as_fixnum()
+            .unwrap_or(DEFAULT_READ_PROCESS_OUTPUT_MAX as i64)
+            .clamp(1, READ_PROCESS_OUTPUT_MAX_CEILING as i64) as usize;
+        let adaptive_value = self.visible_variable_value_or_nil("process-adaptive-read-buffering");
+        let adaptive_read_buffering = if adaptive_value.is_nil() {
+            0
+        } else if adaptive_value == Value::T {
+            1
+        } else {
+            2
+        };
+
+        ProcessReadConfig {
+            readmax,
+            adaptive_read_buffering,
+        }
+    }
+
+    fn sync_process_read_config_from_visible_variables(&mut self) {
+        let config = self.visible_process_read_config();
+        self.processes.set_default_read_config(config);
+    }
+
     /// Whether `delete-exited-processes` is non-nil (GNU
     /// `delete_exited_processes`, default `t`).  Controls whether a terminated
     /// process is removed from the process list once its status is reported.
@@ -5138,17 +5389,20 @@ impl super::eval::Context {
 
         loop {
             match self.processes.read_process_output_result(stderr_id) {
-                ProcessOutputRead::Data(ref data) if !data.is_empty() => {
-                    outcome.record_activity(is_target);
-                    let filter = self
-                        .processes
-                        .get(stderr_id)
-                        .map(|p| p.filter)
-                        .unwrap_or(Value::NIL);
-                    self.run_process_filter_callback(stderr_id, filter, data)?;
+                ProcessOutputRead::Data { data, bytes_read } => {
+                    if bytes_read > 0 {
+                        outcome.record_activity(is_target);
+                    }
+                    if !data.is_empty() {
+                        let filter = self
+                            .processes
+                            .get(stderr_id)
+                            .map(|p| p.filter)
+                            .unwrap_or(Value::NIL);
+                        self.run_process_filter_callback(stderr_id, filter, &data)?;
+                    }
                 }
-                ProcessOutputRead::Data(_)
-                | ProcessOutputRead::WouldBlock
+                ProcessOutputRead::WouldBlock
                 | ProcessOutputRead::Eof
                 | ProcessOutputRead::NoSource => break,
             }
@@ -5168,17 +5422,21 @@ impl super::eval::Context {
 
         loop {
             match self.processes.read_process_output_result(pid) {
-                ProcessOutputRead::Data(ref data) if !data.is_empty() => {
-                    saw_output = true;
-                    outcome.record_activity(is_target);
-                    let filter = self
-                        .processes
-                        .get(pid)
-                        .map(|p| p.filter)
-                        .unwrap_or(Value::NIL);
-                    self.run_process_filter_callback(pid, filter, data)?;
+                ProcessOutputRead::Data { data, bytes_read } => {
+                    if bytes_read > 0 {
+                        saw_output = true;
+                        outcome.record_activity(is_target);
+                    }
+                    if !data.is_empty() {
+                        let filter = self
+                            .processes
+                            .get(pid)
+                            .map(|p| p.filter)
+                            .unwrap_or(Value::NIL);
+                        self.run_process_filter_callback(pid, filter, &data)?;
+                    }
                 }
-                ProcessOutputRead::Data(_) | ProcessOutputRead::WouldBlock => {
+                ProcessOutputRead::WouldBlock => {
                     let disposition = if saw_output {
                         ProcessOutputDrainDisposition::Output
                     } else {
@@ -5433,7 +5691,11 @@ impl super::eval::Context {
             }) {
                 continue;
             }
+            if target_process.is_none() && self.processes.clear_adaptive_read_skip_if_needed(pid) {
+                continue;
+            }
 
+            self.sync_process_read_config_from_visible_variables();
             for event in self.processes.accept_network_server_connections(pid) {
                 // GNU `server_accept_connection` runs inside the wait; the
                 // accept (and its "open from" sentinel) never terminates it.
@@ -5481,16 +5743,22 @@ impl super::eval::Context {
             let mut handled_terminal_eof = false;
             loop {
                 match read_result {
-                    ProcessOutputRead::Data(ref data) if !data.is_empty() => {
-                        saw_output = true;
-                        outcome.record_activity(is_target);
-
-                        let filter = self
-                            .processes
-                            .get(pid)
-                            .map(|p| p.filter)
-                            .unwrap_or(Value::NIL);
-                        self.run_process_filter_callback(pid, filter, data)?;
+                    ProcessOutputRead::Data { data, bytes_read } => {
+                        if bytes_read > 0 {
+                            saw_output = true;
+                            outcome.record_activity(is_target);
+                        }
+                        if !data.is_empty() {
+                            let filter = self
+                                .processes
+                                .get(pid)
+                                .map(|p| p.filter)
+                                .unwrap_or(Value::NIL);
+                            self.run_process_filter_callback(pid, filter, &data)?;
+                        }
+                        if bytes_read == 0 && data.is_empty() {
+                            break;
+                        }
                     }
                     ProcessOutputRead::Eof if is_stderr_pipe => {
                         if let Some(owner_id) = self.processes.stderr_pipe_owner(pid)
@@ -5600,9 +5868,7 @@ impl super::eval::Context {
                         }
                         break;
                     }
-                    ProcessOutputRead::Data(_)
-                    | ProcessOutputRead::WouldBlock
-                    | ProcessOutputRead::NoSource => break,
+                    ProcessOutputRead::WouldBlock | ProcessOutputRead::NoSource => break,
                 }
 
                 // GNU's wait loop does a no-wait follow-up pass after reading
@@ -5686,19 +5952,24 @@ impl super::eval::Context {
         let mut saw_output = false;
         loop {
             match self.processes.read_process_output_result(pid) {
-                ProcessOutputRead::Data(ref data) if !data.is_empty() => {
-                    saw_output = true;
-                    let filter = self
-                        .processes
-                        .get(pid)
-                        .map(|p| p.filter)
-                        .unwrap_or(Value::NIL);
-                    self.run_process_filter_callback(pid, filter, data)?;
+                ProcessOutputRead::Data { data, bytes_read } => {
+                    if bytes_read > 0 {
+                        saw_output = true;
+                    }
+                    if !data.is_empty() {
+                        let filter = self
+                            .processes
+                            .get(pid)
+                            .map(|p| p.filter)
+                            .unwrap_or(Value::NIL);
+                        self.run_process_filter_callback(pid, filter, &data)?;
+                    }
                 }
-                ProcessOutputRead::Data(_)
-                | ProcessOutputRead::WouldBlock
+                ProcessOutputRead::WouldBlock
                 | ProcessOutputRead::Eof
-                | ProcessOutputRead::NoSource => break,
+                | ProcessOutputRead::NoSource => {
+                    break;
+                }
             }
         }
         if let Some(proc) = self.processes.get_mut(pid)
@@ -9659,6 +9930,7 @@ pub(crate) fn builtin_make_network_process(
         return Ok(Value::NIL);
     }
     check_keyword_arg_pairs(&args)?;
+    eval.sync_process_read_config_from_visible_variables();
 
     // ---- Parse all keyword arguments ----
     let mut name: Option<LispString> = None;
@@ -11596,6 +11868,7 @@ pub(crate) fn builtin_make_pipe_process(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    eval.sync_process_read_config_from_visible_variables();
     builtin_make_pipe_process_impl(
         &mut eval.processes,
         &mut eval.buffers,
@@ -11718,6 +11991,7 @@ pub(crate) fn builtin_make_serial_process(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
+    eval.sync_process_read_config_from_visible_variables();
     builtin_make_serial_process_impl(
         &mut eval.processes,
         &mut eval.buffers,
@@ -11986,6 +12260,7 @@ pub(crate) fn builtin_start_process(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_min_args("start-process", &args, 3)?;
+    eval.sync_process_read_config_from_visible_variables();
     let name = expect_process_name_lisp_string(&args[0])?;
     let buffer = parse_make_process_buffer(eval, &args[1])?;
     let program = if args[2].is_nil() {
@@ -12774,6 +13049,7 @@ pub(crate) fn builtin_make_process(
     };
     let process_environment = Some(eval.visible_variable_value_or_nil("process-environment"));
     let subprocess_cwd = super::callproc::subprocess_default_directory(eval);
+    eval.sync_process_read_config_from_visible_variables();
     builtin_make_process_impl_with_environment(
         &mut eval.processes,
         &mut eval.buffers,
@@ -13524,6 +13800,7 @@ pub(crate) fn builtin_set_process_coding_system_impl(
         )
     })?;
     proc.coding_decode = decoding;
+    proc.decoding_carryover.clear();
     proc.coding_encode = encoding;
     proc.coding_explicitly_set = true;
     Ok(Value::NIL)
@@ -13543,6 +13820,7 @@ pub(crate) fn builtin_set_buffer_process_coding_system(
         )
     })?;
     proc.coding_decode = args[0];
+    proc.decoding_carryover.clear();
     proc.coding_encode = args[1];
     proc.coding_explicitly_set = true;
     Ok(Value::NIL)

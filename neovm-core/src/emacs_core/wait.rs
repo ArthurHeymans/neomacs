@@ -1022,6 +1022,12 @@ impl super::eval::Context {
                 timeout = timeout.min(next);
             }
         }
+        if request.services_process_output()
+            && request.target_process().is_none()
+            && let Some(next) = self.processes.adaptive_read_timeout()
+        {
+            timeout = timeout.min(next);
+        }
 
         timeout
     }

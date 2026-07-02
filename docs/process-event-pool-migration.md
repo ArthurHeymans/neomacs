@@ -105,7 +105,7 @@ Key contract points verified empirically this cycle:
 | D7 | `stop-process` eagerly sets status `stop` for real subprocesses | **FIXED — S5** (`stop-process` sends only SIGTSTP; stop/run status comes from `waitpid(WUNTRACED|WCONTINUED)`) |
 | D8 | seqpacket not advertised in `featurep 'make-network-process` though fully implemented | **FIXED** `69b874f9b` |
 | D9 | Child exit observed only inside wait iterations; `process-status` stale outside waits (the load-flaky family's root cause) | **IN TREE — S6** (see §4) |
-| D10 | Fixed 4096-byte reads; no `read-process-output-max`; no adaptive read buffering | **OPEN — S7** |
+| D10 | Fixed 4096-byte reads; no `read-process-output-max`; no adaptive read buffering | **FIXED — S7** |
 | D11 | `process-send-string` = `write_all`+`flush`; never re-enters the wait; `write_queue` field exists unused | **OPEN — S8** |
 | D12 | DNS always blocking, even for `:nowait` | **OPEN — S9** |
 | D13 | 50ms polling cap per wait iteration instead of exact timeouts | **OPEN — S9** |
@@ -280,26 +280,61 @@ Validated gates for this slice:
   remaining (`div_core_divergence_surface_process_attributes_running_child_combo`
   and `div_v3_window_margins_fringes_body_width_combo`).
 
+## 4.2. LANDED — S7 (current in-tree state)
+
+S7 implemented GNU's per-process output read sizing and adaptive
+read-buffering bookkeeping:
+
+- `read-process-output-max` is now snapshotted into each process record at
+  allocation time (`readmax`), clamped to GNU's `[1, INT_MAX]` range, and used
+  by all output sources: child stdout, split stderr pipe-processes, ptys, TLS
+  streams, stream sockets, and datagram sockets.
+- Lisp-facing creators refresh the snapshot source before allocation:
+  `start-process`, `make-process`, `make-network-process`,
+  `make-pipe-process`, and `make-serial-process`. Existing Rust helper
+  constructors keep the GNU default (`65536`, adaptive disabled).
+- Server accepts refresh the read config at accept time before allocating the
+  client process, matching GNU's `server_accept_connection` -> `make_process`
+  path for `readmax`. Accepted clients keep adaptive buffering disabled,
+  matching the GNU source path, which does not set
+  `p->adaptive_read_buffering` there.
+- `process-adaptive-read-buffering` now drives GNU's delay ladder for positive
+  reads: short reads (`<256` bytes) add 20ms up to 70ms; full reads subtract
+  10ms; non-targeted service passes skip a delayed process once and wait-loop
+  timeouts consider the adaptive delay capped at 50ms. Targeted
+  `accept-process-output PROC` remains eager, matching GNU's "not reading
+  output for a specific process" guard.
+- Process output decoding now keeps GNU-style carryover between reads before
+  calling filters. Verified cases include split UTF-8 sequences, incomplete
+  UTF-8 flushed at EOF, and split DOS `\r\n` under `utf-8-dos`; the wait loop
+  treats bytes that only fill decoder carryover as GNU `got_some_output` even
+  when no filter string is emitted yet.
+
+Validated gates for this slice:
+
+- GNU source study: `process.c` `make_process`, `Fmake_process`,
+  `Fmake_pipe_process`, `server_accept_connection`,
+  `wait_reading_process_output`, and `read_process_output`.
+- Live probes in `./tmp`: GNU and release Neomacs both return `(5 5 5 1)` for
+  the `read-process-output-max` snapshot case; split UTF-8 returns
+  `((1 (233)) (1 (88)))`; incomplete UTF-8 at EOF returns
+  `((1 (4194243)))`; split `utf-8-dos` CRLF returns `((1 (10)) (1 (88)))`.
+- Focused unit tests
+  `read_process_output_max_limits_filter_chunks_and_snapshots_at_creation`
+  `read_process_output_carries_split_decode_sequences_between_chunks`, and
+  `adaptive_read_buffering_updates_delay_with_gnu_thresholds` passed.
+- Focused oracle tests
+  `process_wait_semantics::read_process_output_max_limits_filter_chunks_and_snapshots_at_creation`
+  and
+  `process_wait_semantics::read_process_output_carries_split_decode_sequences_between_chunks`
+  passed with inline GNU expectations.
+- `cargo nextest run -p neovm-core -E 'test(process) or test(wait)'
+  --no-fail-fast`: 287/287 passed.
+- Process/network/timer oracle family: 257 run, 256 passed, with only the
+  documented display-backend baseline failure
+  `div_v3_window_margins_fringes_body_width_combo`.
+
 ## 5. REMAINING SLICES — detailed execution guidance
-
-### S7 — read-process-output-max + adaptive read buffering (D10)
-
-- GNU: `p->readmax` from `read-process-output-max` (default 65536 in 29+,
-  4096 historically — check the 31.0.90 default in process.c), carryover
-  buffer for partial multibyte sequences, adaptive delay:
-  `READ_OUTPUT_DELAY_INCREMENT` = TIMESPEC_HZ/100 (~10ms), MAX = ×5,
-  MAX_MAX = ×7; if a read returns < 256 bytes, delay += 2×increment; if a
-  full `readmax` chunk, delay -= increment; `process_output_delay_count` and
-  `read_output_skip` gate an early pselect timeout (process.c:5679-5710,
-  6283-6307).
-- neomacs today: fixed 4096-byte reads (process.rs read paths), no defvar
-  wiring, `process-adaptive-read-buffering` accessors exist but no engine.
-- Implementation: wire the `read-process-output-max` defvar into the read
-  chunk size per process (snapshot at process creation like GNU's
-  `p->readmax`); implement the delay ladder in the wait loop's fd-servicing
-  decision. This changes output CHUNKING visible to filters — gate carefully
-  against `div_cx45_process_env_coding_narrow_output_filter_hash_mega` and
-  the filter-chunk family.
 
 ### S8 — send_process write queue + re-entrant wait (D11)
 
