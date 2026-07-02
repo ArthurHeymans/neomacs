@@ -567,6 +567,36 @@ fn syntax_code_object(code: usize) -> Option<Value> {
 // SyntaxTable
 // ===========================================================================
 
+/// Global syntax-table content-mutation epoch.
+///
+/// The neomacs analog of GNU `search.c:clear_regexp_cache`, which
+/// `Fmodify_syntax_entry` calls to drop every compiled-regexp cache entry
+/// keyed by a syntax table ("It's tempting to compare with the
+/// syntax-table we've actually changed, but it's not sufficient because
+/// char-table inheritance means that modifying one syntax-table can
+/// change others at the same time", search.c:160-170).  Instead of
+/// clearing, neomacs's regexp caches key table-dependent entries by
+/// `(table identity, epoch)`; bumping the epoch on any syntax-table
+/// content mutation makes every such entry unreachable, which is the
+/// same conservative invalidation.
+///
+/// Process-global on purpose: caches are thread-local, so a bump from
+/// another thread can only over-invalidate, never serve a stale entry.
+static SYNTAX_TABLE_MUTATION_EPOCH: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
+/// Current syntax-table mutation epoch (see
+/// [`SYNTAX_TABLE_MUTATION_EPOCH`]).
+pub(crate) fn syntax_table_mutation_epoch() -> u64 {
+    SYNTAX_TABLE_MUTATION_EPOCH.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Record a syntax-table content mutation (GNU `clear_regexp_cache`
+/// analog).  Called from the `modify-syntax-entry` chokepoints.
+pub(crate) fn note_syntax_table_mutation() {
+    SYNTAX_TABLE_MUTATION_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// An Emacs-style syntax table mapping characters to syntax entries.
 ///
 /// Characters not explicitly set fall back to a parent table (if present)
@@ -720,6 +750,7 @@ impl SyntaxTable {
             ],
             None,
         );
+        note_syntax_table_mutation();
     }
 }
 
@@ -2858,6 +2889,11 @@ pub(crate) fn modify_syntax_entry_in_buffers(
         vec![target_table, args[0], chartable_entry],
         None,
     )?;
+    // GNU `Fmodify_syntax_entry` ends with `clear_regexp_cache ()` —
+    // compiled regexps whose fastmap/bitmap baked syntax-table content
+    // must not survive a table mutation.  Our caches key those entries
+    // by (table identity, epoch); bump the epoch.
+    note_syntax_table_mutation();
 
     if !update_current_buffer_table {
         return Ok(Value::NIL);

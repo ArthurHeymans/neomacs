@@ -45,7 +45,7 @@ use crate::buffer::{Buffer, BufferId, CharLen, CharPos0, CharRange, EmacsBytePos
 use crate::emacs_core::casefiddle::apply_replace_match_case;
 use crate::emacs_core::regex_emacs::{
     self, BufferSyntaxLookup, CaseTranslation, CompiledPattern, DefaultSyntaxLookup,
-    MatchRegisters, SyntaxLookup,
+    MatchRegisters, SyntaxCacheKey, SyntaxLookup,
 };
 use crate::heap_types::LispString;
 
@@ -164,44 +164,70 @@ pub(crate) struct IteratedStringMatches {
     pub matches: Vec<Vec<Option<MatchGroup>>>,
 }
 
+/// Entry of [`SEARCH_PATTERN_CACHE`]:
+/// `(posix, case_fold, pattern_multibyte, pattern_bytes, syntax_key, compiled)`.
+type SearchPatternCacheEntry = (
+    bool,
+    bool,
+    bool,
+    Vec<u8>,
+    Option<SyntaxCacheKey>,
+    CompiledSearchPattern,
+);
+
+/// Entry of [`LISP_REGEX_PATTERN_CACHE`]:
+/// `(posix, case_fold, translation_key, pattern_multibyte, target_multibyte,
+///   pattern_bytes, syntax_key, compiled)`.
+type LispRegexPatternCacheEntry = (
+    bool,
+    bool,
+    Option<usize>,
+    bool,
+    bool,
+    Vec<u8>,
+    Option<SyntaxCacheKey>,
+    Rc<CompiledPattern>,
+);
+
+/// Does a cached entry compiled under `stored` serve a request running
+/// under `current`?
+///
+/// Mirrors GNU `compile_pattern`'s probe (search.c:222-224):
+/// `EQ (cp->syntax_table, Qt) || EQ (cp->syntax_table, BVAR
+/// (current_buffer, syntax_table))` — `None` is GNU's `Qt`
+/// (table-independent pattern), and the epoch inside
+/// [`SyntaxCacheKey::Table`] stands in for GNU's `clear_regexp_cache`
+/// on `modify-syntax-entry`.
+fn syntax_key_matches(stored: Option<SyntaxCacheKey>, current: SyntaxCacheKey) -> bool {
+    match stored {
+        None => true,
+        Some(key) => key == current,
+    }
+}
+
 thread_local! {
-    // Cache entry is (posix, case_fold, pattern, compiled).
-    //
     // GNU `src/search.c:61` (`searchbuf_head`) uses a `regexp_cache`
     // record keyed on:
     //
     //   - the pattern Lisp string,
-    //   - the buffer's syntax table (since `\sX`/`\<` etc. bake the
-    //     class membership into the bytecode),
+    //   - the buffer's syntax table for `used_syntax` patterns (the
+    //     `[[:word:]]` / `[[:space:]]` classes bake table content into
+    //     the compiled artifacts — for neomacs, into the fastmap),
     //   - the `whitespace-regexp` transform flag,
     //   - the `posix` flag,
     //   - the `multibyte` flag,
     //   - the translate table identity.
     //
-    // Audit finding #15 in `drafts/regex-search-audit.md` calls out
-    // that neomacs's cache key is too narrow. For neomacs's current
-    // design the practical inputs collapse:
+    // Neomacs tracks (posix, case_fold[/translate identity], pattern
+    // multibyteness, pattern bytes, syntax-table key). Remaining
+    // intentional gaps vs GNU:
     //
-    //   - We don't have buffer-local syntax table threading yet, so
-    //     every compiled pattern uses the standard table; tracking
-    //     identity adds nothing today (audit #8 will need this).
     //   - We don't expose `whitespace-regexp`.
-    //   - The translate table is fully determined by `case_fold`
-    //     (we always compute the same table from
-    //     `to_lowercase()`), so `case_fold` suffices as a proxy for
-    //     translate identity until audit #5 lands a per-buffer
-    //     case-canon table.
-    //   - All neomacs strings are UTF-8 internally so there is no
-    //     separate `multibyte` axis to vary; switching it would
-    //     require an entire encoding-aware refactor.
-    //
-    // The cache key therefore tracks `(posix, case_fold, pattern)`
-    // which is GNU-equivalent for the current feature set. When
-    // audit #5 / #8 land, the key must be extended.
-    static SEARCH_PATTERN_CACHE: RefCell<Vec<(bool, bool, bool, Vec<u8>, CompiledSearchPattern)>> =
+    //   - `charset_unibyte` has no neomacs analog (UTF-8 internal).
+    static SEARCH_PATTERN_CACHE: RefCell<Vec<SearchPatternCacheEntry>> =
         const { RefCell::new(Vec::new()) };
 
-    static LISP_REGEX_PATTERN_CACHE: RefCell<Vec<(bool, bool, Option<usize>, bool, bool, Vec<u8>, Rc<CompiledPattern>)>> =
+    static LISP_REGEX_PATTERN_CACHE: RefCell<Vec<LispRegexPatternCacheEntry>> =
         const { RefCell::new(Vec::new()) };
 }
 
@@ -994,7 +1020,7 @@ fn compile_search_pattern(
     pattern: &LispString,
     case_fold: bool,
 ) -> Result<CompiledSearchPattern, String> {
-    compile_search_pattern_with_posix(pattern, case_fold, false)
+    compile_search_pattern_with_posix(pattern, case_fold, false, &DefaultSyntaxLookup)
 }
 
 /// Compile PATTERN for a `posix-*` search builtin.
@@ -1017,23 +1043,33 @@ fn compile_search_pattern_with_posix(
     pattern: &LispString,
     case_fold: bool,
     posix: bool,
+    syntax: &dyn SyntaxLookup,
 ) -> Result<CompiledSearchPattern, String> {
+    let syntax_key = syntax.cache_key();
     if let Some(cached) = crate::emacs_core::perf_trace::time_op(
         crate::emacs_core::perf_trace::HotpathOp::RegexCompileHit,
         || {
             SEARCH_PATTERN_CACHE.with(|cache| {
                 let mut cache = cache.borrow_mut();
                 let index = cache.iter().position(
-                    |(cached_posix, cached_case_fold, cached_multibyte, cached_pattern, _)| {
+                    |(
+                        cached_posix,
+                        cached_case_fold,
+                        cached_multibyte,
+                        cached_pattern,
+                        cached_syntax_key,
+                        _,
+                    )| {
                         *cached_posix == posix
                             && *cached_case_fold == case_fold
                             && *cached_multibyte == pattern.is_multibyte()
                             && cached_pattern.as_slice() == pattern.as_bytes()
+                            && syntax_key_matches(*cached_syntax_key, syntax_key)
                     },
                 )?;
                 let entry = cache.remove(index);
                 cache.insert(0, entry.clone());
-                Some(entry.4)
+                Some(entry.5)
             })
         },
     ) {
@@ -1055,12 +1091,30 @@ fn compile_search_pattern_with_posix(
                 Ok(CompiledSearchPattern::Literal(literal))
             } else {
                 regex_emacs::regex_compile_lisp(pattern, posix, case_fold)
-                    .map(Rc::new)
-                    .map(CompiledSearchPattern::Emacs)
                     .map_err(|e| e.message)
+                    .map(|mut cp| {
+                        // `used_syntax`: the fastmap bakes ASCII
+                        // membership of `[[:word:]]`/`[[:space:]]`.
+                        // `regex_compile_lisp` baked the standard
+                        // mapping; rebake against the active table
+                        // (GNU bakes the buffer table directly at
+                        // compile time, regex-emacs.c:2081-2092).
+                        if cp.used_syntax && syntax_key != SyntaxCacheKey::Standard {
+                            regex_emacs::recompute_fastmap(&mut cp, syntax);
+                        }
+                        CompiledSearchPattern::Emacs(Rc::new(cp))
+                    })
             }
         },
     )?;
+
+    // GNU `compile_pattern_1`: `cp->syntax_table = cp->buf.used_syntax
+    // ? BVAR (current_buffer, syntax_table) : Qt;` — only patterns whose
+    // compiled artifacts hardcode table content get the syntax axis.
+    let entry_syntax_key = match &compiled {
+        CompiledSearchPattern::Emacs(cp) if cp.used_syntax => Some(syntax_key),
+        _ => None,
+    };
 
     SEARCH_PATTERN_CACHE.with(|cache| {
         let mut cache = cache.borrow_mut();
@@ -1071,6 +1125,7 @@ fn compile_search_pattern_with_posix(
                 case_fold,
                 pattern.is_multibyte(),
                 pattern.as_bytes().to_vec(),
+                entry_syntax_key,
                 compiled.clone(),
             ),
         );
@@ -1088,7 +1143,14 @@ fn compile_lisp_pattern_with_posix(
     posix: bool,
     target_multibyte: bool,
 ) -> Result<Rc<CompiledPattern>, String> {
-    compile_lisp_pattern_with_posix_translation(pattern, case_fold, posix, target_multibyte, None)
+    compile_lisp_pattern_with_posix_translation(
+        pattern,
+        case_fold,
+        posix,
+        target_multibyte,
+        None,
+        &DefaultSyntaxLookup,
+    )
 }
 
 fn compile_lisp_pattern_with_posix_translation(
@@ -1097,6 +1159,7 @@ fn compile_lisp_pattern_with_posix_translation(
     posix: bool,
     target_multibyte: bool,
     translation: Option<CaseTranslation>,
+    syntax: &dyn SyntaxLookup,
 ) -> Result<Rc<CompiledPattern>, String> {
     let effective_translation = if case_fold {
         translation.or_else(|| Some(CaseTranslation::standard()))
@@ -1106,6 +1169,7 @@ fn compile_lisp_pattern_with_posix_translation(
     let translation_key = effective_translation
         .as_ref()
         .map(CaseTranslation::cache_key);
+    let syntax_key = syntax.cache_key();
 
     if let Some(cached) = crate::emacs_core::perf_trace::time_op(
         crate::emacs_core::perf_trace::HotpathOp::RegexCompileHit,
@@ -1120,6 +1184,7 @@ fn compile_lisp_pattern_with_posix_translation(
                         cached_pattern_multibyte,
                         cached_target_multibyte,
                         cached_pattern,
+                        cached_syntax_key,
                         _,
                     )| {
                         *cached_posix == posix
@@ -1128,11 +1193,12 @@ fn compile_lisp_pattern_with_posix_translation(
                             && *cached_pattern_multibyte == pattern.is_multibyte()
                             && *cached_target_multibyte == target_multibyte
                             && cached_pattern.as_slice() == pattern.as_bytes()
+                            && syntax_key_matches(*cached_syntax_key, syntax_key)
                     },
                 )?;
                 let entry = cache.remove(index);
                 cache.insert(0, entry.clone());
-                Some(entry.6)
+                Some(entry.7)
             })
         },
     ) {
@@ -1147,6 +1213,13 @@ fn compile_lisp_pattern_with_posix_translation(
         },
     )?;
     compiled.target_multibyte = target_multibyte;
+    // Rebake the fastmap of `[[:word:]]`/`[[:space:]]` patterns against
+    // the active syntax table (GNU compiles them with the buffer table
+    // directly; see `compile_search_pattern_with_posix`).
+    if compiled.used_syntax && syntax_key != SyntaxCacheKey::Standard {
+        regex_emacs::recompute_fastmap(&mut compiled, syntax);
+    }
+    let entry_syntax_key = compiled.used_syntax.then_some(syntax_key);
     let compiled = Rc::new(compiled);
 
     LISP_REGEX_PATTERN_CACHE.with(|cache| {
@@ -1160,6 +1233,7 @@ fn compile_lisp_pattern_with_posix_translation(
                 pattern.is_multibyte(),
                 target_multibyte,
                 pattern.as_bytes().to_vec(),
+                entry_syntax_key,
                 compiled.clone(),
             ),
         );
@@ -1956,9 +2030,9 @@ pub fn re_search_forward_with_posix(
     let limit_rel = limit.get() - region_start.get();
     let buffer_id = buf.id;
     let multibyte = buf.get_multibyte();
-    let compiled =
-        compile_search_pattern_with_posix(&pattern_for_compile(pattern), case_fold, posix)?;
     let syn = buffer_syntax_lookup(buf);
+    let compiled =
+        compile_search_pattern_with_posix(&pattern_for_compile(pattern), case_fold, posix, &syn)?;
 
     let md_opt = with_buffer_emacs_bytes(buf, accessible.range(), |text| match &compiled {
         CompiledSearchPattern::Literal(literal) => {
@@ -2045,9 +2119,9 @@ pub fn re_search_backward_with_posix(
     let limit_rel = limit.get() - region_start.get();
     let buffer_id = buf.id;
     let multibyte = buf.get_multibyte();
-    let compiled =
-        compile_search_pattern_with_posix(&pattern_for_compile(pattern), case_fold, posix)?;
     let syn = buffer_syntax_lookup(buf);
+    let compiled =
+        compile_search_pattern_with_posix(&pattern_for_compile(pattern), case_fold, posix, &syn)?;
 
     let md_opt = with_buffer_emacs_bytes(buf, accessible.range(), |text| match &compiled {
         CompiledSearchPattern::Literal(literal) => {
@@ -2128,14 +2202,15 @@ pub(crate) fn re_search_forward_lisp_with_posix(
     let limit_rel = limit.get() - region_start.get();
     let buffer_id = buf.id;
     let translation = buffer_search_translation(buf, case_fold);
+    let syn = buffer_syntax_lookup(buf);
     let compiled = compile_lisp_pattern_with_posix_translation(
         pattern,
         case_fold,
         posix,
         buf.get_multibyte(),
         translation,
+        &syn,
     )?;
-    let syn = buffer_syntax_lookup(buf);
 
     if let Some((_pos, regs)) = with_buffer_emacs_bytes(buf, accessible.range(), |text| {
         regex_emacs::re_search(
@@ -2188,14 +2263,15 @@ pub(crate) fn re_search_backward_lisp_with_posix(
     let start_rel = end.get() - region_start.get();
     let limit_rel = limit.get() - region_start.get();
     let buffer_id = buf.id;
+    let syn = buffer_syntax_lookup(buf);
     let compiled = compile_lisp_pattern_with_posix_translation(
         pattern,
         case_fold,
         posix,
         buf.get_multibyte(),
         buffer_search_translation(buf, case_fold),
+        &syn,
     )?;
-    let syn = buffer_syntax_lookup(buf);
 
     if let Some((_pos, regs)) = with_buffer_emacs_bytes(buf, accessible.range(), |text| {
         regex_emacs::re_search(
@@ -2251,9 +2327,9 @@ pub fn looking_at_with_posix(
     let start_rel = start.get() - region_start.get();
     let buffer_id = buf.id;
     let multibyte = buf.get_multibyte();
-    let compiled =
-        compile_search_pattern_with_posix(&pattern_for_compile(pattern), case_fold, posix)?;
     let syn = buffer_syntax_lookup(buf);
+    let compiled =
+        compile_search_pattern_with_posix(&pattern_for_compile(pattern), case_fold, posix, &syn)?;
 
     match with_buffer_emacs_bytes(buf, accessible.range(), |text| match &compiled {
         CompiledSearchPattern::Literal(literal) => {
@@ -2312,14 +2388,15 @@ pub(crate) fn looking_at_lisp_with_posix(
     let region_start = accessible.start();
     let start_rel = start.get() - region_start.get();
     let buffer_id = buf.id;
+    let syn = buffer_syntax_lookup(buf);
     let compiled = compile_lisp_pattern_with_posix_translation(
         pattern,
         case_fold,
         posix,
         buf.get_multibyte(),
         buffer_search_translation(buf, case_fold),
+        &syn,
     )?;
-    let syn = buffer_syntax_lookup(buf);
 
     if let Some((_end, regs)) = with_buffer_emacs_bytes(buf, accessible.range(), |text| {
         regex_emacs::re_match(
@@ -2511,6 +2588,7 @@ pub(crate) fn string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
         posix,
         string.is_multibyte(),
         translation,
+        syntax,
     )?;
     let text_bytes = string.as_bytes();
     let range = (text_bytes.len() - start) as isize;
@@ -2569,6 +2647,7 @@ pub(crate) fn string_match_full_with_case_fold_source_posix(
             &crate::heap_types::LispString::from_utf8(pattern),
             case_fold,
             posix,
+            &DefaultSyntaxLookup,
         )?,
         string,
         searched_string,

@@ -615,6 +615,16 @@ impl SyntaxLookup for LispModeSyntaxLookup {
     fn char_has_category(&self, c: char, cat: u8) -> bool {
         DefaultSyntaxLookup.char_has_category(c, cat)
     }
+
+    fn cache_key(&self) -> super::SyntaxCacheKey {
+        // Test-only lookup, never routed through the pattern caches;
+        // use a sentinel identity distinct from `Standard` so a cache
+        // ever probed with it cannot hit standard-baked entries.
+        super::SyntaxCacheKey::Table {
+            id: usize::MAX,
+            epoch: 0,
+        }
+    }
 }
 
 /// GNU `[[:space:]]` is `ISSPACE(c) == (BUFFER_SYNTAX(c) == Swhitespace)`

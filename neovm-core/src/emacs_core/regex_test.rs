@@ -2833,7 +2833,9 @@ fn regex_bench_fontlock_engine() {
         total += t;
         report.push_str(&format!(
             "  {name:<16} {t:>10.1?}  {matches:>5} matches  fastmap={} uses_syntax={} ({:.1} MiB/s)\n",
-            !cp.can_be_null && cp.fastmap_accurate && !cp.uses_syntax,
+            // The actual `re_search` gate (GNU regex-emacs.c:3483):
+            // syntax use no longer disables the fastmap.
+            !cp.can_be_null && cp.fastmap_accurate,
             cp.uses_syntax,
             kib / 1024.0 / t.as_secs_f64(),
         ));
@@ -3113,5 +3115,303 @@ fn regex_bench_string_match_elisp() {
          literal full-scan miss over {} KiB: {t_miss:?}",
         t_small / calls,
         hay.len() / 1024,
+    );
+}
+
+
+// =========================================================================
+// Fastmap restoration (GNU parity) — gates, equivalence fuzz, cache axis
+// =========================================================================
+//
+// GNU gates the `re_search_2` fastmap skip solely on `fastmap_accurate &&
+// !can_be_null` (regex-emacs.c:3483); syntax-dependent constructs never
+// disable it wholesale.  These tests pin the per-opcode `analyze_first`
+// semantics, prove fastmap-on == fastmap-off for match results, and pin
+// the GNU `used_syntax` cache axis (search.c `compile_pattern` +
+// `clear_regexp_cache`).
+
+/// Syntax lookup with `-` promoted to a word constituent (as lisp modes
+/// do via `modify-syntax-entry`) — exercises the buffer-table rebake
+/// path of the fastmap without needing a full evaluator.
+struct DashWordSyntaxLookup;
+
+impl regex_emacs::SyntaxLookup for DashWordSyntaxLookup {
+    fn char_syntax(&self, c: char) -> crate::emacs_core::syntax::SyntaxClass {
+        if c == '-' {
+            crate::emacs_core::syntax::SyntaxClass::Word
+        } else {
+            crate::emacs_core::syntax::standard_syntax_class_for_char(c)
+        }
+    }
+
+    fn char_has_category(&self, c: char, cat: u8) -> bool {
+        DefaultSyntaxLookup.char_has_category(c, cat)
+    }
+
+    fn cache_key(&self) -> regex_emacs::SyntaxCacheKey {
+        // Test-only: distinct from `Standard` so it can never satisfy a
+        // standard-baked cache entry.
+        regex_emacs::SyntaxCacheKey::Table {
+            id: usize::MAX - 1,
+            epoch: 0,
+        }
+    }
+}
+
+/// Run `re_search` twice — fastmap enabled vs force-disabled — and
+/// assert identical results (match position + full match-data
+/// registers) over forward-from-0, forward-from-middle, and backward
+/// spans.
+fn assert_fastmap_equivalence(
+    label: &str,
+    cp: &regex_emacs::CompiledPattern,
+    syn: &dyn regex_emacs::SyntaxLookup,
+    text: &[u8],
+) {
+    let mid = text.len() / 2;
+    let spans: [(usize, isize); 3] = [
+        (0, text.len() as isize),
+        (mid, (text.len() - mid) as isize),
+        (text.len(), -(text.len() as isize)),
+    ];
+    for &(start, range) in &spans {
+        let normal = regex_emacs::re_search(cp, text, start, range, syn, start);
+        regex_emacs::FORCE_DISABLE_FASTMAP.with(|f| f.set(true));
+        let forced = regex_emacs::re_search(cp, text, start, range, syn, start);
+        regex_emacs::FORCE_DISABLE_FASTMAP.with(|f| f.set(false));
+        match (&normal, &forced) {
+            (None, None) => {}
+            (Some((p1, r1)), Some((p2, r2))) => {
+                assert_eq!(
+                    p1, p2,
+                    "{label}: match position diverged at start={start} range={range}"
+                );
+                assert_eq!(
+                    r1.start, r2.start,
+                    "{label}: register starts diverged at start={start} range={range}"
+                );
+                assert_eq!(
+                    r1.end, r2.end,
+                    "{label}: register ends diverged at start={start} range={range}"
+                );
+            }
+            (n, f) => panic!(
+                "{label}: fastmap changed match existence at start={start} range={range}: \
+                 with-fastmap={:?} without-fastmap={:?}",
+                n.as_ref().map(|(p, _)| *p),
+                f.as_ref().map(|(p, _)| *p),
+            ),
+        }
+    }
+}
+
+/// Fastmap-on/off equivalence over the real font-lock patterns plus
+/// syntax/class/boundary/charset patterns, across ASCII, multibyte,
+/// case-fold, and match-at-start/middle/none haystacks.
+#[test]
+fn regex_fastmap_equivalence_fuzz() {
+    let mut patterns: Vec<(&str, bool)> = REGEX_BENCH_FONTLOCK_PATTERNS
+        .iter()
+        .map(|(_, pat)| (*pat, false))
+        .collect();
+    patterns.extend_from_slice(&[
+        ("[[:digit:]]+", false),
+        ("[[:word:]]+", false),
+        ("[[:space:]]+", false),
+        ("x[[:alpha:]]*!", false),
+        ("[-[:alnum:]]+\\.el", false),
+        ("[^[:word:]]+", false),
+        ("[[:word:]]+", true),
+        ("\\bdefun", false),
+        ("provide\\b", false),
+        ("\\<forward\\>", false),
+        ("\\_<point-min\\_>", false),
+        ("\\w+", false),
+        ("\\W\\w", false),
+        ("\\s-;;", false),
+        ("\\Sw+", false),
+        ("[a-f\u{e9}-\u{ef}]+", false),
+        ("(defun\\_>", false),
+        ("(DEFUN\\_>", true),
+        ("^;;;###autoload", false),
+        ("\\(setq\\|setf\\)[ \t]", false),
+        ("[A-F]+x", true),
+    ]);
+
+    let haystacks: [&str; 10] = [
+        "",
+        "(defun foo-bar (x) \"doc \u{2018}quoted\u{2019}\" nil)",
+        ";;;###autoload\n(defun x ())",
+        "no-match-here 12345 end",
+        "===defun=== \u{2018}sym\u{2019} `q' \\e",
+        "\u{e9}\u{e9} (defun \u{e0}ccent-fn ()) ;; \u{2018}x\u{2019}",
+        "a b\tc\nd-e_f",
+        "defun at start",
+        "ends with (defun\t",
+        "(SETQ CASE-FOLD T) (setf x)",
+    ];
+
+    for &(pat, case_fold) in &patterns {
+        let cp = regex_bench_compile(pat, case_fold);
+        for hay in &haystacks {
+            assert_fastmap_equivalence(
+                &format!("{pat:?} (fold={case_fold}) vs {hay:?}"),
+                &cp,
+                &DefaultSyntaxLookup,
+                hay.as_bytes(),
+            );
+        }
+        // Same corpus under a modified syntax table, mirroring the
+        // front-end pipeline: `used_syntax` fastmaps are rebaked
+        // against the active table before use.
+        let mut cp_dash = cp.clone();
+        regex_emacs::recompute_fastmap(&mut cp_dash, &DashWordSyntaxLookup);
+        for hay in &haystacks {
+            assert_fastmap_equivalence(
+                &format!("{pat:?} (fold={case_fold}, dash-word table) vs {hay:?}"),
+                &cp_dash,
+                &DashWordSyntaxLookup,
+                hay.as_bytes(),
+            );
+        }
+    }
+
+    // The real font-lock patterns over real elisp text (2 KiB of
+    // subr.el, cut at a char boundary).
+    let big = regex_bench_haystack();
+    let mut end = big.len().min(2 * 1024);
+    while !big.is_char_boundary(end) {
+        end -= 1;
+    }
+    let big = &big[..end];
+    for (name, pat) in REGEX_BENCH_FONTLOCK_PATTERNS {
+        let cp = regex_bench_compile(pat, false);
+        assert_fastmap_equivalence(
+            &format!("{name} vs subr.el slice"),
+            &cp,
+            &DefaultSyntaxLookup,
+            big.as_bytes(),
+        );
+    }
+}
+
+/// Per-opcode `analyze_first` gates (GNU regex-emacs.c:3062-3234).
+#[test]
+fn regex_fastmap_syntax_pattern_gates() {
+    // `\_>` after a literal: match-time syntax use must NOT disable the
+    // fastmap; the leading exactn provides the single candidate byte.
+    let cp = regex_bench_compile("(defun\\_>", false);
+    assert!(cp.uses_syntax, "\\_> consults syntax at match time");
+    assert!(!cp.used_syntax, "no table content is baked for \\_>");
+    assert!(cp.fastmap_accurate && !cp.can_be_null, "fastmap stays live");
+    assert!(cp.fastmap[b'(' as usize]);
+    assert!(!cp.fastmap[b'd' as usize]);
+
+    // Zero-width `\<` contributes the following atom (GNU: "not
+    // succeeded yet", keep walking).
+    let cp = regex_bench_compile("\\<defun", false);
+    assert!(!cp.can_be_null);
+    assert!(cp.fastmap[b'd' as usize]);
+    assert!(!cp.fastmap[b'e' as usize]);
+
+    // Leading `\w` (syntaxspec): GNU analyze_first aborts ("This match
+    // depends on text properties") -> can_be_null -> no skip.
+    let cp = regex_bench_compile("\\w+", false);
+    assert!(cp.can_be_null, "leading syntaxspec disables the skip");
+
+    // Fixed POSIX class: fastmap = ASCII members + multibyte leads; no
+    // syntax-table axis.
+    let cp = regex_bench_compile("[[:digit:]]x", false);
+    assert!(!cp.can_be_null && !cp.used_syntax);
+    assert!(cp.fastmap[b'5' as usize]);
+    assert!(!cp.fastmap[b'a' as usize]);
+    assert!(cp.fastmap[0xC3], "class charsets admit multibyte leads");
+
+    // Syntax-dependent POSIX class: `used_syntax` (GNU
+    // regex-emacs.c:2096-2101) + standard-table ASCII word members.
+    let cp = regex_bench_compile("[[:word:]]+z", false);
+    assert!(cp.used_syntax && !cp.can_be_null);
+    assert!(cp.fastmap[b'a' as usize] && cp.fastmap[b'0' as usize]);
+    assert!(
+        !cp.fastmap[b'-' as usize],
+        "standard table: '-' is not a word constituent"
+    );
+
+    // Rebake against a table where '-' IS a word constituent.
+    let mut cp_dash = cp.clone();
+    regex_emacs::recompute_fastmap(&mut cp_dash, &DashWordSyntaxLookup);
+    assert!(cp_dash.fastmap[b'-' as usize]);
+
+    // keyword-colon: `\_<` passes through to the exactn `:`.
+    let cp = regex_bench_compile("\\_<:\\(?:\\w\\|\\s_\\|\\\\.\\)+\\_>", false);
+    assert!(!cp.can_be_null);
+    assert!(cp.fastmap[b':' as usize]);
+    assert!(!cp.fastmap[b'a' as usize]);
+}
+
+/// A syntax-table content mutation must not serve a stale fastmap:
+/// GNU `Fmodify_syntax_entry` ends with `clear_regexp_cache ()`; our
+/// analog is the syntax mutation epoch in the cache key.
+#[test]
+fn regex_syntax_table_mutation_invalidates_cached_fastmap() {
+    let mut ev = crate::emacs_core::eval::Context::new();
+    ev.eval_str("(progn (insert \"===abc===\") nil)")
+        .expect("insert");
+    let probe = "(progn (goto-char (point-min)) \
+                 (if (re-search-forward \"[[:word:]]+\" nil t) (match-beginning 0) -1))";
+    // Standard table: '=' is Ssymbol, so the first word chars are "abc".
+    let first = ev.eval_str(probe).expect("first search");
+    assert_eq!(first.as_int(), Some(4), "standard table matches at 'abc'");
+    // Make '=' a word constituent.  The cached pattern's fastmap (baked
+    // without '=') must not be reused, or the search would skip the
+    // '===' prefix and still report position 4.
+    ev.eval_str("(modify-syntax-entry ?= \"w\")")
+        .expect("modify-syntax-entry");
+    let second = ev.eval_str(probe).expect("second search");
+    assert_eq!(
+        second.as_int(),
+        Some(1),
+        "mutated table must re-bake the fastmap (no stale cache entry)"
+    );
+}
+
+/// Cache entries baked for one syntax table must not be served under
+/// another (GNU keys the regexp cache by the syntax-table object,
+/// search.c:222-224), and table-independent entries survive table
+/// switches.
+#[test]
+fn regex_syntax_table_identity_keys_cached_fastmap() {
+    let mut ev = crate::emacs_core::eval::Context::new();
+    // Build the modified table BEFORE any compile so the mutation epoch
+    // is constant across all three probes — this isolates the identity
+    // axis of the cache key.
+    ev.eval_str(
+        "(progn (defvar regex-fastmap-t2 (copy-syntax-table)) \
+                (modify-syntax-entry ?= \"w\" regex-fastmap-t2) \
+                (insert \"===abc===\") nil)",
+    )
+    .expect("setup");
+    let probe = "(progn (goto-char (point-min)) \
+                 (if (re-search-forward \"[[:word:]]+\" nil t) (match-beginning 0) -1))";
+
+    let under_standard = ev.eval_str(probe).expect("standard search");
+    assert_eq!(under_standard.as_int(), Some(4));
+
+    ev.eval_str("(set-syntax-table regex-fastmap-t2)")
+        .expect("switch to t2");
+    let under_t2 = ev.eval_str(probe).expect("t2 search");
+    assert_eq!(
+        under_t2.as_int(),
+        Some(1),
+        "the standard-table cache entry must not satisfy table t2"
+    );
+
+    ev.eval_str("(set-syntax-table (standard-syntax-table))")
+        .expect("switch back");
+    let back = ev.eval_str(probe).expect("standard search again");
+    assert_eq!(
+        back.as_int(),
+        Some(4),
+        "the t2 cache entry must not satisfy the standard table"
     );
 }

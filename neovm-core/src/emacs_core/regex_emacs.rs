@@ -235,15 +235,36 @@ pub(crate) struct CompiledPattern {
     /// True if the pattern can match the empty string.
     pub can_be_null: bool,
 
-    /// True if matching this pattern depends on the active syntax table.
+    /// True if matching this pattern consults the syntax table at MATCH
+    /// time (`\b \B \< \> \_< \_> \w \W \sC \SC` and POSIX classes).
     ///
-    /// GNU `src/search.c:compile_pattern` keeps syntax-table-sensitive
-    /// regexps in cache entries keyed by `BVAR (current_buffer, syntax_table)`.
-    /// Neomacs currently keeps compiled regexp bytecode independent of the
-    /// syntax table and passes the active table to the matcher, so fastmap
-    /// skipping must be disabled for these patterns unless the fastmap was
-    /// built for the same table.
+    /// This is informational only: the matcher resolves per-character
+    /// syntax through the `SyntaxLookup` passed to each `re_match` call,
+    /// so the compiled bytecode itself stays table-independent.  In
+    /// particular it does NOT disable the search fastmap — GNU gates the
+    /// fastmap skip solely on `fastmap_accurate && !can_be_null`
+    /// (regex-emacs.c:3483 `if (fastmap && startpos < total_size &&
+    /// !bufp->can_be_null)`), and syntax-dependent *leading* atoms
+    /// (`\w`, `\sC`) set `can_be_null` via `analyze_first` instead.
     pub uses_syntax: bool,
+
+    /// True if the compiled artifacts hardcode syntax-table CONTENT, so
+    /// the pattern is only valid for the syntax table it was compiled
+    /// against and the compile cache must key such entries by table.
+    ///
+    /// Mirrors GNU `re_pattern_buffer.used_syntax` (regex-emacs.h:112),
+    /// which is set only for `[[:space:]]` / `[[:word:]]` inside a
+    /// charset (regex-emacs.c:2096-2101: "In most cases the matching
+    /// rule for char classes only uses the syntax table for multibyte
+    /// chars ... SPACE and WORD are the two exceptions") and makes
+    /// `search.c:compile_pattern` key the cache entry by
+    /// `BVAR (current_buffer, syntax_table)`.
+    ///
+    /// In neomacs the charset MATCH path re-derives ASCII class
+    /// membership per call from the active table, so only the FASTMAP
+    /// bakes table content (see `compile_fastmap`); the caching rule is
+    /// the same.
+    pub used_syntax: bool,
 
     /// Character translation table for case-folding.
     ///
@@ -358,6 +379,7 @@ impl CompiledPattern {
             target_multibyte: true,
             can_be_null: false,
             uses_syntax: false,
+            used_syntax: false,
             translate: None,
             multibyte_charsets: HashMap::new(),
             charset_class_bits: HashMap::new(),
@@ -1267,8 +1289,12 @@ pub(crate) fn regex_compile_lisp_with_translation(
         emit_op!(RegexOp::Succeed);
     }
 
-    // Populate the fastmap for search-time position skipping.
-    compile_fastmap(&mut buf);
+    // Populate the fastmap for search-time position skipping.  The
+    // standard syntax table stands in for `[[:word:]]`/`[[:space:]]`
+    // ASCII baking here; callers searching under a buffer-local table
+    // rebake via `recompute_fastmap` and key their cache by table
+    // (GNU `search.c:compile_pattern` + `used_syntax`).
+    compile_fastmap(&mut buf, &DefaultSyntaxLookup);
 
     Ok(buf)
 }
@@ -1999,6 +2025,13 @@ fn compile_charset(
     // syntax table at run time for `[[:word:]]` and `[[:space:]]`.
     if class_bits != 0 {
         buf.uses_syntax = true;
+        // GNU regex-emacs.c:2096-2101: only RECC_SPACE and RECC_WORD
+        // hardcode syntax-table content into the compiled pattern (for
+        // us: into the fastmap), so only they force the compile cache
+        // to key this pattern by syntax table (`used_syntax`).
+        if class_bits & (CHARSET_CLASS_BIT_WORD | CHARSET_CLASS_BIT_SPACE) != 0 {
+            buf.used_syntax = true;
+        }
         buf.charset_class_bits
             .insert(charset_opcode_pos, class_bits);
     }
@@ -2522,12 +2555,35 @@ fn compile_interval(
 /// The matcher queries the syntax table to implement `\w`, `\b`, `\sC`, etc.
 /// In GNU Emacs, this is done via the `SYNTAX()` macro which reads from
 /// `gl_state.current_syntax_table`.
+/// Identity of a syntax lookup for the compiled-pattern caches.
+///
+/// GNU `search.c` keeps this as `regexp_cache.syntax_table` — the actual
+/// syntax-table object for `used_syntax` patterns, `Qt` for
+/// table-independent ones — and compares it with `BASE_EQ` against the
+/// current buffer's table on every cache probe (search.c:222-224).
+/// The `epoch` component stands in for GNU's `clear_regexp_cache` call
+/// on `modify-syntax-entry`: bumping it strands every entry baked
+/// against the old table contents.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum SyntaxCacheKey {
+    /// The immutable built-in standard mapping (`DefaultSyntaxLookup`).
+    Standard,
+    /// A live syntax chartable: object identity bits + the global
+    /// syntax-table mutation epoch at key time.
+    Table { id: usize, epoch: u64 },
+}
+
 pub(crate) trait SyntaxLookup {
     /// Return the syntax class of character `c` in the current syntax table.
     fn char_syntax(&self, c: char) -> SyntaxClass;
 
     /// Return true if character `c` belongs to category `cat`.
     fn char_has_category(&self, c: char, cat: u8) -> bool;
+
+    /// Cache identity of this lookup (see [`SyntaxCacheKey`]).  Used by
+    /// the front-end pattern caches to key `used_syntax` entries by
+    /// syntax table, mirroring GNU `compile_pattern`.
+    fn cache_key(&self) -> SyntaxCacheKey;
 }
 
 /// Default syntax lookup — uses GNU's standard syntax-table definitions.
@@ -2550,6 +2606,13 @@ impl SyntaxLookup for DefaultSyntaxLookup {
     fn char_has_category(&self, c: char, cat: u8) -> bool {
         default_char_has_category(c, cat)
     }
+
+    fn cache_key(&self) -> SyntaxCacheKey {
+        // `standard_syntax_class_for_char` is a hardwired mapping — no
+        // chartable, no mutation — so entries baked against it stay
+        // valid forever (GNU `Qt` for the standard-classification case).
+        SyntaxCacheKey::Standard
+    }
 }
 
 impl SyntaxLookup for BufferSyntaxLookup {
@@ -2563,6 +2626,13 @@ impl SyntaxLookup for BufferSyntaxLookup {
                 crate::emacs_core::category::char_has_category_in_table(table, c, cat).ok()
             })
             .unwrap_or_else(|| default_char_has_category(c, cat))
+    }
+
+    fn cache_key(&self) -> SyntaxCacheKey {
+        SyntaxCacheKey::Table {
+            id: self.syntax_table.chartable().bits(),
+            epoch: crate::emacs_core::syntax::syntax_table_mutation_epoch(),
+        }
     }
 }
 
@@ -2732,6 +2802,104 @@ fn unicode_printable_char(c: char) -> bool {
     !c.is_control()
 }
 
+/// Emacs character code for a unibyte byte (raw bytes 0x80..=0xFF map to
+/// the byte8 range). Mirrors GNU `RE_CHAR_TO_MULTIBYTE`.
+fn regex_unibyte_to_char(byte: u8) -> u32 {
+    if byte < 0x80 {
+        byte as u32
+    } else {
+        emacs_char::unibyte_to_char(byte)
+    }
+}
+
+/// Rust `char` used for syntax-table lookups of an Emacs character code.
+/// Byte8 codes collapse to their raw byte so `char_syntax` sees the same
+/// 0x80..=0xFF index GNU's syntax table uses for eight-bit characters.
+fn regex_syntax_char(code: u32) -> char {
+    if emacs_char::char_byte8_p(code) {
+        char::from(emacs_char::char_to_byte8(code))
+    } else {
+        char::from_u32(code).unwrap_or(char::REPLACEMENT_CHARACTER)
+    }
+}
+
+/// Unibyte byte for an Emacs character code, if one exists.
+/// Mirrors GNU `RE_CHAR_TO_UNIBYTE`.
+fn regex_char_to_unibyte(code: u32) -> Option<u8> {
+    if code < 0x80 || emacs_char::char_byte8_p(code) {
+        Some(emacs_char::char_to_byte8(code))
+    } else {
+        None
+    }
+}
+
+/// Runtime POSIX character-class membership for charset `class_bits`.
+///
+/// Mirrors GNU `re_iswctype` (regex-emacs.c) as consulted by
+/// `execute_charset` for the range-table class bits.  The syntax-table
+/// dependent classes are `word` and `space` (GNU regex-emacs.c:151
+/// `ISSPACE` / `ISWORD` route through `SYNTAX (c)`); everything else is
+/// a fixed predicate.  Shared by the matcher (per-character class test)
+/// and `compile_fastmap` (baking the ASCII members of a leading class
+/// into the fastmap).
+fn posix_class_matches(code: u32, bits: u32, syntax: &dyn SyntaxLookup) -> bool {
+    let byte = regex_char_to_unibyte(code);
+    let ch = regex_syntax_char(code);
+    let is_real_ascii = code < 0x80;
+    let ascii_alnum = |b: u8| b.is_ascii_alphabetic() || b.is_ascii_digit();
+    let ascii_alpha = |b: u8| b.is_ascii_alphabetic();
+
+    (bits & CHARSET_CLASS_BIT_ALNUM != 0
+        && if is_real_ascii {
+            ascii_alnum(code as u8)
+        } else {
+            ch.is_alphanumeric()
+        })
+        || (bits & CHARSET_CLASS_BIT_ALPHA != 0
+            && if is_real_ascii {
+                ascii_alpha(code as u8)
+            } else {
+                ch.is_alphabetic()
+            })
+        || (bits & CHARSET_CLASS_BIT_BLANK != 0
+            && if is_real_ascii {
+                matches!(code, 0x20 | 0x09)
+            } else {
+                unicode_blank_char(ch)
+            })
+        || (bits & CHARSET_CLASS_BIT_CNTRL != 0 && code < 0x20)
+        || (bits & CHARSET_CLASS_BIT_DIGIT != 0 && is_real_ascii && (code as u8).is_ascii_digit())
+        || (bits & CHARSET_CLASS_BIT_GRAPH != 0
+            && byte.map_or_else(
+                || unicode_graphic_char(ch),
+                |b| b > b' ' && !(0x7f..=0xa0).contains(&b),
+            ))
+        || (bits & CHARSET_CLASS_BIT_LOWER != 0 && ch.is_lowercase())
+        || (bits & CHARSET_CLASS_BIT_PRINT != 0
+            && byte.map_or_else(
+                || unicode_printable_char(ch),
+                |b| b >= b' ' && !(0x7f..=0x9f).contains(&b),
+            ))
+        || (bits & CHARSET_CLASS_BIT_PUNCT != 0
+            && if is_real_ascii {
+                let b = code as u8;
+                b > b' ' && b < 0x7f && !ascii_alnum(b)
+            } else {
+                syntax.char_syntax(ch) != SyntaxClass::Word
+            })
+        || (bits & CHARSET_CLASS_BIT_SPACE != 0
+            && syntax.char_syntax(ch) == SyntaxClass::Whitespace)
+        || (bits & CHARSET_CLASS_BIT_UPPER != 0 && ch.is_uppercase())
+        || (bits & CHARSET_CLASS_BIT_XDIGIT != 0
+            && is_real_ascii
+            && (code as u8).is_ascii_hexdigit())
+        || (bits & CHARSET_CLASS_BIT_ASCII != 0 && is_real_ascii)
+        || (bits & CHARSET_CLASS_BIT_WORD != 0 && syntax.char_syntax(ch) == SyntaxClass::Word)
+        || (bits & CHARSET_CLASS_BIT_NONASCII != 0 && !is_real_ascii)
+        || (bits & CHARSET_CLASS_BIT_UNIBYTE != 0 && byte.is_some())
+        || (bits & CHARSET_CLASS_BIT_MULTIBYTE != 0 && byte.is_none())
+}
+
 /// Match a compiled pattern against input text.
 ///
 /// This is the core matching function, equivalent to GNU's `re_match_2_internal`.
@@ -2828,86 +2996,10 @@ pub(crate) fn re_match(
         }
     };
 
-    let unibyte_to_emacs_char = |byte: u8| -> u32 {
-        if byte < 0x80 {
-            byte as u32
-        } else {
-            emacs_char::unibyte_to_char(byte)
-        }
-    };
-    let syntax_char = |code: u32| -> char {
-        if emacs_char::char_byte8_p(code) {
-            char::from(emacs_char::char_to_byte8(code))
-        } else {
-            char::from_u32(code).unwrap_or(char::REPLACEMENT_CHARACTER)
-        }
-    };
-    let emacs_char_to_unibyte = |code: u32| -> Option<u8> {
-        if code < 0x80 || emacs_char::char_byte8_p(code) {
-            Some(emacs_char::char_to_byte8(code))
-        } else {
-            None
-        }
-    };
-    let posix_class_matches = |code: u32, bits: u32| -> bool {
-        let byte = emacs_char_to_unibyte(code);
-        let ch = syntax_char(code);
-        let is_real_ascii = code < 0x80;
-        let ascii_alnum = |b: u8| b.is_ascii_alphabetic() || b.is_ascii_digit();
-        let ascii_alpha = |b: u8| b.is_ascii_alphabetic();
-
-        (bits & CHARSET_CLASS_BIT_ALNUM != 0
-            && if is_real_ascii {
-                ascii_alnum(code as u8)
-            } else {
-                ch.is_alphanumeric()
-            })
-            || (bits & CHARSET_CLASS_BIT_ALPHA != 0
-                && if is_real_ascii {
-                    ascii_alpha(code as u8)
-                } else {
-                    ch.is_alphabetic()
-                })
-            || (bits & CHARSET_CLASS_BIT_BLANK != 0
-                && if is_real_ascii {
-                    matches!(code, 0x20 | 0x09)
-                } else {
-                    unicode_blank_char(ch)
-                })
-            || (bits & CHARSET_CLASS_BIT_CNTRL != 0 && code < 0x20)
-            || (bits & CHARSET_CLASS_BIT_DIGIT != 0
-                && is_real_ascii
-                && (code as u8).is_ascii_digit())
-            || (bits & CHARSET_CLASS_BIT_GRAPH != 0
-                && byte.map_or_else(
-                    || unicode_graphic_char(ch),
-                    |b| b > b' ' && !(0x7f..=0xa0).contains(&b),
-                ))
-            || (bits & CHARSET_CLASS_BIT_LOWER != 0 && ch.is_lowercase())
-            || (bits & CHARSET_CLASS_BIT_PRINT != 0
-                && byte.map_or_else(
-                    || unicode_printable_char(ch),
-                    |b| b >= b' ' && !(0x7f..=0x9f).contains(&b),
-                ))
-            || (bits & CHARSET_CLASS_BIT_PUNCT != 0
-                && if is_real_ascii {
-                    let b = code as u8;
-                    b > b' ' && b < 0x7f && !ascii_alnum(b)
-                } else {
-                    syntax.char_syntax(ch) != SyntaxClass::Word
-                })
-            || (bits & CHARSET_CLASS_BIT_SPACE != 0
-                && syntax.char_syntax(ch) == SyntaxClass::Whitespace)
-            || (bits & CHARSET_CLASS_BIT_UPPER != 0 && ch.is_uppercase())
-            || (bits & CHARSET_CLASS_BIT_XDIGIT != 0
-                && is_real_ascii
-                && (code as u8).is_ascii_hexdigit())
-            || (bits & CHARSET_CLASS_BIT_ASCII != 0 && is_real_ascii)
-            || (bits & CHARSET_CLASS_BIT_WORD != 0 && syntax.char_syntax(ch) == SyntaxClass::Word)
-            || (bits & CHARSET_CLASS_BIT_NONASCII != 0 && !is_real_ascii)
-            || (bits & CHARSET_CLASS_BIT_UNIBYTE != 0 && byte.is_some())
-            || (bits & CHARSET_CLASS_BIT_MULTIBYTE != 0 && byte.is_none())
-    };
+    let unibyte_to_emacs_char = regex_unibyte_to_char;
+    let syntax_char = regex_syntax_char;
+    let emacs_char_to_unibyte = regex_char_to_unibyte;
+    let posix_class_matches = |code: u32, bits: u32| posix_class_matches(code, bits, syntax);
 
     // Helper: decode an Emacs character at position.
     let text_char = |pos: usize| -> Option<(u32, usize)> {
@@ -3781,41 +3873,31 @@ fn register_scratch(num_regs: usize) -> RegisterScratch {
 /// this to skip positions that cannot start a match, giving a significant
 /// speed-up for patterns that begin with a restricted set of characters.
 ///
-/// Populate `fastmap` for `\sX` (or `\SX` when `negate` is true) by
-/// querying the standard syntax table for every ASCII byte. Mirrors
-/// GNU regex-emacs.c:3170-3186 which iterates the same range and
-/// consults the buffer's actual syntax table. We don't have a per-
-/// buffer syntax table at compile time so we fall back to the
-/// standard one — that matches GNU's behavior for all the standard
-/// classes (Whitespace, Punctuation, Word, Symbol, Open, Close, ...)
-/// for ASCII bytes. Audit finding #16 in
-/// `drafts/regex-search-audit.md`.
-fn fastmap_for_syntax_class(fastmap: &mut [bool; 256], class_byte: u8, negate: bool) {
-    let target = match crate::emacs_core::syntax::SyntaxClass::from_code(class_byte as i64) {
-        Some(cls) => cls,
-        None => {
-            // Unknown class — conservatively allow every byte
-            // (matches GNU's "fall through to set all" behavior).
-            *fastmap = [true; 256];
-            return;
-        }
-    };
-    let table = crate::emacs_core::syntax::SyntaxTable::new_standard();
-    for c in 0u8..=127 {
-        let in_class = table.char_syntax(c as char) == target;
-        if in_class != negate {
-            fastmap[c as usize] = true;
-        }
-    }
-    // Conservatively allow every non-ASCII byte. The matcher will do
-    // the real per-character syntax lookup at match time.
-    for c in 128..256usize {
-        fastmap[c] = true;
-    }
+/// Recompute the fastmap of an already-compiled pattern against a
+/// (possibly buffer-local) syntax table.
+///
+/// GNU bakes `[[:word:]]` / `[[:space:]]` ASCII membership into the
+/// charset bitmap with the buffer's syntax table at compile time and
+/// keys the compiled-pattern cache by that table
+/// (`search.c:compile_pattern`, `cp->syntax_table`).  Neomacs defers
+/// the class membership test to match time, so only the FASTMAP bakes
+/// table content; the front-end cache calls this to rebuild the
+/// fastmap for the active table before caching a `used_syntax` entry
+/// under that table's key.
+pub(crate) fn recompute_fastmap(pattern: &mut CompiledPattern, syntax: &dyn SyntaxLookup) {
+    compile_fastmap(pattern, syntax);
 }
 
-/// Translated from GNU regex-emacs.c `re_compile_fastmap`.
-fn compile_fastmap(pattern: &mut CompiledPattern) {
+/// Translated from GNU regex-emacs.c `re_compile_fastmap` /
+/// `analyze_first`.
+///
+/// `syntax` is consulted only to bake the ASCII members of
+/// syntax-table-dependent POSIX classes (`[[:word:]]`, `[[:space:]]`)
+/// of a *leading* charset into the fastmap — the analog of GNU baking
+/// them into the charset bitmap at compile time (regex-emacs.c:2081).
+/// Patterns whose fastmap took that path are flagged `used_syntax` at
+/// compile and must be cache-keyed by syntax table.
+fn compile_fastmap(pattern: &mut CompiledPattern, syntax: &dyn SyntaxLookup) {
     pattern.fastmap = [false; 256];
     pattern.can_be_null = false;
 
@@ -3930,6 +4012,33 @@ fn compile_fastmap(pattern: &mut CompiledPattern) {
                             pattern.fastmap[c] = true;
                         }
                     }
+                    // POSIX classes.  The bitmap only holds the fixed-set
+                    // classes' ASCII members (`apply_posix_class`); the
+                    // syntax-dependent ones (`[[:word:]]`, `[[:space:]]`)
+                    // are re-derived per match from the active table, so
+                    // bake their current ASCII members here — the analog
+                    // of GNU compiling them into the bitmap with
+                    // `re_iswctype` (regex-emacs.c:2081-2092).  Also set
+                    // every translated partner, mirroring GNU's
+                    // `SET_LIST_BIT (TRANSLATE (c))`, since the search
+                    // skip loop indexes the fastmap by translated input.
+                    // And a class can match multibyte characters, so all
+                    // non-ASCII leading bytes become candidates — GNU's
+                    // "If we can match a character class, we can match
+                    // any multibyte characters" (analyze_first).
+                    if let Some(&bits) = pattern.charset_class_bits.get(&charset_op_pos) {
+                        for c in 0u8..0x80 {
+                            if posix_class_matches(c as u32, bits, syntax) {
+                                pattern.fastmap[c as usize] = true;
+                                if let Some(table) = &pattern.translate {
+                                    pattern.fastmap[table.translate_byte(c) as usize] = true;
+                                }
+                            }
+                        }
+                        for c in 128..256usize {
+                            pattern.fastmap[c] = true;
+                        }
+                    }
                     break;
                 }
 
@@ -3953,29 +4062,22 @@ fn compile_fastmap(pattern: &mut CompiledPattern) {
                     break;
                 }
 
-                RegexOp::SyntaxSpec => {
-                    if pc >= bytecode.len() {
-                        break;
-                    }
-                    // GNU `re_compile_fastmap` consults the buffer's
-                    // syntax table for `\sX` (regex-emacs.c:3170-3186).
-                    // We don't have a per-buffer table at compile
-                    // time so we use the standard one. The previous
-                    // body hardcoded Rust's Unicode `is_whitespace` /
-                    // `is_alphanumeric` and silently dropped classes
-                    // 4-15, so any pattern using `\s(`, `\s)`, `\s\"`
-                    // etc. went down a wrong fastmap path. See audit
-                    // finding #16 in `drafts/regex-search-audit.md`.
-                    fastmap_for_syntax_class(&mut pattern.fastmap, bytecode[pc], false);
-                    break;
-                }
-
-                RegexOp::NotSyntaxSpec => {
-                    if pc >= bytecode.len() {
-                        break;
-                    }
-                    fastmap_for_syntax_class(&mut pattern.fastmap, bytecode[pc], true);
-                    break;
+                RegexOp::SyntaxSpec | RegexOp::NotSyntaxSpec => {
+                    // GNU `analyze_first` gives up on `\sX` / `\SX` in
+                    // first-character position: "This match depends on
+                    // text properties.  These end with aborting
+                    // optimizations" (regex-emacs.c:3186-3190, returning
+                    // failure so `re_compile_fastmap` sets
+                    // `bufp->can_be_null = 1`).  The syntax class of a
+                    // byte is a property of the *buffer's* table at match
+                    // time, so no compile-time fastmap can restrict the
+                    // candidate set without hardcoding a table.  Setting
+                    // `can_be_null` disables the search-time fastmap skip
+                    // exactly as in GNU `re_search_2`
+                    // (regex-emacs.c:3483).
+                    pattern.can_be_null = true;
+                    pattern.fastmap_accurate = true;
+                    return;
                 }
 
                 RegexOp::CategorySpec | RegexOp::NotCategorySpec => {
@@ -4081,6 +4183,26 @@ fn compile_fastmap(pattern: &mut CompiledPattern) {
     pattern.fastmap_accurate = true;
 }
 
+// Test-only escape hatch: force `re_search` down the no-fastmap path so
+// equivalence tests can assert that fastmap skipping never changes match
+// results (position + registers) for any pattern/haystack pair.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static FORCE_DISABLE_FASTMAP: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+fn fastmap_force_disabled() -> bool {
+    FORCE_DISABLE_FASTMAP.with(|flag| flag.get())
+}
+
+#[cfg(not(test))]
+#[inline(always)]
+fn fastmap_force_disabled() -> bool {
+    false
+}
+
 /// Search for a match of the compiled pattern in text.
 ///
 /// Equivalent to GNU's `re_search_2()` operating on a single
@@ -4119,7 +4241,15 @@ pub(crate) fn re_search(
     point: usize,
 ) -> Option<(usize, MatchRegisters)> {
     let text_len = text.len();
-    let use_fastmap = pattern.fastmap_accurate && !pattern.can_be_null && !pattern.uses_syntax;
+    // GNU regex-emacs.c:3483: `if (fastmap && startpos < total_size &&
+    // !bufp->can_be_null)` — the fastmap skip is gated ONLY on having an
+    // accurate map and the pattern not matching the null string.  Syntax-
+    // dependent constructs do not disable it: leading `\w`/`\sC` set
+    // `can_be_null` via `analyze_first`, zero-width `\b \< \_>` etc.
+    // contribute the following atom's characters, and `[[:word:]]` /
+    // `[[:space:]]` bake the active table into the fastmap with the
+    // compile cache keyed by that table (`used_syntax`).
+    let use_fastmap = pattern.fastmap_accurate && !pattern.can_be_null && !fastmap_force_disabled();
     let translate = pattern.translate.as_ref();
 
     if range >= 0 {
