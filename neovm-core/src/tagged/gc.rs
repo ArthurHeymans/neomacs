@@ -940,6 +940,28 @@ impl MappedStringObject {
     }
 }
 
+/// Snapshot of the deferred-sweep cost accounting plus the concurrent-mark
+/// termination drain probe. Diagnostics only: per-cycle fields hold the most
+/// recently completed (or in-flight) deferred sweep; lifetime fields aggregate
+/// across the heap's life, with the eager STW sweep feeding `lifetime_sweep_us`
+/// too so the two sweep paths are comparable.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct SweepStats {
+    pub sweep_us: u64,
+    pub slice_count: usize,
+    pub cons_blocks_swept: usize,
+    pub noncons_freed: usize,
+    pub lifetime_sweep_us: u64,
+    pub lifetime_slices: usize,
+    pub lifetime_cons_blocks_swept: usize,
+    pub lifetime_noncons_freed: usize,
+    /// Values `join_concurrent_mark` folded into the termination gray queue:
+    /// the GC thread's parked non-cons buffer and the residual SATB log.
+    pub last_termination_deferred: usize,
+    pub max_termination_deferred: usize,
+    pub last_termination_satb: usize,
+}
+
 // ---------------------------------------------------------------------------
 // TaggedHeap — the main GC-managed heap
 // ---------------------------------------------------------------------------
@@ -1190,6 +1212,20 @@ pub struct TaggedHeap {
     /// Carried from mark termination for the completion trace/accounting.
     sweep_mark_us: u64,
     sweep_bytes_before: usize,
+    /// Per-cycle deferred-sweep cost accumulators (reset when the sweep is
+    /// armed at `incremental_finish`) + lifetime totals, and the
+    /// concurrent-termination drain probe. Snapshot via `sweep_stats`.
+    sweep_slice_us_total: u64,
+    sweep_slice_count: usize,
+    sweep_cons_blocks_swept: usize,
+    sweep_noncons_freed: usize,
+    sweep_lifetime_us: u64,
+    sweep_lifetime_slices: usize,
+    sweep_lifetime_cons_blocks_swept: usize,
+    sweep_lifetime_noncons_freed: usize,
+    last_termination_deferred: usize,
+    max_termination_deferred: usize,
+    last_termination_satb: usize,
 }
 
 impl TaggedHeap {
@@ -1256,6 +1292,17 @@ impl TaggedHeap {
             sweep_noncons_live_bytes: 0,
             sweep_mark_us: 0,
             sweep_bytes_before: 0,
+            sweep_slice_us_total: 0,
+            sweep_slice_count: 0,
+            sweep_cons_blocks_swept: 0,
+            sweep_noncons_freed: 0,
+            sweep_lifetime_us: 0,
+            sweep_lifetime_slices: 0,
+            sweep_lifetime_cons_blocks_swept: 0,
+            sweep_lifetime_noncons_freed: 0,
+            last_termination_deferred: 0,
+            max_termination_deferred: 0,
+            last_termination_satb: 0,
             dump_addr_lo: usize::MAX,
             dump_addr_hi: 0,
         }
@@ -1317,6 +1364,23 @@ impl TaggedHeap {
     /// created. Used by allocation benchmarks to measure GC frequency.
     pub fn gc_collections(&self) -> usize {
         self.gc_collections
+    }
+
+    /// Deferred-sweep cost + termination-drain instrumentation snapshot.
+    pub(crate) fn sweep_stats(&self) -> SweepStats {
+        SweepStats {
+            sweep_us: self.sweep_slice_us_total,
+            slice_count: self.sweep_slice_count,
+            cons_blocks_swept: self.sweep_cons_blocks_swept,
+            noncons_freed: self.sweep_noncons_freed,
+            lifetime_sweep_us: self.sweep_lifetime_us,
+            lifetime_slices: self.sweep_lifetime_slices,
+            lifetime_cons_blocks_swept: self.sweep_lifetime_cons_blocks_swept,
+            lifetime_noncons_freed: self.sweep_lifetime_noncons_freed,
+            last_termination_deferred: self.last_termination_deferred,
+            max_termination_deferred: self.max_termination_deferred,
+            last_termination_satb: self.last_termination_satb,
+        }
     }
 
     #[inline]
@@ -3455,6 +3519,9 @@ impl TaggedHeap {
         }
 
         let sweep_us = sweep_t0.elapsed().as_micros() as u64;
+        // Eager STW sweep cost feeds the same lifetime total as the deferred
+        // slices, so the two sweep paths are comparable.
+        self.sweep_lifetime_us += sweep_us;
         let elapsed = t0.elapsed();
         self.gc_collections += 1;
         self.gc_total_elapsed_us += elapsed.as_micros() as u64;
@@ -3678,8 +3745,11 @@ impl TaggedHeap {
         // deferred (every non-cons + non-owned cons the GC parked) become gray;
         // the caller reseeds roots, then drains to a fixpoint stop-the-world.
         let satb = std::mem::take(&mut *self.satb_shared.lock().unwrap());
+        self.last_termination_satb = satb.len();
         self.gray_queue.extend(satb);
         let deferred = std::mem::take(&mut *self.deferred_veclikes.lock().unwrap());
+        self.last_termination_deferred = deferred.len();
+        self.max_termination_deferred = self.max_termination_deferred.max(deferred.len());
         self.gray_queue.extend(deferred);
         // Stage 2 Tier B CONCURRENT VECTOR SCAN: the GC thread has provably exited its
         // mark loop (the `rx.recv()` above), so its snapshot pointers into the retired
@@ -3852,6 +3922,10 @@ impl TaggedHeap {
         self.sweep_noncons_live_bytes = 0;
         self.sweep_mark_us = self.incremental_mark_us;
         self.sweep_bytes_before = bytes_before;
+        self.sweep_slice_us_total = 0;
+        self.sweep_slice_count = 0;
+        self.sweep_cons_blocks_swept = 0;
+        self.sweep_noncons_freed = 0;
         self.sweep_in_progress = true;
         // The triggering allocation budget is spent; the next mark fires once a
         // fresh threshold's worth has been allocated.
@@ -3889,6 +3963,7 @@ impl TaggedHeap {
         //    object (with a heavier per-object free). --
         let noncons_budget = budget.saturating_mul(256);
         let mut processed = 0usize;
+        let mut noncons_freed = 0usize;
         while processed < noncons_budget && !self.sweep_noncons_pending.is_null() {
             let current = self.sweep_noncons_pending;
             unsafe {
@@ -3904,6 +3979,7 @@ impl TaggedHeap {
                     self.non_cons_object_addrs.remove(&(current as usize));
                     self.free_gc_object(current);
                     self.allocated_count = self.allocated_count.saturating_sub(1);
+                    noncons_freed += 1;
                 }
             }
             processed += 1;
@@ -3911,10 +3987,14 @@ impl TaggedHeap {
 
         let done = self.sweep_cons_cursor >= self.cons_blocks.len()
             && self.sweep_noncons_pending.is_null();
+        let slice_us = t0.elapsed().as_micros() as u64;
+        self.sweep_slice_us_total += slice_us;
+        self.sweep_slice_count += 1;
+        self.sweep_cons_blocks_swept += swept_blocks;
+        self.sweep_noncons_freed += noncons_freed;
         if std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
             eprintln!(
-                "NEOVM_GC sweep_slice {}us cons={}/{} noncons_left={} done={done}",
-                t0.elapsed().as_micros(),
+                "NEOVM_GC sweep_slice {slice_us}us cons={}/{} noncons_left={} done={done}",
                 self.sweep_cons_cursor,
                 self.cons_blocks.len(),
                 if self.sweep_noncons_pending.is_null() {
@@ -3970,13 +4050,21 @@ impl TaggedHeap {
             .saturating_add(mapped_object_live_bytes);
 
         self.gc_collections += 1;
+        self.sweep_lifetime_us += self.sweep_slice_us_total;
+        self.sweep_lifetime_slices += self.sweep_slice_count;
+        self.sweep_lifetime_cons_blocks_swept += self.sweep_cons_blocks_swept;
+        self.sweep_lifetime_noncons_freed += self.sweep_noncons_freed;
         if std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
             let (mapped_total, mapped_marked) = self.mapped_object_stats();
             eprintln!(
-                "NEOVM_GC gc#{} [incremental mark={}us sweep=deferred] \
-                 cons_live={} heap_noncons={} dump_marked={}/{} live={}B",
+                "NEOVM_GC gc#{} [incremental mark={}us sweep_total={}us slices={} blocks={} \
+                 noncons_freed={}] cons_live={} heap_noncons={} dump_marked={}/{} live={}B",
                 self.gc_collections,
                 self.sweep_mark_us,
+                self.sweep_slice_us_total,
+                self.sweep_slice_count,
+                self.sweep_cons_blocks_swept,
+                self.sweep_noncons_freed,
                 self.cons_live_count,
                 self.non_cons_object_addrs.len(),
                 mapped_marked,
@@ -4798,6 +4886,107 @@ mod ownership_tests {
             unsafe { (*head_again.xcons_ptr()).load_car() }.0,
             TaggedValue::fixnum(N - 1).0,
         );
+    }
+
+    /// Gap 3 instrumentation: a deferred sweep must aggregate per-slice cost
+    /// (slice count, total µs, cons blocks, non-cons frees) into `sweep_stats`
+    /// and fold the cycle into the lifetime totals at completion.
+    #[test]
+    fn deferred_sweep_aggregates_slice_stats() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // A small rooted list plus lots of garbage: dead conses spanning many
+        // blocks and dead non-cons objects, so the sliced sweep has real work.
+        let mut rooted = TaggedValue::fixnum(0);
+        for i in 0..1_000 {
+            rooted = heap.alloc_cons(TaggedValue::fixnum(i), rooted);
+        }
+        for i in 0..400_000 {
+            let _ = heap.alloc_cons(TaggedValue::fixnum(i), TaggedValue::fixnum(0));
+        }
+        for i in 0..4_000 {
+            let _ = heap.alloc_float(i as f64);
+        }
+
+        // Mark to a fixpoint, arm the deferred sweep (the incremental
+        // termination path), then drain it in bounded slices.
+        heap.begin_collection();
+        heap.seed_root(rooted);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        assert!(heap.sweep_in_progress());
+        let mut slices = 1usize;
+        while !heap.incremental_sweep_slice(8) {
+            slices += 1;
+        }
+        assert!(!heap.sweep_in_progress());
+
+        let stats = heap.sweep_stats();
+        assert_eq!(stats.slice_count, slices);
+        assert!(stats.slice_count > 1, "budget 8 must take several slices");
+        assert!(stats.sweep_us > 0, "aggregated sweep cost must be non-zero");
+        assert!(stats.cons_blocks_swept > 0);
+        assert!(
+            stats.noncons_freed >= 4_000,
+            "the dead floats must be reclaimed by the deferred sweep \
+             (freed={})",
+            stats.noncons_freed,
+        );
+        assert_eq!(stats.lifetime_slices, stats.slice_count);
+        assert_eq!(stats.lifetime_sweep_us, stats.sweep_us);
+        assert_eq!(stats.lifetime_cons_blocks_swept, stats.cons_blocks_swept);
+        assert_eq!(stats.lifetime_noncons_freed, stats.noncons_freed);
+    }
+
+    /// Gap 3 instrumentation: `join_concurrent_mark` must record how many
+    /// GC-thread-parked (deferred) values the STW termination drain was handed
+    /// — the number that sizes a records/closures/strings concurrent tier.
+    #[test]
+    fn concurrent_termination_records_deferred_drain_size() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // A rooted cons spine carrying non-cons cars: the GC thread marks the
+        // owned conses but parks every non-cons in `deferred`, so the
+        // termination drain size is deterministically >= the car count.
+        let mut list = TaggedValue::fixnum(0);
+        for i in 0..1_000 {
+            let car = heap.alloc_float(i as f64);
+            list = heap.alloc_cons(car, list);
+        }
+        let root = list;
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+
+        let stats = heap.sweep_stats();
+        assert!(
+            stats.last_termination_deferred >= 1_000,
+            "every non-cons car must be parked for the termination drain \
+             (deferred={})",
+            stats.last_termination_deferred,
+        );
+        assert!(stats.max_termination_deferred >= stats.last_termination_deferred);
+        assert_eq!(stats.last_termination_satb, 0, "no mutation ran mid-mark");
+
+        // Finish the cycle cleanly: termination drain + deferred sweep.
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(root);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+        assert!(!heap.sweep_in_progress());
+        assert_eq!(heap.sweep_stats().noncons_freed, 0, "all floats are live");
     }
 
     /// Workstream A path-collapse safety net (characterization): a forced

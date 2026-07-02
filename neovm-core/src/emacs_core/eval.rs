@@ -7275,9 +7275,13 @@ impl Context {
             (*heap_ptr).incremental_finish(bytes_before, pause_t0);
         }
         if std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
+            let stats = self.tagged_heap.sweep_stats();
             eprintln!(
-                "NEOVM_GC concurrent_termination {}us [roots={roots_us}us drain={drain_us}us]",
-                term_t0.elapsed().as_micros()
+                "NEOVM_GC concurrent_termination {}us [roots={roots_us}us drain={drain_us}us \
+                 deferred={} satb={}]",
+                term_t0.elapsed().as_micros(),
+                stats.last_termination_deferred,
+                stats.last_termination_satb,
             );
         }
     }
