@@ -5342,18 +5342,18 @@ fn make_network_process_feature_advertisement_is_conservative() {
 
     let expected_featurep = cfg_select! {
         any(target_os = "linux", target_os = "android") => {
-            "OK (t t t t t t t t nil t t t t t t t t t)"
+            "OK (t t t t t t t t t t t t t t t t t t)"
         }
         _ => {
-            "OK (t t t t t t t t nil t t nil t nil t t t t)"
+            "OK (t t t t t t t t t t t nil t nil t t t t)"
         }
     };
     let expected_subfeatures = cfg_select! {
         any(target_os = "linux", target_os = "android") => {
-            "OK (:nodelay :reuseaddr :priority :oobinline :linger :keepalive :dontroute :broadcast :bindtodevice (:family local) (:family ipv4) (:family ipv6) (:service t) (:server t) (:nowait t) (:type datagram))"
+            "OK (:nodelay :reuseaddr :priority :oobinline :linger :keepalive :dontroute :broadcast :bindtodevice (:family local) (:family ipv4) (:family ipv6) (:service t) (:server t) (:nowait t) (:type datagram) (:type seqpacket))"
         }
         _ => {
-            "OK (:nodelay :reuseaddr :oobinline :linger :keepalive :dontroute :broadcast (:family local) (:family ipv4) (:family ipv6) (:service t) (:server t) (:nowait t) (:type datagram))"
+            "OK (:nodelay :reuseaddr :oobinline :linger :keepalive :dontroute :broadcast (:family local) (:family ipv4) (:family ipv6) (:service t) (:server t) (:nowait t) (:type datagram) (:type seqpacket))"
         }
     };
     assert_eq!(results[0], expected_featurep);

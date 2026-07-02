@@ -14601,6 +14601,11 @@ pub(crate) fn make_network_process_subfeatures() -> Value {
         Value::list(vec![Value::keyword("server"), Value::T]),
         Value::list(vec![Value::keyword("nowait"), Value::T]),
         Value::list(vec![Value::keyword("type"), Value::symbol("datagram")]),
+        // Local SOCK_SEQPACKET connections are fully backed (server accept +
+        // client + data delivery verified against GNU); GNU advertises this
+        // under HAVE_SEQPACKET (process.c `ADD_SUBFEATURE (QCtype,
+        // Qseqpacket)`).
+        Value::list(vec![Value::keyword("type"), Value::symbol("seqpacket")]),
     ];
     cfg_select! {
         any(target_os = "linux", target_os = "android") => {
