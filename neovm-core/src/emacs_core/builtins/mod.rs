@@ -9019,7 +9019,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "x-popup-dialog",
-        |_ctx, args| super::display::builtin_x_popup_dialog(args),
+        |ctx, args| super::display::builtin_x_popup_dialog(ctx, args),
         2,
         Some(3),
     );

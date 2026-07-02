@@ -1,13 +1,40 @@
 use super::*;
 use crate::buffer::{CharPos0, LispCharPos1};
-use crate::emacs_core::eval::Context;
+use crate::emacs_core::eval::{Context, DisplayHost, GuiFrameHostRequest, PopupMenuRequest};
 use crate::emacs_core::print_value;
 use crate::emacs_core::value::{
     ValueKind, VecLikeType, eq_value, get_string_text_properties_table_for_value,
 };
 use crate::test_utils::{eval_with_ldefs_boot_autoloads, runtime_startup_eval_all};
 use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
+
+#[derive(Clone, Default)]
+struct RecordingPopupHost {
+    shown: Arc<Mutex<Vec<PopupMenuRequest>>>,
+    hidden: Arc<Mutex<usize>>,
+}
+
+impl DisplayHost for RecordingPopupHost {
+    fn realize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn resize_gui_frame(&mut self, _request: GuiFrameHostRequest) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn show_popup_menu(&mut self, menu: PopupMenuRequest) -> Result<(), String> {
+        self.shown.lock().unwrap().push(menu);
+        Ok(())
+    }
+
+    fn hide_popup_menu(&mut self) -> Result<(), String> {
+        *self.hidden.lock().unwrap() += 1;
+        Ok(())
+    }
+}
 
 fn install_mouse_help_echo_snapshot_with_value(eval: &mut Context, help: Value) -> Value {
     let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
@@ -1792,6 +1819,17 @@ fn yes_or_no_p_rejects_extra_arg() {
 fn yes_or_no_p_uses_dialog_path_for_cons_last_input_event() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*scratch*");
+    let frame_id = ev
+        .frames
+        .create_frame("yes-or-no-dialog", 800, 600, scratch);
+    ev.frames.select_frame(frame_id);
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+    let host = RecordingPopupHost::default();
+    let shown = Arc::clone(&host.shown);
+    let hidden = Arc::clone(&host.hidden);
+    ev.set_display_host(Box::new(host));
     ev.obarray.set_symbol_value(
         "last-input-event",
         Value::list(vec![Value::symbol("dbus-event")]),
@@ -1799,9 +1837,19 @@ fn yes_or_no_p_uses_dialog_path_for_cons_last_input_event() {
     ev.obarray
         .set_symbol_value("last-nonmenu-event", Value::NIL);
     ev.obarray.set_symbol_value("use-dialog-box", Value::T);
+    tx.send(crate::keyboard::InputEvent::MenuSelection { index: 0 })
+        .unwrap();
 
     let result = builtin_yes_or_no_p(&mut ev, vec![Value::string("Confirm? ")]).unwrap();
-    assert_eq!(result, Value::NIL);
+    assert_eq!(result, Value::T);
+    let shown = shown.lock().unwrap();
+    assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0].frame_id, frame_id);
+    assert_eq!(shown[0].title.as_deref(), Some("Confirm? "));
+    assert_eq!(shown[0].entries.len(), 2);
+    assert_eq!(shown[0].entries[0].label, "Yes");
+    assert_eq!(shown[0].entries[1].label, "No");
+    assert_eq!(*hidden.lock().unwrap(), 1);
 }
 
 #[test]
@@ -1821,6 +1869,34 @@ fn yes_or_no_p_respects_use_dialog_box_nil() {
         result,
         Err(Flow::Signal(sig)) if sig.symbol_name() == "end-of-file"
     ));
+}
+
+#[test]
+fn yes_or_no_p_uses_dialog_before_short_answers() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let (tx, rx) = crossbeam_channel::unbounded();
+    ev.input_rx = Some(rx);
+    let host = RecordingPopupHost::default();
+    let shown = Arc::clone(&host.shown);
+    ev.set_display_host(Box::new(host));
+    ev.obarray.set_symbol_value(
+        "last-input-event",
+        Value::list(vec![Value::symbol("dbus-event")]),
+    );
+    ev.obarray
+        .set_symbol_value("last-nonmenu-event", Value::NIL);
+    ev.obarray.set_symbol_value("use-dialog-box", Value::T);
+    ev.obarray.set_symbol_value("use-short-answers", Value::T);
+    tx.send(crate::keyboard::InputEvent::MenuSelection { index: 1 })
+        .unwrap();
+
+    let result = builtin_yes_or_no_p(&mut ev, vec![Value::string("Confirm? ")]).unwrap();
+
+    assert_eq!(result, Value::NIL);
+    let shown = shown.lock().unwrap();
+    assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0].title.as_deref(), Some("Confirm? "));
 }
 
 #[test]

@@ -2549,11 +2549,11 @@ pub(crate) fn builtin_waiting_for_user_input_p_ctx(
 /// In interactive mode, uses read-from-minibuffer.
 /// In batch mode, signals end-of-file.
 pub(crate) fn builtin_yes_or_no_p(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    if eval
-        .obarray
-        .symbol_value("use-short-answers")
-        .is_some_and(|v| v.is_truthy())
-    {
+    validate_yes_or_no_p_args(&args)?;
+    if let Some(result) = yes_or_no_p_dialog_result(eval, &args)? {
+        return Ok(result);
+    }
+    if yes_or_no_p_use_short_answers(eval) {
         return eval.apply(Value::symbol("y-or-n-p"), args);
     }
     if let Some(result) = builtin_yes_or_no_p_in_runtime(eval, &args)? {
@@ -2613,6 +2613,13 @@ pub(crate) fn finish_yes_or_no_p_in_vm_runtime(
     shared: &mut super::eval::Context,
     args: &[Value],
 ) -> EvalResult {
+    validate_yes_or_no_p_args(args)?;
+    if let Some(result) = yes_or_no_p_dialog_result(shared, args)? {
+        return Ok(result);
+    }
+    if yes_or_no_p_use_short_answers(shared) {
+        return shared.apply(Value::symbol("y-or-n-p"), args.to_vec());
+    }
     if let Some(result) = builtin_yes_or_no_p_in_runtime(shared, args)? {
         return Ok(result);
     }
@@ -2625,24 +2632,7 @@ pub(crate) fn builtin_yes_or_no_p_in_runtime(
     runtime: &impl KeyboardInputRuntime,
     args: &[Value],
 ) -> Result<Option<Value>, Flow> {
-    expect_args("yes-or-no-p", args, 1)?;
-    if !args[0].is_string() {
-        return Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), args[0]],
-        ));
-    }
-
-    if yes_or_no_p_should_use_dialog(runtime) {
-        let menu = Value::cons(
-            args[0],
-            Value::list(vec![
-                Value::cons(Value::string("Yes"), Value::T),
-                Value::cons(Value::string("No"), Value::NIL),
-            ]),
-        );
-        return super::display::builtin_x_popup_dialog(vec![Value::T, menu, Value::NIL]).map(Some);
-    }
+    validate_yes_or_no_p_args(args)?;
 
     if runtime.has_input_receiver() {
         Ok(None)
@@ -2662,6 +2652,40 @@ pub(crate) fn builtin_yes_or_no_p_in_runtime(
         })
         .map(Some)
     }
+}
+
+fn validate_yes_or_no_p_args(args: &[Value]) -> Result<(), Flow> {
+    expect_args("yes-or-no-p", args, 1)?;
+    if !args[0].is_string() {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("stringp"), args[0]],
+        ));
+    }
+    Ok(())
+}
+
+fn yes_or_no_p_dialog_result(
+    eval: &mut super::eval::Context,
+    args: &[Value],
+) -> Result<Option<Value>, Flow> {
+    if !yes_or_no_p_should_use_dialog(eval) {
+        return Ok(None);
+    }
+    let menu = Value::cons(
+        args[0],
+        Value::list(vec![
+            Value::cons(Value::string("Yes"), Value::T),
+            Value::cons(Value::string("No"), Value::NIL),
+        ]),
+    );
+    super::display::builtin_x_popup_dialog(eval, vec![Value::T, menu, Value::NIL]).map(Some)
+}
+
+fn yes_or_no_p_use_short_answers(eval: &super::eval::Context) -> bool {
+    eval.obarray
+        .symbol_value("use-short-answers")
+        .is_some_and(|v| v.is_truthy())
 }
 
 fn yes_or_no_p_should_use_dialog(runtime: &impl KeyboardInputRuntime) -> bool {

@@ -1088,8 +1088,7 @@ pub(crate) fn builtin_x_send_client_message(args: Vec<Value>) -> EvalResult {
     Err(x_display_query_first_arg_error(&args[0]))
 }
 
-/// (x-popup-dialog POSITION CONTENTS &optional HEADER) -> nil/error in batch context.
-pub(crate) fn builtin_x_popup_dialog(args: Vec<Value>) -> EvalResult {
+fn validate_x_popup_dialog_args(args: &[Value]) -> Result<(), Flow> {
     expect_range_args("x-popup-dialog", &args, 2, 3)?;
 
     if !args[0].is_frame() && !args[0].is_t() {
@@ -1130,6 +1129,12 @@ pub(crate) fn builtin_x_popup_dialog(args: Vec<Value>) -> EvalResult {
         ));
     }
 
+    Ok(())
+}
+
+/// (x-popup-dialog POSITION CONTENTS &optional HEADER) -> nil/error in batch context.
+pub(crate) fn builtin_x_popup_dialog_batch(args: Vec<Value>) -> EvalResult {
+    validate_x_popup_dialog_args(&args)?;
     Ok(Value::NIL)
 }
 
@@ -1438,6 +1443,154 @@ impl TtyMenuNavigationCommand {
     }
 }
 
+fn popup_dialog_from_contents(
+    contents: Value,
+) -> Option<(String, Vec<PopupMenuEntry>, Vec<Value>)> {
+    let title = popup_menu_string(contents.cons_car())?;
+    let mut rest = contents.cons_cdr();
+    let mut entries = Vec::new();
+    let mut values = Vec::new();
+    let mut depth = 0;
+
+    while rest.is_cons() && depth < 256 {
+        let item = rest.cons_car();
+        if item.is_nil() {
+            entries.push(PopupMenuEntry {
+                label: String::new(),
+                shortcut: String::new(),
+                enabled: false,
+                separator: true,
+                submenu: false,
+                depth: 0,
+            });
+            values.push(Value::NIL);
+        } else if item.is_string() {
+            entries.push(PopupMenuEntry {
+                label: popup_menu_string(item)?,
+                shortcut: String::new(),
+                enabled: false,
+                separator: false,
+                submenu: false,
+                depth: 0,
+            });
+            values.push(Value::NIL);
+        } else if item.is_cons()
+            && let Some(label) = popup_menu_string(item.cons_car())
+        {
+            entries.push(PopupMenuEntry {
+                label,
+                shortcut: String::new(),
+                enabled: true,
+                separator: false,
+                submenu: false,
+                depth: 0,
+            });
+            values.push(item.cons_cdr());
+        }
+
+        rest = rest.cons_cdr();
+        depth += 1;
+    }
+
+    Some((title, entries, values))
+}
+
+fn popup_dialog_position(ctx: &Context, position: Value) -> (FrameId, f32, f32) {
+    let frame_id = position
+        .as_frame_id()
+        .map(FrameId)
+        .filter(|id| ctx.frame_manager().get(*id).is_some())
+        .or_else(|| ctx.frame_manager().selected_frame().map(|frame| frame.id))
+        .unwrap_or(FrameId(0));
+
+    let (x, y) = ctx
+        .frame_manager()
+        .get(frame_id)
+        .map(|frame| (frame.width as f32 / 2.0, frame.height as f32 / 2.0))
+        .unwrap_or((0.0, 0.0));
+
+    (frame_id, x, y)
+}
+
+pub(crate) fn builtin_x_popup_dialog(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
+    validate_x_popup_dialog_args(&args)?;
+
+    if ctx.input_rx.is_none() {
+        tracing::info!("x-popup-dialog interactive: no input receiver");
+        return Ok(Value::NIL);
+    }
+    if ctx.display_host.is_none() {
+        tracing::info!("x-popup-dialog interactive: no display host");
+        return Ok(Value::NIL);
+    }
+
+    let Some((title, entries, values)) = popup_dialog_from_contents(args[1]) else {
+        tracing::info!("x-popup-dialog interactive: malformed dialog contents");
+        return Ok(Value::NIL);
+    };
+    if entries.is_empty() {
+        tracing::info!("x-popup-dialog interactive: dialog has no entries");
+        return Ok(Value::NIL);
+    }
+
+    let (frame_id, x, y) = popup_dialog_position(ctx, args[0]);
+    let visible_rows = ctx
+        .display_host
+        .as_ref()
+        .and_then(|host| host.popup_menu_visible_rows(x, y, entries.len()))
+        .unwrap_or(entries.len())
+        .min(entries.len());
+    if visible_rows == 0 {
+        tracing::info!(
+            x,
+            y,
+            entries = entries.len(),
+            "x-popup-dialog interactive: host reported zero visible rows"
+        );
+        return Ok(Value::NIL);
+    }
+
+    tracing::info!(
+        x,
+        y,
+        entries = entries.len(),
+        visible_rows,
+        "x-popup-dialog interactive: showing popup"
+    );
+
+    let mut selected = entries
+        .iter()
+        .position(|entry| entry.enabled && !entry.separator)
+        .unwrap_or(0);
+
+    let specpdl_count = ctx.specpdl.len();
+    for value in &values {
+        ctx.push_specpdl_root(*value);
+    }
+    ctx.specbind(intern("overriding-terminal-local-map"), Value::NIL);
+    ctx.specbind(intern("track-mouse"), Value::NIL);
+
+    let result = x_popup_menu_interactive_loop(
+        ctx,
+        args[0],
+        &entries,
+        &values,
+        visible_rows,
+        x,
+        y,
+        frame_id,
+        Some(&title),
+        &mut selected,
+    );
+
+    let result_root_scope = ctx.save_vm_roots();
+    ctx.push_eval_result_roots(&result);
+    let _ = ctx.display_host.as_mut().map(|host| host.hide_popup_menu());
+    ctx.redisplay_with_force(true);
+    ctx.restore_vm_roots(result_root_scope);
+    ctx.unbind_to_with_result(specpdl_count, result)
+}
+
 fn x_popup_menu_interactive(ctx: &mut Context, position: Value, menu: Value) -> EvalResult {
     // GNU keys submenu rendering off `Vmenu_updating_frame` being a TTY frame
     // (`is_tty_frame`, src/menu.c:407). For `x-popup-menu` that is the selected
@@ -1487,6 +1640,11 @@ fn x_popup_menu_interactive(ctx: &mut Context, position: Value, menu: Value) -> 
         "x-popup-menu interactive: showing popup"
     );
     let mut selected = 0;
+    let frame_id = ctx
+        .frame_manager()
+        .selected_frame()
+        .map(|frame| frame.id)
+        .unwrap_or(FrameId(0));
 
     let specpdl_count = ctx.specpdl.len();
     for event in &events {
@@ -1507,6 +1665,8 @@ fn x_popup_menu_interactive(ctx: &mut Context, position: Value, menu: Value) -> 
         visible_rows,
         x,
         y,
+        frame_id,
+        None,
         &mut selected,
     );
 
@@ -1526,9 +1686,11 @@ fn x_popup_menu_interactive_loop(
     visible_rows: usize,
     x: f32,
     y: f32,
+    frame_id: FrameId,
+    title: Option<&str>,
     selected: &mut usize,
 ) -> EvalResult {
-    show_popup_menu_selection(ctx, x, y, entries, *selected)?;
+    show_popup_menu_selection(ctx, frame_id, x, y, title, entries, *selected)?;
 
     loop {
         let (keys, binding) = ctx.read_key_sequence()?;
@@ -1547,11 +1709,11 @@ fn x_popup_menu_interactive_loop(
         match command {
             Some(TtyMenuNavigationCommand::TtyMenuNextItem) => {
                 *selected = (*selected + 1).min(visible_rows.saturating_sub(1));
-                show_popup_menu_selection(ctx, x, y, entries, *selected)?;
+                show_popup_menu_selection(ctx, frame_id, x, y, title, entries, *selected)?;
             }
             Some(TtyMenuNavigationCommand::TtyMenuPrevItem) => {
                 *selected = (*selected).saturating_sub(1);
-                show_popup_menu_selection(ctx, x, y, entries, *selected)?;
+                show_popup_menu_selection(ctx, frame_id, x, y, title, entries, *selected)?;
             }
             Some(TtyMenuNavigationCommand::TtyMenuNextMenu) => {
                 if let Some(new_position) =
@@ -1586,16 +1748,13 @@ fn x_popup_menu_interactive_loop(
 
 fn show_popup_menu_selection(
     ctx: &mut Context,
+    frame_id: FrameId,
     x: f32,
     y: f32,
+    title: Option<&str>,
     entries: &[PopupMenuEntry],
     selected: usize,
 ) -> Result<(), Flow> {
-    let frame_id = ctx
-        .frame_manager()
-        .selected_frame()
-        .map(|frame| frame.id)
-        .unwrap_or(crate::window::FrameId(0));
     let Some(host) = ctx.display_host.as_mut() else {
         return Ok(());
     };
@@ -1603,7 +1762,7 @@ fn show_popup_menu_selection(
         frame_id,
         x,
         y,
-        title: None,
+        title: title.map(str::to_owned),
         entries: entries.to_vec(),
         selected,
     })

@@ -1851,21 +1851,21 @@ fn x_popup_dialog_and_menu_batch_semantics() {
     crate::test_utils::init_test_tracing();
     let term = terminal_handle_value();
 
-    match builtin_x_popup_dialog(vec![Value::NIL, Value::NIL]) {
+    match builtin_x_popup_dialog_batch(vec![Value::NIL, Value::NIL]) {
         Err(Flow::Signal(sig)) => {
             assert_eq!(sig.symbol_name(), "wrong-type-argument");
             assert_eq!(sig.data, vec![Value::symbol("windowp"), Value::NIL]);
         }
         other => panic!("expected wrong-type-argument signal, got {other:?}"),
     }
-    match builtin_x_popup_dialog(vec![Value::make_frame(1), Value::NIL]) {
+    match builtin_x_popup_dialog_batch(vec![Value::make_frame(1), Value::NIL]) {
         Err(Flow::Signal(sig)) => {
             assert_eq!(sig.symbol_name(), "wrong-type-argument");
             assert_eq!(sig.data, vec![Value::symbol("stringp"), Value::NIL]);
         }
         other => panic!("expected wrong-type-argument signal, got {other:?}"),
     }
-    match builtin_x_popup_dialog(vec![
+    match builtin_x_popup_dialog_batch(vec![
         Value::make_frame(1),
         Value::list(vec![Value::string("A")]),
     ]) {
@@ -1876,7 +1876,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         other => panic!("expected wrong-type-argument signal, got {other:?}"),
     }
     assert!(
-        builtin_x_popup_dialog(vec![
+        builtin_x_popup_dialog_batch(vec![
             Value::make_frame(1),
             Value::list(vec![
                 Value::string("Title"),
@@ -1887,7 +1887,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         .is_nil()
     );
     assert!(
-        builtin_x_popup_dialog(vec![
+        builtin_x_popup_dialog_batch(vec![
             Value::T,
             Value::list(vec![
                 Value::string("Title"),
@@ -1898,7 +1898,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         .is_nil()
     );
     assert!(
-        builtin_x_popup_dialog(vec![
+        builtin_x_popup_dialog_batch(vec![
             Value::make_frame(1),
             Value::list(vec![Value::string("A"), Value::fixnum(1)]),
         ])
@@ -1906,7 +1906,7 @@ fn x_popup_dialog_and_menu_batch_semantics() {
         .is_nil()
     );
     for arg in [Value::string("x"), Value::fixnum(1), term] {
-        match builtin_x_popup_dialog(vec![arg, Value::NIL]) {
+        match builtin_x_popup_dialog_batch(vec![arg, Value::NIL]) {
             Err(Flow::Signal(sig)) => {
                 assert_eq!(sig.symbol_name(), "wrong-type-argument");
                 assert_eq!(sig.data, vec![Value::symbol("windowp"), Value::NIL]);
@@ -1914,15 +1914,15 @@ fn x_popup_dialog_and_menu_batch_semantics() {
             other => panic!("expected wrong-type-argument signal, got {other:?}"),
         }
     }
-    match builtin_x_popup_dialog(vec![]) {
+    match builtin_x_popup_dialog_batch(vec![]) {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "wrong-number-of-arguments"),
         other => panic!("expected wrong-number-of-arguments signal, got {other:?}"),
     }
-    match builtin_x_popup_dialog(vec![Value::NIL]) {
+    match builtin_x_popup_dialog_batch(vec![Value::NIL]) {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "wrong-number-of-arguments"),
         other => panic!("expected wrong-number-of-arguments signal, got {other:?}"),
     }
-    match builtin_x_popup_dialog(vec![Value::NIL, Value::NIL, Value::NIL, Value::NIL]) {
+    match builtin_x_popup_dialog_batch(vec![Value::NIL, Value::NIL, Value::NIL, Value::NIL]) {
         Err(Flow::Signal(sig)) => assert_eq!(sig.symbol_name(), "wrong-number-of-arguments"),
         other => panic!("expected wrong-number-of-arguments signal, got {other:?}"),
     }
@@ -3486,6 +3486,43 @@ fn x_popup_menu_interactive_keymap_returns_selected_event() {
     assert_eq!(shown[0].frame_id, frame_id);
     assert_eq!(shown[0].entries.len(), 1);
     assert_eq!(shown[0].entries[0].label, "Open");
+    assert_eq!(*hidden.lock().unwrap(), 1);
+}
+
+#[test]
+fn x_popup_dialog_interactive_returns_selected_value() {
+    let mut eval = crate::emacs_core::Context::new();
+    let scratch = eval.buffers.create_buffer("*scratch*");
+    let frame_id = eval.frames.create_frame("dialog-owner", 800, 600, scratch);
+    eval.frames.select_frame(frame_id);
+    let (tx, rx) = crossbeam_channel::unbounded();
+    eval.input_rx = Some(rx);
+    let host = RecordingPopupHost::default();
+    let shown = Arc::clone(&host.shown);
+    let hidden = Arc::clone(&host.hidden);
+    eval.set_display_host(Box::new(host));
+
+    let contents = Value::list(vec![
+        Value::string("Confirm?"),
+        Value::cons(Value::string("Yes"), Value::T),
+        Value::cons(Value::string("No"), Value::symbol("declined")),
+    ]);
+    tx.send(crate::keyboard::InputEvent::MenuSelection { index: 1 })
+        .unwrap();
+
+    let result =
+        super::builtin_x_popup_dialog(&mut eval, vec![Value::T, contents, Value::NIL]).unwrap();
+
+    assert_eq!(result, Value::symbol("declined"));
+    let shown = shown.lock().unwrap();
+    assert_eq!(shown.len(), 1);
+    assert_eq!(shown[0].frame_id, frame_id);
+    assert_eq!(shown[0].x, 400.0);
+    assert_eq!(shown[0].y, 300.0);
+    assert_eq!(shown[0].title.as_deref(), Some("Confirm?"));
+    assert_eq!(shown[0].entries.len(), 2);
+    assert_eq!(shown[0].entries[0].label, "Yes");
+    assert_eq!(shown[0].entries[1].label, "No");
     assert_eq!(*hidden.lock().unwrap(), 1);
 }
 
