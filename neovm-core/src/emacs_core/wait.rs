@@ -402,8 +402,7 @@ impl WaitRequest {
     fn base_timeout(self, now: Instant) -> Duration {
         self.deadline
             .remaining(now)
-            .unwrap_or_else(|| Duration::from_millis(50))
-            .min(Duration::from_millis(50))
+            .unwrap_or_else(|| Duration::from_secs(100_000))
     }
 
     fn needs_redisplay_after_service(
@@ -1344,6 +1343,7 @@ mod tests {
         assert!(read.sets_waiting_for_user_input());
         assert!(read.runs_timers());
         assert!(!read.poll_or_deadline_elapsed(now));
+        assert_eq!(read.base_timeout(now), Duration::from_secs(1));
         assert_eq!(
             read.base_timeout(now + Duration::from_secs(2)),
             Duration::ZERO

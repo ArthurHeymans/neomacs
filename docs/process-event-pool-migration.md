@@ -107,8 +107,8 @@ Key contract points verified empirically this cycle:
 | D9 | Child exit observed only inside wait iterations; `process-status` stale outside waits (the load-flaky family's root cause) | **IN TREE — S6** (see §4) |
 | D10 | Fixed 4096-byte reads; no `read-process-output-max`; no adaptive read buffering | **FIXED — S7** |
 | D11 | `process-send-string` = `write_all`+`flush`; never re-enters the wait; `write_queue` field exists unused | **FIXED — S8** |
-| D12 | DNS always blocking, even for `:nowait` | **OPEN — S9** |
-| D13 | 50ms polling cap per wait iteration instead of exact timeouts | **OPEN — S9** |
+| D12 | DNS always blocking, even for `:nowait` | **FIXED — S9** |
+| D13 | 50ms polling cap per wait iteration instead of exact timeouts | **FIXED — S9** |
 | D14 | Lisp threads: mutex ownership error where GNU blocks; dynamic `let` leaks across threads; `all-threads` misses blocked workers; `thread-signal` handler detail | **OPEN — S10** (separate subsystem) |
 
 ## 3. Landed slices (all pushed to main)
@@ -396,21 +396,67 @@ Validated gates for this slice:
   was the documented display-backend baseline
   `div_v3_window_margins_fringes_body_width_combo`.
 
+## 4.4. LANDED — S9 (current in-tree state)
+
+S9 implemented async DNS for `:nowait` TCP clients and removed the global
+50ms wait-iteration cap:
+
+- `make-network-process :nowait` with a real hostname now creates the process
+  in `connect` state immediately and stores a `PendingNetworkConnect::Dns`
+  request. A Rust resolver thread performs `getaddrinfo`; it never touches
+  Lisp state and only sends address data back through a channel plus
+  `Poller::notify()`.
+- The wait service pass checks completed DNS before socket I/O, matching GNU's
+  `check_for_dns` position near the top of `wait_reading_process_output`.
+  Successful DNS hands the address list to the existing non-blocking TCP
+  connect path; DNS failure records GNU's string-valued failed status
+  `(failed "Name lookup of HOST failed")` and does not run a sentinel.
+- Invalid hostnames that libc would reject (`-bad.example`, interior empty
+  labels, whitespace, overlong labels) are represented as an already-ready
+  async DNS failure. Root/trailing-dot names are left to the resolver; the
+  host-candidate probe keeps `"."` matching GNU's environment-dependent
+  resolver result. This preserves GNU's Lisp-visible sequence (`connect` now,
+  `failed` at the next wait) without letting the resolver retry for tens of
+  seconds.
+- Already-known local/literal destinations (`:host nil`, `:host 'local`,
+  `"localhost"`, and numeric IP literals) continue to use the immediate
+  non-blocking connect path so `process-contact` exposes remote/local vectors
+  at construction time, matching GNU probes.
+- `WaitRequest::base_timeout` now uses the exact remaining deadline, with GNU's
+  long 100000-second block for forever waits. Timer, adaptive-read, and fd
+  readiness still reduce or wake the block through their existing paths.
+
+Validated gates for this slice:
+
+- GNU source study: `process.c` `Fmake_network_process` around
+  `getaddrinfo_a`, `check_for_dns`, `connect_network_socket`, and the
+  `wait_reading_process_output` timeout calculation / async retry logic.
+- Live probes in `./tmp`: GNU and release Neomacs both return
+  `(ok (connect (connect stop)) failed nil)` for async DNS failure,
+  `(connect nil failed nil)` for targeted accept return, and
+  `(ok (connect (connect stop)) failed nil nil)` for the sentinel probe
+  (DNS failure does not run the sentinel). The host-candidate probe matches GNU
+  for `""`, `"."`, `"-bad.example"`, `"bad..example"`, `"bad host"`,
+  `"::bad::"`, and an overlong-label hostname. `:host 'local :nowait` still
+  returns `(connect (connect stop) t t)` for immediate remote/local contact
+  vectors.
+- Focused unit tests
+  `make_network_process_nowait_hostname_dns_failure_is_async_like_gnu`,
+  `wait_request_exposes_scheduler_queries`,
+  `make_network_process_nowait_tcp_loopback_opens_like_gnu`, and
+  `process_send_string_waits_for_nowait_tcp_connect_like_gnu` passed.
+- Focused oracle test
+  `process_wait_semantics::make_network_process_nowait_hostname_dns_failure_is_async_like_gnu`
+  passed with inline GNU expectation `"OK (connect nil failed nil)"`.
+- `cargo nextest run -p neovm-core -E 'test(process) or test(wait)'
+  --no-fail-fast`: 290/290 passed.
+- Process/network/timer oracle family: 259 run, 257 passed. The only failures
+  were documented baseline cases:
+  `div_v3_window_margins_fringes_body_width_combo` and flaky
+  `div_core_divergence_surface_process_attributes_running_child_combo`, which
+  passed standalone three times.
+
 ## 5. REMAINING SLICES — detailed execution guidance
-
-### S9 — async DNS + exact timeouts (D12, D13)
-
-- `:nowait` with a hostname should not block on `getaddrinfo`. GNU uses
-  `getaddrinfo_a` when available and polls completion in the wait loop
-  (process.c:5410-5431, `check_for_dns`). Rust: resolve on a `std::thread`
-  with the result delivered through the poller's notify (the one legitimate
-  auxiliary thread — it never touches Lisp; the wait loop applies the result
-  inside its iteration, matching GNU's model).
-- Drop the 50ms polling cap (wait.rs `base_timeout`): timeout should be
-  exactly min(deadline remaining, next-timer delta, ∞) — the poller already
-  wakes on fd readiness and `Poller::notify()`. Audit the cap's current
-  consumers first (GUI frame scheduling may rely on periodic wakes; if so,
-  scope the exact-timeout change to `--batch`/no-display waits first).
 
 ### S10 — Lisp threads (D14) — separate subsystem effort
 

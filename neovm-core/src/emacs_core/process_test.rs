@@ -1,5 +1,5 @@
 use super::*;
-use crate::emacs_core::wait::CommandInputWaitOutcome;
+use crate::emacs_core::wait::{CommandInputWaitOutcome, ProcessOutputWaitOutcome};
 use crate::emacs_core::{Context, builtins, format_eval_result};
 use crate::heap_types::LispString;
 use crate::test_utils::{runtime_startup_eval_all, runtime_startup_eval_one};
@@ -5710,6 +5710,64 @@ fn make_network_process_nowait_tcp_loopback_opens_like_gnu() {
     assert_eq!(
         results[0],
         "OK ((connect (connect stop) t t) open (open listen connect stop) ((:cli \"open\" open)) t t)"
+    );
+}
+
+#[test]
+fn make_network_process_nowait_hostname_dns_failure_is_async_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let id = eval.processes.create_process_with_kind_lisp(
+        LispString::from_utf8("nowait-dns-fail"),
+        Value::NIL,
+        LispString::from_utf8("network"),
+        Vec::new(),
+        ProcessKind::Network,
+    );
+    let (sender, receiver) = std::sync::mpsc::channel();
+    sender
+        .send(Err("Name or service not known".to_string()))
+        .expect("seed dns failure");
+    let proc = eval.processes.get_mut(id).expect("network process");
+    proc.status = process_status_connect_value();
+    proc.childp = Value::list(vec![
+        ProcessKeyword::Host.value(),
+        Value::string("-bad.example"),
+        ProcessKeyword::Service.value(),
+        Value::fixnum(9),
+        ProcessKeyword::Nowait.value(),
+        Value::T,
+    ]);
+    proc.pending_network_connect = Some(PendingNetworkConnect::Dns(PendingDnsRequest {
+        host: "-bad.example".to_string(),
+        receiver,
+        ready: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        socket_options: Vec::new(),
+    }));
+
+    let outcome = eval
+        .wait_for_process_output(ProcessOutputWaitRequest::new(
+            ProcessOutputWaitTiming::For(Duration::from_secs(1)),
+            Some(id),
+            false,
+            true,
+        ))
+        .expect("wait for dns failure");
+
+    assert_eq!(outcome, ProcessOutputWaitOutcome::NoProcessActivity);
+    assert_eq!(
+        builtin_process_status_impl(
+            &mut eval.processes,
+            &eval.buffers,
+            vec![Value::make_process(id)]
+        )
+        .expect("status"),
+        Value::symbol("failed")
+    );
+    assert_eq!(
+        builtin_process_live_p_impl(&mut eval.processes, vec![Value::make_process(id)])
+            .expect("live-p"),
+        Value::NIL
     );
 }
 

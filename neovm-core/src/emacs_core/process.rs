@@ -42,7 +42,8 @@ use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::os::unix::net::{SocketAddr as UnixSocketAddr, UnixDatagram, UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use strum::{EnumString, IntoStaticStr};
 
@@ -1145,6 +1146,11 @@ impl ProcessWaitBackend {
                         if interest.wants_input_wakeup() {
                             input_wakeup = true;
                         }
+                        if interest.wants_processes() {
+                            ready_processes.extend(processes.iter().filter_map(|(id, process)| {
+                                process_has_ready_async_dns(process).then_some(*id)
+                            }));
+                        }
                         let backend = ProcessWaitEvents::from_sources_with_writable(
                             input_wakeup,
                             ready_processes,
@@ -1892,6 +1898,10 @@ fn process_status_failed_value(code: i32) -> Value {
     Value::list(vec![Value::symbol("failed"), Value::fixnum(code as i64)])
 }
 
+fn process_status_failed_message_value(message: String) -> Value {
+    Value::list(vec![Value::symbol("failed"), Value::string(message)])
+}
+
 /// Convert a finished `std::process::ExitStatus` to an Emacs process status:
 /// `(exit CODE)` for a normal exit, `(signal N ...)` for signal death (GNU
 /// distinguishes the two via `WIFSIGNALED`/`WTERMSIG`).
@@ -2006,8 +2016,11 @@ fn gnu_process_status_message(status: Value) -> String {
             }
         }
         Some(ProcessStatusSymbol::Failed) => {
-            let code = process_status_code_value(status);
-            format!("failed with code {code}\n")
+            if let Some(code) = process_status_code_lisp_value(status) {
+                format!("failed with code {}\n", process_status_code_message(code))
+            } else {
+                "failed with code 0\n".to_string()
+            }
         }
         Some(ProcessStatusSymbol::Signal) | Some(ProcessStatusSymbol::Stop) => {
             let code = process_status_code_value(status);
@@ -2086,10 +2099,20 @@ fn process_status_symbol_value(status: Value) -> Value {
 }
 
 fn process_status_code_value(status: Value) -> i64 {
-    list_to_vec(&status)
-        .and_then(|items| items.get(1).copied())
+    process_status_code_lisp_value(status)
         .and_then(|value| value.as_fixnum())
         .unwrap_or(0)
+}
+
+fn process_status_code_lisp_value(status: Value) -> Option<Value> {
+    list_to_vec(&status).and_then(|items| items.get(1).copied())
+}
+
+fn process_status_code_message(code: Value) -> String {
+    code.as_fixnum()
+        .map(|value| value.to_string())
+        .or_else(|| code.as_utf8_str().map(str::to_string))
+        .unwrap_or_else(|| "0".to_string())
 }
 
 /// Resolve the (decode . encode) coding pair for a network process, mirroring
@@ -2602,14 +2625,39 @@ struct NetworkSocketOptionSpec {
     value: Value,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 enum PendingNetworkConnect {
     Tcp {
         remaining_addrs: Vec<SocketAddr>,
         socket_options: Vec<NetworkSocketOptionSpec>,
     },
+    Dns(PendingDnsRequest),
     #[cfg(unix)]
     Local,
+}
+
+#[derive(Debug)]
+struct PendingDnsRequest {
+    host: String,
+    receiver: mpsc::Receiver<Result<Vec<SocketAddr>, String>>,
+    ready: Arc<AtomicBool>,
+    socket_options: Vec<NetworkSocketOptionSpec>,
+}
+
+impl PendingDnsRequest {
+    fn is_ready(&self) -> bool {
+        self.ready.load(Ordering::Acquire)
+    }
+}
+
+fn pending_network_connect_has_ready_async_dns(pending: &PendingNetworkConnect) -> bool {
+    matches!(pending, PendingNetworkConnect::Dns(request) if request.is_ready())
+}
+
+fn process_has_ready_async_dns(proc: &Process) -> bool {
+    proc.pending_network_connect
+        .as_ref()
+        .is_some_and(pending_network_connect_has_ready_async_dns)
 }
 
 #[derive(Debug)]
@@ -2631,6 +2679,7 @@ enum PendingNetworkConnectCompletion {
     Retrying,
     Connected { sentinel: Value },
     Failed { sentinel: Value, code: i32 },
+    DnsFailed,
 }
 
 impl NetworkSocketOption {
@@ -3076,28 +3125,25 @@ fn network_socket_type_addrinfo_socktype(socket_type: NetworkSocketType) -> i32 
     }
 }
 
-fn network_addrinfo_error(host: &str, port: u16, err: dns_lookup::LookupError) -> Flow {
+fn network_addrinfo_error_detail(err: dns_lookup::LookupError) -> String {
     let io_error: std::io::Error = err.into();
     let detail = io_error.to_string();
-    let detail = detail
+    detail
         .strip_prefix("failed to lookup address information: ")
-        .unwrap_or(&detail);
-    signal(
-        "error",
-        vec![Value::string(format!("{host}/{port} {detail}"))],
-    )
+        .unwrap_or(&detail)
+        .to_string()
 }
 
-fn network_addrinfo_item_error(host: &str, port: u16, err: std::io::Error) -> Flow {
-    signal("error", vec![Value::string(format!("{host}/{port} {err}"))])
+fn network_addrinfo_item_error_detail(err: std::io::Error) -> String {
+    err.to_string()
 }
 
-fn resolve_network_socket_addrs(
+fn resolve_network_socket_addrs_raw(
     host: &str,
     port: u16,
     family: NetworkProcessFamily,
     socket_type: NetworkSocketType,
-) -> Result<Vec<SocketAddr>, Flow> {
+) -> Result<Vec<SocketAddr>, String> {
     use dns_lookup::AddrInfoHints;
 
     let normalized_host = host.split('\0').next().unwrap_or_default();
@@ -3108,22 +3154,103 @@ fn resolve_network_socket_addrs(
         ..AddrInfoHints::default()
     };
     let iter = dns_lookup::getaddrinfo(Some(normalized_host), Some(&service), Some(hints))
-        .map_err(|err| network_addrinfo_error(normalized_host, port, err))?;
+        .map_err(network_addrinfo_error_detail)?;
     let mut addrs = Vec::new();
     for info in iter {
-        let info = info.map_err(|err| network_addrinfo_item_error(normalized_host, port, err))?;
+        let info = info.map_err(network_addrinfo_item_error_detail)?;
         addrs.push(info.sockaddr);
     }
     if addrs.is_empty() {
-        Err(signal(
-            "error",
-            vec![Value::string(format!(
-                "{normalized_host}/{port} No address associated with hostname"
-            ))],
-        ))
+        Err("No address associated with hostname".to_string())
     } else {
         Ok(addrs)
     }
+}
+
+fn resolve_network_socket_addrs(
+    host: &str,
+    port: u16,
+    family: NetworkProcessFamily,
+    socket_type: NetworkSocketType,
+) -> Result<Vec<SocketAddr>, Flow> {
+    let normalized_host = host.split('\0').next().unwrap_or_default();
+    resolve_network_socket_addrs_raw(host, port, family, socket_type).map_err(|detail| {
+        signal(
+            "error",
+            vec![Value::string(format!("{normalized_host}/{port} {detail}"))],
+        )
+    })
+}
+
+fn start_async_network_dns_lookup(
+    host: String,
+    port: u16,
+    family: NetworkProcessFamily,
+    socket_type: NetworkSocketType,
+    socket_options: Vec<NetworkSocketOptionSpec>,
+    notifier: Option<WaitNotifier>,
+) -> PendingDnsRequest {
+    let (sender, receiver) = mpsc::channel();
+    let ready = Arc::new(AtomicBool::new(false));
+    if hostname_fails_without_dns_lookup(&host) {
+        let _ = sender.send(Err("Name or service not known".to_string()));
+        ready.store(true, Ordering::Release);
+        return PendingDnsRequest {
+            host,
+            receiver,
+            ready,
+            socket_options,
+        };
+    }
+    let thread_ready = Arc::clone(&ready);
+    let thread_host = host.clone();
+    std::thread::spawn(move || {
+        let result = resolve_network_socket_addrs_raw(&thread_host, port, family, socket_type);
+        let _ = sender.send(result);
+        thread_ready.store(true, Ordering::Release);
+        if let Some(notifier) = notifier {
+            notifier.notify();
+        }
+    });
+    PendingDnsRequest {
+        host,
+        receiver,
+        ready,
+        socket_options,
+    }
+}
+
+fn hostname_fails_without_dns_lookup(host: &str) -> bool {
+    let host = host.split('\0').next().unwrap_or_default();
+    if host.is_empty() || host.len() > 253 || host.chars().any(char::is_whitespace) {
+        return true;
+    }
+    let host = host.strip_suffix('.').unwrap_or(host);
+    if host.is_empty() {
+        return false;
+    }
+    host.split('.').any(|label| {
+        label.is_empty() || label.len() > 63 || label.starts_with('-') || label.ends_with('-')
+    })
+}
+
+fn nowait_tcp_immediate_addrs(
+    host_value: Value,
+    host: &str,
+    port: u16,
+    family: NetworkProcessFamily,
+) -> Option<Vec<SocketAddr>> {
+    if host_value.is_nil() || host_value.as_symbol_name() == Some("local") || host == "localhost" {
+        let ip = family.loopback_host().parse::<IpAddr>().ok()?;
+        return Some(vec![SocketAddr::new(ip, port)]);
+    }
+    let ip = host.parse::<IpAddr>().ok()?;
+    let family_matches = match (family, ip) {
+        (NetworkProcessFamily::Ipv4, IpAddr::V6(_)) => false,
+        (NetworkProcessFamily::Ipv6, IpAddr::V4(_)) => false,
+        _ => true,
+    };
+    family_matches.then_some(vec![SocketAddr::new(ip, port)])
 }
 
 fn bind_udp_socket_host(
@@ -4825,6 +4952,9 @@ impl ProcessManager {
                 if p.status_notify_pending {
                     return true;
                 }
+                if p.pending_network_connect.is_some() {
+                    return true;
+                }
                 if !process_has_readable_process_io(p) {
                     return false;
                 }
@@ -5148,6 +5278,13 @@ impl ProcessManager {
         if proc.pending_network_connect.is_none() {
             return Ok(PendingNetworkConnectCompletion::None);
         }
+        if proc
+            .pending_network_connect
+            .as_ref()
+            .is_some_and(|pending| matches!(pending, PendingNetworkConnect::Dns(_)))
+        {
+            return self.complete_pending_dns_network_connect(id);
+        }
         let connect_error = proc
             .network_socket
             .as_ref()
@@ -5230,6 +5367,75 @@ impl ProcessManager {
         }
         self.register_socket_fd(id).ok();
         Ok(PendingNetworkConnectCompletion::Connected { sentinel })
+    }
+
+    fn complete_pending_dns_network_connect(
+        &mut self,
+        id: ProcessId,
+    ) -> Result<PendingNetworkConnectCompletion, Flow> {
+        let Some(proc) = self.processes.get(&id) else {
+            return Ok(PendingNetworkConnectCompletion::None);
+        };
+        let Some(PendingNetworkConnect::Dns(request)) = proc.pending_network_connect.as_ref()
+        else {
+            return Ok(PendingNetworkConnectCompletion::None);
+        };
+        if !request.is_ready() {
+            return Ok(PendingNetworkConnectCompletion::None);
+        }
+
+        let pending = self
+            .processes
+            .get_mut(&id)
+            .and_then(|proc| proc.pending_network_connect.take());
+        let Some(PendingNetworkConnect::Dns(request)) = pending else {
+            return Ok(PendingNetworkConnectCompletion::None);
+        };
+
+        let resolved = match request.receiver.try_recv() {
+            Ok(result) => result,
+            Err(mpsc::TryRecvError::Empty) => {
+                if let Some(proc) = self.processes.get_mut(&id) {
+                    proc.pending_network_connect = Some(PendingNetworkConnect::Dns(request));
+                }
+                return Ok(PendingNetworkConnectCompletion::None);
+            }
+            Err(mpsc::TryRecvError::Disconnected) => {
+                Err("resolver thread disconnected".to_string())
+            }
+        };
+
+        match resolved {
+            Ok(addrs) if !addrs.is_empty() => {
+                match self.start_next_pending_network_connect(id, addrs, &request.socket_options)? {
+                    None => Ok(PendingNetworkConnectCompletion::Retrying),
+                    Some(code) => {
+                        let sentinel = self
+                            .processes
+                            .get(&id)
+                            .map(|proc| proc.sentinel)
+                            .unwrap_or(Value::NIL);
+                        if let Some(proc) = self.processes.get_mut(&id) {
+                            proc.status = process_status_failed_value(code);
+                            proc.network_socket = None;
+                            proc.pending_network_connect = None;
+                        }
+                        Ok(PendingNetworkConnectCompletion::Failed { sentinel, code })
+                    }
+                }
+            }
+            Ok(_) | Err(_) => {
+                let host = request.host.split('\0').next().unwrap_or(&request.host);
+                if let Some(proc) = self.processes.get_mut(&id) {
+                    proc.status = process_status_failed_message_value(format!(
+                        "Name lookup of {host} failed"
+                    ));
+                    proc.network_socket = None;
+                    proc.pending_network_connect = None;
+                }
+                Ok(PendingNetworkConnectCompletion::DnsFailed)
+            }
+        }
     }
 
     fn accept_network_server_connections(
@@ -6017,6 +6223,9 @@ impl super::eval::Context {
                         &format!("failed with code {code}\n"),
                     )?;
                 }
+                PendingNetworkConnectCompletion::DnsFailed => {
+                    outcome.record_serviced();
+                }
             }
             match self.processes.flush_process_write_queue(pid)? {
                 ProcessWriteFlush::Drained | ProcessWriteFlush::Blocked => {
@@ -6054,6 +6263,34 @@ impl super::eval::Context {
 
         for pid in proc_ids {
             let is_target = target_process.map_or(true, |target| target == pid);
+            if self
+                .processes
+                .get(pid)
+                .is_some_and(process_has_ready_async_dns)
+            {
+                match self.processes.complete_pending_network_connect(pid)? {
+                    PendingNetworkConnectCompletion::None => {}
+                    PendingNetworkConnectCompletion::Retrying => {
+                        outcome.record_serviced();
+                    }
+                    PendingNetworkConnectCompletion::Connected { sentinel } => {
+                        outcome.record_serviced();
+                        self.run_process_sentinel_callback(pid, sentinel, "open\n")?;
+                    }
+                    PendingNetworkConnectCompletion::Failed { sentinel, code } => {
+                        outcome.record_serviced();
+                        self.run_process_sentinel_callback(
+                            pid,
+                            sentinel,
+                            &format!("failed with code {code}\n"),
+                        )?;
+                    }
+                    PendingNetworkConnectCompletion::DnsFailed => {
+                        outcome.record_serviced();
+                    }
+                }
+                continue;
+            }
             if self
                 .processes
                 .get(pid)
@@ -12151,13 +12388,21 @@ pub(crate) fn builtin_make_network_process(
     let port = parse_network_service_port(&service, false, socket_type)?;
 
     if nowait {
-        let addrs = resolve_network_socket_addrs(
-            host_str.as_str(),
-            port,
-            family,
-            NetworkSocketType::Stream,
-        )?;
-        let start = start_pending_tcp_stream_connect(addrs, &socket_options)?;
+        let immediate_start = nowait_tcp_immediate_addrs(host_value, &host_str, port, family)
+            .map(|addrs| start_pending_tcp_stream_connect(addrs, &socket_options))
+            .transpose()?;
+        let pending_dns = if immediate_start.is_none() {
+            Some(start_async_network_dns_lookup(
+                host_str.clone(),
+                port,
+                family,
+                NetworkSocketType::Stream,
+                socket_options.clone(),
+                eval.processes.wait_notifier(),
+            ))
+        } else {
+            None
+        };
 
         let id = eval.processes.create_process_with_kind_lisp(
             name,
@@ -12198,32 +12443,33 @@ pub(crate) fn builtin_make_network_process(
                 proc.childp =
                     process_contact_plist_put(proc.childp, ProcessKeyword::Buffer.value(), buffer)?;
             }
-            match start {
-                PendingNetworkConnectStart::Started(started) => {
-                    let local_addr = started.stream.local_addr().ok();
-                    proc.network_socket = Some(NetworkSocket::TcpStream(started.stream));
-                    proc.pending_network_connect = Some(PendingNetworkConnect::Tcp {
-                        remaining_addrs: started.remaining_addrs,
-                        socket_options: socket_options.clone(),
-                    });
-                    ProcessManager::update_tcp_client_contact(
-                        proc,
-                        started.remote_addr,
-                        local_addr,
-                    )?;
+            if let Some(start) = immediate_start {
+                match start {
+                    PendingNetworkConnectStart::Started(started) => {
+                        let local_addr = started.stream.local_addr().ok();
+                        proc.network_socket = Some(NetworkSocket::TcpStream(started.stream));
+                        proc.pending_network_connect = Some(PendingNetworkConnect::Tcp {
+                            remaining_addrs: started.remaining_addrs,
+                            socket_options: socket_options.clone(),
+                        });
+                        ProcessManager::update_tcp_client_contact(
+                            proc,
+                            started.remote_addr,
+                            local_addr,
+                        )?;
+                    }
+                    PendingNetworkConnectStart::Failed(code) => {
+                        proc.status = process_status_failed_value(code);
+                    }
                 }
-                PendingNetworkConnectStart::Failed(code) => {
-                    proc.status = process_status_failed_value(code);
-                }
+            } else if let Some(pending_dns) = pending_dns {
+                proc.pending_network_connect = Some(PendingNetworkConnect::Dns(pending_dns));
             }
             apply_connection_process_flags(proc, noquery, stop);
         }
-
-        if eval
-            .processes
-            .get(id)
-            .is_some_and(|proc| proc.pending_network_connect.is_some())
-        {
+        if eval.processes.get(id).is_some_and(|proc| {
+            proc.network_socket.is_some() && proc.pending_network_connect.is_some()
+        }) {
             eval.processes.register_socket_writable_fd(id).ok();
         }
         return Ok(Value::make_process(id));
