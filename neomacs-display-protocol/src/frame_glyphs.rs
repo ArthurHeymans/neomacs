@@ -687,6 +687,8 @@ pub struct WindowInfo {
     pub is_minibuffer: bool,
     /// Character cell height for this window (tracks text-scale-adjust)
     pub char_height: f32,
+    /// Buffer name, e.g. "*scratch*" (empty string if unavailable)
+    pub buffer_name: String,
     /// Buffer file name (empty string if no file)
     pub buffer_file_name: String,
     /// Whether the buffer has unsaved modifications
@@ -1001,6 +1003,7 @@ impl FrameGlyphBuffer {
             underline_position: 1,
             underline_thickness: 1,
             background_gradient: None,
+            lisp_name: None,
         }
     }
 
@@ -1602,6 +1605,7 @@ impl FrameGlyphBuffer {
         selected: bool,
         is_minibuffer: bool,
         char_height: f32,
+        buffer_name: String,
         buffer_file_name: String,
         modified: bool,
     ) {
@@ -1618,6 +1622,7 @@ impl FrameGlyphBuffer {
             selected,
             is_minibuffer,
             char_height,
+            buffer_name,
             buffer_file_name,
             modified,
         });

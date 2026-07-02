@@ -2407,6 +2407,10 @@ pub struct ResolvedFace {
     /// Face cache ID — matches [`BasicFaceId`] for basic faces (0–19)
     /// or a dynamically allocated ID (≥20) for other faces.
     pub face_id: u32,
+    /// Lisp face name this face was resolved from, when it came from a
+    /// named face (GNU keeps the name reachable via `struct face::lface`).
+    /// `None` for anonymous attribute-plist faces.
+    pub lisp_name: Option<String>,
 }
 
 impl Default for ResolvedFace {
@@ -2436,6 +2440,7 @@ impl Default for ResolvedFace {
             font_ascent: 0.0,
             font_line_height: 0.0,
             face_id: 0, // DEFAULT_FACE_ID
+            lisp_name: None,
         }
     }
 }
@@ -2583,6 +2588,7 @@ impl FaceResolver {
         use neomacs_display_protocol::face::BasicFaceId;
         let face = self.face_table.resolve(name);
         let mut resolved = self.realize_face(&face);
+        resolved.lisp_name = Some(name.to_string());
         if let Some(basic) = BasicFaceId::from_name(name) {
             resolved.face_id = basic.into();
         } else {
@@ -2609,6 +2615,7 @@ impl FaceResolver {
         let mut face = self.face_table.resolve(name);
         face.inverse_video = None;
         let mut resolved = self.realize_face(&face);
+        resolved.lisp_name = Some(name.to_string());
         if let Some(basic) = BasicFaceId::from_name(name) {
             resolved.face_id = basic.into();
         } else {
@@ -3287,6 +3294,9 @@ impl FaceResolver {
     /// box, overstrike, and extend.
     pub fn realize_face(&self, face: &NeoFace) -> ResolvedFace {
         let mut rf = self.default_face.clone();
+        // The clone starts from the default face; an anonymous face must not
+        // inherit its *name*. Named resolvers overwrite this after realizing.
+        rf.lisp_name = None;
 
         // Foreground
         if let Some(c) = &face.foreground {

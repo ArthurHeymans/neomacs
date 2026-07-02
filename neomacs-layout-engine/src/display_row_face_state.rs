@@ -46,6 +46,7 @@ pub(crate) struct DisplayRowFace {
     pub(crate) metrics: DisplayRowFaceMetrics,
     pub(crate) underline_position: i32,
     pub(crate) underline_thickness: i32,
+    pub(crate) lisp_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -178,6 +179,7 @@ impl DisplayRowFace {
             box_color2: None,
             box_h_line_width: face.box_line_width,
             terminal_inverse_video: face.terminal_inverse_video,
+            lisp_name: face.lisp_name.clone(),
             metrics: DisplayRowFaceMetrics::from_resolved(face),
             underline_position: 1,
             underline_thickness: 1,
@@ -256,6 +258,10 @@ impl DisplayRowFace {
             underline_position: self.underline_position.max(1),
             underline_thickness: self.underline_thickness.max(1),
             background_gradient: None,
+            lisp_name: self.lisp_name.clone().or_else(|| {
+                neomacs_display_protocol::face::BasicFaceId::from_gnu_code(self.face_id)
+                    .map(|basic| basic.name().to_string())
+            }),
         }
     }
 }

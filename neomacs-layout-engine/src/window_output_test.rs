@@ -94,6 +94,7 @@ fn window_info(window_id: i64) -> WindowInfo {
     WindowInfo {
         window_id: neomacs_display_protocol::types::DisplayWindowId::new(window_id),
         buffer_id: 9,
+        buffer_name: String::new(),
         window_start: 1,
         window_end: 1,
         buffer_size: 100,

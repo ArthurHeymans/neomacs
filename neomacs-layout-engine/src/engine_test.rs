@@ -12992,3 +12992,50 @@ fn echo_content_rows_measures_displayed_message_height() {
         "an 85-col line (2 rows) plus a short line (1 row) is three rows"
     );
 }
+
+/// Frame-snapshot contract: the display state must identify windows by
+/// buffer NAME (not just file name) and realized faces by their Lisp face
+/// name, so agents can assert on them from snapshot JSON/text.
+#[test]
+fn window_info_carries_buffer_name_and_faces_carry_lisp_names() {
+    let mut eval = Context::new();
+    convert_current_buffer_text_backend(&mut eval, BufferTextBackendKind::GapBuffer);
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    insert_fragmented_current_buffer_text(&mut eval, "snapshot names\n");
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("snapshot-names", 360, 180, buf_id);
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+    let state = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("display state");
+
+    let info = state
+        .window_infos
+        .iter()
+        .find(|w| !w.is_minibuffer)
+        .expect("non-minibuffer window info");
+    assert!(
+        !info.buffer_name.is_empty(),
+        "buffer_name must be populated: {info:?}"
+    );
+    assert!(
+        state
+            .faces
+            .values()
+            .any(|f| f.lisp_name.as_deref() == Some("default")),
+        "realized default face must carry its Lisp name: {:?}",
+        state
+            .faces
+            .values()
+            .map(|f| (f.id, f.lisp_name.clone()))
+            .collect::<Vec<_>>()
+    );
+}

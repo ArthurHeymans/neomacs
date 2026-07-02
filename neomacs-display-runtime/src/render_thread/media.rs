@@ -786,6 +786,7 @@ fn terminal_cell_face(
         underline_position: 1,
         underline_thickness: 1,
         background_gradient: None,
+        lisp_name: None,
     }
 }
 

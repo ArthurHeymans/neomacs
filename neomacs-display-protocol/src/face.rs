@@ -259,6 +259,13 @@ pub struct Face {
     /// If present, this overrides the solid `background` color during rendering.
     /// GPU fragment shader evaluates the gradient per-pixel with no CPU overhead.
     pub background_gradient: Option<Box<crate::gradient::Gradient>>,
+
+    /// Lisp face name this realized face came from (e.g.
+    /// "font-lock-keyword-face"), when known. `None` for anonymous faces
+    /// realized from raw attribute plists. Basic faces (id 0-19) fall back
+    /// to their canonical [`BasicFaceId`] name at snapshot time. Kept LAST:
+    /// `#[repr(C)]` prefix layout stays stable for existing readers.
+    pub lisp_name: Option<String>,
 }
 
 impl Default for Face {
@@ -290,6 +297,7 @@ impl Default for Face {
             underline_position: 1,
             underline_thickness: 1,
             background_gradient: None,
+            lisp_name: None,
         }
     }
 }
@@ -505,6 +513,7 @@ impl FaceDataFFI {
             underline_position: self.underline_position.max(1),
             underline_thickness: self.underline_thickness.max(1),
             background_gradient: None,
+            lisp_name: None,
         }
     }
 }

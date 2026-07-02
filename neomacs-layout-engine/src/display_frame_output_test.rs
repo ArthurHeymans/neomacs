@@ -94,6 +94,7 @@ fn window_info(params: &WindowParams) -> WindowInfo {
     WindowInfo {
         window_id: DisplayWindowId::new(params.window_id),
         buffer_id: params.buffer_id,
+        buffer_name: String::new(),
         window_start: 31,
         window_end: 101,
         buffer_size: params.buffer_size,
@@ -129,6 +130,7 @@ fn window_frame_geometry_reserves_terminal_border_column() {
 fn window_frame_info_request_emits_background_and_window_info() {
     let params = window_params();
     let metadata = WindowFrameMetadata {
+        buffer_name: "notes".to_string(),
         buffer_file_name: "notes.org".to_string(),
         modified: true,
     };

@@ -371,6 +371,9 @@ fn test_window_params_from_neovm_internal_returns_none() {
         direction: SplitDirection::Vertical,
         children: vec![],
         bounds: NeoRect::new(0.0, 0.0, 100.0, 100.0),
+        // GNU `make_window` leaves top_line/left_col zero (ed7a3476d).
+        top_line: 0,
+        left_col: 0,
         parameters: Vec::new(),
         combination_limit: false,
         new_pixel: None,

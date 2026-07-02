@@ -582,6 +582,9 @@ impl LayoutEngine {
                     let buf_id = neovm_core::buffer::BufferId(params.buffer_id);
                     let buffer = evaluator.buffer_manager().get(buf_id);
                     WindowFrameMetadata {
+                        buffer_name: buffer
+                            .map(|b| b.name_runtime_string_owned())
+                            .unwrap_or_default(),
                         buffer_file_name: buffer
                             .and_then(|b| b.file_name_runtime_string_owned())
                             .unwrap_or_default(),

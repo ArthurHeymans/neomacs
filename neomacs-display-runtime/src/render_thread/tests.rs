@@ -687,6 +687,7 @@ fn managed_primary_visual_bell_uses_frame_renderer_effects() {
         false,
         17.0,
         String::new(),
+        String::new(),
         false,
     );
     render.compositor.current_frame = Some(frame);

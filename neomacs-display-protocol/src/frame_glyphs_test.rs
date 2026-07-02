@@ -19,6 +19,7 @@ fn make_window_info(window_id: i64, buffer_id: u64, window_start: i64, bounds: R
     WindowInfo {
         window_id: DisplayWindowId::new(window_id),
         buffer_id,
+        buffer_name: String::new(),
         window_start,
         window_end: window_start + 200,
         buffer_size: 10_000,
@@ -120,6 +121,7 @@ fn clear_all_resets_glyphs_and_metadata() {
         true,
         false,
         16.0,
+        String::new(),
         "test.rs".to_string(),
         false,
     );
@@ -784,6 +786,7 @@ fn add_window_info_appends_metadata() {
         true,
         false,
         16.0,
+        String::new(),
         "main.rs".to_string(),
         true,
     );
@@ -825,6 +828,7 @@ fn add_window_info_multiple_windows() {
         true,
         false,
         16.0,
+        String::new(),
         "left.rs".to_string(),
         false,
     );
@@ -844,6 +848,7 @@ fn add_window_info_multiple_windows() {
         false,
         false,
         16.0,
+        String::new(),
         "right.rs".to_string(),
         true,
     );
@@ -874,6 +879,7 @@ fn add_window_info_minibuffer() {
         false,
         true,
         16.0,
+        String::new(),
         String::new(),
         false,
     );
@@ -1596,6 +1602,7 @@ fn full_frame_simulation() {
         true,
         false,
         16.0,
+        String::new(),
         "left.rs".to_string(),
         false,
     );
@@ -1615,6 +1622,7 @@ fn full_frame_simulation() {
         false,
         false,
         16.0,
+        String::new(),
         "right.rs".to_string(),
         true,
     );

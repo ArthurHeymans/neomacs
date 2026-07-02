@@ -20,6 +20,7 @@ use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct WindowFrameMetadata {
+    pub(crate) buffer_name: String,
     pub(crate) buffer_file_name: String,
     pub(crate) modified: bool,
 }
@@ -458,6 +459,7 @@ impl<'a> WindowFrameInfoRenderRequest<'a> {
             selected: self.params.selected,
             is_minibuffer: self.params.is_minibuffer(),
             char_height: self.params.char_height,
+            buffer_name: self.metadata.buffer_name,
             buffer_file_name: self.metadata.buffer_file_name,
             modified: self.metadata.modified,
         });
