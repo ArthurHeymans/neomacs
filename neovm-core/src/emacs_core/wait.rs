@@ -385,6 +385,12 @@ impl WaitRequest {
         self.timers.allow()
     }
 
+    /// The specific process this wait targets (`accept-process-output PROC`),
+    /// if any.
+    fn target_pid(self) -> Option<ProcessId> {
+        self.processes.target_process()
+    }
+
     fn poll_or_deadline_elapsed(self, now: Instant) -> bool {
         matches!(self.deadline, WaitDeadline::Poll) || self.deadline.expired(now)
     }
@@ -447,6 +453,11 @@ enum WaitCompletion {
     CommandInputPending,
     SpecialInputActivity,
     DeadlineElapsed,
+    /// The wait's target process reached a status that ends the wait in GNU
+    /// (`wait_reading_process_output` breaks when WAIT_PROC's status is
+    /// neither `run` nor a pending connect) or no longer exists (reaped).
+    /// `accept-process-output` returns nil for this, like a timeout.
+    TargetProcessTerminated,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -460,7 +471,9 @@ impl CommandInputWaitOutcome {
     fn from_completion(completion: WaitCompletion) -> Self {
         match completion {
             WaitCompletion::CommandInputPending => Self::InputPending,
-            WaitCompletion::DeadlineElapsed => Self::DeadlineElapsed,
+            WaitCompletion::DeadlineElapsed | WaitCompletion::TargetProcessTerminated => {
+                Self::DeadlineElapsed
+            }
             WaitCompletion::ProcessActivity | WaitCompletion::SpecialInputActivity => {
                 Self::Interrupted
             }
@@ -480,7 +493,8 @@ impl ProcessOutputWaitOutcome {
             WaitCompletion::ProcessActivity => Self::ProcessActivity,
             WaitCompletion::CommandInputPending
             | WaitCompletion::SpecialInputActivity
-            | WaitCompletion::DeadlineElapsed => Self::NoProcessActivity,
+            | WaitCompletion::DeadlineElapsed
+            | WaitCompletion::TargetProcessTerminated => Self::NoProcessActivity,
         }
     }
 }
@@ -837,6 +851,17 @@ impl super::eval::Context {
         Ok(outcome)
     }
 
+    /// GNU ends a WAIT_PROC wait once the target process is no longer
+    /// running/connecting (process.c drains remaining output, then breaks);
+    /// output read during the final drain still wins via `completion_for`.
+    fn wait_request_target_terminated(&self, request: &WaitRequest) -> bool {
+        request.target_pid().is_some_and(|pid| {
+            self.processes
+                .get(pid)
+                .is_none_or(super::process::process_status_ends_target_wait)
+        })
+    }
+
     fn wait_reading_process_output(
         &mut self,
         request: WaitRequest,
@@ -844,6 +869,9 @@ impl super::eval::Context {
         let mut outcome = self.service_wait_request_once_outcome(&request)?;
         if let Some(completion) = request.completion_for(outcome) {
             return Ok(completion);
+        }
+        if self.wait_request_target_terminated(&request) {
+            return Ok(WaitCompletion::TargetProcessTerminated);
         }
         if request.poll_or_deadline_elapsed(Instant::now()) {
             return Ok(WaitCompletion::DeadlineElapsed);
@@ -883,6 +911,9 @@ impl super::eval::Context {
 
             if let Some(completion) = request.completion_for(outcome) {
                 return Ok(completion);
+            }
+            if self.wait_request_target_terminated(&request) {
+                return Ok(WaitCompletion::TargetProcessTerminated);
             }
         }
     }

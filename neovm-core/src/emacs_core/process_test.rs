@@ -4224,7 +4224,7 @@ fn accept_process_output_runs_default_process_filter() {
 }
 
 #[test]
-fn accept_process_output_keeps_status_pending_after_ready_output() {
+fn accept_process_output_target_terminated_reports_exit_after_ready_output() {
     crate::test_utils::init_test_tracing();
     let echo = find_bin("echo");
     let mut ev = Context::new();
@@ -4262,9 +4262,29 @@ fn accept_process_output_keeps_status_pending_after_ready_output() {
         .buffer_string();
     let killed = eval_one_in_context(&mut ev, "(kill-buffer apio-ready-exit-buffer)");
 
-    assert_eq!(result, "OK (t run)");
-    assert_eq!(text, "out\n");
+    // GNU contract for THIS scenario (child exited during a raw thread sleep,
+    // so nothing was serviced before the wait): the wait drains the pending
+    // output -- the drained bytes count as got_some_output (process.c:5588),
+    // so `accept-process-output` returns t -- and the terminated target then
+    // ends the wait; `process-status` decodes the reaped status (`exit`) at
+    // observation (GNU Fprocess_status runs update_status). Note: when a
+    // Lisp-visible wait (e.g. `sleep-for`) runs BEFORE `accept-process-output`
+    // it services output + EOF + sentinel first, and the later targeted wait
+    // returns nil with the "Process NAME finished" line already inserted --
+    // verified byte-identical against emacs --batch for that variant.
+    assert_eq!(result, "OK (t exit)");
     assert_eq!(killed, "OK t");
+    // The default sentinel's "Process NAME finished" line may or may not have
+    // landed by the time the buffer is read, and GNU emits it with either one
+    // or two newlines depending on bolp state at insertion (both shapes
+    // observed in emacs --batch probes: "out\nProcess x finished\n" and
+    // "hello\n\nProcess neo-cx423-eof finished\n").
+    assert!(
+        text == "out\n"
+            || text == "out\nProcess apio-ready-exit finished\n"
+            || text == "out\n\nProcess apio-ready-exit finished\n",
+        "unexpected buffer content: {text:?}"
+    );
 }
 
 #[test]
@@ -4312,12 +4332,23 @@ fn accept_process_output_defers_pty_status_after_explicit_coding() {
                    (set-process-query-on-exit-flag proc nil)
                    (set-process-coding-system proc 'utf-8-unix 'utf-8-unix)
                    (accept-process-output proc 1)
-                   (prog1 (list (process-status proc) (buffer-string))
+                   (prog1 (list (process-status proc)
+                                (equal (substring (buffer-string) 0 6) "hello\n"))
                      (kill-buffer buf))))"#
         ),
     );
 
-    assert_eq!(result, "OK (run \"hello\n\")");
+    // Whether the child's exit has been observed by the time the wait returns
+    // is a race in GNU too (measured: `emacs --batch` gives `run` in ~2/3 of
+    // runs and `exit` -- with the default sentinel's "finished" line -- in
+    // ~1/3). The invariants are: the explicitly-set coding system decoded the
+    // output ("hello\n" reached the buffer first) and the status is one of
+    // run/exit. Pinning `run` here would pin the pre-observation-decode
+    // masking that GNU does not have.
+    assert!(
+        result == "OK (run t)" || result == "OK (exit t)",
+        "unexpected pty status/output after explicit coding: {result}"
+    );
 }
 
 #[test]

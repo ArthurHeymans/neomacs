@@ -460,11 +460,26 @@ impl ProcessOutputServiceActivity {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct ProcessOutputServiceOutcome {
     activity: ProcessOutputServiceActivity,
+    /// Non-output servicing happened: a connect completed, a server accepted a
+    /// connection, a sentinel/status notification ran, or an EOF was handled.
+    /// GNU's `wait_reading_process_output` services all of these inside the
+    /// wait WITHOUT terminating it — only actual output bytes make
+    /// `got_some_output` positive (process.c:5588/6018), so only reads may
+    /// complete an `accept-process-output`.
+    serviced: bool,
 }
 
 impl ProcessOutputServiceOutcome {
+    /// Record output read from a process (GNU `got_some_output = nread`).
+    /// This is the only activity class that completes a process wait.
     pub(crate) fn record_activity(&mut self, target: bool) {
         self.activity = self.activity.record(target);
+    }
+
+    /// Record non-output servicing (connects, accepts, sentinels, EOF).
+    /// Keeps the wait running, exactly like GNU.
+    pub(crate) fn record_serviced(&mut self) {
+        self.serviced = true;
     }
 
     pub(crate) fn absorb(&mut self, other: Self) {
@@ -472,6 +487,9 @@ impl ProcessOutputServiceOutcome {
             self.record_activity(true);
         } else if other.has_any_process_activity() {
             self.record_activity(false);
+        }
+        if other.has_serviced_activity() {
+            self.record_serviced();
         }
     }
 
@@ -481,6 +499,10 @@ impl ProcessOutputServiceOutcome {
 
     pub(crate) fn has_target_process_activity(self) -> bool {
         self.activity.target()
+    }
+
+    pub(crate) fn has_serviced_activity(self) -> bool {
+        self.serviced
     }
 }
 
@@ -1992,6 +2014,48 @@ fn process_output_source(proc: &Process) -> Option<ProcessOutputSource> {
         Some(ProcessOutputSource::Network)
     } else {
         None
+    }
+}
+
+/// GNU `wait_reading_process_output` ends a WAIT_PROC wait when the target's
+/// INTERNAL status is neither `Qrun` nor a pending connect (process.c: the
+/// `wait_proc && !EQ (wait_proc->status, Qrun) && !connecting_status` drain +
+/// break). GNU's internal statuses differ from the `process-status`
+/// projection: a listen server is stored as `Qlisten` (ends the wait —
+/// verified empirically: `accept-process-output` on a server returns at
+/// once), while an io-paused connection (`stop-process` on a netconn, GNU
+/// `p->command = Qt`) stays internally `Qrun` and does NOT end the wait even
+/// though `process-status` projects it as `stop`.
+///
+/// neomacs's storage model: connected netconns AND servers both store `run`
+/// (projected to `open`/`listen` by `process_public_status_symbol` via
+/// `process_contact_server_p`), io-pause is a separate flag
+/// (`process_stopped_for_io`), and real children store their observed status
+/// directly. Map GNU's internal-status rule onto that:
+pub(crate) fn process_status_ends_target_wait(process: &Process) -> bool {
+    match ProcessStatusSymbol::from_status_value(process.status) {
+        // Stored `run`: GNU internal Qrun for real children and connected
+        // netconns (keep waiting) -- but a server's GNU-internal status is
+        // Qlisten, which ends the wait.
+        Some(ProcessStatusSymbol::Run) => {
+            process.kind == ProcessKind::Network && process_contact_server_p(process)
+        }
+        // Pending :nowait connect keeps waiting (GNU connecting_status).
+        Some(ProcessStatusSymbol::Connect) => false,
+        // Stored `open` (paths that store the projection directly) is GNU
+        // internal Qrun for a connection.
+        Some(ProcessStatusSymbol::Open) => false,
+        // listen / stop (a genuinely stopped child) / exit / signal / failed /
+        // closed all end the wait.
+        Some(
+            ProcessStatusSymbol::Listen
+            | ProcessStatusSymbol::Stop
+            | ProcessStatusSymbol::Exit
+            | ProcessStatusSymbol::Signal
+            | ProcessStatusSymbol::Failed
+            | ProcessStatusSymbol::Closed,
+        ) => true,
+        None => false,
     }
 }
 
@@ -4055,9 +4119,16 @@ impl ProcessManager {
         if proc.kind != ProcessKind::Real || process_status_is_exit_or_signal(&proc.status) {
             return false;
         }
+        // GNU `kill_buffer_processes` only SENDS the hangup
+        // (`process_send_signal (proc, SIGHUP, …)`); the status becomes
+        // `(signal . SIGHUP)` when the child's death is actually observed
+        // (SIGCHLD/waitpid), and the sentinel runs inside the next wait's
+        // `status_notify`. Synthesizing a pending terminal status here made
+        // `process-status` report `signal` before the child had even died —
+        // action must never write status (unlike `delete-process`, whose
+        // synchronous `(signal . SIGKILL)` stamp IS GNU behavior,
+        // process.c:1145).
         kill_real_process_child(proc, signal_hup_number());
-        proc.pending_terminal_status = process_status_signal_value(signal_hup_number());
-        proc.status_notify_pending = true;
         true
     }
 
@@ -5192,14 +5263,16 @@ impl super::eval::Context {
             match self.processes.complete_pending_network_connect(pid)? {
                 PendingNetworkConnectCompletion::None => {}
                 PendingNetworkConnectCompletion::Retrying => {
-                    outcome.record_activity(is_target);
+                    outcome.record_serviced();
                 }
                 PendingNetworkConnectCompletion::Connected { sentinel } => {
-                    outcome.record_activity(is_target);
+                    // GNU services :nowait completion inside the wait and
+                    // keeps waiting (only read bytes complete the wait).
+                    outcome.record_serviced();
                     self.run_process_sentinel_callback(pid, sentinel, "open\n")?;
                 }
                 PendingNetworkConnectCompletion::Failed { sentinel, code } => {
-                    outcome.record_activity(is_target);
+                    outcome.record_serviced();
                     self.run_process_sentinel_callback(
                         pid,
                         sentinel,
@@ -5258,8 +5331,17 @@ impl super::eval::Context {
                         ProcessOutputDrainDisposition::Terminal => {}
                     }
                 }
-                if self.run_process_status_notification(pid)? {
-                    outcome.record_activity(is_target);
+                {
+                    let (drained_output, notified) = self.run_process_status_notification(pid)?;
+                    // GNU `status_notify`'s return value counts the bytes it
+                    // DRAINED (feeding `got_some_output`, which completes the
+                    // wait); the sentinel run itself only services it.
+                    if drained_output {
+                        outcome.record_activity(is_target);
+                    }
+                    if notified {
+                        outcome.record_serviced();
+                    }
                 }
                 continue;
             }
@@ -5278,7 +5360,9 @@ impl super::eval::Context {
             }
 
             for event in self.processes.accept_network_server_connections(pid) {
-                outcome.record_activity(is_target);
+                // GNU `server_accept_connection` runs inside the wait; the
+                // accept (and its "open from" sentinel) never terminates it.
+                outcome.record_serviced();
                 self.run_process_log_callback(
                     event.log,
                     event.server_id,
@@ -5357,7 +5441,7 @@ impl super::eval::Context {
                                 break;
                             }
                         }
-                        outcome.record_activity(is_target);
+                        outcome.record_serviced();
 
                         // Mirror GNU's later status notification pass: when
                         // the child's stderr EOF is reported, the stderr
@@ -5395,7 +5479,9 @@ impl super::eval::Context {
                         break;
                     }
                     ProcessOutputRead::Eof if is_network => {
-                        outcome.record_activity(is_target);
+                        // GNU: EOF is not output; the wait continues (or the
+                        // terminated-target break ends it at the loop top).
+                        outcome.record_serviced();
 
                         // GNU: EOF on a running network connection sets
                         // `(exit . 256)` (process.c:6090, "Preserve status of
@@ -5477,20 +5563,21 @@ impl super::eval::Context {
                     outcome.absorb(stderr_outcome);
                 }
 
-                // GNU separates the readable pipe wakeup from later process
-                // status notification.  After draining pipe bytes, queue a
-                // terminal child status but leave the sentinel/default status
-                // message for a later status-notify pass.  PTY subprocesses are
-                // different only when the read side also reported EOF in this
-                // pass: then EOF and status arrived with the same wait, and GNU
-                // publishes the terminal status/default sentinel before
-                // returning from that wait.
-                let is_pty_process = self
-                    .processes
-                    .get(pid)
-                    .is_some_and(|proc| proc.pty_child.is_some() || proc.pty_reader.is_some());
+                // When the read side reported EOF in this same pass AND the
+                // child's exit is reaped, GNU's wait publishes the terminal
+                // status and runs the default sentinel before returning: the
+                // pselect round that saw the pipe close also has SIGCHLD
+                // pending, so `status_notify` runs in the same
+                // `wait_reading_process_output` iteration (pipe and pty
+                // alike). Deferring the notification to a later wait breaks
+                // the classic `(while (process-live-p p)
+                // (accept-process-output p))` idiom -- `process-live-p`
+                // observes the reaped status between waits and the loop exits
+                // before any wait delivers the sentinel. (Verified against
+                // GNU: `cat` + process-send-eof delivers "Process NAME
+                // finished" within the first wait.)
                 let exited = self.processes.check_child_exit(pid);
-                if exited && is_pty_process && saw_eof_after_output {
+                if exited && saw_eof_after_output {
                     let defer_status_after_output = self
                         .processes
                         .get(pid)
@@ -5498,7 +5585,7 @@ impl super::eval::Context {
                     if defer_status_after_output {
                         continue;
                     }
-                    let _ = self.run_process_status_notification(pid)?;
+                    let (_, _) = self.run_process_status_notification(pid)?;
                 }
 
                 continue;
@@ -5526,8 +5613,17 @@ impl super::eval::Context {
                         ProcessOutputDrainDisposition::Terminal => {}
                     }
                 }
-                if self.run_process_status_notification(pid)? {
-                    outcome.record_activity(is_target);
+                {
+                    let (drained_output, notified) = self.run_process_status_notification(pid)?;
+                    // GNU `status_notify`'s return value counts the bytes it
+                    // DRAINED (feeding `got_some_output`, which completes the
+                    // wait); the sentinel run itself only services it.
+                    if drained_output {
+                        outcome.record_activity(is_target);
+                    }
+                    if notified {
+                        outcome.record_serviced();
+                    }
                 }
             }
         }
@@ -5535,7 +5631,10 @@ impl super::eval::Context {
         Ok(outcome)
     }
 
-    fn run_process_status_notification(&mut self, pid: ProcessId) -> Result<bool, Flow> {
+    /// Returns `(drained_output, notified)`: GNU `status_notify` drains
+    /// remaining output (its return feeds `got_some_output`, i.e. completes
+    /// waits) and then runs the sentinel (which never completes a wait).
+    fn run_process_status_notification(&mut self, pid: ProcessId) -> Result<(bool, bool), Flow> {
         // GNU `status_notify` (process.c) drains ALL remaining output from a
         // terminated process before reporting its status and (when
         // `delete-exited-processes' is non-nil) removing it from
@@ -5564,7 +5663,7 @@ impl super::eval::Context {
             && process_should_defer_explicit_coding_status_after_output(proc, saw_output)
         {
             proc.explicit_coding_status_deferred_once = true;
-            return Ok(true);
+            return Ok((saw_output, false));
         }
 
         let sentinel = self
@@ -5595,7 +5694,7 @@ impl super::eval::Context {
         if self.delete_exited_processes_enabled() {
             self.processes.reap_exited_process(pid);
         }
-        Ok(saw_output)
+        Ok((saw_output, true))
     }
 }
 
@@ -6327,10 +6426,10 @@ fn process_live_status_value(process: &Process) -> Value {
     if process_stopped_for_io(process) {
         return Value::list(vec![Value::symbol("stop")]);
     }
-    if process.status_notify_pending && !process.pending_terminal_status.is_nil() {
-        return process_live_running_status_value(process.kind);
-    }
-    let status = process.status;
+    // GNU decodes a pending child status at observation (`update_status`), so
+    // a process whose exit has been reaped-but-not-yet-notified is already
+    // dead to `process-live-p`.
+    let status = process_effective_status(process);
     let kind = process.kind;
     match ProcessStatusSymbol::from_status_value(status) {
         Some(ProcessStatusSymbol::Run) => process_live_running_status_value(kind),
@@ -6374,11 +6473,25 @@ fn process_live_running_status_value(kind: ProcessKind) -> Value {
     }
 }
 
+/// GNU `update_status` view of a process: a pending-but-unnotified child
+/// status (`raw_status_new` in GNU, `status_notify_pending` +
+/// `pending_terminal_status` here) is DECODED at observation points --
+/// `Fprocess_status` and `Fprocess_exit_status` both run `update_status`
+/// before reading -- while the sentinel notification stays pending for the
+/// wait loop's `status_notify` pass.
+pub(crate) fn process_effective_status(process: &Process) -> Value {
+    if process.status_notify_pending && !process.pending_terminal_status.is_nil() {
+        process.pending_terminal_status
+    } else {
+        process.status
+    }
+}
+
 pub(crate) fn process_public_status_symbol(process: &Process) -> Value {
     if process_stopped_for_io(process) {
         return ProcessStatusSymbol::Stop.value();
     }
-    match ProcessStatusSymbol::from_status_value(process.status) {
+    match ProcessStatusSymbol::from_status_value(process_effective_status(process)) {
         Some(ProcessStatusSymbol::Run) => match process.kind {
             ProcessKind::Network => {
                 if process_contact_server_p(process) {
@@ -13092,11 +13205,17 @@ pub(crate) fn builtin_process_status_impl(
     let Some(id) = resolve_process_for_status_in_state(processes, buffers, &args[0])? else {
         return Ok(Value::NIL);
     };
-    // GNU `Fprocess_status` only converts an already pending raw child status
-    // (`p->raw_status_new` via `update_status`).  It does not probe the OS for
-    // a fresh exit here; doing that collapses GNU's separate "output is ready"
-    // and "process status notification is ready" wakeups for short-lived
-    // subprocesses.
+    // GNU `Fprocess_status` runs `update_status` when `raw_status_new` is
+    // set: it decodes a child status that SIGCHLD has already delivered — it
+    // does not itself probe the OS. neomacs's equivalent of "delivered" is
+    // "reaped by a wait iteration's poll" (`check_child_exit` runs inside
+    // `wait_reading_process_output`'s service pass, where GNU's SIGCHLD
+    // effectively lands), parked in `pending_terminal_status` and decoded
+    // here by `process_effective_status`. Actively polling `try_wait` HERE
+    // instead would let the classic `(while (process-live-p p)
+    // (accept-process-output p))` loop observe a death between waits and
+    // exit before any wait delivers the pending sentinel — GNU reliably
+    // delivers the sentinel inside the next wait for that idiom.
     match processes.get_any(id) {
         Some(proc) => Ok(process_public_status_symbol(proc)),
         None => Ok(Value::NIL),
@@ -13108,28 +13227,27 @@ pub(crate) fn builtin_process_exit_status(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_process_exit_status_impl(&eval.processes, args)
+    builtin_process_exit_status_impl(&mut eval.processes, args)
 }
 
 pub(crate) fn builtin_process_exit_status_impl(
-    processes: &ProcessManager,
+    processes: &mut ProcessManager,
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("process-exit-status", &args, 1)?;
     let id = resolve_process_object_or_wrong_type_any_in_manager(processes, &args[0])?;
+    // GNU `Fprocess_exit_status` decodes an already-delivered pending status,
+    // like `Fprocess_status` -- see `builtin_process_status_impl`.
     let proc = processes
         .get_any(id)
         .ok_or_else(|| signal_wrong_type_processp(args[0]))?;
-    match ProcessStatusSymbol::from_status_value(proc.status) {
-        Some(ProcessStatusSymbol::Exit) => {
-            Ok(Value::fixnum(process_status_code_value(proc.status)))
-        }
-        Some(ProcessStatusSymbol::Failed) => {
-            Ok(Value::fixnum(process_status_code_value(proc.status)))
-        }
+    let status = process_effective_status(proc);
+    match ProcessStatusSymbol::from_status_value(status) {
+        Some(ProcessStatusSymbol::Exit) => Ok(Value::fixnum(process_status_code_value(status))),
+        Some(ProcessStatusSymbol::Failed) => Ok(Value::fixnum(process_status_code_value(status))),
         Some(ProcessStatusSymbol::Signal) => {
             if proc.kind == ProcessKind::Real {
-                Ok(Value::fixnum(process_status_code_value(proc.status)))
+                Ok(Value::fixnum(process_status_code_value(status)))
             } else {
                 Ok(Value::fixnum(0))
             }
