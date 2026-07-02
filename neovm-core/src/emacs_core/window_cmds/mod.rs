@@ -906,6 +906,7 @@ fn ensure_selected_frame_id_in_state_with_policy(
                 minibuffer_buf_id,
             );
         }
+        frame.recalculate_minibuffer_bounds();
     }
     fid
 }

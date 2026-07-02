@@ -308,6 +308,15 @@ impl<'a> BufferSourceItemRenderRequest<'a> {
                     .map(|face| (item_face_id, face))
             })
             .flatten();
+        let row_extend_fill = resolved_item_face
+            .as_ref()
+            .and_then(|(face_id, face)| face.extend.then(|| (Color::from_pixel(face.bg), *face_id)))
+            .or_else(|| active_face_state.row_extend_fill());
+        if let Some(fill) = row_extend_fill {
+            row_extend.activate(row_geometry.current_row_marker(), fill);
+        } else {
+            row_extend.clear();
+        }
         let mut buffer_row_append_context = BufferSourceRowAppendContext::from_active_face_row(
             buffer,
             self.buffer_id,

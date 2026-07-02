@@ -1,5 +1,7 @@
 use super::tty_frontend::TtyTerminalHost;
-use super::tty_init::{default_controlling_tty_name, should_enable_live_tty_io};
+use super::tty_init::{
+    default_controlling_tty_name, detect_tty_background_mode, should_enable_live_tty_io,
+};
 use super::tty_layout::{
     LAYOUT_ENGINE, current_layout_frame_id,
     install_tty_redisplay_callback as maybe_install_tty_redisplay_callback,
@@ -10,8 +12,8 @@ use super::{
     StartupOptions, adopt_existing_primary_gui_frame, bootstrap_buffers,
     bootstrap_default_font_name, bootstrap_display_config, bootstrap_frame_metrics,
     bootstrap_frame_metrics_for_font_sizing, bootstrap_frame_metrics_for_frontend,
-    classify_early_cli_action, configure_gnu_startup_state, parse_startup_options,
-    publish_gui_frame, raw_loadup_command_line, raw_loadup_startup_surface,
+    classify_early_cli_action, configure_gnu_startup_state, load_neomacs_gui_term_layer,
+    parse_startup_options, publish_gui_frame, raw_loadup_command_line, raw_loadup_startup_surface,
     render_fingerprint_text, render_help_text, render_startup_image_error, render_version_text,
     run_gnu_startup, runtime_mode_from_program_name, startup_dimensions,
     sync_live_gui_frame_titles, sync_selected_gui_chrome_state,
@@ -564,13 +566,17 @@ fn raw_loadup_startup_surface_forces_noninteractive_dump_bootstrap() {
     );
 }
 
-fn bootstrap_runtime_gui_startup(eval: &mut Context) -> FrameId {
+fn bootstrap_runtime_gui_frame(eval: &mut Context) -> FrameId {
+    load_neomacs_gui_term_layer(eval);
     let _bootstrap = bootstrap_buffers(eval, 960, 640, gui_display());
-    let frame_id = eval
-        .frame_manager()
+    eval.frame_manager()
         .selected_frame()
         .expect("selected frame after bootstrap")
-        .id;
+        .id
+}
+
+fn bootstrap_runtime_gui_startup(eval: &mut Context) -> FrameId {
+    let frame_id = bootstrap_runtime_gui_frame(eval);
     configure_gnu_startup_state(eval, frame_id, &gui_startup());
     frame_id
 }
@@ -1512,22 +1518,9 @@ fn batch_tty_mode_leaves_redisplay_callback_unset() {
 
 #[test]
 fn configure_gnu_startup_state_marks_bootstrap_gui_frame_as_initial_frame() {
-    // NOTE: pre-existing failure. This test needs a bare evaluator to assert a
-    // *pristine* hidden `terminal-frame` (no inherited GUI face params), but
-    // `bootstrap_buffers(gui_display())` now runs GUI frame-init Lisp that
-    // requires subr.el macros (`when`), which a bare `Context::new()` lacks.
-    // A full-Lisp bootstrap fixture carries GUI frame-defaults that the new
-    // terminal frame then inherits, so it can't assert pristine topology.
-    // Resolving this cleanly needs separating the GUI-init Lisp from the
-    // pure-Rust frame bootstrap (see initialize_reused_gui_startup_frame).
-    let mut eval = Context::new();
-    let _bootstrap = bootstrap_buffers(&mut eval, 960, 640, gui_display());
-    let frame_id = eval
-        .frame_manager()
-        .selected_frame()
-        .expect("selected frame after bootstrap")
-        .id;
-    configure_gnu_startup_state(&mut eval, frame_id, &gui_startup());
+    let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
+        .expect("cached bootstrap evaluator");
+    let frame_id = bootstrap_runtime_gui_startup(&mut eval);
 
     let terminal_frame = *eval
         .obarray()
@@ -1550,13 +1543,15 @@ fn configure_gnu_startup_state_marks_bootstrap_gui_frame_as_initial_frame() {
         terminal_frame.effective_window_system().is_none(),
         "hidden startup terminal frame must stay non-GUI"
     );
-    assert!(
-        terminal_frame.parameter("display-type").is_none(),
-        "hidden startup terminal frame must not inherit GUI face parameters"
+    assert_eq!(
+        terminal_frame.parameter("display-type"),
+        Some(Value::symbol("color")),
+        "hidden startup terminal frame should use TTY face classification"
     );
-    assert!(
-        terminal_frame.parameter("background-mode").is_none(),
-        "hidden startup terminal frame must not inherit GUI face parameters"
+    assert_eq!(
+        terminal_frame.parameter("background-mode"),
+        Some(Value::symbol(detect_tty_background_mode())),
+        "hidden startup terminal frame should use TTY background classification"
     );
     assert_eq!(
         eval.obarray()
@@ -1726,6 +1721,7 @@ fn cl_generic_context_dispatch_uses_neo_window_system_method() {
 fn pdump_preserves_neo_term_generic_methods() {
     let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
         .expect("cached bootstrap evaluator");
+    load_neomacs_gui_term_layer(&mut eval);
 
     let pre = eval
         .eval_str(
@@ -1859,13 +1855,15 @@ fn configure_gnu_startup_state_clears_window_system_for_tty_boots() {
         .frame_manager()
         .get(frame_id)
         .expect("selected TTY frame should exist");
-    assert!(
-        frame.parameter("display-type").is_none(),
-        "GNU TTY startup must let frame-set-background-mode install display-type"
+    assert_eq!(
+        frame.parameter("display-type"),
+        Some(Value::symbol("color")),
+        "live TTY startup should seed face classification for defface matching"
     );
-    assert!(
-        frame.parameter("background-mode").is_none(),
-        "GNU TTY startup must let frame-set-background-mode install background-mode"
+    assert_eq!(
+        frame.parameter("background-mode"),
+        Some(Value::symbol(detect_tty_background_mode())),
+        "live TTY startup should seed background classification for defface matching"
     );
     assert_eq!(
         frame.parameter("tty"),
@@ -2376,12 +2374,7 @@ fn gnu_startup_preserves_default_fontset_alias() {
 fn gnu_startup_posts_echo_area_message() {
     let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
         .expect("cached bootstrap evaluator");
-    let _bootstrap = bootstrap_buffers(&mut eval, 960, 640, gui_display());
-    let frame_id = eval
-        .frame_manager()
-        .selected_frame()
-        .expect("selected frame after bootstrap")
-        .id;
+    let frame_id = bootstrap_runtime_gui_frame(&mut eval);
     configure_gnu_startup_state(&mut eval, frame_id, &gui_startup());
 
     run_gnu_startup(&mut eval);
@@ -2824,12 +2817,7 @@ fn gnu_startup_window_pixel_queries_use_live_frame_pixels() {
 fn gnu_startup_processes_load_option_from_forwarded_args() {
     let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
         .expect("cached bootstrap evaluator");
-    let _bootstrap = bootstrap_buffers(&mut eval, 960, 640, gui_display());
-    let frame_id = eval
-        .frame_manager()
-        .selected_frame()
-        .expect("selected frame after bootstrap")
-        .id;
+    let frame_id = bootstrap_runtime_gui_frame(&mut eval);
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("crate lives in workspace root");
@@ -2866,12 +2854,7 @@ fn gnu_startup_processes_load_option_from_forwarded_args() {
 fn recursive_edit_processes_load_option_from_forwarded_args_before_first_input() {
     let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
         .expect("cached bootstrap evaluator");
-    let _bootstrap = bootstrap_buffers(&mut eval, 960, 640, gui_display());
-    let frame_id = eval
-        .frame_manager()
-        .selected_frame()
-        .expect("selected frame after bootstrap")
-        .id;
+    let frame_id = bootstrap_runtime_gui_frame(&mut eval);
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("crate lives in workspace root");
@@ -3047,10 +3030,20 @@ fn bootstrap_batch_startup_error_exits_nonzero_like_gnu() {
             restart: false,
         })
     );
+    assert_eq!(
+        eval.current_message_text(),
+        None,
+        "GNU noninteractive message writes to stderr/*Messages*, not the echo area"
+    );
+    let messages = eval
+        .buffer_manager()
+        .find_buffer_by_name("*Messages*")
+        .and_then(|id| eval.buffer_manager().get(id))
+        .map(|buffer| buffer.buffer_string())
+        .unwrap_or_default();
     assert!(
-        eval.current_message_text()
-            .is_some_and(|message| message.contains("error") && message.contains("boom")),
-        "startup error should be reported before nonzero shutdown"
+        messages.contains("error") && messages.contains("boom"),
+        "startup error should be logged before nonzero shutdown; messages={messages:?}"
     );
 }
 

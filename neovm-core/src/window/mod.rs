@@ -2260,6 +2260,11 @@ impl Frame {
     pub fn sync_window_area_bounds(&mut self) {
         let root_bounds = self.window_text_area_bounds();
         resize_window_subtree(&mut self.root_window, root_bounds);
+        sync_window_character_edges_from_bounds(
+            &mut self.root_window,
+            self.char_width,
+            self.char_height,
+        );
 
         self.reposition_minibuffer_below_root();
     }
@@ -4426,6 +4431,44 @@ fn resize_window_subtree(window: &mut Window, bounds: Rect) {
         for child in children {
             let child_bounds = *child.bounds();
             resize_window_subtree(child, child_bounds);
+        }
+    }
+}
+
+fn sync_window_character_edges_from_bounds(window: &mut Window, char_width: f32, char_height: f32) {
+    let left_col = window.left_col();
+    let top_line = window.top_line();
+    sync_window_character_edges_from_bounds_at(window, left_col, top_line, char_width, char_height);
+}
+
+fn sync_window_character_edges_from_bounds_at(
+    window: &mut Window,
+    left_col: i64,
+    top_line: i64,
+    char_width: f32,
+    char_height: f32,
+) {
+    window.set_left_col(left_col);
+    window.set_top_line(top_line);
+
+    let parent_bounds = *window.bounds();
+    let char_width = char_width.max(1.0);
+    let char_height = char_height.max(1.0);
+
+    if let Window::Internal { children, .. } = window {
+        for child in children {
+            let child_bounds = *child.bounds();
+            let child_left_col =
+                left_col + ((child_bounds.x - parent_bounds.x) / char_width).round() as i64;
+            let child_top_line =
+                top_line + ((child_bounds.y - parent_bounds.y) / char_height).round() as i64;
+            sync_window_character_edges_from_bounds_at(
+                child,
+                child_left_col,
+                child_top_line,
+                char_width,
+                char_height,
+            );
         }
     }
 }

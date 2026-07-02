@@ -128,9 +128,10 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
             state
                 .row_extend
                 .activate(state.row_geometry.current_row_marker(), fill);
-        } else {
-            state.row_extend.clear();
         }
+        // Do not clear row_extend on a bare face checkpoint: an extending face
+        // that ends exactly before a newline still supplies the line-fill face.
+        // Rendering the next non-extend source item clears it instead.
 
         if state.box_face.is_active() && resolved_box_type == 0 {
             state.box_face.clear();
