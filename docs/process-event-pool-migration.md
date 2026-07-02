@@ -177,14 +177,52 @@ activity path).
   comment guarded against the pre-S4b world where a status change completed
   waits. S4b removed that coupling.
 
-**State at pause/handoff:** all of the above compiles (`cargo check --tests`
-clean); a release build + verification run covers: the S6 target test
-(`div_v8_process_attributes_status_type_tty` — GNU reports `(exit signal)`
-membership + reaped process-list where neomacs reported `run` + live entry),
-the flipped flaky family ×3 runs, the S4b probes, and a fresh
-`status-after-exit` probe. Remaining before push: unit-test suite for
-process/wait, oracle family gate, **clean idle full regression** (see §6
-methodology), commit (S4b and S6 as separate commits), push.
+**State at handoff (2026-07-02, S4b+S6 in tree, uncommitted —
+`neovm-core/src/emacs_core/process.rs` + `wait.rs` dirty):**
+
+Verified green so far (release binary built from the in-tree state):
+- All S4b probes byte-identical with GNU: listen-wait `(nil t)` immediate;
+  open connection waits full timeout; io-paused connection waits with public
+  `stop`; sentinel-only activity → nil; `:nowait` connect `(nil t ("open")
+  open)`; both network sentinel scripts identical.
+- S6 probes: `status-after-exit` → `(exit 0)` both; the exited-child wait
+  contract verified byte-identical:
+  `(accept-process-output P 0.5)` on a 200ms-dead `echo` child returns
+  `(nil exit "out\nProcess x finished\n")` in BOTH GNU and neomacs (GNU
+  breaks the targeted wait on the terminated child, drains the output, runs
+  the default sentinel, reports `exit`).
+- `div_v8_process_attributes_status_type_tty` (the S6 target) passes on an
+  idle machine; the rest of the flaky family passes idle, still flips under
+  load (their windows involve output-arrival order, not just status
+  observation).
+
+Remaining to finish S4b+S6 (exact list):
+1. Retarget unit test
+   `accept_process_output_keeps_status_pending_after_ready_output`
+   (process_test.rs): it pins pre-S6 neomacs-only behavior `(t run)`. The
+   GNU-verified contract is `accepted = nil`, `process-status = exit`, buffer
+   = `"out\nProcess x finished\n"` (probe: `tmp/t_pending.el` pattern above).
+   Rename it accordingly (e.g. `accept_process_output_target_terminated_...`).
+2. Fix/retarget unit test
+   `accept_process_output_defers_pty_status_after_explicit_coding`: the
+   explicit-coding defer branch in `run_process_status_notification` now
+   returns `(saw_output, false)`; the caller no longer records completing
+   activity for the defer round. Read the test's intent (pty status deferral
+   after explicit coding change) and check whether the defer branch should
+   count drained output (`saw_output` may need to be recorded by the caller —
+   it is, via `drained_output`) or whether the test just pinned the old
+   bool-conflation. Verify the underlying scenario against GNU before
+   changing either side.
+3. Re-run: unit family (`-E 'test(process) or test(wait) or …'`), oracle
+   family (257), then a **clean idle full regression**; diff leaf names vs
+   the 121-fail baseline (`tmp/s4a_leaf.txt`); re-run any new failure
+   standalone ×2.
+4. Commit S4b and S6 as separate commits (message drafts: S4b = completion
+   semantics / got_some_output parity + TargetProcessTerminated; S6 =
+   observation-point status decode, reversing the old "do not probe" comment
+   with the S4b rationale). Push (note: the pre-push hook runs `cargo fmt
+   --check` + `cargo check`, which QUEUES on the target-dir lock if a build
+   or nextest compile is running — be patient, it is not hung).
 
 ## 5. REMAINING SLICES — detailed execution guidance
 
