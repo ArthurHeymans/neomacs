@@ -127,14 +127,14 @@ contract has four clauses:
    `glyph_row::left_fringe_bitmap` analog); implementation includes an audit
    that every currently drawn element (margins, dividers, open popup-menu
    state, IME preedit, drag highlights, …) is represented or gets added.
-2. **All visible frames, not one.** Today a single thread-local
-   `LayoutEngine` (`neomacs-bin/src/tty_layout.rs:24`) retains only the most
-   recently laid-out frame (`engine.rs:178`), so child frames — posframe /
-   corfu popups, tooltips — would be invisible to a snapshot. Retention
-   becomes per-frame (keyed by `DisplayFrameId`), and
-   `(neomacs--frame-snapshot t FORMAT)` returns every visible frame with its
-   `parent_id`/`parent_x`/`parent_y`/`z_order`, i.e. the full composited
-   screen.
+2. **All visible frames, not one.** `(neomacs--frame-snapshot t FORMAT)`
+   walks the same `render_frame_tree` that `publish_gui_frame` publishes
+   from and lays each visible frame out **on demand** (the single-slot
+   `last_frame_display_state` handoff stays untouched), stamping
+   `parent_id`/`parent_x`/`parent_y`/`z_order` — the full composited screen,
+   child frames (posframe/corfu popups, tooltips) included. On-demand layout
+   supersedes the earlier per-frame-retention idea: it is always fresh and
+   needs no retention map or eviction.
 3. **Settled-frame semantics.** Render-side animations (scroll animation,
    cursor effects) interpolate *toward* the published state; the snapshot is
    the settled screen, which is the correct oracle for tests. Mid-animation
@@ -144,6 +144,20 @@ contract has four clauses:
    external engine (WPE/webkit, video decoder). Pixel-level truth overall
    (font fallback, GPU correctness) remains the PNG readback's job — the
    snapshot is the semantic screen, the readback proves it was painted.
+
+**Audit results (2026-07-02).** Renderer inputs vs. serialized state:
+glyph rows/faces/cursors/fringes (`GlyphRow` + `fringe_bitmaps`), chrome
+rows, GUI menu/tool/tab bar state, scroll bars, backgrounds/borders/
+stipple, and media geometry all come from `FrameDisplayState` — covered.
+Image/video pixel bits arrive via `AssetCommand` (clause 4 boundary;
+snapshot carries id + geometry). IME preedit is drawn by the OS candidate
+window; the render thread only positions it (`ImeCursorArea`) — not a gap.
+**One real gap:** an OPEN popup menu (`UiCommand::ShowPopupMenu`,
+thread_comm.rs) is drawn from a command channel and is not part of
+`FrameDisplayState`, so a snapshot taken while an `x-popup-menu` is open
+does not show the menu. Follow-up: mirror open-popup state into
+`FrameDisplayState` (or a snapshot-visible side field) when popup-menu
+testing becomes a need.
 
 ### Phase 1b — GUI test harness integration
 
@@ -256,12 +270,12 @@ Use `cargo nextest`, output redirected to a file under `./tmp/`.
    round-trip test.
 2. `lisp_name` on protocol `Face`, populated at face realization.
 3. `FrameDisplayState::render_text()` + golden tests.
-4. Per-frame retention: replace the engine's single
-   `last_frame_display_state` slot with a `DisplayFrameId`-keyed map so
-   child frames/popups are snapshot-visible.
+4. On-demand multi-frame collection (`collect_snapshot_states` in
+   neomacs-bin): walk `render_frame_tree`, lay out each covered frame,
+   stamp parent/origin/z-order — no retention map needed.
 5. `neomacs--frame-snapshot` / `neomacs--write-frame-snapshot` subrs: force
-   redisplay, read the retained state (FRAME = `t` → all visible frames),
-   serialize.
+   redisplay, then run the frontend-installed `frame_snapshot_fn` hook
+   (same seam pattern as `redisplay_fn`), which collects and serializes.
 6. Completeness audit: enumerate everything the renderer draws; verify each
    element originates from a serialized `FrameDisplayState` field; add what
    is missing.
