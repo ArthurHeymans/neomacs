@@ -57,6 +57,12 @@ pub mod mir;
 #[cfg(feature = "jit")]
 pub mod aot;
 
+/// Always-on metering of the synchronous compile stalls the cache-miss path
+/// pays on the eval thread — the evidence base for background compilation.
+/// Only built with the `jit` feature. See `jit/stats.rs`.
+#[cfg(feature = "jit")]
+pub mod stats;
+
 #[cfg(feature = "jit")]
 pub use cache::try_run_compiled;
 

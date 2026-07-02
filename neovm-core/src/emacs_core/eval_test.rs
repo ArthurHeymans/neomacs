@@ -14373,6 +14373,76 @@ fn vm_subr_mix_byte_compile() {
     panic!("SUBR-MIX dumped above (profiling aid, not a failure)");
 }
 
+/// Profiling aid (NOT a pass/fail test): measure the synchronous compile stall
+/// the JIT pays at each first hot call, over a corpus of byte-compiled defuns
+/// (the runtime_startup_context + byte-compile recipe from vm_op_mix_real_elisp
+/// — a plain defun tree-walks and never reaches the JIT). Each function is
+/// forced hot and called once — the call that compiles — then the per-thread
+/// `jit::stats` aggregate is dumped bench-style via panic!. Run:
+///   cargo nextest run -p neovm-core --release \
+///     --run-ignored ignored-only --no-capture -E 'test(jit_compile_time_profile)'
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "profiling aid; run explicitly in release with --no-capture"]
+fn jit_compile_time_profile() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    ev.eval_str(
+        "(progn \
+           (defun jcp-sq (x) (* x x)) \
+           (defun jcp-poly (x y) (+ (* x x) (* 2 x y) (* y y) (- x y) 1)) \
+           (defun jcp-clamp (x lo hi) (cond ((< x lo) lo) ((> x hi) hi) (t x))) \
+           (defun jcp-sum-to (n) (let ((s 0) (i 0)) (while (< i n) (setq s (+ s i)) (setq i (1+ i))) s)) \
+           (defun jcp-fib (n) (if (< n 2) n (+ (jcp-fib (- n 1)) (jcp-fib (- n 2))))) \
+           (defun jcp-build (n acc) (if (= n 0) acc (jcp-build (1- n) (cons n acc)))) \
+           (defun jcp-sum (lst) (if (null lst) 0 (+ (car lst) (jcp-sum (cdr lst))))) \
+           (defun jcp-work (n) (jcp-sum (jcp-build n nil))) \
+           (defun jcp-vecsum (v) (let ((s 0) (i 0) (n (length v))) (while (< i n) (setq s (+ s (aref v i))) (setq i (1+ i))) s)) \
+           (defun jcp-mix (a b c) \
+             (let* ((d (+ (* a a) (* b b) (* c c))) \
+                    (e (- (* 3 d) (+ a b c))) \
+                    (g (+ (* d e) (- e a) (* 2 b))) \
+                    (h (- (* g g) (* d e) (+ g d e)))) \
+               (+ (* h 5) (- g h) (* d 7) e))) \
+           (dolist (f '(jcp-sq jcp-poly jcp-clamp jcp-sum-to jcp-fib jcp-build \
+                        jcp-sum jcp-work jcp-vecsum jcp-mix)) \
+             (byte-compile f)) \
+           t)",
+    )
+    .expect("setup defuns + byte-compile");
+    crate::emacs_core::jit::stats::reset_compile_stats();
+    for (name, call) in [
+        ("jcp-sq", "(jcp-sq 9)"),
+        ("jcp-poly", "(jcp-poly 3 4)"),
+        ("jcp-clamp", "(jcp-clamp 12 0 10)"),
+        ("jcp-sum-to", "(jcp-sum-to 100)"),
+        ("jcp-fib", "(jcp-fib 12)"),
+        ("jcp-build", "(jcp-build 20 nil)"),
+        ("jcp-sum", "(jcp-sum '(1 2 3 4 5))"),
+        ("jcp-work", "(jcp-work 50)"),
+        ("jcp-vecsum", "(jcp-vecsum [1 2 3 4 5 6 7 8])"),
+        ("jcp-mix", "(jcp-mix 2 3 4)"),
+    ] {
+        let f = ev
+            .eval_str(&format!("(symbol-function '{name})"))
+            .expect(name);
+        let bc = f
+            .get_bytecode_data()
+            .unwrap_or_else(|| panic!("{name} must be byte-compiled (else it never tiers up)"));
+        bc.runtime.set_hot_for_test();
+        ev.eval_str(call).expect(call);
+    }
+    let snap = crate::emacs_core::jit::stats::compile_stats_snapshot();
+    assert!(
+        snap.total_compiles > 0,
+        "forcing the corpus hot must reach the JIT at least once"
+    );
+    panic!(
+        "COMPILE-STATS {} (profiling aid, not a failure)",
+        crate::emacs_core::jit::stats::format_summary(&snap)
+    );
+}
+
 /// CallBuiltinSym-dominated benchmark: a loop calling the primitive `length`
 /// via `Op::CallBuiltinSym` each iteration (the byte-compiler's inlined-
 /// primitive call opcode, opcodes 0140-0177). Isolates the JIT's named-builtin

@@ -19,12 +19,15 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
+use std::time::Instant;
 
 use super::compile::{CompiledLeaf, NativeRun, compile_bytecode_function_with, take_pending_flow};
+use super::stats;
 use crate::emacs_core::bytecode::ByteCodeFunction;
 use crate::emacs_core::error::Flow;
 use crate::emacs_core::eval::Context;
 use crate::emacs_core::intern::SymId;
+use crate::emacs_core::symbol::Obarray;
 use crate::emacs_core::value::Value;
 
 /// One thread's knowledge of a function's compiled state.
@@ -60,11 +63,30 @@ thread_local! {
 }
 
 /// Register a freshly-compiled leaf's inlined-callee deps into the reverse map.
-/// Called ONLY from the cache compile-miss path (the `or_insert_with` closures), so
+/// Called ONLY from the cache compile-miss path ([`compile_cache_entry`]), so
 /// it runs once per compile, never on the hot dispatch path.
 fn register_inline_deps(id: u64, leaf: &CompiledLeaf) {
     for &sym in leaf.inline_deps() {
         INLINE_DEPS.with(|m| m.borrow_mut().entry(sym).or_default().insert(id));
+    }
+}
+
+/// The cache-miss JIT compile — the synchronous eval-thread stall this tier
+/// pays once per function. Meters the stall into [`stats`] (timing ONLY the
+/// compile call; an AOT-served miss never reaches here), records the precise
+/// inline deps on success (so a later redefinition of an inlined callee evicts
+/// this leaf), and maps the outcome to a [`CacheEntry`]. Runs solely from the
+/// `or_insert_with` closures, never on the hot dispatch path.
+fn compile_cache_entry(id: u64, func: &ByteCodeFunction, obarray: Option<&Obarray>) -> CacheEntry {
+    let started = Instant::now();
+    let result = compile_bytecode_function_with(func, obarray);
+    stats::record_compile(started.elapsed(), func.ops.len(), &result);
+    match result {
+        Ok(leaf) => {
+            register_inline_deps(id, &leaf);
+            CacheEntry::Compiled(Rc::new(leaf))
+        }
+        Err(_) => CacheEntry::NotCompilable,
     }
 }
 
@@ -345,18 +367,11 @@ pub fn try_run_compiled(
                 {
                     // AOT leaves never inline → no inline deps to register. Their
                     // reloc consts are rooted via the COMPILED walk (R1c-8).
+                    stats::record_aot_load(func.ops.len());
                     return CacheEntry::Compiled(Rc::new(leaf));
                 }
             }
-            match compile_bytecode_function_with(func, obarray) {
-                Ok(leaf) => {
-                    // Compile-only (this closure runs solely on a cache miss): record
-                    // the precise inline deps so a later redefinition evicts this leaf.
-                    register_inline_deps(id, &leaf);
-                    CacheEntry::Compiled(Rc::new(leaf))
-                }
-                Err(_) => CacheEntry::NotCompilable,
-            }
+            compile_cache_entry(id, func, obarray)
         }) {
             // Only run native for a valid call (lambda-list range); a mismatch
             // is a wrong-arg-count call the interpreter must signal.
@@ -399,15 +414,7 @@ pub(crate) fn resolve_compiled_leaf_ptr(
         match cache.entry(id).or_insert_with(|| {
             // SAFETY: same dormant-Context contract as try_run_compiled.
             let obarray = (!ctx.is_null()).then(|| unsafe { &(*ctx).obarray });
-            match compile_bytecode_function_with(func, obarray) {
-                Ok(leaf) => {
-                    // Compile-only (this closure runs solely on a cache miss): record
-                    // the precise inline deps so a later redefinition evicts this leaf.
-                    register_inline_deps(id, &leaf);
-                    CacheEntry::Compiled(Rc::new(leaf))
-                }
-                Err(_) => CacheEntry::NotCompilable,
-            }
+            compile_cache_entry(id, func, obarray)
         }) {
             // INLINED leaves must NOT be fast-path-cached in a spec slot: their
             // validity depends on an inlined callee's epoch, which the caller's
@@ -569,6 +576,70 @@ mod tests {
             try_run_compiled(std::ptr::null_mut(), &f, Value::NIL, &[]).unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn metering_records_one_compile_per_cache_miss() {
+        stats::reset_compile_stats();
+        let c = Value::make_int(7);
+        let f = nullary_fn(vec![Op::Constant(0), Op::Return], vec![c]);
+        assert_eq!(
+            try_run_compiled(std::ptr::null_mut(), &f, Value::NIL, &[]).unwrap(),
+            Some(c.bits())
+        );
+        let s = stats::compile_stats_snapshot();
+        assert_eq!(s.total_compiles, 1);
+        assert_eq!(s.compiled_ok, 1);
+        assert_eq!(s.not_compilable, 0);
+        assert_eq!(s.not_profitable, 0);
+        assert_eq!(s.aot_loads, 0);
+        assert!(s.total_us > 0, "a real compile takes measurable time");
+        assert_eq!(s.max_us, s.total_us);
+        assert_eq!(s.max_fn_len, 2, "ops.len() of the worst (only) compile");
+        assert_eq!(s.histogram_us.iter().sum::<u64>(), 1);
+        assert_eq!(s.histogram_us[stats::bucket_index(s.max_us)], 1);
+        // Second call is a cache hit: no new compile is recorded.
+        assert_eq!(
+            try_run_compiled(std::ptr::null_mut(), &f, Value::NIL, &[]).unwrap(),
+            Some(c.bits())
+        );
+        assert_eq!(stats::compile_stats_snapshot().total_compiles, 1);
+    }
+
+    #[test]
+    fn metering_aggregates_across_compiles() {
+        stats::reset_compile_stats();
+        for i in 0..64 {
+            let c = Value::make_int(i);
+            let f = nullary_fn(vec![Op::Constant(0), Op::Return], vec![c]);
+            assert_eq!(
+                try_run_compiled(std::ptr::null_mut(), &f, Value::NIL, &[]).unwrap(),
+                Some(c.bits())
+            );
+        }
+        let s = stats::compile_stats_snapshot();
+        assert_eq!(s.total_compiles, 64);
+        assert_eq!(s.compiled_ok, 64);
+        assert_eq!(s.histogram_us.iter().sum::<u64>(), 64);
+        assert!(s.max_us <= s.total_us);
+        assert_eq!(s.max_fn_len, 2);
+    }
+
+    #[test]
+    fn metering_counts_noncompilable_outcome() {
+        stats::reset_compile_stats();
+        let f = nullary_fn(
+            vec![Op::Nil, Op::Nil, Op::Switch, Op::Nil, Op::Return],
+            vec![],
+        );
+        assert_eq!(
+            try_run_compiled(std::ptr::null_mut(), &f, Value::NIL, &[]).unwrap(),
+            None
+        );
+        let s = stats::compile_stats_snapshot();
+        assert_eq!(s.total_compiles, 1);
+        assert_eq!(s.compiled_ok, 0);
+        assert_eq!(s.not_compilable, 1);
     }
 
     #[test]

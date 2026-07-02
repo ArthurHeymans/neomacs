@@ -3664,6 +3664,7 @@ mod tests {
 
         // Drive try_run_compiled so the AOT leaf is cached.
         let id = f.runtime.compiled_id_or_assign();
+        super::super::stats::reset_compile_stats();
         let _ = super::super::cache::try_run_compiled(
             std::ptr::null_mut(),
             &f,
@@ -3677,6 +3678,10 @@ mod tests {
             Some(true),
             "leaf must be AOT-backed for this rooting test to be meaningful"
         );
+        // The compile-stall metering must see it as an AOT serve, NOT a compile.
+        let stats = super::super::stats::compile_stats_snapshot();
+        assert_eq!(stats.aot_loads, 1);
+        assert_eq!(stats.total_compiles, 0);
 
         // The root walk must include the leaf's rebuilt const (by content).
         let mut roots: Vec<Value> = Vec::new();
