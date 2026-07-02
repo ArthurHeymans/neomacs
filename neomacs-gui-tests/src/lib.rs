@@ -126,6 +126,11 @@ pub struct GuiArtifactSet {
     pub png: PathBuf,
     pub stderr: PathBuf,
     pub gui_state: PathBuf,
+    /// Full-fidelity display oracle: serde JSON of the real
+    /// `FrameDisplayState`s, written by `neomacs--write-frame-snapshot`.
+    pub frame_snapshot_json: PathBuf,
+    /// Greppable text (text-faces) rendering of the same snapshot.
+    pub frame_snapshot_txt: PathBuf,
 }
 
 impl GuiArtifactSet {
@@ -136,6 +141,8 @@ impl GuiArtifactSet {
             png: dir.join(format!("{scenario_name}.png")),
             stderr: dir.join(format!("{scenario_name}.stderr.log")),
             gui_state: dir.join(format!("{scenario_name}.gui-state.json")),
+            frame_snapshot_json: dir.join(format!("{scenario_name}.frame-snapshot.json")),
+            frame_snapshot_txt: dir.join(format!("{scenario_name}.frame-snapshot.txt")),
         }
     }
 }
@@ -225,6 +232,14 @@ impl GuiTestPlan {
                     "NEOMACS_GUI_STATE_JSON".to_string(),
                     path_to_string(&artifacts.gui_state),
                 ),
+                (
+                    "NEOMACS_GUI_FRAME_SNAPSHOT_JSON".to_string(),
+                    path_to_string(&artifacts.frame_snapshot_json),
+                ),
+                (
+                    "NEOMACS_GUI_FRAME_SNAPSHOT_TXT".to_string(),
+                    path_to_string(&artifacts.frame_snapshot_txt),
+                ),
             ],
         };
 
@@ -281,6 +296,14 @@ impl GuiTestPlan {
             .ok()
             .map(|metadata| metadata.len())
             .filter(|len| *len > 0);
+        let frame_snapshot_json_bytes = fs::metadata(&artifacts.frame_snapshot_json)
+            .ok()
+            .map(|metadata| metadata.len())
+            .filter(|len| *len > 0);
+        let frame_snapshot_txt_bytes = fs::metadata(&artifacts.frame_snapshot_txt)
+            .ok()
+            .map(|metadata| metadata.len())
+            .filter(|len| *len > 0);
         let readback_diagnostics = readback_diagnostics(&output.stderr);
         let failure_reason = failure_reason(status, output.exit_code, png_bytes);
         let result = GuiRunResult {
@@ -290,6 +313,8 @@ impl GuiTestPlan {
             timed_out: output.timed_out,
             png_bytes,
             gui_state_bytes,
+            frame_snapshot_json_bytes,
+            frame_snapshot_txt_bytes,
             stderr_bytes,
             stdout_bytes,
             gui_state,
@@ -550,6 +575,8 @@ pub struct GuiRunResult {
     pub timed_out: bool,
     pub png_bytes: Option<u64>,
     pub gui_state_bytes: Option<u64>,
+    pub frame_snapshot_json_bytes: Option<u64>,
+    pub frame_snapshot_txt_bytes: Option<u64>,
     pub stderr_bytes: u64,
     pub stdout_bytes: u64,
     pub gui_state: Option<serde_json::Value>,
@@ -596,6 +623,10 @@ fn result_manifest(
             "png_bytes": result.png_bytes,
             "gui_state_exists": result.gui_state_bytes.is_some(),
             "gui_state_bytes": result.gui_state_bytes,
+            "frame_snapshot_json_exists": result.frame_snapshot_json_bytes.is_some(),
+            "frame_snapshot_json_bytes": result.frame_snapshot_json_bytes,
+            "frame_snapshot_txt_exists": result.frame_snapshot_txt_bytes.is_some(),
+            "frame_snapshot_txt_bytes": result.frame_snapshot_txt_bytes,
             "stderr_bytes": result.stderr_bytes,
             "stdout_bytes": result.stdout_bytes,
         },
@@ -624,6 +655,8 @@ fn artifacts_json(artifacts: &GuiArtifactSet) -> serde_json::Value {
         "png": path_to_string(&artifacts.png),
         "stderr": path_to_string(&artifacts.stderr),
         "gui_state": path_to_string(&artifacts.gui_state),
+        "frame_snapshot_json": path_to_string(&artifacts.frame_snapshot_json),
+        "frame_snapshot_txt": path_to_string(&artifacts.frame_snapshot_txt),
     })
 }
 

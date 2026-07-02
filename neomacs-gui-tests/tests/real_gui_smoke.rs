@@ -47,6 +47,31 @@ fn real_gui_smoke_generates_surface_readback_png() {
         result.png_bytes.unwrap_or_default() > 0,
         "readback PNG should be non-empty"
     );
+
+    // Display oracle: assert what redisplay actually produced, not what the
+    // fixture's Lisp said it intended.
+    let snapshot_txt = std::fs::read_to_string(&result.artifacts.frame_snapshot_txt)
+        .expect("frame snapshot text artifact (rebuild target/release/neomacs if stale)");
+    assert!(
+        snapshot_txt.contains("=== frame "),
+        "snapshot frame header:\n{snapshot_txt:.500}"
+    );
+    assert!(
+        snapshot_txt.contains("NeoMacs GUI smoke line 00"),
+        "smoke buffer text visible on screen:\n{snapshot_txt:.2000}"
+    );
+    assert!(
+        snapshot_txt.contains("*neomacs-gui-smoke*"),
+        "smoke buffer name in window header:\n{snapshot_txt:.2000}"
+    );
+    let snapshot_json = std::fs::read_to_string(&result.artifacts.frame_snapshot_json)
+        .expect("frame snapshot JSON artifact");
+    let doc: serde_json::Value =
+        serde_json::from_str(&snapshot_json).expect("snapshot JSON parses");
+    assert!(
+        !doc["frames"].as_array().expect("frames array").is_empty(),
+        "at least one frame in snapshot"
+    );
 }
 
 fn requested_backend() -> Option<GuiBackend> {

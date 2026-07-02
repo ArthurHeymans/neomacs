@@ -44,6 +44,14 @@ fn artifact_paths_are_backend_and_scenario_qualified() {
         artifacts.gui_state,
         PathBuf::from("target/neomacs-gui-tests/linux-wayland/startup-smoke.gui-state.json")
     );
+    assert_eq!(
+        artifacts.frame_snapshot_json,
+        PathBuf::from("target/neomacs-gui-tests/linux-wayland/startup-smoke.frame-snapshot.json")
+    );
+    assert_eq!(
+        artifacts.frame_snapshot_txt,
+        PathBuf::from("target/neomacs-gui-tests/linux-wayland/startup-smoke.frame-snapshot.txt")
+    );
 }
 
 #[test]
@@ -80,6 +88,14 @@ fn linux_x11_plan_sets_backend_and_readback_environment() {
     assert_eq!(
         command.env_value("NEOMACS_DEBUG_SURFACE_READBACK_PNG"),
         Some("/repo/target/neomacs-gui-tests/linux-x11/startup-smoke.png")
+    );
+    assert_eq!(
+        command.env_value("NEOMACS_GUI_FRAME_SNAPSHOT_JSON"),
+        Some("/repo/target/neomacs-gui-tests/linux-x11/startup-smoke.frame-snapshot.json")
+    );
+    assert_eq!(
+        command.env_value("NEOMACS_GUI_FRAME_SNAPSHOT_TXT"),
+        Some("/repo/target/neomacs-gui-tests/linux-x11/startup-smoke.frame-snapshot.txt")
     );
 }
 
@@ -194,6 +210,7 @@ fn run_with_runner_writes_ai_readable_result_artifacts() {
         },
         create_png: true,
         gui_state: None,
+        frame_snapshot: None,
     };
 
     let result = plan
@@ -238,6 +255,7 @@ fn run_with_runner_reports_missing_png_as_failed_text_result() {
         },
         create_png: false,
         gui_state: None,
+        frame_snapshot: None,
     };
 
     let result = plan
@@ -283,6 +301,7 @@ fn run_with_runner_treats_timeout_after_png_as_successful_capture() {
         },
         create_png: true,
         gui_state: None,
+        frame_snapshot: None,
     };
 
     let result = plan
@@ -325,6 +344,7 @@ fn run_with_runner_includes_fixture_visible_text_snapshot() {
         },
         create_png: true,
         gui_state: Some(r##"{"buffer_name":"*neomacs-gui-smoke*","visible_text":"NeoMacs GUI smoke line 00\nNeoMacs GUI smoke line 01\n"}"##.to_string()),
+        frame_snapshot: None,
     };
 
     let result = plan
@@ -341,6 +361,52 @@ fn run_with_runner_includes_fixture_visible_text_snapshot() {
     assert!(manifest.contains("NeoMacs GUI smoke line 00"));
 }
 
+#[test]
+fn run_with_runner_records_frame_snapshot_artifacts() {
+    let workspace_root = workspace_root();
+    let artifact_root = workspace_root.join("target/neomacs-gui-tests");
+    let artifacts = GuiArtifactSet::new(&artifact_root, GuiBackend::LinuxWayland, "runner-snap");
+    let _ = std::fs::remove_file(&artifacts.json);
+    let _ = std::fs::remove_file(&artifacts.png);
+    let _ = std::fs::remove_file(&artifacts.stderr);
+    let _ = std::fs::remove_file(&artifacts.frame_snapshot_json);
+    let _ = std::fs::remove_file(&artifacts.frame_snapshot_txt);
+
+    let plan = GuiTestPlan::new(
+        GuiBackend::LinuxWayland,
+        &workspace_root,
+        &artifact_root,
+        GuiScenario::new("runner-snap", "test/neomacs/neomacs-face-test.el"),
+    );
+    let mut runner = FakeRunner {
+        output: GuiCommandOutput {
+            exit_code: Some(0),
+            timed_out: false,
+            stdout: String::new(),
+            stderr: "First-frame surface readback: ok\n".to_string(),
+        },
+        create_png: true,
+        gui_state: None,
+        frame_snapshot: Some((
+            r##"{"frames":[{"frame_id":1}]}"##.to_string(),
+            "=== frame 1: 80x24 cols 640x384 px ===\n".to_string(),
+        )),
+    };
+
+    let result = plan
+        .run_with(
+            &mut runner,
+            GuiRunOptions::with_timeout(Duration::from_secs(1)),
+        )
+        .expect("runner result should be written");
+    let manifest = std::fs::read_to_string(&artifacts.json).expect("result json should exist");
+
+    assert!(result.frame_snapshot_json_bytes.unwrap_or_default() > 0);
+    assert!(result.frame_snapshot_txt_bytes.unwrap_or_default() > 0);
+    assert!(manifest.contains(r##""frame_snapshot_json_exists":true"##));
+    assert!(manifest.contains(r##""frame_snapshot_txt_exists":true"##));
+}
+
 fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -352,6 +418,7 @@ struct FakeRunner {
     output: GuiCommandOutput,
     create_png: bool,
     gui_state: Option<String>,
+    frame_snapshot: Option<(String, String)>,
 }
 
 impl GuiCommandRunner for FakeRunner {
@@ -373,6 +440,16 @@ impl GuiCommandRunner for FakeRunner {
                     .expect("gui state should have parent"),
             )?;
             std::fs::write(&artifacts.gui_state, gui_state)?;
+        }
+        if let Some((json, txt)) = &self.frame_snapshot {
+            std::fs::create_dir_all(
+                artifacts
+                    .frame_snapshot_json
+                    .parent()
+                    .expect("frame snapshot should have parent"),
+            )?;
+            std::fs::write(&artifacts.frame_snapshot_json, json)?;
+            std::fs::write(&artifacts.frame_snapshot_txt, txt)?;
         }
         Ok(self.output.clone())
     }
