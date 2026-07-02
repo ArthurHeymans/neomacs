@@ -32,7 +32,6 @@ use smallvec::SmallVec;
 
 const INLINE_REGEX_REGISTERS: usize = 8;
 type RegisterScratch = SmallVec<[Option<usize>; INLINE_REGEX_REGISTERS]>;
-type SavedRegisters = SmallVec<[(usize, i64, i64); INLINE_REGEX_REGISTERS]>;
 
 // ---------------------------------------------------------------------------
 // Phase 1: Opcodes and Data Structures
@@ -489,25 +488,105 @@ impl MatchRegisters {
 // Failure Stack (for backtracking)
 // ---------------------------------------------------------------------------
 
-/// A single failure point on the backtracking stack.
+/// A failure point (choice point) on the backtracking stack.
 ///
-/// When the matcher hits a choice point (OnFailureJump), it pushes the
-/// current state so it can backtrack if the primary path fails.
-#[derive(Clone, Debug)]
-struct FailurePoint {
+/// Mirrors GNU `PUSH_FAILURE_POINT` (regex-emacs.c:1080): a frame is just
+/// the resume positions plus a mark into the shared undo log.  Register
+/// and counter state is NOT snapshotted here — GNU's protocol delta-saves
+/// a register when `start_memory` modifies it (`PUSH_FAILURE_REG`) and a
+/// counter when it is written (`PUSH_NUMBER`); `POP_FAILURE_POINT`
+/// replays the undo log down to the frame's mark.  The previous
+/// implementation rebuilt a full register snapshot and cloned the counter
+/// table on EVERY choice point, which was the dominant cost of
+/// backtracking-heavy searches.
+#[derive(Clone, Copy, Debug)]
+struct FailFrame {
+    /// `undo.len()` at push time — POP replays undo entries above this.
+    undo_mark: usize,
+
     /// Position in the bytecode to resume at.
     pattern_pos: usize,
 
     /// Position in the input text to resume at.
     /// None means "keep current string position" (OnFailureKeepStringJump).
     string_pos: Option<usize>,
+}
 
-    /// Saved group register values at this point.
-    saved_registers: SavedRegisters, // (group_idx, start, end)
+/// One delta-undo entry (GNU `PUSH_FAILURE_REG` / `PUSH_NUMBER`).
+#[derive(Clone, Copy, Debug)]
+enum FailUndo {
+    /// Register `idx`'s (start, end) before a `start_memory` overwrote it.
+    Reg {
+        idx: usize,
+        start: Option<usize>,
+        end: Option<usize>,
+    },
+    /// Counter at bytecode position `pos` before it was rewritten.
+    Counter { pos: usize, val: u16 },
+}
 
-    /// Saved interval-counter overrides at this point.
-    /// Keyed by bytecode position of the 2-byte counter field.
-    saved_counters: HashMap<usize, u16>,
+/// GNU `emacs_re_max_failures` (regex-emacs.c:893).
+const EMACS_RE_MAX_FAILURES: usize = 40_000;
+/// GNU `TYPICAL_FAILURE_SIZE` (regex-emacs.c:1110): estimated stack slots
+/// per failure point; the fail stack refuses to grow beyond
+/// `emacs_re_max_failures * TYPICAL_FAILURE_SIZE` slots.
+const TYPICAL_FAILURE_SIZE: usize = 20;
+/// Our frames and undo entries each stand for one 3-slot GNU stack item
+/// (frame = [prev_frame, str, pat]; reg = [start, end, num]; counter =
+/// [val, ptr, -1]), so the GNU slot budget divides by 3.
+const FAIL_STACK_ENTRY_LIMIT: usize = EMACS_RE_MAX_FAILURES * TYPICAL_FAILURE_SIZE / 3;
+
+/// Reusable per-thread matcher state.  `re_search` runs `re_match` once
+/// per fastmap candidate; allocating the fail stack, register vectors and
+/// counter table afresh for every candidate was measured as a major share
+/// of search time.  Cleared (not deallocated) on each entry.
+#[derive(Default)]
+struct MatchScratch {
+    frames: Vec<FailFrame>,
+    undo: Vec<FailUndo>,
+    regstart: RegisterScratch,
+    regend: RegisterScratch,
+    best_regstart: RegisterScratch,
+    best_regend: RegisterScratch,
+    /// Live interval-counter overrides, keyed by bytecode position of the
+    /// 2-byte counter field.  An association list: patterns rarely have
+    /// more than a couple of `\{n,m\}` counters.
+    counters: SmallVec<[(usize, u16); 4]>,
+}
+
+thread_local! {
+    static MATCH_SCRATCH: std::cell::RefCell<MatchScratch> =
+        std::cell::RefCell::new(MatchScratch::default());
+
+    /// Set when a match aborts on the GNU fail-stack limit.  `re_search`
+    /// bails out of its candidate loop when it sees the flag; the
+    /// front-end (`regex.rs`) promotes a `None`-with-flag result into the
+    /// GNU error `"Stack overflow in regexp matcher"` (search.c:78
+    /// `matcher_overflow`, reached via `re_match_2_internal` returning
+    /// -2).  Same TLS-flag idiom as the quit poll.
+    static MATCHER_OVERFLOW: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// GNU `matcher_overflow` message (search.c:80).
+pub(crate) const MATCHER_OVERFLOW_MESSAGE: &str = "Stack overflow in regexp matcher";
+
+fn set_matcher_overflow() {
+    MATCHER_OVERFLOW.with(|flag| flag.set(true));
+}
+
+fn matcher_overflow_pending() -> bool {
+    MATCHER_OVERFLOW.with(|flag| flag.get())
+}
+
+fn clear_matcher_overflow() {
+    MATCHER_OVERFLOW.with(|flag| flag.set(false));
+}
+
+/// Read-and-clear the overflow flag.  The front-end calls this after a
+/// failed search to distinguish "no match" from "aborted on the
+/// fail-stack limit" (which GNU signals as an error).
+pub(crate) fn take_matcher_overflow() -> bool {
+    MATCHER_OVERFLOW.with(|flag| flag.replace(false))
 }
 
 // SyntaxClass is imported from crate::emacs_core::syntax.
@@ -542,21 +621,34 @@ fn extract_number_u16(buf: &[u8], pos: usize) -> u16 {
     u16::from_le_bytes([buf[pos], buf[pos + 1]])
 }
 
-/// Read a counter value from the counter table, falling back to the bytecode
-/// if no override has been stored yet.  Used by `succeed_n`, `jump_n`, and
-/// `set_number_at` to emulate GNU's in-place bytecode mutation on immutable
-/// bytecode.
-fn get_counter(counters: &HashMap<usize, u16>, bytecode: &[u8], pos: usize) -> u16 {
+/// Live counter overrides, keyed by bytecode position of the 2-byte
+/// counter field.  GNU mutates the bytecode in place (`STORE_NUMBER`);
+/// neomacs keeps compiled patterns immutable and shared, so overrides
+/// live in this small association list instead.
+type CounterTable = SmallVec<[(usize, u16); 4]>;
+
+/// Read a counter value, falling back to the bytecode if no override has
+/// been stored yet.  Used by `succeed_n`, `jump_n`, and `set_number_at`.
+fn get_counter(counters: &CounterTable, bytecode: &[u8], pos: usize) -> u16 {
     counters
-        .get(&pos)
-        .copied()
+        .iter()
+        .find(|(counter_pos, _)| *counter_pos == pos)
+        .map(|(_, val)| *val)
         .unwrap_or_else(|| extract_number_u16(bytecode, pos))
 }
 
-/// Store a counter value in the mutable counter table (keyed by bytecode
-/// position).
-fn set_counter(counters: &mut HashMap<usize, u16>, pos: usize, val: u16) {
-    counters.insert(pos, val);
+/// Store a counter value WITHOUT recording an undo entry.  Only the
+/// backtracking pop path uses this directly; everything else goes through
+/// the PUSH_NUMBER-style delta save in the matcher.
+fn set_counter(counters: &mut CounterTable, pos: usize, val: u16) {
+    if let Some(entry) = counters
+        .iter_mut()
+        .find(|(counter_pos, _)| *counter_pos == pos)
+    {
+        entry.1 = val;
+    } else {
+        counters.push((pos, val));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1289,6 +1381,10 @@ pub(crate) fn regex_compile_lisp_with_translation(
         emit_op!(RegexOp::Succeed);
     }
 
+    // Resolve on_failure_jump_smart loops (GNU does this lazily at first
+    // execution; our bytecode is immutable and shared after this point).
+    resolve_smart_jumps(&mut buf);
+
     // Populate the fastmap for search-time position skipping.  The
     // standard syntax table stands in for `[[:word:]]`/`[[:space:]]`
     // ASCII baking here; callers searching under a buffer-local table
@@ -1480,12 +1576,25 @@ fn compile_repetition(
             // * = zero or more
             if greedy {
                 // Layout:
-                //   [laststart] OFJL  offset(2)  <expr>  Jump  offset(2)
-                //   OFJL fail target → past the Jump instruction
-                //   Jump target → back to OFJL opcode
-
-                // Insert OnFailureJumpLoop before the expression
-                buf.splice_bytecode(laststart, &[RegexOp::OnFailureJumpLoop as u8, 0, 0]);
+                //   [laststart] OFJ*  offset(2)  <expr>  Jump  offset(2)
+                //   OFJ* fail target → past the Jump instruction
+                //   Jump target → back to the OFJ* opcode
+                //
+                // Opcode choice mirrors GNU regex-emacs.c:1926-1971:
+                // a "simple" one-character body gets on_failure_jump_smart
+                // (resolved after compilation to a keep-string fast loop
+                // or a plain on_failure_jump by `resolve_smart_jumps`);
+                // otherwise on_failure_jump when the body cannot match
+                // the empty string, else on_failure_jump_loop (which
+                // pays the cycle check).
+                let loop_op = if simple_one_char_body(buf, laststart, after_last) {
+                    RegexOp::OnFailureJumpSmart
+                } else if repeated_body_may_match_empty(&buf.buffer[laststart..after_last]) {
+                    RegexOp::OnFailureJumpLoop
+                } else {
+                    RegexOp::OnFailureJump
+                };
+                buf.splice_bytecode(laststart, &[loop_op as u8, 0, 0]);
                 // After splice, expr occupies [laststart+3 .. laststart+3+expr_len)
                 let expr_len = after_last - laststart; // original expr length
 
@@ -1558,8 +1667,22 @@ fn compile_repetition(
             // + = one or more
             // Layout: <expr(already emitted)>  OFJL/OFJ  offset(2)  Jump  offset(2)
             if greedy {
-                // OFJL fail target → past the Jump instruction (continue)
-                buf.buffer.push(RegexOp::OnFailureJumpLoop as u8);
+                // GNU uses on_failure_jump for a body that cannot match
+                // empty and on_failure_jump_loop otherwise (the `ofj`
+                // choice at regex-emacs.c:1929-1934).  GNU additionally
+                // rewrites a simple-body `P+` into `PP*` to enable the
+                // smart loop; we skip that body duplication — the plain
+                // per-iteration on_failure_jump is GNU's own fallback
+                // shape and none of the measured font-lock patterns has
+                // a simple `+` body.
+                let loop_op =
+                    if repeated_body_may_match_empty(&buf.buffer[laststart..after_last]) {
+                        RegexOp::OnFailureJumpLoop
+                    } else {
+                        RegexOp::OnFailureJump
+                    };
+                // Loop-op fail target → past the Jump instruction (continue)
+                buf.buffer.push(loop_op as u8);
                 let ofjl_pos = buf.buffer.len();
                 buf.buffer.push(0);
                 buf.buffer.push(0);
@@ -2923,29 +3046,83 @@ pub(crate) fn re_match(
     syntax: &dyn SyntaxLookup,
     point: usize,
 ) -> Option<(usize, MatchRegisters)> {
+    clear_matcher_overflow();
+    re_match_candidate(pattern, text, pos, stop, syntax, point)
+}
+
+/// `re_match` without the overflow-flag reset — `re_search` uses this per
+/// fastmap candidate so an overflow set by one candidate survives until
+/// the search loop checks it.
+fn re_match_candidate(
+    pattern: &CompiledPattern,
+    text: &[u8],
+    pos: usize,
+    stop: usize,
+    syntax: &dyn SyntaxLookup,
+    point: usize,
+) -> Option<(usize, MatchRegisters)> {
+    MATCH_SCRATCH.with(|cell| match cell.try_borrow_mut() {
+        Ok(mut scratch) => {
+            re_match_internal(&mut scratch, pattern, text, pos, stop, syntax, point)
+        }
+        // Defensive: if a syntax/category callback ever re-enters the
+        // matcher, fall back to fresh (allocating) state for the nested
+        // match rather than corrupting the outer one.
+        Err(_) => re_match_internal(
+            &mut MatchScratch::default(),
+            pattern,
+            text,
+            pos,
+            stop,
+            syntax,
+            point,
+        ),
+    })
+}
+
+fn re_match_internal(
+    scratch: &mut MatchScratch,
+    pattern: &CompiledPattern,
+    text: &[u8],
+    pos: usize,
+    stop: usize,
+    syntax: &dyn SyntaxLookup,
+    point: usize,
+) -> Option<(usize, MatchRegisters)> {
     let bytecode = &pattern.buffer;
     let num_regs = pattern.re_nsub + 1;
-    let mut fail_stack: Vec<FailurePoint> = Vec::new();
 
-    // Mutable counter table for interval repetition (succeed_n / jump_n / set_number_at).
-    // GNU modifies bytecode in-place; we use a side table keyed by bytecode position.
-    let mut counters: HashMap<usize, u16> = HashMap::new();
+    let MatchScratch {
+        frames,
+        undo,
+        regstart,
+        regend,
+        best_regstart,
+        best_regend,
+        counters,
+    } = scratch;
+
+    // Failure (choice-point) stack — GNU's delta protocol: frames record
+    // only resume positions; register/counter deltas accumulate in `undo`
+    // and are replayed on pop (see `FailFrame`).
+    frames.clear();
+    undo.clear();
+
+    // Mutable counter table for interval repetition (succeed_n / jump_n /
+    // set_number_at).  GNU modifies bytecode in-place; we use a side
+    // table keyed by bytecode position.
+    counters.clear();
 
     // GNU regex-emacs.c:4188-4204 skips all internal register arrays
     // when the pattern has no subexpressions. Register 0 is handled
     // separately on success, so failed no-group candidate checks should
     // not allocate register scratch space.
     let has_subexpressions = pattern.re_nsub > 0;
-    let mut regstart: RegisterScratch = if has_subexpressions {
-        register_scratch(num_regs)
-    } else {
-        RegisterScratch::new()
-    };
-    let mut regend: RegisterScratch = if has_subexpressions {
-        register_scratch(num_regs)
-    } else {
-        RegisterScratch::new()
-    };
+    let scratch_regs = if has_subexpressions { num_regs } else { 0 };
+    regstart.clear();
+    regstart.resize(scratch_regs, None);
+    regend.clear();
+    regend.resize(scratch_regs, None);
 
     // Best match tracking for POSIX longest-match (audit #2).
     //
@@ -2960,16 +3137,10 @@ pub(crate) fn re_match(
     let posix_longest = pattern.posix;
     let mut best_regs_set = false;
     let mut best_match_end: usize = pos;
-    let mut best_regstart: RegisterScratch = if has_subexpressions {
-        register_scratch(num_regs)
-    } else {
-        RegisterScratch::new()
-    };
-    let mut best_regend: RegisterScratch = if has_subexpressions {
-        register_scratch(num_regs)
-    } else {
-        RegisterScratch::new()
-    };
+    best_regstart.clear();
+    best_regstart.resize(scratch_regs, None);
+    best_regend.clear();
+    best_regend.resize(scratch_regs, None);
 
     let mut pc = 0usize; // Bytecode program counter
     let mut d = pos; // Data position in text
@@ -3076,19 +3247,41 @@ pub(crate) fn re_match(
     // passed in explicitly as a `lifetime` metavariable.
     macro_rules! try_fail {
         ($label:lifetime) => {
-            if goto_fail(
-                &mut pc,
-                &mut d,
-                &mut fail_stack,
-                &mut regstart,
-                &mut regend,
-                &mut counters,
-            )
-            .is_none()
-            {
+            if goto_fail(&mut pc, &mut d, frames, undo, regstart, regend, counters).is_none() {
                 total_failure = true;
                 break $label;
             }
+        };
+    }
+
+    // GNU `PUSH_FAILURE_POINT` incl. `ENSURE_FAIL_STACK`: refuse to grow
+    // the stack past the `emacs_re_max_failures` budget; GNU returns -2
+    // and `search.c:matcher_overflow` signals "Stack overflow in regexp
+    // matcher".  We flag the thread-local and return no-match; the
+    // front-end promotes the flag to the same error.
+    macro_rules! push_failure_point {
+        ($pattern_pos:expr, $string_pos:expr) => {
+            if frames.len() + undo.len() >= FAIL_STACK_ENTRY_LIMIT {
+                set_matcher_overflow();
+                return None;
+            }
+            frames.push(FailFrame {
+                undo_mark: undo.len(),
+                pattern_pos: $pattern_pos,
+                string_pos: $string_pos,
+            });
+        };
+    }
+
+    // GNU `PUSH_FAILURE_REG` / `PUSH_NUMBER`: delta-save one register or
+    // counter onto the shared undo log (subject to the same stack budget).
+    macro_rules! push_failure_undo {
+        ($entry:expr) => {
+            if frames.len() + undo.len() >= FAIL_STACK_ENTRY_LIMIT {
+                set_matcher_overflow();
+                return None;
+            }
+            undo.push($entry);
         };
     }
 
@@ -3108,12 +3301,12 @@ pub(crate) fn re_match(
             }
             if posix_longest && d < stop {
                 let better_than_best = !best_regs_set || d > best_match_end;
-                if !fail_stack.is_empty() {
+                if !frames.is_empty() {
                     if better_than_best {
                         best_regs_set = true;
                         best_match_end = d;
-                        best_regstart.clone_from_slice(&regstart);
-                        best_regend.clone_from_slice(&regend);
+                        best_regstart.clone_from_slice(regstart);
+                        best_regend.clone_from_slice(regend);
                     }
                     // Force a backtrack to explore alternative paths.
                     // The stack is non-empty so goto_fail cannot fail.
@@ -3367,10 +3560,16 @@ pub(crate) fn re_match(
             RegexOp::StartMemory => {
                 let group = bytecode[pc] as usize;
                 pc += 1;
-                if group < num_regs
-                    && let Some(start) = regstart.get_mut(group)
-                {
-                    *start = Some(d);
+                if group < num_regs && group < regstart.len() {
+                    // GNU start_memory: "In case we need to undo this
+                    // operation (via backtracking)" — PUSH_FAILURE_REG
+                    // saves the old (start, end) pair on the fail stack.
+                    push_failure_undo!(FailUndo::Reg {
+                        idx: group,
+                        start: regstart[group],
+                        end: regend[group],
+                    });
+                    regstart[group] = Some(d);
                 }
             }
 
@@ -3380,6 +3579,11 @@ pub(crate) fn re_match(
                 if group < num_regs
                     && let Some(end) = regend.get_mut(group)
                 {
+                    // GNU stop_memory pushes nothing: undoing this write
+                    // is unnecessary because the value is only read again
+                    // after the next start_memory (which delta-saves it)
+                    // or at match end (only reachable if this
+                    // stop_memory was not undone).  regex-emacs.c:4608.
                     *end = Some(d);
                 }
             }
@@ -3610,44 +3814,26 @@ pub(crate) fn re_match(
                 let offset = extract_number(bytecode, pc);
                 pc += 2;
                 let fail_pc = ((pc as i64) + (offset as i64)) as usize;
-                fail_stack.push(FailurePoint {
-                    pattern_pos: fail_pc,
-                    string_pos: Some(d),
-                    saved_registers: save_registers(&regstart, &regend, num_regs),
-                    saved_counters: counters.clone(),
-                });
+                push_failure_point!(fail_pc, Some(d));
             }
 
             RegexOp::OnFailureKeepStringJump => {
                 let offset = extract_number(bytecode, pc);
                 pc += 2;
                 let fail_pc = ((pc as i64) + (offset as i64)) as usize;
-                fail_stack.push(FailurePoint {
-                    pattern_pos: fail_pc,
-                    string_pos: None, // Don't restore string position
-                    saved_registers: save_registers(&regstart, &regend, num_regs),
-                    saved_counters: counters.clone(),
-                });
+                push_failure_point!(fail_pc, None); // Don't restore string position
             }
 
             RegexOp::OnFailureJumpLoop => {
                 let offset = extract_number(bytecode, pc);
                 pc += 2;
                 let fail_pc = ((pc as i64) + (offset as i64)) as usize;
-                // Check for infinite loop (empty match detection)
-                let already_at_same_pos = fail_stack
-                    .last()
-                    .is_some_and(|fp| fp.string_pos == Some(d) && fp.pattern_pos == fail_pc);
-                if already_at_same_pos {
+                // Check for infinite loop (empty match detection).
+                if check_infinite_loop(frames, fail_pc, d) {
                     // Would loop forever on empty match — skip the loop
                     pc = fail_pc;
                 } else {
-                    fail_stack.push(FailurePoint {
-                        pattern_pos: fail_pc,
-                        string_pos: Some(d),
-                        saved_registers: save_registers(&regstart, &regend, num_regs),
-                        saved_counters: counters.clone(),
-                    });
+                    push_failure_point!(fail_pc, Some(d));
                 }
             }
 
@@ -3656,25 +3842,19 @@ pub(crate) fn re_match(
                 let offset = extract_number(bytecode, pc);
                 pc += 2;
                 let fail_pc = ((pc as i64) + (offset as i64)) as usize;
-                fail_stack.push(FailurePoint {
-                    pattern_pos: fail_pc,
-                    string_pos: Some(d),
-                    saved_registers: save_registers(&regstart, &regend, num_regs),
-                    saved_counters: counters.clone(),
-                });
+                push_failure_point!(fail_pc, Some(d));
             }
 
             RegexOp::OnFailureJumpSmart => {
-                // Smart greedy optimization — treated same as OnFailureJump
+                // Unreachable in practice: `resolve_smart_jumps` rewrites
+                // every on_failure_jump_smart at compile time (GNU does
+                // the same rewrite lazily at first execution,
+                // regex-emacs.c:4864-4906).  Fall back to the safe plain
+                // on_failure_jump semantics if one survives.
                 let offset = extract_number(bytecode, pc);
                 pc += 2;
                 let fail_pc = ((pc as i64) + (offset as i64)) as usize;
-                fail_stack.push(FailurePoint {
-                    pattern_pos: fail_pc,
-                    string_pos: Some(d),
-                    saved_registers: save_registers(&regstart, &regend, num_regs),
-                    saved_counters: counters.clone(),
-                });
+                push_failure_point!(fail_pc, Some(d));
             }
 
             RegexOp::SucceedN => {
@@ -3685,10 +3865,16 @@ pub(crate) fn re_match(
                 // When counter == 0 we fall through to on_failure_jump_loop
                 // semantics using the jump offset.
                 let counter_pos = pc + 2; // bytecode position of the counter
-                let count = get_counter(&counters, bytecode, counter_pos);
+                let count = get_counter(counters, bytecode, counter_pos);
                 if count != 0 {
-                    // Still must succeed more times — decrement & continue
-                    set_counter(&mut counters, counter_pos, count.saturating_sub(1));
+                    // Still must succeed more times — decrement & continue.
+                    // GNU PUSH_NUMBER: the old value is delta-saved so
+                    // backtracking restores it.
+                    push_failure_undo!(FailUndo::Counter {
+                        pos: counter_pos,
+                        val: count,
+                    });
+                    set_counter(counters, counter_pos, count.saturating_sub(1));
                     pc += 4;
                 } else {
                     // Counter exhausted — behave like on_failure_jump_loop.
@@ -3698,18 +3884,10 @@ pub(crate) fn re_match(
                     let fail_pc = ((pc as i64) + (offset as i64)) as usize;
                     pc += 2; // skip the counter field
                     // Infinite-loop detection (same as OnFailureJumpLoop)
-                    let already_at_same_pos = fail_stack
-                        .last()
-                        .is_some_and(|fp| fp.string_pos == Some(d) && fp.pattern_pos == fail_pc);
-                    if already_at_same_pos {
+                    if check_infinite_loop(frames, fail_pc, d) {
                         pc = fail_pc;
                     } else {
-                        fail_stack.push(FailurePoint {
-                            pattern_pos: fail_pc,
-                            string_pos: Some(d),
-                            saved_registers: save_registers(&regstart, &regend, num_regs),
-                            saved_counters: counters.clone(),
-                        });
+                        push_failure_point!(fail_pc, Some(d));
                     }
                 }
             }
@@ -3720,10 +3898,15 @@ pub(crate) fn re_match(
                 // If counter > 0, decrement and jump.
                 // If counter == 0, skip past (don't jump).
                 let counter_pos = pc + 2;
-                let count = get_counter(&counters, bytecode, counter_pos);
+                let count = get_counter(counters, bytecode, counter_pos);
                 if count != 0 {
-                    // Decrement counter and perform unconditional jump
-                    set_counter(&mut counters, counter_pos, count.saturating_sub(1));
+                    // Decrement counter (delta-saved, GNU PUSH_NUMBER)
+                    // and perform the unconditional jump.
+                    push_failure_undo!(FailUndo::Counter {
+                        pos: counter_pos,
+                        val: count,
+                    });
+                    set_counter(counters, counter_pos, count.saturating_sub(1));
                     let offset = extract_number(bytecode, pc);
                     pc = ((pc as i64) + 2 + (offset as i64)) as usize;
                 } else {
@@ -3742,7 +3925,12 @@ pub(crate) fn re_match(
                 // Target counter position: relative to position after
                 // the offset field (same convention as GNU).
                 let target_pos = ((pc as i64) - 2 + (rel_offset as i64)) as usize;
-                set_counter(&mut counters, target_pos, value);
+                // GNU set_number_at writes through PUSH_NUMBER too.
+                push_failure_undo!(FailUndo::Counter {
+                    pos: target_pos,
+                    val: get_counter(counters, bytecode, target_pos),
+                });
+                set_counter(counters, target_pos, value);
             }
         }
     }
@@ -3787,52 +3975,39 @@ pub(crate) fn re_match(
     Some((d, regs))
 }
 
-/// Save current register state for backtracking.
-fn save_registers(
-    regstart: &[Option<usize>],
-    regend: &[Option<usize>],
-    num_regs: usize,
-) -> SavedRegisters {
-    let mut saved = SavedRegisters::new();
-    for i in 1..num_regs.min(regstart.len()).min(regend.len()) {
-        saved.push((
-            i,
-            regstart[i].map(|v| v as i64).unwrap_or(-1),
-            regend[i].map(|v| v as i64).unwrap_or(-1),
-        ));
-    }
-    saved
-}
-
-/// Restore register state from a failure point.
-fn restore_registers(
-    fp: &FailurePoint,
-    regstart: &mut [Option<usize>],
-    regend: &mut [Option<usize>],
-) {
-    for &(idx, start, end) in &fp.saved_registers {
-        if idx < regstart.len() {
-            regstart[idx] = if start >= 0 {
-                Some(start as usize)
-            } else {
-                None
-            };
-        }
-        if idx < regend.len() {
-            regend[idx] = if end >= 0 { Some(end as usize) } else { None };
+/// GNU `CHECK_INFINITE_LOOP` (regex-emacs.c:1049-1069): walk down the
+/// failure stack while the recorded string position equals the current
+/// one (or was a keep-string `None`); a frame with the same resume
+/// pattern position means the loop has made no progress since it was
+/// last here — an empty-match cycle.
+fn check_infinite_loop(frames: &[FailFrame], fail_pc: usize, d: usize) -> bool {
+    for frame in frames.iter().rev() {
+        match frame.string_pos {
+            Some(sp) if sp != d => return false,
+            _ => {
+                if frame.pattern_pos == fail_pc {
+                    return true;
+                }
+            }
         }
     }
+    false
 }
 
 /// Handle match failure — pop the failure stack and backtrack.
 /// Returns None if the failure stack is empty (complete failure).
+///
+/// Mirrors GNU `POP_FAILURE_POINT` (regex-emacs.c:1128): replay the undo
+/// log down to the popped frame's mark (restoring registers and counters
+/// delta-saved since the push), then resume at the frame's positions.
 fn goto_fail(
     pc: &mut usize,
     d: &mut usize,
-    fail_stack: &mut Vec<FailurePoint>,
-    regstart: &mut [Option<usize>],
-    regend: &mut [Option<usize>],
-    counters: &mut HashMap<usize, u16>,
+    frames: &mut Vec<FailFrame>,
+    undo: &mut Vec<FailUndo>,
+    regstart: &mut RegisterScratch,
+    regend: &mut RegisterScratch,
+    counters: &mut CounterTable,
 ) -> Option<()> {
     // Mirrors GNU `regex-emacs.c:5236`: poll quit at the failure /
     // backtrack site. Backtracking loops are the worst offenders for
@@ -3842,21 +4017,25 @@ fn goto_fail(
     if crate::emacs_core::eval::tls_quit_pending() {
         return None;
     }
-    let fp = fail_stack.pop()?;
-    *pc = fp.pattern_pos;
-    if let Some(sp) = fp.string_pos {
+    let frame = frames.pop()?;
+    while undo.len() > frame.undo_mark {
+        match undo.pop().expect("undo log at least undo_mark deep") {
+            FailUndo::Reg { idx, start, end } => {
+                if idx < regstart.len() {
+                    regstart[idx] = start;
+                }
+                if idx < regend.len() {
+                    regend[idx] = end;
+                }
+            }
+            FailUndo::Counter { pos, val } => set_counter(counters, pos, val),
+        }
+    }
+    *pc = frame.pattern_pos;
+    if let Some(sp) = frame.string_pos {
         *d = sp;
     }
-    restore_registers(&fp, regstart, regend);
-    // Restore interval counters to the state when this failure point was pushed
-    *counters = fp.saved_counters;
     Some(())
-}
-
-fn register_scratch(num_regs: usize) -> RegisterScratch {
-    let mut scratch = RegisterScratch::new();
-    scratch.resize(num_regs, None);
-    scratch
 }
 
 // ---------------------------------------------------------------------------
@@ -3873,6 +4052,374 @@ fn register_scratch(num_regs: usize) -> RegisterScratch {
 /// this to skip positions that cannot start a match, giving a significant
 /// speed-up for patterns that begin with a restricted set of characters.
 ///
+/// Byte length of the opcode at `pc`, or `None` for a malformed buffer.
+fn opcode_len(bytecode: &[u8], pc: usize) -> Option<usize> {
+    let op = RegexOp::from_byte(*bytecode.get(pc)?)?;
+    Some(match op {
+        RegexOp::NoOp
+        | RegexOp::Succeed
+        | RegexOp::AnyChar
+        | RegexOp::BegLine
+        | RegexOp::EndLine
+        | RegexOp::BegBuf
+        | RegexOp::EndBuf
+        | RegexOp::AtDot
+        | RegexOp::WordBound
+        | RegexOp::NotWordBound
+        | RegexOp::WordBeg
+        | RegexOp::WordEnd
+        | RegexOp::SymBeg
+        | RegexOp::SymEnd => 1,
+        RegexOp::Exactn => 2 + *bytecode.get(pc + 1)? as usize,
+        RegexOp::Charset | RegexOp::CharsetNot => 2 + (*bytecode.get(pc + 1)? & 0x7F) as usize,
+        RegexOp::StartMemory
+        | RegexOp::StopMemory
+        | RegexOp::Duplicate
+        | RegexOp::SyntaxSpec
+        | RegexOp::NotSyntaxSpec
+        | RegexOp::CategorySpec
+        | RegexOp::NotCategorySpec => 2,
+        RegexOp::Jump
+        | RegexOp::OnFailureJump
+        | RegexOp::OnFailureKeepStringJump
+        | RegexOp::OnFailureJumpLoop
+        | RegexOp::OnFailureJumpNastyloop
+        | RegexOp::OnFailureJumpSmart => 3,
+        RegexOp::SucceedN | RegexOp::JumpN | RegexOp::SetNumberAt => 5,
+    })
+}
+
+/// Is `[start, end)` exactly one character-matching opcode?  GNU
+/// `skip_one_char (laststart) == b` (regex-emacs.c:1928): the compiler
+/// splits trailing multi-char `exactn`s before postfix operators, so a
+/// simple body is a single `anychar` / one-char `exactn` / `charset` /
+/// `syntaxspec` / `categoryspec`.
+fn simple_one_char_body(buf: &CompiledPattern, start: usize, end: usize) -> bool {
+    let bytecode = &buf.buffer;
+    let Some(op) = bytecode.get(start).copied().and_then(RegexOp::from_byte) else {
+        return false;
+    };
+    if !matches!(
+        op,
+        RegexOp::AnyChar
+            | RegexOp::Exactn
+            | RegexOp::Charset
+            | RegexOp::CharsetNot
+            | RegexOp::SyntaxSpec
+            | RegexOp::NotSyntaxSpec
+            | RegexOp::CategorySpec
+            | RegexOp::NotCategorySpec
+    ) {
+        return false;
+    }
+    if op == RegexOp::Exactn {
+        // One character only (multibyte chars span several bytes).
+        let count = match bytecode.get(start + 1) {
+            Some(&count) => count as usize,
+            None => return false,
+        };
+        let char_len = if buf.multibyte && count > 0 && start + 2 + count <= bytecode.len() {
+            emacs_char::string_char(&bytecode[start + 2..start + 2 + count]).1
+        } else {
+            1
+        };
+        if count != char_len {
+            return false;
+        }
+    }
+    opcode_len(bytecode, start) == Some(end - start)
+}
+
+/// Conservative superset of the characters a single char-matching opcode
+/// can accept: an ASCII bitmask plus a "may match something >= 0x80 /
+/// multibyte" flag.  `None` = unanalyzable (syntax/category/class-bit
+/// dependent — GNU resolves those against the live syntax table at its
+/// runtime rewrite; our rewrite happens at compile time, so anything
+/// table-dependent must stay unanalyzable to keep bytecode
+/// table-independent).
+#[derive(Clone, Copy, Default)]
+struct CharSuperset {
+    ascii: u128,
+    high: bool,
+}
+
+impl CharSuperset {
+    fn add_char(&mut self, ch: u32) {
+        if ch < 0x80 {
+            self.ascii |= 1u128 << ch;
+        } else {
+            self.high = true;
+        }
+    }
+
+    fn union(&mut self, other: CharSuperset) {
+        self.ascii |= other.ascii;
+        self.high |= other.high;
+    }
+
+    fn disjoint(&self, other: &CharSuperset) -> bool {
+        (self.ascii & other.ascii) == 0 && !(self.high && other.high)
+    }
+}
+
+/// Match superset of the one char-matching opcode at `pos`.
+fn one_char_match_superset(buf: &CompiledPattern, pos: usize) -> Option<CharSuperset> {
+    let bytecode = &buf.buffer;
+    let op = RegexOp::from_byte(*bytecode.get(pos)?)?;
+    let mut set = CharSuperset::default();
+    match op {
+        RegexOp::Exactn => {
+            let count = *bytecode.get(pos + 1)? as usize;
+            if count == 0 || pos + 2 + count > bytecode.len() {
+                return None;
+            }
+            // Pattern literals are stored translated (case-canonical);
+            // the same holds for the sets compared against, so both
+            // sides of the exclusivity test are in canonical space
+            // (GNU compares RE_STRING_CHAR of the stored bytes too).
+            if buf.multibyte {
+                let (ch, _) = emacs_char::string_char(&bytecode[pos + 2..pos + 2 + count]);
+                set.add_char(ch);
+            } else {
+                set.add_char(bytecode[pos + 2] as u32);
+            }
+        }
+        RegexOp::AnyChar => {
+            // Everything except newline (u128 bits 0..=127 = ASCII).
+            set.ascii = !(1u128 << b'\n');
+            set.high = true;
+        }
+        RegexOp::Charset => {
+            let charset_pos = pos;
+            let bitmap_len = (*bytecode.get(pos + 1)? & 0x7F) as usize;
+            if pos + 2 + bitmap_len > bytecode.len() {
+                return None;
+            }
+            // POSIX-class bits can match table-dependent sets; give up.
+            if buf.charset_class_bits.contains_key(&charset_pos) {
+                return None;
+            }
+            for c in 0..(bitmap_len * 8).min(256) {
+                if (bytecode[pos + 2 + c / 8] >> (c % 8)) & 1 != 0 {
+                    set.add_char(c as u32);
+                }
+            }
+            if let Some(ranges) = buf.multibyte_charsets.get(&charset_pos) {
+                for &(lo, hi) in ranges {
+                    if (lo as u32) < 0x80 {
+                        for c in (lo as u32)..=(hi as u32).min(0x7F) {
+                            set.add_char(c);
+                        }
+                    }
+                    if (hi as u32) >= 0x80 {
+                        set.high = true;
+                    }
+                }
+            }
+        }
+        RegexOp::CharsetNot => {
+            let charset_pos = pos;
+            let bitmap_len = (*bytecode.get(pos + 1)? & 0x7F) as usize;
+            if pos + 2 + bitmap_len > bytecode.len() {
+                return None;
+            }
+            // Superset of "not in set": the bitmap complement plus all
+            // multibyte characters (class bits and ranges only REMOVE
+            // characters from a negated set, so ignoring them keeps
+            // this a superset).
+            for c in 0..128usize {
+                let in_bitmap = c / 8 < bitmap_len && (bytecode[pos + 2 + c / 8] >> (c % 8)) & 1 != 0;
+                if !in_bitmap {
+                    set.add_char(c as u32);
+                }
+            }
+            set.high = true;
+        }
+        // Syntax and category tests depend on runtime tables.
+        _ => return None,
+    }
+    Some(set)
+}
+
+/// Superset of the first characters matchable by the continuation
+/// starting at `from` — a worklist walk in the style of GNU
+/// `forall_firstchar` as used by `mutually_exclusive_p`
+/// (regex-emacs.c:4025-4035).  Returns `None` when any reachable path is
+/// unanalyzable or may accept the empty string (reaching `succeed` /
+/// end-of-pattern), in which case the loop must stay backtrack-safe.
+fn continuation_first_superset(buf: &CompiledPattern, from: usize) -> Option<CharSuperset> {
+    let bytecode = &buf.buffer;
+    let mut set = CharSuperset::default();
+    let mut worklist: Vec<usize> = vec![from];
+    let mut visited: HashSet<usize> = HashSet::new();
+
+    while let Some(start_pc) = worklist.pop() {
+        let mut pc = start_pc;
+        loop {
+            if !visited.insert(pc) {
+                break;
+            }
+            if pc >= bytecode.len() {
+                // Pattern may end right after the loop: a shorter
+                // iteration count could produce an overall match, so the
+                // fast loop is not safe (GNU only allows this in its
+                // `unconstrained` refinement, which we skip).
+                return None;
+            }
+            let op = RegexOp::from_byte(bytecode[pc])?;
+            match op {
+                RegexOp::Succeed => return None,
+
+                // Char-matching terminals: contribute their superset.
+                RegexOp::Exactn
+                | RegexOp::AnyChar
+                | RegexOp::Charset
+                | RegexOp::CharsetNot => {
+                    set.union(one_char_match_superset(buf, pc)?);
+                    break;
+                }
+
+                // Table-dependent matchers: unanalyzable.
+                RegexOp::SyntaxSpec
+                | RegexOp::NotSyntaxSpec
+                | RegexOp::CategorySpec
+                | RegexOp::NotCategorySpec
+                | RegexOp::Duplicate => return None,
+
+                // endline is effectively `exactn \n` for this analysis
+                // (GNU mutually_exclusive_one, `case endline`).
+                RegexOp::EndLine => {
+                    set.add_char(b'\n' as u32);
+                    break;
+                }
+
+                // If the body matched a character we are not at
+                // end-of-buffer, so `endbuf` fails: exclusive on this
+                // path, nothing to add (GNU `case endbuf: return true`).
+                RegexOp::EndBuf => break,
+
+                // Other zero-width assertions cannot rescue a shorter
+                // iteration count on their own (the character test
+                // already fails there); walk through them.
+                RegexOp::BegLine
+                | RegexOp::BegBuf
+                | RegexOp::AtDot
+                | RegexOp::WordBound
+                | RegexOp::NotWordBound
+                | RegexOp::WordBeg
+                | RegexOp::WordEnd
+                | RegexOp::SymBeg
+                | RegexOp::SymEnd
+                | RegexOp::NoOp => {
+                    pc += 1;
+                }
+
+                RegexOp::StartMemory | RegexOp::StopMemory => {
+                    pc += 2;
+                }
+
+                RegexOp::Jump => {
+                    let offset = extract_number(bytecode, pc + 1);
+                    pc = ((pc as i64) + 3 + (offset as i64)) as usize;
+                }
+
+                RegexOp::OnFailureJump
+                | RegexOp::OnFailureKeepStringJump
+                | RegexOp::OnFailureJumpLoop
+                | RegexOp::OnFailureJumpNastyloop
+                | RegexOp::OnFailureJumpSmart => {
+                    let offset = extract_number(bytecode, pc + 1);
+                    worklist.push(((pc as i64) + 3 + (offset as i64)) as usize);
+                    pc += 3;
+                }
+
+                RegexOp::SucceedN | RegexOp::JumpN => {
+                    let offset = extract_number(bytecode, pc + 1);
+                    worklist.push(((pc as i64) + 3 + (offset as i64)) as usize);
+                    pc += 5;
+                }
+
+                RegexOp::SetNumberAt => {
+                    pc += 5;
+                }
+            }
+        }
+    }
+    Some(set)
+}
+
+/// GNU `mutually_exclusive_p` (regex-emacs.c:4025): true if "the loop
+/// body at `body_start` matches something" implies "the continuation at
+/// `cont` fails".  Conservative: only provable byte-set disjointness
+/// counts, so a `false` merely keeps the safe backtracking loop.
+fn mutually_exclusive_p(buf: &CompiledPattern, body_start: usize, cont: usize) -> bool {
+    let Some(body) = one_char_match_superset(buf, body_start) else {
+        return false;
+    };
+    let Some(cont_set) = continuation_first_superset(buf, cont) else {
+        return false;
+    };
+    body.disjoint(&cont_set)
+}
+
+/// Resolve every `on_failure_jump_smart` in freshly-compiled bytecode.
+///
+/// GNU performs this rewrite lazily on first execution
+/// (regex-emacs.c:4864-4906, discarding `const` and making `re_match`
+/// non-reentrant); neomacs shares compiled patterns via a cache, so the
+/// rewrite happens once here, immediately after compilation — same
+/// resulting bytecode, no runtime mutation:
+///
+/// - exclusive loop (`mutually_exclusive_p`): the opcode becomes
+///   `on_failure_keep_string_jump` and the trailing jump is retargeted
+///   from the opcode to the loop body (GNU `STORE_NUMBER (p2 - 2,
+///   mcnt + 3)`), so ONE failure point is pushed for the whole loop and
+///   iterations do not save/restore the string position;
+/// - otherwise it becomes a plain `on_failure_jump`.
+fn resolve_smart_jumps(buf: &mut CompiledPattern) {
+    let mut pc = 0;
+    while pc < buf.buffer.len() {
+        let Some(len) = opcode_len(&buf.buffer, pc) else {
+            return;
+        };
+        if buf.buffer[pc] == RegexOp::OnFailureJumpSmart as u8 {
+            resolve_one_smart_jump(buf, pc);
+        }
+        pc += len;
+    }
+}
+
+fn resolve_one_smart_jump(buf: &mut CompiledPattern, p3: usize) {
+    // Expected shape (emitted by `compile_repetition`):
+    //   p3: on_failure_jump_smart <offset -> p2>
+    //   p3+3: <one-char body>
+    //   p2-3: jump <offset -> p3>
+    //   p2: continuation
+    // Default to the safe plain loop; upgrade if the shape checks out
+    // and the body excludes the continuation.
+    buf.buffer[p3] = RegexOp::OnFailureJump as u8;
+    if p3 + 3 > buf.buffer.len() {
+        return;
+    }
+    let offset = extract_number(&buf.buffer, p3 + 1);
+    let p2 = ((p3 + 3) as i64 + offset as i64) as usize;
+    if p2 < p3 + 6 || p2 > buf.buffer.len() {
+        return;
+    }
+    let jump_at = p2 - 3;
+    if buf.buffer[jump_at] != RegexOp::Jump as u8 {
+        return;
+    }
+    let back = extract_number(&buf.buffer, jump_at + 1);
+    if ((jump_at + 3) as i64 + back as i64) as usize != p3 {
+        return;
+    }
+    if mutually_exclusive_p(buf, p3 + 3, p2) {
+        buf.buffer[p3] = RegexOp::OnFailureKeepStringJump as u8;
+        store_number(&mut buf.buffer, jump_at + 1, back + 3);
+    }
+}
+
 /// Recompute the fastmap of an already-compiled pattern against a
 /// (possibly buffer-local) syntax table.
 ///
@@ -4203,6 +4750,22 @@ fn fastmap_force_disabled() -> bool {
     false
 }
 
+/// Fastmap byte set when it is small (<= 3 bytes) and pure ASCII — the
+/// cases where `memchr`/`memchr2`/`memchr3` can drive the forward skip
+/// loop.
+fn sparse_ascii_fastmap(fastmap: &[bool; 256]) -> Option<SmallVec<[u8; 3]>> {
+    let mut bytes: SmallVec<[u8; 3]> = SmallVec::new();
+    for (byte, &set) in fastmap.iter().enumerate() {
+        if set {
+            if byte >= 0x80 || bytes.len() == 3 {
+                return None;
+            }
+            bytes.push(byte as u8);
+        }
+    }
+    if bytes.is_empty() { None } else { Some(bytes) }
+}
+
 /// Search for a match of the compiled pattern in text.
 ///
 /// Equivalent to GNU's `re_search_2()` operating on a single
@@ -4252,6 +4815,24 @@ pub(crate) fn re_search(
     let use_fastmap = pattern.fastmap_accurate && !pattern.can_be_null && !fastmap_force_disabled();
     let translate = pattern.translate.as_ref();
 
+    // A fresh search starts with a clean overflow flag; a candidate match
+    // that hits the fail-stack limit sets it, aborting the whole scan
+    // (GNU re_search_2 propagates re_match_2_internal's -2 immediately).
+    clear_matcher_overflow();
+    macro_rules! try_candidate {
+        ($pos:expr, $stop:expr) => {
+            match re_match_candidate(pattern, text, $pos, $stop, syntax, point) {
+                Some(result) => Some(result),
+                None => {
+                    if matcher_overflow_pending() {
+                        return None;
+                    }
+                    None
+                }
+            }
+        };
+    }
+
     if range >= 0 {
         // Forward search
         let end = (start + range as usize).min(text_len);
@@ -4282,7 +4863,43 @@ pub(crate) fn re_search(
                             continue;
                         }
                     }
-                    if let Some(result) = re_match(pattern, text, pos, end, syntax, point) {
+                    if let Some(result) = try_candidate!(pos, end) {
+                        return Some((pos, result.1));
+                    }
+                    pos += 1;
+                }
+            } else if let Some(bytes) = sparse_ascii_fastmap(&pattern.fastmap) {
+                // The candidate first-byte set is tiny and pure ASCII
+                // (e.g. `{'('}` for the font-lock defun matchers):
+                // let memchr's SIMD scan find candidates instead of
+                // testing the fastmap byte by byte.  ASCII hits are
+                // never UTF-8 continuation bytes, so the char-boundary
+                // skip is vacuous here.  GNU uses the plain
+                // `while (range > lim && !fastmap[*d]) d++` loop; the
+                // candidate set and attempt positions are identical.
+                let hi = if end < text_len { end + 1 } else { text_len };
+                while pos <= end {
+                    if pos < text_len {
+                        let found = match *bytes.as_slice() {
+                            [b0] => memchr::memchr(b0, &text[pos..hi]),
+                            [b0, b1] => memchr::memchr2(b0, b1, &text[pos..hi]),
+                            [b0, b1, b2] => memchr::memchr3(b0, b1, b2, &text[pos..hi]),
+                            _ => unreachable!("sparse_ascii_fastmap yields 1..=3 bytes"),
+                        };
+                        match found {
+                            Some(idx) => pos += idx,
+                            None => {
+                                // No candidate byte before `hi`; the only
+                                // remaining attempt position is text_len
+                                // itself (when the range allows it).
+                                pos = text_len;
+                                if pos > end {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if let Some(result) = try_candidate!(pos, end) {
                         return Some((pos, result.1));
                     }
                     pos += 1;
@@ -4300,7 +4917,7 @@ pub(crate) fn re_search(
                         pos += 1;
                         continue;
                     }
-                    if let Some(result) = re_match(pattern, text, pos, end, syntax, point) {
+                    if let Some(result) = try_candidate!(pos, end) {
                         return Some((pos, result.1));
                     }
                     pos += 1;
@@ -4315,7 +4932,7 @@ pub(crate) fn re_search(
                     pos += 1;
                     continue;
                 }
-                if let Some(result) = re_match(pattern, text, pos, end, syntax, point) {
+                if let Some(result) = try_candidate!(pos, end) {
                     return Some((pos, result.1));
                 }
                 pos += 1;
@@ -4345,7 +4962,7 @@ pub(crate) fn re_search(
                     // not extend past it.  This prevents a repeated backward search
                     // from re-matching the same non-empty match that begins at
                     // point but ends after it.
-                    if let Some(result) = re_match(pattern, text, pos, start, syntax, point) {
+                    if let Some(result) = try_candidate!(pos, start) {
                         return Some((pos, result.1));
                     }
                 }
@@ -4357,7 +4974,7 @@ pub(crate) fn re_search(
                     if pos < text_len && !pattern.fastmap[text[pos] as usize] {
                         continue;
                     }
-                    if let Some(result) = re_match(pattern, text, pos, start, syntax, point) {
+                    if let Some(result) = try_candidate!(pos, start) {
                         return Some((pos, result.1));
                     }
                 }
@@ -4374,7 +4991,7 @@ pub(crate) fn re_search(
                 // not extend past it.  This prevents a repeated backward search
                 // from re-matching the same non-empty match that begins at
                 // point but ends after it.
-                if let Some(result) = re_match(pattern, text, pos, start, syntax, point) {
+                if let Some(result) = try_candidate!(pos, start) {
                     return Some((pos, result.1));
                 }
             }

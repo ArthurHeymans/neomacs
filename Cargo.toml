@@ -66,6 +66,7 @@ x509-parser = "0.18"
 
 # Misc
 regex = "1"
+memchr = "2"
 rustc-hash = "2"
 num_enum = "0.7.6"
 strum = { version = "0.28", features = ["derive"] }

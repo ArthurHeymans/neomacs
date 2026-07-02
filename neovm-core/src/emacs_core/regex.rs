@@ -1821,6 +1821,25 @@ fn with_buffer_emacs_bytes<R>(
     f(&text)
 }
 
+/// [`with_buffer_emacs_bytes`] for the regex-engine search paths.
+///
+/// When the gap-buffer gap sits inside the searched range, every search
+/// used to copy the whole accessible region (audit #17).  GNU never
+/// copies: `re_search_2` walks the two gap segments in place.  The
+/// port's engine is single-segment, so the clean equivalent is one gap
+/// motion out of the range (amortized: after an edit parks the gap
+/// mid-buffer, the first search moves it once and the rest of the
+/// font-lock pass borrows zero-copy).  Chunked backends (piece tree,
+/// rope) still take the copy fallback inside `with_buffer_emacs_bytes`.
+fn with_buffer_emacs_bytes_for_search<R>(
+    buf: &Buffer,
+    range: EmacsByteRange,
+    f: impl FnOnce(&[u8]) -> R,
+) -> R {
+    buf.try_make_emacs_byte_range_contiguous(range);
+    with_buffer_emacs_bytes(buf, range, f)
+}
+
 /// Search forward from point for a literal string PATTERN.
 ///
 /// If found, returns the end of match as the point position the caller should
@@ -2034,7 +2053,7 @@ pub fn re_search_forward_with_posix(
     let compiled =
         compile_search_pattern_with_posix(&pattern_for_compile(pattern), case_fold, posix, &syn)?;
 
-    let md_opt = with_buffer_emacs_bytes(buf, accessible.range(), |text| match &compiled {
+    let md_opt = with_buffer_emacs_bytes_for_search(buf, accessible.range(), |text| match &compiled {
         CompiledSearchPattern::Literal(literal) => {
             literal_find_emacs_bytes(&text[start_rel..limit_rel], literal, multibyte, case_fold)
                 .map(|matched| {
@@ -2056,6 +2075,14 @@ pub fn re_search_forward_with_posix(
         }
     });
 
+    if md_opt.is_none()
+        && matches!(compiled, CompiledSearchPattern::Emacs(_))
+        && regex_emacs::take_matcher_overflow()
+    {
+        // GNU search.c:matcher_overflow — a -2 from the matcher is an
+        // error, not a search failure.
+        return Err(regex_emacs::MATCHER_OVERFLOW_MESSAGE.to_string());
+    }
     if let Some(md) = md_opt {
         let full_match = md.groups[0].unwrap();
         *match_data = Some(md);
@@ -2123,7 +2150,7 @@ pub fn re_search_backward_with_posix(
     let compiled =
         compile_search_pattern_with_posix(&pattern_for_compile(pattern), case_fold, posix, &syn)?;
 
-    let md_opt = with_buffer_emacs_bytes(buf, accessible.range(), |text| match &compiled {
+    let md_opt = with_buffer_emacs_bytes_for_search(buf, accessible.range(), |text| match &compiled {
         CompiledSearchPattern::Literal(literal) => {
             literal_rfind_emacs_bytes(&text[limit_rel..start_rel], literal, multibyte, case_fold)
                 .map(|matched| {
@@ -2146,6 +2173,12 @@ pub fn re_search_backward_with_posix(
         }
     });
 
+    if md_opt.is_none()
+        && matches!(compiled, CompiledSearchPattern::Emacs(_))
+        && regex_emacs::take_matcher_overflow()
+    {
+        return Err(regex_emacs::MATCHER_OVERFLOW_MESSAGE.to_string());
+    }
     if let Some(md) = md_opt {
         let full_match = md.groups[0].unwrap();
         *match_data = Some(md);
@@ -2212,7 +2245,7 @@ pub(crate) fn re_search_forward_lisp_with_posix(
         &syn,
     )?;
 
-    if let Some((_pos, regs)) = with_buffer_emacs_bytes(buf, accessible.range(), |text| {
+    let search_result = with_buffer_emacs_bytes_for_search(buf, accessible.range(), |text| {
         regex_emacs::re_search(
             compiled.as_ref(),
             text,
@@ -2221,7 +2254,11 @@ pub(crate) fn re_search_forward_lisp_with_posix(
             &syn,
             start_rel,
         )
-    }) {
+    });
+    if search_result.is_none() && regex_emacs::take_matcher_overflow() {
+        return Err(regex_emacs::MATCHER_OVERFLOW_MESSAGE.to_string());
+    }
+    if let Some((_pos, regs)) = search_result {
         let mut md = buffer_match_data_from_registers(&regs, region_start.get());
         md.set_buffer_id(buffer_id);
         let full_match = md.groups[0].unwrap();
@@ -2273,7 +2310,7 @@ pub(crate) fn re_search_backward_lisp_with_posix(
         &syn,
     )?;
 
-    if let Some((_pos, regs)) = with_buffer_emacs_bytes(buf, accessible.range(), |text| {
+    let search_result = with_buffer_emacs_bytes_for_search(buf, accessible.range(), |text| {
         regex_emacs::re_search(
             compiled.as_ref(),
             text,
@@ -2282,7 +2319,11 @@ pub(crate) fn re_search_backward_lisp_with_posix(
             &syn,
             start_rel,
         )
-    }) {
+    });
+    if search_result.is_none() && regex_emacs::take_matcher_overflow() {
+        return Err(regex_emacs::MATCHER_OVERFLOW_MESSAGE.to_string());
+    }
+    if let Some((_pos, regs)) = search_result {
         let mut md = buffer_match_data_from_registers(&regs, region_start.get());
         md.set_buffer_id(buffer_id);
         let full_match = md.groups[0].unwrap();
@@ -2331,7 +2372,7 @@ pub fn looking_at_with_posix(
     let compiled =
         compile_search_pattern_with_posix(&pattern_for_compile(pattern), case_fold, posix, &syn)?;
 
-    match with_buffer_emacs_bytes(buf, accessible.range(), |text| match &compiled {
+    match with_buffer_emacs_bytes_for_search(buf, accessible.range(), |text| match &compiled {
         CompiledSearchPattern::Literal(literal) => {
             let tail = &text[start_rel..];
             let matched = literal_find_emacs_bytes(tail, literal, multibyte, case_fold)
@@ -2398,7 +2439,7 @@ pub(crate) fn looking_at_lisp_with_posix(
         &syn,
     )?;
 
-    if let Some((_end, regs)) = with_buffer_emacs_bytes(buf, accessible.range(), |text| {
+    if let Some((_end, regs)) = with_buffer_emacs_bytes_for_search(buf, accessible.range(), |text| {
         regex_emacs::re_match(
             compiled.as_ref(),
             text,
@@ -2605,6 +2646,8 @@ pub(crate) fn string_match_full_with_case_fold_source_lisp_pattern_posix_syntax(
         let result_pos = char_md.groups[0].unwrap().start();
         *match_data = Some(char_md);
         Ok(Some(result_pos))
+    } else if regex_emacs::take_matcher_overflow() {
+        Err(regex_emacs::MATCHER_OVERFLOW_MESSAGE.to_string())
     } else {
         Ok(None)
     }
@@ -2700,6 +2743,8 @@ fn string_match_full_with_case_fold_source_compiled_syntax(
                 let result_pos = char_md.groups[0].unwrap().start();
                 *match_data = Some(char_md);
                 Ok(Some(result_pos))
+            } else if regex_emacs::take_matcher_overflow() {
+                Err(regex_emacs::MATCHER_OVERFLOW_MESSAGE.to_string())
             } else {
                 Ok(None)
             }

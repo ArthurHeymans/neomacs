@@ -220,6 +220,24 @@ impl TextBackend {
         dispatch_backend_ref!(self, storage => PhysicalTextBackend::has_contiguous_emacs_byte_range(storage, range))
     }
 
+    /// Best-effort: arrange for `range` to be borrowable as a single
+    /// contiguous slice, returning whether it now is.  The gap backend
+    /// moves its gap out of the range (GNU `move_gap`); chunked backends
+    /// (piece tree, rope) cannot and just report their existing
+    /// contiguity.  Content and logical positions are unaffected.
+    pub(in crate::buffer) fn try_make_emacs_byte_range_contiguous(
+        &mut self,
+        range: EmacsByteRange,
+    ) -> bool {
+        match self {
+            TextBackend::Gap(gap) => {
+                gap.make_emacs_byte_range_contiguous(range);
+                true
+            }
+            _ => self.has_contiguous_emacs_byte_range(range),
+        }
+    }
+
     pub(in crate::buffer) fn with_contiguous_emacs_byte_range<R>(
         &self,
         range: EmacsByteRange,

@@ -173,6 +173,10 @@ impl GapTextBackend {
         self.gap.has_contiguous_emacs_byte_range(range)
     }
 
+    pub(in crate::buffer) fn make_emacs_byte_range_contiguous(&mut self, range: EmacsByteRange) {
+        self.gap.make_emacs_byte_range_contiguous(range);
+    }
+
     pub(in crate::buffer) fn with_contiguous_emacs_byte_range<R>(
         &self,
         range: EmacsByteRange,

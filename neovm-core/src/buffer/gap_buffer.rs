@@ -728,6 +728,33 @@ impl GapBuffer {
     // Gap management
     // -----------------------------------------------------------------------
 
+    /// Move the gap out of `range` so the whole range becomes one
+    /// contiguous slice.
+    ///
+    /// The regex searcher uses this instead of copying the accessible
+    /// region on every search when the gap sits mid-buffer (audit #17:
+    /// GNU searches across the gap with `re_search_2`'s two-segment
+    /// protocol; neomacs's engine is single-segment, so one gap motion
+    /// per gap-position change is the equivalent fix).  Content and all
+    /// logical positions are unaffected — only the physical gap moves,
+    /// exactly as GNU `move_gap_both` does before `fast_string_match`
+    /// style operations.  Cost: one memmove of the shorter distance from
+    /// the gap to either range boundary.
+    pub(crate) fn make_emacs_byte_range_contiguous(&mut self, range: EmacsByteRange) {
+        if self.has_contiguous_emacs_byte_range(range) {
+            return;
+        }
+        let start = range.start().get();
+        let end = range.end().get();
+        // Not contiguous, so the gap lies strictly inside (start, end);
+        // move it to the nearer boundary.
+        if self.gap_start - start <= end - self.gap_start {
+            self.move_gap_to(start);
+        } else {
+            self.move_gap_to(end);
+        }
+    }
+
     /// Move the gap so that `gap_start == pos`.
     ///
     /// Wrapper that computes the char delta by scanning moved bytes. Prefer

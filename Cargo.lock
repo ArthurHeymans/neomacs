@@ -3172,6 +3172,7 @@ dependencies = [
  "libc",
  "libloading 0.9.0",
  "malachite",
+ "memchr",
  "memmap2",
  "neovm-host-abi",
  "network-interface",

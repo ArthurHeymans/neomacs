@@ -2800,6 +2800,12 @@ impl Buffer {
             .has_contiguous_emacs_byte_range(self.clamped_emacs_byte_range(range))
     }
 
+    /// See [`BufferText::try_make_emacs_byte_range_contiguous`].
+    pub(crate) fn try_make_emacs_byte_range_contiguous(&self, range: EmacsByteRange) -> bool {
+        self.text
+            .try_make_emacs_byte_range_contiguous(self.clamped_emacs_byte_range(range))
+    }
+
     pub(crate) fn with_contiguous_emacs_byte_range<R>(
         &self,
         range: EmacsByteRange,

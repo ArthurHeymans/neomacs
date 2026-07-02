@@ -16,6 +16,7 @@ notify.workspace = true
 fs4.workspace = true
 sysinfo.workspace = true
 regex.workspace = true
+memchr.workspace = true
 rustc-hash.workspace = true
 aes.workspace = true
 cbc.workspace = true

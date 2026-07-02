@@ -3415,3 +3415,152 @@ fn regex_syntax_table_identity_keys_cached_fastmap() {
         "the t2 cache entry must not satisfy the standard table"
     );
 }
+
+// =========================================================================
+// Interpreter-state slimming (GNU failure-stack protocol) — commit 2
+// =========================================================================
+
+/// GNU's fail-stack budget (`emacs_re_max_failures`): a pattern whose
+/// live choice-point stack grows past it aborts with "Stack overflow in
+/// regexp matcher" instead of churning unboundedly.  `\(a*\)*b` pushes
+/// one failure point per input char in its first outer iteration, so a
+/// long-enough run of a's deterministically overflows.
+#[test]
+fn regex_fail_stack_overflow_flags_engine() {
+    let n = 400_000usize;
+    let text = "a".repeat(n);
+    let cp = regex_bench_compile("\\(a*\\)*b", false);
+    let syn = DefaultSyntaxLookup;
+    assert!(
+        regex_emacs::re_search(&cp, text.as_bytes(), 0, text.len() as isize, &syn, 0).is_none(),
+        "no match once the matcher aborts"
+    );
+    assert!(
+        regex_emacs::take_matcher_overflow(),
+        "the fail-stack limit must flag overflow for the front-end"
+    );
+    // A pattern within the budget: no overflow, plain no-match.  (NOTE:
+    // `\(a*\)*b` over a SMALL run of a's is the classic exponential
+    // backtracker with a bounded live stack — GNU's limit does not stop
+    // it either, only C-g does — so the in-budget control uses `a*b`.)
+    let small = "a".repeat(64);
+    let cp_ok = regex_bench_compile("a*b", false);
+    assert!(
+        regex_emacs::re_search(&cp_ok, small.as_bytes(), 0, small.len() as isize, &syn, 0)
+            .is_none()
+    );
+    assert!(!regex_emacs::take_matcher_overflow());
+}
+
+/// The same overflow at the elisp level signals GNU's error
+/// (`search.c:matcher_overflow`), even under `noerror`.
+#[test]
+fn regex_fail_stack_overflow_signals_elisp_error() {
+    let mut ev = crate::emacs_core::eval::Context::new();
+    ev.eval_str("(progn (insert (make-string 400000 ?a)) (goto-char (point-min)) nil)")
+        .expect("insert haystack");
+    // `noerror = t` must not swallow the overflow: GNU's
+    // matcher_overflow is an `error`, not `search-failed`.
+    let caught = ev
+        .eval_str(
+            "(condition-case err \
+                 (progn (re-search-forward \"\\\\(a*\\\\)*b\" nil t) \"no-error\") \
+               (error (format \"%S\" err)))",
+        )
+        .expect("condition-case evaluates");
+    let msg = caught
+        .as_lisp_string()
+        .and_then(|s| s.as_utf8_str())
+        .unwrap_or_default()
+        .to_string();
+    assert!(
+        msg.contains("Stack overflow in regexp matcher"),
+        "expected GNU matcher_overflow error, got: {msg}"
+    );
+}
+
+/// `resolve_smart_jumps`: a simple greedy loop whose body excludes the
+/// continuation becomes GNU's one-push keep-string fast loop; an
+/// overlapping continuation keeps the safe backtracking loop.  No
+/// `on_failure_jump_smart` survives compilation.
+#[test]
+fn regex_smart_loop_resolution() {
+    // `[ \t']*(` — the el-defs/catch-throw hot loop: exclusive.
+    let cp = regex_bench_compile("[ \t']*(", false);
+    assert!(
+        cp.buffer
+            .contains(&(regex_emacs::RegexOp::OnFailureKeepStringJump as u8)),
+        "exclusive simple loop must resolve to on_failure_keep_string_jump"
+    );
+    assert!(
+        !cp.buffer
+            .contains(&(regex_emacs::RegexOp::OnFailureJumpSmart as u8)),
+        "no unresolved smart jump may survive compilation"
+    );
+
+    // `a*a` — body overlaps continuation: must stay a backtracking loop.
+    let cp2 = regex_bench_compile("a*a", false);
+    assert!(
+        !cp2.buffer
+            .contains(&(regex_emacs::RegexOp::OnFailureKeepStringJump as u8)),
+        "overlapping loop must NOT use the keep-string fast loop"
+    );
+    assert!(
+        !cp2.buffer
+            .contains(&(regex_emacs::RegexOp::OnFailureJumpSmart as u8))
+    );
+
+    // Behavior: the non-exclusive loop still backtracks (greedy [0-9]*
+    // gives back the final digit for the trailing `3`).
+    let syn = DefaultSyntaxLookup;
+    let cp3 = regex_bench_compile("[0-9]*3", false);
+    let (_pos, regs) = regex_emacs::re_search(&cp3, b"123", 0, 3, &syn, 0).expect("matches");
+    assert_eq!((regs.start[0], regs.end[0]), (0, 3), "backtracking loop");
+
+    // And the exclusive loop consumes greedily with the continuation
+    // matched right after the loop's stop position.
+    let cp4 = regex_bench_compile("[0-9]*x", false);
+    let (_pos, regs) = regex_emacs::re_search(&cp4, b"0919x!", 0, 6, &syn, 0).expect("matches");
+    assert_eq!((regs.start[0], regs.end[0]), (0, 5), "keep-string loop");
+
+    // `.*\n` — GNU's motivating example for keep-string loops.
+    let cp5 = regex_bench_compile(".*\n", false);
+    assert!(
+        cp5.buffer
+            .contains(&(regex_emacs::RegexOp::OnFailureKeepStringJump as u8))
+    );
+    let (_pos, regs) = regex_emacs::re_search(&cp5, b"ab\ncd", 0, 5, &syn, 0).expect("matches");
+    assert_eq!((regs.start[0], regs.end[0]), (0, 3));
+}
+
+/// Audit #17: a regexp search across a mid-buffer gap must produce the
+/// same result as over contiguous text (the search path now moves the
+/// gap out of the accessible range instead of copying it per call).
+#[test]
+fn regex_search_across_mid_buffer_gap() {
+    let mut ev = crate::emacs_core::eval::Context::new();
+    // Insert text, then park the gap in the middle of "defun" via an
+    // insert+delete at position 7.
+    ev.eval_str(
+        "(progn (insert \"aaa defun bbb defun ccc\") \
+                (goto-char 7) (insert \"z\") (delete-region 7 8) \
+                (goto-char (point-min)) nil)",
+    )
+    .expect("build gap-split buffer");
+    let hit = ev
+        .eval_str("(if (re-search-forward \"defun\\\\_>\" nil t) (match-beginning 0) -1)")
+        .expect("first search");
+    assert_eq!(hit.as_int(), Some(5), "match spanning the parked gap");
+    let hit2 = ev
+        .eval_str("(if (re-search-forward \"defun\\\\_>\" nil t) (match-beginning 0) -1)")
+        .expect("second search");
+    assert_eq!(hit2.as_int(), Some(15));
+    // Backward from the end re-finds the second occurrence.
+    let back = ev
+        .eval_str(
+            "(progn (goto-char (point-max)) \
+                    (if (re-search-backward \"defun\\\\_>\" nil t) (point) -1))",
+        )
+        .expect("backward search");
+    assert_eq!(back.as_int(), Some(15));
+}

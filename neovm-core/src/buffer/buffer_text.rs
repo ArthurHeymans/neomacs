@@ -606,6 +606,18 @@ impl BufferText {
             .has_contiguous_emacs_byte_range(range)
     }
 
+    /// See [`TextBackend::try_make_emacs_byte_range_contiguous`].
+    /// Logically const — text content and every logical position are
+    /// unchanged; only the gap backend's physical gap placement moves
+    /// (like GNU `move_gap`, which runs freely during "read-only"
+    /// searches).
+    pub(crate) fn try_make_emacs_byte_range_contiguous(&self, range: EmacsByteRange) -> bool {
+        self.storage
+            .borrow_mut()
+            .backend
+            .try_make_emacs_byte_range_contiguous(range)
+    }
+
     pub(crate) fn with_contiguous_emacs_byte_range<R>(
         &self,
         range: EmacsByteRange,

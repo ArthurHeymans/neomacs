@@ -3,6 +3,18 @@ use crate::buffer::{CharLen, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos
 use crate::emacs_core::regex::{MatchGroup, char_pos_to_byte, char_pos_to_byte_lisp_string};
 use crate::emacs_core::value::{ValueKind, VecLikeType};
 
+/// Map a regex front-end error string to its Lisp signal.  Compile
+/// errors are `invalid-regexp`; the matcher's fail-stack overflow is a
+/// plain `error` in GNU (`search.c:matcher_overflow`: `error ("Stack
+/// overflow in regexp matcher")`).
+fn regex_error_signal(msg: String) -> crate::emacs_core::error::Flow {
+    if msg == crate::emacs_core::regex_emacs::MATCHER_OVERFLOW_MESSAGE {
+        signal("error", vec![Value::string(msg)])
+    } else {
+        signal("invalid-regexp", vec![Value::string(msg)])
+    }
+}
+
 // ===========================================================================
 // Search / Regex builtins (evaluator-dependent)
 // ===========================================================================
@@ -501,7 +513,7 @@ pub(crate) fn re_search_forward_with_state_posix(
             }
             Err(msg) if msg != "Search failed" => {
                 let _ = buffers.goto_buffer_emacs_byte_pos(current_id, start_pt);
-                return Err(signal("invalid-regexp", vec![Value::string(msg)]));
+                return Err(regex_error_signal(msg));
             }
             Err(_) => {
                 return handle_search_failure_in_manager(
@@ -610,7 +622,7 @@ pub(crate) fn re_search_backward_with_state_posix(
             }
             Err(msg) if msg != "Search failed" => {
                 let _ = buffers.goto_buffer_emacs_byte_pos(current_id, start_pt);
-                return Err(signal("invalid-regexp", vec![Value::string(msg)]));
+                return Err(regex_error_signal(msg));
             }
             Err(_) => {
                 return handle_search_failure_in_manager(
@@ -763,7 +775,7 @@ pub(crate) fn builtin_looking_at_with_state(
 
     match result {
         Ok(matched) => Ok(Value::bool_val(matched)),
-        Err(msg) => Err(signal("invalid-regexp", vec![Value::string(msg)])),
+        Err(msg) => Err(regex_error_signal(msg)),
     }
 }
 
@@ -798,7 +810,7 @@ pub(crate) fn builtin_looking_at_p_with_state(
         &mut throwaway_match_data,
     ) {
         Ok(matched) => Ok(Value::bool_val(matched)),
-        Err(msg) => Err(signal("invalid-regexp", vec![Value::string(msg)])),
+        Err(msg) => Err(regex_error_signal(msg)),
     }
 }
 
@@ -853,7 +865,7 @@ pub(crate) fn builtin_posix_looking_at_with_state(
 
     match result {
         Ok(matched) => Ok(Value::bool_val(matched)),
-        Err(msg) => Err(signal("invalid-regexp", vec![Value::string(msg)])),
+        Err(msg) => Err(regex_error_signal(msg)),
     }
 }
 
@@ -907,7 +919,7 @@ pub(crate) fn builtin_string_match_with_state(
                     ) {
                         Ok(Some(char_pos)) => Ok(Value::fixnum(char_pos as i64)),
                         Ok(None) => Ok(Value::NIL),
-                        Err(msg) => Err(signal("invalid-regexp", vec![Value::string(msg)])),
+                        Err(msg) => Err(regex_error_signal(msg)),
                     }
                 }
                 _ => {
@@ -925,7 +937,7 @@ pub(crate) fn builtin_string_match_with_state(
                     ) {
                         Ok(Some(char_pos)) => Ok(Value::fixnum(char_pos as i64)),
                         Ok(None) => Ok(Value::NIL),
-                        Err(msg) => Err(signal("invalid-regexp", vec![Value::string(msg)])),
+                        Err(msg) => Err(regex_error_signal(msg)),
                     }
                 }
             }
@@ -1034,7 +1046,7 @@ pub(crate) fn builtin_posix_string_match_with_state(
                     ) {
                         Ok(Some(char_pos)) => Ok(Value::fixnum(char_pos as i64)),
                         Ok(None) => Ok(Value::NIL),
-                        Err(msg) => Err(signal("invalid-regexp", vec![Value::string(msg)])),
+                        Err(msg) => Err(regex_error_signal(msg)),
                     }
                 }
                 _ => {
@@ -1052,7 +1064,7 @@ pub(crate) fn builtin_posix_string_match_with_state(
                     ) {
                         Ok(Some(char_pos)) => Ok(Value::fixnum(char_pos as i64)),
                         Ok(None) => Ok(Value::NIL),
-                        Err(msg) => Err(signal("invalid-regexp", vec![Value::string(msg)])),
+                        Err(msg) => Err(regex_error_signal(msg)),
                     }
                 }
             }
@@ -1097,7 +1109,7 @@ pub(crate) fn builtin_string_match_p_with_case_fold(
             ) {
                 Ok(Some(char_pos)) => Ok(Value::fixnum(char_pos as i64)),
                 Ok(None) => Ok(Value::NIL),
-                Err(msg) => Err(signal("invalid-regexp", vec![Value::string(msg)])),
+                Err(msg) => Err(regex_error_signal(msg)),
             }
         }
         _ => {
@@ -1115,7 +1127,7 @@ pub(crate) fn builtin_string_match_p_with_case_fold(
             ) {
                 Ok(Some(char_pos)) => Ok(Value::fixnum(char_pos as i64)),
                 Ok(None) => Ok(Value::NIL),
-                Err(msg) => Err(signal("invalid-regexp", vec![Value::string(msg)])),
+                Err(msg) => Err(regex_error_signal(msg)),
             }
         }
     }
