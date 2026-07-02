@@ -7430,7 +7430,11 @@ fn pure_dispatch_make_placeholder_cluster_matches_compat_contracts() {
     let make_finalizer = dispatch_builtin_pure("make-finalizer", vec![Value::symbol("ignore")])
         .expect("builtin make-finalizer should resolve")
         .expect("builtin make-finalizer should evaluate");
-    assert!(make_finalizer.is_nil());
+    assert_eq!(
+        make_finalizer.veclike_type(),
+        Some(crate::tagged::header::VecLikeType::Finalizer),
+        "make-finalizer should produce a live finalizer object"
+    );
 
     assert!(
         dispatch_builtin_pure(
