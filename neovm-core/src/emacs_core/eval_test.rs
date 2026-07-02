@@ -17247,3 +17247,174 @@ fn macroexpand_proper_args_unchanged() {
     let results = eval_all(&src);
     assert_eq!(results[1], "OK '(a c d)");
 }
+
+// =======================================================================
+// Concurrent-GC termination-drain KIND profile (profiling aid)
+// =======================================================================
+
+/// Median of an unsorted sample (0 for an empty one).
+#[allow(dead_code)]
+fn drain_probe_median(samples: &mut [u64]) -> u64 {
+    if samples.is_empty() {
+        return 0;
+    }
+    samples.sort_unstable();
+    samples[samples.len() / 2]
+}
+
+/// Shared driver for the `gc_drain_kinds_profile_*` probes: churn a mixed
+/// Lisp working set (strings/lists/vectors/records/closures/hash-tables)
+/// through a bootstrapped evaluator in SMALL eval chunks, and after each chunk
+/// poll `SweepStats.termination_count` to capture the per-cycle deferred
+/// total, per-kind breakdown, fold cost, and termination drain (`mark_us`).
+/// The retained rolling window (1 in 8 iterations, 256 slots) keeps a live
+/// mixed working set while the rest churns to drive cycles. Note what feeds
+/// `deferred`: the GC thread parks a non-cons per DISCOVERED EDGE — from the
+/// rooted cons walk (live graph only) but also from the obarray scan and the
+/// Tier B vector-backing scan, and the latter conservatively scans EVERY
+/// owned vector alive at cycle start, garbage included, so churned vectors'
+/// slot contents inflate the buffer with duplicates.
+///
+/// `pdump=true` measures the REAL dump-partitioned configuration: the
+/// bootstrap-cache pdump `runtime_startup_context` loads maps the whole
+/// bootstrap state, so dump conses are skipped and young objects reach the GC
+/// via the remembered set. `pdump=false` (`NEOVM_DISABLE_PDUMP=1`) measures
+/// the dump-less heap, where the concurrent collector re-walks the entire
+/// live graph every cycle after the STW bootstrap.
+#[allow(dead_code)]
+fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
+    crate::test_utils::init_test_tracing();
+    // Print the per-cycle `concurrent_termination ... kinds[...]` trace lines
+    // alongside the in-test capture (ground truth under --no-capture).
+    unsafe { std::env::set_var("NEOVM_GC_TRACE", "1") };
+    if !pdump {
+        unsafe { std::env::set_var("NEOVM_DISABLE_PDUMP", "1") };
+    }
+    let mut ev = runtime_startup_context();
+    if pdump && !ev.tagged_heap.dump_partition_active() {
+        // Cold bootstrap cache: that first call ran the live bootstrap
+        // (dump-less) and WROTE the cache; load the freshly written pdump so
+        // the measured heap really has the mapped partition.
+        ev = runtime_startup_context();
+        assert!(
+            ev.tagged_heap.dump_partition_active(),
+            "pdump probe config requires a mapped bootstrap image",
+        );
+    }
+    ev.set_lexical_binding(true);
+    eprintln!(
+        "DRAIN-KINDS PROBE start: pdump={pdump} partition_active={} live={}B",
+        ev.tagged_heap.dump_partition_active(),
+        ev.tagged_heap.live_bytes(),
+    );
+    ev.eval_str(
+        "(progn \
+           (defvar drain-probe--keep (make-vector 256 nil)) \
+           (defvar drain-probe--i 0) \
+           (defun drain-probe--step (n) \
+             (let ((k 0)) \
+               (while (< k n) \
+                 (let* ((s (make-string 64 ?s)) \
+                        (l (make-list 32 k)) \
+                        (v (make-vector 24 s)) \
+                        (r (record 'drain-probe s l v)) \
+                        (h (make-hash-table :test 'eq :size 8)) \
+                        (c (lambda (q) (cons q s)))) \
+                   (puthash 0 r h) \
+                   (puthash 1 c h) \
+                   (when (= 0 (% k 8)) \
+                     (aset drain-probe--keep (% drain-probe--i 256) \
+                           (list s l v r h c)) \
+                     (setq drain-probe--i (1+ drain-probe--i)))) \
+                 (setq k (1+ k)))) \
+             nil) \
+           t)",
+    )
+    .expect("probe setup");
+
+    let mut captures: Vec<crate::tagged::gc::SweepStats> = Vec::new();
+    let mut missed = 0usize;
+    let mut seen = ev.tagged_heap.sweep_stats().termination_count;
+    let start_collections = ev.tagged_heap.gc_collections();
+    for _ in 0..chunks {
+        ev.eval_str("(drain-probe--step 200)").expect("churn step");
+        let stats = ev.tagged_heap.sweep_stats();
+        if stats.termination_count > seen {
+            // More than one termination inside a single chunk loses all but
+            // the last cycle's per-cycle stats; count the loss honestly.
+            missed += stats.termination_count - seen - 1;
+            seen = stats.termination_count;
+            captures.push(stats);
+        }
+    }
+
+    let mut lines = String::new();
+    for (i, s) in captures.iter().enumerate() {
+        lines.push_str(&format!(
+            "cycle#{i} deferred={} satb={} fold={}us drain={}us kinds[{}]\n",
+            s.last_termination_deferred,
+            s.last_termination_satb,
+            s.last_termination_fold_us,
+            s.mark_us,
+            s.last_termination_kinds,
+        ));
+    }
+    let med = |f: fn(&crate::tagged::gc::SweepStats) -> u64| {
+        let mut v: Vec<u64> = captures.iter().map(f).collect();
+        drain_probe_median(&mut v)
+    };
+    let summary = format!(
+        "config={} cycles_captured={} missed={} gc_collections={} \
+         churn_chunks={chunks} live={}B\n\
+         medians: deferred={} satb={} fold_us={} drain_us={}\n\
+         kind medians: str={} vec={} rec={} clo={} bc={} ht={} ct={} f={} cons={} sub={} other={}\n\
+         kind maxima (lifetime): {}\n",
+        if pdump { "pdump(mapped-dump)" } else { "plain(dump-less)" },
+        captures.len(),
+        missed,
+        ev.tagged_heap.gc_collections() - start_collections,
+        ev.tagged_heap.live_bytes(),
+        med(|s| s.last_termination_deferred as u64),
+        med(|s| s.last_termination_satb as u64),
+        med(|s| s.last_termination_fold_us),
+        med(|s| s.mark_us),
+        med(|s| s.last_termination_kinds.string as u64),
+        med(|s| s.last_termination_kinds.vector as u64),
+        med(|s| s.last_termination_kinds.record as u64),
+        med(|s| s.last_termination_kinds.closure as u64),
+        med(|s| s.last_termination_kinds.bytecode as u64),
+        med(|s| s.last_termination_kinds.hash_table as u64),
+        med(|s| s.last_termination_kinds.char_table as u64),
+        med(|s| s.last_termination_kinds.float as u64),
+        med(|s| s.last_termination_kinds.cons as u64),
+        med(|s| s.last_termination_kinds.subr as u64),
+        med(|s| s.last_termination_kinds.other as u64),
+        ev.tagged_heap.sweep_stats().max_termination_kinds,
+    );
+    // Like the other profiling aids, report via panic! so the dump surfaces
+    // under nextest's capture (NOT a failure).
+    panic!("DRAIN-KINDS PROFILE (profiling aid, not a failure)\n{lines}{summary}");
+}
+
+/// Which kinds dominate the concurrent GC's STW termination drain — the
+/// measurement that decides the concurrent-tracing extension order
+/// (strings-first vs records/closures vs "hash tables dominate, stop").
+/// Real dump-partitioned config: the bootstrap state is a mapped pdump (the
+/// bootstrap cache), dump conses are skipped by the GC thread. Run in release:
+///   cargo nextest run -p neovm-core --release --run-ignored ignored-only \
+///     --no-capture -E 'test(gc_drain_kinds_profile_pdump)'
+#[test]
+#[ignore = "profiling aid; run explicitly in release with --no-capture"]
+fn gc_drain_kinds_profile_pdump() {
+    gc_drain_kinds_profile(true, 400);
+}
+
+/// Plain dump-less config: the concurrent collector engages after the STW
+/// bootstrap (post adaptive-pacer cadence — fewer, bigger cycles). Run:
+///   cargo nextest run -p neovm-core --release --run-ignored ignored-only \
+///     --no-capture -E 'test(gc_drain_kinds_profile_plain)'
+#[test]
+#[ignore = "profiling aid; run explicitly in release with --no-capture"]
+fn gc_drain_kinds_profile_plain() {
+    gc_drain_kinds_profile(false, 400);
+}

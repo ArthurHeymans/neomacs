@@ -940,6 +940,125 @@ impl MappedStringObject {
     }
 }
 
+/// Per-kind breakdown of the values the GC thread parked in `deferred` for the
+/// STW termination drain, taken as `join_concurrent_mark` folds the buffer into
+/// gray. Sizes the concurrent-tracing extension: which kind a further
+/// concurrent tier should take on first (strings are mark-only + intervals;
+/// records/closures need atomic slots + snapshot/clone-on-write; weak/growable
+/// hash tables stay deferred regardless). Counts are ENTRIES, not unique
+/// objects — the GC thread parks a value once per discovered edge, and the
+/// termination's `mark_value` dedups. Diagnostics only.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct DrainKinds {
+    pub string: usize,
+    /// Vectors trace concurrently (Stage 2 Tier B scans their BACKINGS), but
+    /// the vector VALUE is still parked so the termination sets its header
+    /// mark — so this bucket counts header-mark-only work, not child traces.
+    pub vector: usize,
+    pub record: usize,
+    /// Lambda + Macro (interpreted closures).
+    pub closure: usize,
+    pub bytecode: usize,
+    pub hash_table: usize,
+    /// CharTable + SubCharTable.
+    pub char_table: usize,
+    pub float: usize,
+    /// Non-owned conses (new-block or mapped) the GC thread could not mark via
+    /// its start-of-cycle block snapshot.
+    pub cons: usize,
+    /// Built-in functions — a large near-constant population (~1.7k registered
+    /// at startup), split out so it does not mask the true `other` residue.
+    pub subr: usize,
+    /// Every remaining veclike (marker/buffer/overlay/bignum/...).
+    pub other: usize,
+}
+
+impl DrainKinds {
+    /// Classify one parked value into its bucket — the same tag dispatch
+    /// `mark_value` uses (cons/string/float, then the veclike `type_tag`).
+    ///
+    /// # Safety
+    /// `val` must be a live heap value: `join_concurrent_mark` runs before the
+    /// termination drain and sweep, and nothing is freed during a concurrent
+    /// mark (allocate-black; sweeps never overlap marking), so every parked
+    /// entry's header is still valid.
+    unsafe fn note(&mut self, val: TaggedValue) {
+        if val.is_cons() {
+            self.cons += 1;
+        } else if val.is_string() {
+            self.string += 1;
+        } else if val.is_float() {
+            self.float += 1;
+        } else if val.is_veclike() {
+            let ptr = val.as_veclike_ptr().unwrap();
+            match unsafe { (*ptr).type_tag } {
+                VecLikeType::Vector => self.vector += 1,
+                VecLikeType::Record => self.record += 1,
+                VecLikeType::Lambda | VecLikeType::Macro => self.closure += 1,
+                VecLikeType::ByteCode => self.bytecode += 1,
+                VecLikeType::HashTable => self.hash_table += 1,
+                VecLikeType::CharTable | VecLikeType::SubCharTable => self.char_table += 1,
+                VecLikeType::Subr => self.subr += 1,
+                _ => self.other += 1,
+            }
+        } else {
+            self.other += 1; // unreachable: only heap objects are parked
+        }
+    }
+
+    /// Fold `cycle`'s per-kind counts into this lifetime per-kind maximum.
+    fn merge_max(&mut self, cycle: &DrainKinds) {
+        self.string = self.string.max(cycle.string);
+        self.vector = self.vector.max(cycle.vector);
+        self.record = self.record.max(cycle.record);
+        self.closure = self.closure.max(cycle.closure);
+        self.bytecode = self.bytecode.max(cycle.bytecode);
+        self.hash_table = self.hash_table.max(cycle.hash_table);
+        self.char_table = self.char_table.max(cycle.char_table);
+        self.float = self.float.max(cycle.float);
+        self.cons = self.cons.max(cycle.cons);
+        self.subr = self.subr.max(cycle.subr);
+        self.other = self.other.max(cycle.other);
+    }
+
+    /// Sum of all buckets — equals the deferred-entry count it was built from.
+    pub fn total(&self) -> usize {
+        self.string
+            + self.vector
+            + self.record
+            + self.closure
+            + self.bytecode
+            + self.hash_table
+            + self.char_table
+            + self.float
+            + self.cons
+            + self.subr
+            + self.other
+    }
+}
+
+impl std::fmt::Display for DrainKinds {
+    /// Compact trace-line segment: `str=N vec=N rec=N clo=N bc=N ht=N ct=N f=N
+    /// cons=N sub=N other=N`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "str={} vec={} rec={} clo={} bc={} ht={} ct={} f={} cons={} sub={} other={}",
+            self.string,
+            self.vector,
+            self.record,
+            self.closure,
+            self.bytecode,
+            self.hash_table,
+            self.char_table,
+            self.float,
+            self.cons,
+            self.subr,
+            self.other,
+        )
+    }
+}
+
 /// Snapshot of the deferred-sweep cost accounting plus the concurrent-mark
 /// termination drain probe. Diagnostics only: per-cycle fields hold the most
 /// recently completed (or in-flight) deferred sweep; lifetime fields aggregate
@@ -960,6 +1079,24 @@ pub(crate) struct SweepStats {
     pub last_termination_deferred: usize,
     pub max_termination_deferred: usize,
     pub last_termination_satb: usize,
+    /// Per-kind breakdown of `last_termination_deferred`, plus the lifetime
+    /// per-kind maximum (each bucket's own max across cycles). Populated in
+    /// crate tests and under `NEOVM_GC_TRACE=1`; zero otherwise — the
+    /// classification's header reads are not free STW time.
+    pub last_termination_kinds: DrainKinds,
+    pub max_termination_kinds: DrainKinds,
+    /// Cost of the `join_concurrent_mark` fold itself (taking the SATB +
+    /// deferred buffers, classifying, pushing to gray) — the cheap half of the
+    /// termination; the mark fixpoint that follows is the trace line's `drain`.
+    pub last_termination_fold_us: u64,
+    /// Lifetime count of concurrent-mark terminations (`join_concurrent_mark`
+    /// calls), so a probe polling between eval chunks can detect a new cycle.
+    pub termination_count: usize,
+    /// Mark cost of the most recent cycle at `incremental_finish`. For a
+    /// concurrent cycle this is exactly the STW termination drain: the counter
+    /// resets at `concurrent_begin` and the termination's
+    /// `incremental_drain_all` is the only accumulation.
+    pub mark_us: u64,
 }
 
 // ---------------------------------------------------------------------------
@@ -1247,6 +1384,10 @@ pub struct TaggedHeap {
     last_termination_deferred: usize,
     max_termination_deferred: usize,
     last_termination_satb: usize,
+    last_termination_kinds: DrainKinds,
+    max_termination_kinds: DrainKinds,
+    last_termination_fold_us: u64,
+    termination_count: usize,
 }
 
 impl TaggedHeap {
@@ -1327,6 +1468,10 @@ impl TaggedHeap {
             last_termination_deferred: 0,
             max_termination_deferred: 0,
             last_termination_satb: 0,
+            last_termination_kinds: DrainKinds::default(),
+            max_termination_kinds: DrainKinds::default(),
+            last_termination_fold_us: 0,
+            termination_count: 0,
             dump_addr_lo: usize::MAX,
             dump_addr_hi: 0,
         }
@@ -1404,6 +1549,11 @@ impl TaggedHeap {
             last_termination_deferred: self.last_termination_deferred,
             max_termination_deferred: self.max_termination_deferred,
             last_termination_satb: self.last_termination_satb,
+            last_termination_kinds: self.last_termination_kinds,
+            max_termination_kinds: self.max_termination_kinds,
+            last_termination_fold_us: self.last_termination_fold_us,
+            termination_count: self.termination_count,
+            mark_us: self.sweep_mark_us,
         }
     }
 
@@ -1673,6 +1823,14 @@ impl TaggedHeap {
             // remembered set starts being maintained immediately.
             TAGGED_HEAP_PARTITION_ACTIVE.with(|p| p.set(true));
         }
+    }
+
+    /// True when a registered mapped span (a loaded pdump) has activated the
+    /// dump-partitioned collector. Diagnostics: lets the drain-kind profiling
+    /// probe verify which collector configuration it is measuring.
+    #[cfg(test)]
+    pub(crate) fn dump_partition_active(&self) -> bool {
+        self.partition_dump
     }
 
     fn note_allocation_bytes(&mut self, bytes: usize) {
@@ -3872,13 +4030,34 @@ impl TaggedHeap {
         // Residual SATB (children overwritten after the GC's last drain) +
         // deferred (every non-cons + non-owned cons the GC parked) become gray;
         // the caller reseeds roots, then drains to a fixpoint stop-the-world.
+        // The fold is timed (`last_termination_fold_us`) so the termination's
+        // cheap push half is attributable separately from the mark fixpoint.
+        let fold_t0 = std::time::Instant::now();
         let satb = std::mem::take(&mut *self.satb_shared.lock().unwrap());
         self.last_termination_satb = satb.len();
         self.gray_queue.extend(satb);
         let deferred = std::mem::take(&mut *self.deferred_veclikes.lock().unwrap());
         self.last_termination_deferred = deferred.len();
         self.max_termination_deferred = self.max_termination_deferred.max(deferred.len());
+        // Classify what the drain is about to trace, per kind — the measurement
+        // that decides which kinds a concurrent-tracing extension should take
+        // on. Pure counting (marking behavior is unchanged), but the header
+        // reads cost real STW time on a large buffer (~20ns/entry), so outside
+        // the crate's own tests it only runs when the trace that prints it is
+        // on; the kind buckets stay zero otherwise.
+        if cfg!(test) || std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
+            let mut kinds = DrainKinds::default();
+            for &val in &deferred {
+                // Safety: parked entries are live heap values; nothing has been
+                // swept since they were parked (see `DrainKinds::note`).
+                unsafe { kinds.note(val) };
+            }
+            self.last_termination_kinds = kinds;
+            self.max_termination_kinds.merge_max(&kinds);
+        }
+        self.termination_count += 1;
         self.gray_queue.extend(deferred);
+        self.last_termination_fold_us = fold_t0.elapsed().as_micros() as u64;
         // Stage 2 Tier B CONCURRENT VECTOR SCAN: the GC thread has provably exited its
         // mark loop (the `rx.recv()` above), so its snapshot pointers into the retired
         // vector backings are no longer in use — this is the ONLY safe free point.
@@ -5145,6 +5324,110 @@ mod ownership_tests {
         heap.finish_incremental_sweep_now();
         assert!(!heap.sweep_in_progress());
         assert_eq!(heap.sweep_stats().noncons_freed, 0, "all floats are live");
+    }
+
+    /// Termination-drain kind probe: a concurrent cycle over a rooted spine
+    /// carrying known counts of strings/records/closures/floats/hash-tables/
+    /// vectors must classify every parked entry into the right bucket. Each
+    /// value is reachable ONLY through the rooted cons spine, so the GC
+    /// thread's cons walk discovers it and parks it in `deferred` (vectors
+    /// included — Tier B traces their BACKINGS concurrently, but the vector
+    /// VALUE is still parked for its header mark).
+    #[test]
+    fn concurrent_termination_classifies_deferred_kinds() {
+        use crate::emacs_core::value::{HashTableTest, LispHashTable};
+
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        const N_STR: usize = 300;
+        const N_REC: usize = 200;
+        const N_LAMBDA: usize = 150;
+        const N_MACRO: usize = 30;
+        const N_FLT: usize = 120;
+        const N_HT: usize = 8;
+        const N_VEC: usize = 50;
+
+        let mut list = TaggedValue::fixnum(0);
+        for _ in 0..N_STR {
+            let s = heap.alloc_string(crate::heap_types::LispString::from_utf8("drain-kind"));
+            list = heap.alloc_cons(s, list);
+        }
+        for i in 0..N_REC {
+            let r = heap.alloc_record(vec![TaggedValue::fixnum(i as i64)]);
+            list = heap.alloc_cons(r, list);
+        }
+        for _ in 0..N_LAMBDA {
+            let c = heap.alloc_lambda(vec![TaggedValue::fixnum(1)]);
+            list = heap.alloc_cons(c, list);
+        }
+        for _ in 0..N_MACRO {
+            let m = heap.alloc_macro(vec![TaggedValue::fixnum(2)]);
+            list = heap.alloc_cons(m, list);
+        }
+        for i in 0..N_FLT {
+            let f = heap.alloc_float(i as f64);
+            list = heap.alloc_cons(f, list);
+        }
+        for _ in 0..N_HT {
+            let h = heap.alloc_hash_table(LispHashTable::new(HashTableTest::Equal));
+            list = heap.alloc_cons(h, list);
+        }
+        for i in 0..N_VEC {
+            let v = heap.alloc_vector(vec![TaggedValue::fixnum(i as i64); 4]);
+            list = heap.alloc_cons(v, list);
+        }
+        let root = list;
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+
+        let stats = heap.sweep_stats();
+        let kinds = stats.last_termination_kinds;
+        assert!(kinds.string >= N_STR, "strings parked (str={})", kinds.string);
+        assert!(kinds.record >= N_REC, "records parked (rec={})", kinds.record);
+        assert!(
+            kinds.closure >= N_LAMBDA + N_MACRO,
+            "lambdas + macros share the closure bucket (clo={})",
+            kinds.closure,
+        );
+        assert!(kinds.float >= N_FLT, "floats parked (f={})", kinds.float);
+        assert!(
+            kinds.hash_table >= N_HT,
+            "hash tables parked (ht={})",
+            kinds.hash_table,
+        );
+        assert!(
+            kinds.vector >= N_VEC,
+            "vector VALUES are parked for their header mark even though their \
+             backings trace concurrently (vec={})",
+            kinds.vector,
+        );
+        assert_eq!(
+            kinds.total(),
+            stats.last_termination_deferred,
+            "every deferred entry lands in exactly one bucket",
+        );
+        assert_eq!(stats.termination_count, 1);
+        assert!(stats.max_termination_kinds.string >= kinds.string);
+        assert!(stats.max_termination_kinds.record >= kinds.record);
+        assert!(stats.max_termination_kinds.closure >= kinds.closure);
+
+        // Finish the cycle cleanly: termination drain + deferred sweep.
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(root);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+        assert!(!heap.sweep_in_progress());
+        assert_eq!(heap.sweep_stats().noncons_freed, 0, "everything is rooted");
     }
 
     /// Gap 3: a dump-less heap enables the concurrent collector after its

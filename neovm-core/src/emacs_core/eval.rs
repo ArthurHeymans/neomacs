@@ -7311,10 +7311,12 @@ impl Context {
             let stats = self.tagged_heap.sweep_stats();
             eprintln!(
                 "NEOVM_GC concurrent_termination {}us [roots={roots_us}us drain={drain_us}us \
-                 deferred={} satb={}]",
+                 fold={}us deferred={} satb={} kinds[{}]]",
                 term_t0.elapsed().as_micros(),
+                stats.last_termination_fold_us,
                 stats.last_termination_deferred,
                 stats.last_termination_satb,
+                stats.last_termination_kinds,
             );
         }
     }
