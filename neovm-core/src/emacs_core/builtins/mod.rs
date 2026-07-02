@@ -5877,6 +5877,18 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(0),
     );
     ctx.defsubr("redisplay", builtin_redisplay, 0, Some(1));
+    ctx.defsubr(
+        "neomacs--frame-snapshot",
+        super::xdisp::builtin_neomacs_frame_snapshot,
+        0,
+        Some(2),
+    );
+    ctx.defsubr(
+        "neomacs--write-frame-snapshot",
+        super::xdisp::builtin_neomacs_write_frame_snapshot,
+        1,
+        Some(3),
+    );
     ctx.defsubr("record", |_ctx, args| builtin_record(args), 1, None);
     ctx.defsubr_1("recordp", builtin_recordp_1, 1);
     ctx.defsubr(

@@ -1869,6 +1869,19 @@ pub struct Context {
     ///
     /// `None` in batch mode (no display).
     pub redisplay_fn: Option<Box<dyn FnMut(&mut Self)>>,
+    /// Frontend-installed frame snapshot hook (`neomacs--frame-snapshot`).
+    /// Same seam pattern as `redisplay_fn`: neovm-core cannot reach the
+    /// layout engine, so the frontend lays out the requested frames on
+    /// demand and returns the serialized snapshot. Take/call/reinstall.
+    #[allow(clippy::type_complexity)]
+    pub frame_snapshot_fn: Option<
+        Box<
+            dyn FnMut(
+                &mut Self,
+                &crate::emacs_core::xdisp::SnapshotRequest,
+            ) -> Result<String, String>,
+        >,
+    >,
     /// Host-display bridge for GUI frame realization.
     pub display_host: Option<Box<dyn DisplayHost>>,
     /// Native anchor for the next Lisp-driven menu-bar popup.
@@ -2598,6 +2611,7 @@ impl Context {
         ev.input_rx = None;
         ev.wakeup_fd = None;
         ev.redisplay_fn = None;
+        ev.frame_snapshot_fn = None;
         ev.display_host = None;
         ev.coding_systems = CodingSystemManager::new();
         ev.face_table = FaceTable::new();
@@ -4908,6 +4922,7 @@ impl Context {
             wakeup_fd: None,
             quit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             redisplay_fn: None,
+            frame_snapshot_fn: None,
             display_host: None,
             pending_menu_bar_popup_anchor: None,
             coding_systems: CodingSystemManager::new(),
@@ -5089,6 +5104,7 @@ impl Context {
             wakeup_fd: None,
             quit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             redisplay_fn: None,
+            frame_snapshot_fn: None,
             display_host: None,
             pending_menu_bar_popup_anchor: None,
             coding_systems,

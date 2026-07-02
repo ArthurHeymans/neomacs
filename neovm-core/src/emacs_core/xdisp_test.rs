@@ -3172,3 +3172,95 @@ fn display_prop_replacing_p_matches_gnu_taxonomy() {
         );
     }
 }
+
+// ---------------------------------------------------------------------------
+// neomacs--frame-snapshot
+// ---------------------------------------------------------------------------
+
+fn snapshot_string(value: Value) -> String {
+    crate::emacs_core::emacs_char::to_utf8_lossy(
+        value.as_lisp_string().expect("string result").as_bytes(),
+    )
+}
+
+#[test]
+fn frame_snapshot_errors_without_display_hook() {
+    let mut eval = Context::new();
+    assert!(
+        eval.eval_str("(neomacs--frame-snapshot)").is_err(),
+        "must signal in batch mode (no frontend hook installed)"
+    );
+}
+
+#[test]
+fn frame_snapshot_forwards_request_to_installed_hook() {
+    use crate::emacs_core::xdisp::{SnapshotFormat, SnapshotTarget};
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    let mut eval = Context::new();
+    let seen: Rc<RefCell<Vec<(SnapshotTarget, SnapshotFormat)>>> = Rc::default();
+    let sink = seen.clone();
+    eval.frame_snapshot_fn = Some(Box::new(move |_eval, request| {
+        sink.borrow_mut().push((request.target, request.format));
+        Ok("SNAP".to_string())
+    }));
+
+    let value = eval
+        .eval_str("(neomacs--frame-snapshot)")
+        .expect("selected/text snapshot");
+    assert_eq!(snapshot_string(value), "SNAP");
+    eval.eval_str("(neomacs--frame-snapshot t 'json)")
+        .expect("all/json snapshot");
+    eval.eval_str("(neomacs--frame-snapshot nil 'text-faces)")
+        .expect("selected/text-faces snapshot");
+
+    assert_eq!(
+        *seen.borrow(),
+        vec![
+            (SnapshotTarget::Selected, SnapshotFormat::Text),
+            (SnapshotTarget::All, SnapshotFormat::Json),
+            (SnapshotTarget::Selected, SnapshotFormat::TextFaces),
+        ]
+    );
+}
+
+#[test]
+fn frame_snapshot_rejects_bad_format_and_dead_frame() {
+    let mut eval = Context::new();
+    eval.frame_snapshot_fn = Some(Box::new(|_, _| Ok(String::new())));
+    assert!(
+        eval.eval_str("(neomacs--frame-snapshot nil 'bogus)")
+            .is_err(),
+        "unknown format symbol must signal"
+    );
+    assert!(
+        eval.eval_str("(neomacs--frame-snapshot 999999)").is_err(),
+        "dead frame id must signal"
+    );
+    assert!(
+        eval.eval_str("(neomacs--frame-snapshot \"x\")").is_err(),
+        "non-frame FRAME arg must signal wrong-type-argument"
+    );
+}
+
+#[test]
+fn write_frame_snapshot_writes_file_and_returns_t() {
+    let mut eval = Context::new();
+    eval.frame_snapshot_fn = Some(Box::new(|_, _| Ok("SNAPSHOT-CONTENT".to_string())));
+    let path = std::env::temp_dir().join(format!(
+        "neomacs-frame-snapshot-test-{}.txt",
+        std::process::id()
+    ));
+    let form = format!(
+        "(neomacs--write-frame-snapshot {:?} nil 'text)",
+        path.to_str().expect("utf8 temp path")
+    );
+    let value = eval.eval_str(&form).expect("write snapshot");
+    assert!(value.is_t());
+    assert_eq!(
+        std::fs::read_to_string(&path).expect("artifact readable"),
+        "SNAPSHOT-CONTENT"
+    );
+    let _ = std::fs::remove_file(&path);
+}

@@ -5618,6 +5618,175 @@ pub fn register_bootstrap_vars(obarray: &mut crate::emacs_core::symbol::Obarray)
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Frame snapshot (`neomacs--frame-snapshot`)
+// ---------------------------------------------------------------------------
+//
+// Expose 100% of what redisplay produced — the real `FrameDisplayState` — as
+// plain text for agents/tests, per
+// docs/plans/2026-07-02-gui-observability-agent-driving-design.md.
+//
+// The subr lives in the internal `neomacs--` namespace on purpose: GNU's
+// equivalent debug subrs (`dump-glyph-matrix` etc., src/xdisp.c) exist only
+// under GLYPH_DEBUG, so a GNU-named subr would be an `fboundp` divergence
+// against release reference binaries.
+//
+// neovm-core cannot see the layout engine (dependency direction), so the
+// actual layout+serialize step is a frontend-installed callback on the
+// evaluator (`Context::frame_snapshot_fn`), exactly like `redisplay_fn`.
+
+/// Which frames a snapshot request covers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SnapshotTarget {
+    /// The selected frame only.
+    Selected,
+    /// Every visible frame in bottom-to-top z order — the full composited
+    /// screen, including child frames (posframe/corfu popups, tooltips).
+    All,
+    /// One specific frame (core `FrameId.0`).
+    Frame(u64),
+}
+
+/// Serialization format of a snapshot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SnapshotFormat {
+    /// Greppable logical text grid (`FrameDisplayState::render_text`).
+    Text,
+    /// Text plus per-row face runs with names and resolved hex colors.
+    TextFaces,
+    /// Full-fidelity JSON: serde on the real protocol structs.
+    Json,
+}
+
+/// One `neomacs--frame-snapshot` request, handed to the frontend hook.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SnapshotRequest {
+    pub target: SnapshotTarget,
+    pub format: SnapshotFormat,
+}
+
+/// Decode the optional FRAME / FORMAT subr arguments (`rest` starts at the
+/// FRAME argument). FRAME: nil = selected frame, t = all visible frames, or
+/// a live frame object (a fixnum frame id is also accepted, mirroring
+/// `frame_id_from_designator` in font.rs). FORMAT: nil/`text`,
+/// `text-faces`, or `json`.
+fn snapshot_request_from_args(
+    eval: &super::eval::Context,
+    rest: &[Value],
+) -> Result<SnapshotRequest, Flow> {
+    let target = match rest.first() {
+        None => SnapshotTarget::Selected,
+        Some(value) if value.is_nil() => SnapshotTarget::Selected,
+        Some(value) if value.is_t() => SnapshotTarget::All,
+        Some(value) => {
+            let id = match value.kind() {
+                ValueKind::Fixnum(id) if id >= 0 => Some(id as u64),
+                ValueKind::Veclike(VecLikeType::Frame) => value.as_frame_id(),
+                _ => None,
+            };
+            let Some(id) = id else {
+                return Err(signal(
+                    "wrong-type-argument",
+                    vec![Value::symbol("framep"), *value],
+                ));
+            };
+            if eval.frames.get(crate::window::FrameId(id)).is_none() {
+                return Err(signal(
+                    "error",
+                    vec![Value::string(format!("No such live frame: {id}"))],
+                ));
+            }
+            SnapshotTarget::Frame(id)
+        }
+    };
+    let format = match rest.get(1) {
+        None => SnapshotFormat::Text,
+        Some(value) if value.is_nil() => SnapshotFormat::Text,
+        Some(value) => match value.as_symbol_name() {
+            Some("text") => SnapshotFormat::Text,
+            Some("text-faces") => SnapshotFormat::TextFaces,
+            Some("json") => SnapshotFormat::Json,
+            _ => {
+                return Err(signal(
+                    "error",
+                    vec![Value::string(format!(
+                        "Invalid frame snapshot format: {value} (use text, text-faces or json)"
+                    ))],
+                ));
+            }
+        },
+    };
+    Ok(SnapshotRequest { target, format })
+}
+
+/// Force a full redisplay, then run the frontend snapshot hook.
+///
+/// The redisplay first is essential: `redisplay_with_force` performs the
+/// marker/point syncs, `pre-redisplay-function`, and auto-hscroll that
+/// layout correctness depends on (GNU `redisplay_internal` preamble). The
+/// hook then lays out the target frames on demand and serializes. The
+/// take/call/reinstall dance mirrors `redisplay_fn` (eval.rs).
+fn run_frame_snapshot(
+    eval: &mut super::eval::Context,
+    request: &SnapshotRequest,
+) -> Result<String, Flow> {
+    eval.redisplay_with_force(true);
+    let Some(mut hook) = eval.frame_snapshot_fn.take() else {
+        return Err(signal(
+            "error",
+            vec![Value::string(
+                "neomacs--frame-snapshot: no display attached (batch mode?)",
+            )],
+        ));
+    };
+    let result = hook(eval, request);
+    eval.frame_snapshot_fn = Some(hook);
+    result.map_err(|message| signal("error", vec![Value::string(message)]))
+}
+
+/// `(neomacs--frame-snapshot &optional FRAME FORMAT)` — force a redisplay
+/// and return what is on screen as a string. See `SnapshotRequest`.
+pub(crate) fn builtin_neomacs_frame_snapshot(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    let request = snapshot_request_from_args(eval, &args)?;
+    let snapshot = run_frame_snapshot(eval, &request)?;
+    Ok(Value::string(snapshot))
+}
+
+/// `(neomacs--write-frame-snapshot PATH &optional FRAME FORMAT)` — like
+/// `neomacs--frame-snapshot` but write the result to PATH and return t.
+pub(crate) fn builtin_neomacs_write_frame_snapshot(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    let Some(path) = args
+        .first()
+        .and_then(|value| value.as_lisp_string())
+        .map(|ls| crate::emacs_core::emacs_char::to_utf8_lossy(ls.as_bytes()))
+    else {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![
+                Value::symbol("stringp"),
+                args.first().copied().unwrap_or(Value::NIL),
+            ],
+        ));
+    };
+    let request = snapshot_request_from_args(eval, &args[1..])?;
+    let snapshot = run_frame_snapshot(eval, &request)?;
+    std::fs::write(&path, snapshot).map_err(|error| {
+        signal(
+            "error",
+            vec![Value::string(format!(
+                "Cannot write frame snapshot to {path}: {error}"
+            ))],
+        )
+    })?;
+    Ok(Value::T)
+}
+
 // Tests
 // ---------------------------------------------------------------------------
 #[cfg(test)]
