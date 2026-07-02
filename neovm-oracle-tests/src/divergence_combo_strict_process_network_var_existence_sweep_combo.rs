@@ -25,7 +25,7 @@ fn div_v8_process_shell_exec_var_sweep() {
       (boundp 'coding-system-for-read)
       (boundp 'coding-system-for-write))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -44,7 +44,7 @@ fn div_v8_network_socket_var_sweep() {
       (boundp 'socks-timeout)
       (boundp 'url-user-agent))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (nil nil t nil nil nil nil nil nil nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -65,6 +65,6 @@ fn div_v8_signal_alarm_async_event_var_sweep() {
       (boundp 'double-click-time)
       (boundp 'mouse-1-click-follows-link))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t nil t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

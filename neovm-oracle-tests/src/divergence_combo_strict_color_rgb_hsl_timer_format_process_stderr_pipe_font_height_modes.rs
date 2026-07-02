@@ -24,7 +24,7 @@ fn div_u2_color_rgb_hsl_conversion() {
       (color-distance "black" "white")
       (color-complement "red"))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function color-rgb-to-hsl)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -45,7 +45,7 @@ fn div_u2_timer_time_format_and_cancel_order() {
                (length timer-list))
         (timerp (car timers))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (3 3 t nil t t 0 t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -75,7 +75,7 @@ fn div_u2_process_stderr_pipe_process() {
             (string= (string-trim out) "out")
             (string= (string-trim err) "err"))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -96,7 +96,7 @@ fn div_u2_font_spec_height_modes() {
         (> (font-get fs3 :height) (font-get fs1 :height))
         (integerp (font-get fs1 :height))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function font-spec-p)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -115,6 +115,8 @@ fn div_u2_nil_argument_arithmetic_edge() {
       (condition-case err (logand 1 nil) (wrong-type-argument (car err)))
       (condition-case err (expt 2 nil) (wrong-type-argument (car err))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (wrong-type-argument wrong-type-argument wrong-type-argument wrong-type-argument wrong-type-argument wrong-type-argument wrong-type-argument wrong-type-argument wrong-type-argument wrong-type-argument)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

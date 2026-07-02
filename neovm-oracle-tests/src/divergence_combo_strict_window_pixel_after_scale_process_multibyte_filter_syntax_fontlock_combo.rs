@@ -108,7 +108,9 @@ fn div_t9_format_spec_with_eval_and_nested() {
       (format-spec "%a%b%a" '((?a . "x") (?b . "y")))
       (format-spec "%a-unknown-%z" '((?a . "x") (?z . "z"))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"x-y-z\" \"100%\" \"[   hi]\" \"nested: outer\" \"\" \"\" \"xyx\" \"x-unknown-z\")""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

@@ -64,6 +64,6 @@ fn div_v8_call_process_error_exit_stderr_separate() {
     (kill-buffer stdout)
     (kill-buffer stderr)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (wrong-type-argument stringp #<killed buffer>)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

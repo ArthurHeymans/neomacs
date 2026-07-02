@@ -25,7 +25,9 @@ fn div_u1_process_signal_combo() {
       (when (process-live-p proc) (delete-process proc))))
   (nreverse results))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((interrupt . signal) (quit . run) (stop . run) (kill . signal))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -133,6 +135,6 @@ fn div_u1_condition_case_nested_error_data() {
     (void-function (push (cdr err) log)))
   (nreverse log))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

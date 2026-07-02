@@ -645,9 +645,15 @@ impl WaitBlockActivity {
     }
 
     fn from_source_events(events: ProcessWaitEvents) -> Self {
+        let input_wakeup = events.has_input_wakeup();
+        let process_service = if !events.has_ready_processes() && !events.has_writable_processes() {
+            WaitProcessService::Poll
+        } else {
+            WaitProcessService::Ready(events)
+        };
         Self {
-            input_wakeup: events.has_input_wakeup(),
-            process_service: WaitProcessService::Ready(events),
+            input_wakeup,
+            process_service,
         }
     }
 
@@ -1175,6 +1181,22 @@ mod tests {
             activity.into_process_service(),
             WaitProcessService::Ready(ProcessWaitEvents::ready_processes(vec![7]))
         );
+    }
+
+    #[test]
+    fn empty_source_events_poll_all_processes() {
+        let activity = WaitBlockActivity::from_source_events(ProcessWaitEvents::default());
+
+        assert!(!activity.has_input_wakeup());
+        assert_eq!(activity.into_process_service(), WaitProcessService::Poll);
+    }
+
+    #[test]
+    fn input_only_source_events_poll_all_processes() {
+        let activity = WaitBlockActivity::from_source_events(ProcessWaitEvents::input_wakeup());
+
+        assert!(activity.has_input_wakeup());
+        assert_eq!(activity.into_process_service(), WaitProcessService::Poll);
     }
 
     #[test]

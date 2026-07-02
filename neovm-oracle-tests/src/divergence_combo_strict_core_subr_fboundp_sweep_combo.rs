@@ -93,6 +93,6 @@ fn div_v8_io_process_subr_fboundp_sweep() {
       (fboundp 'insert-file-contents)
       (fboundp 'file-attributes))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t t t t t t t t t t t t t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -212,6 +212,19 @@ fn process_finite_domains_match_gnu_symbols() {
     assert!(resolve_process_connection_type_use_pty(Some(&Value::T), true).is_err());
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn waitpid_signal_status_preserves_core_dump_flag_for_sentinel_messages() {
+    let raw_status = libc::SIGQUIT | 0x80;
+    let status = process_status_from_waitpid_status(raw_status).expect("signal status");
+
+    assert_eq!(
+        status,
+        process_status_signal_value_with_core(libc::SIGQUIT, true)
+    );
+    assert_eq!(gnu_process_status_message(status), "quit (core dumped)\n");
+}
+
 #[test]
 fn char_sequence_to_lisp_string_preserves_nonunicode_char_codes() {
     crate::test_utils::init_test_tracing();

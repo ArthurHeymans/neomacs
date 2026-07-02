@@ -19,7 +19,7 @@ fn div_v3_font_matching_and_charset_priority() {
       (font-get (font-spec :family "Monospace" :weight 'bold) :weight)
       (> (length (font-family-list)) 0))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function font-spec-p)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -49,7 +49,7 @@ fn div_v3_process_stderr_routing_variants() {
             (not (string-match-p "stderr" out))
             (not (string-match-p "stdout" err)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -73,7 +73,7 @@ fn div_v3_cl_loop_conditional_sum_count_finally() {
            finally (return (list big-sum big-count small-sum small-count
                                   (+ big-sum small-sum)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-loop)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -104,7 +104,9 @@ fn div_v3_window_margins_fringes_body_width_combo() {
     (kill-buffer b)
     (delete-other-windows)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (80 80 75 80 (3 . 2) 75 (0 0 nil nil) 80 (nil) (0 0 nil nil))""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -129,6 +131,6 @@ fn div_v3_eieio_slot_default_and_initform_evaluation() {
           (slot-boundp o1 'c)
           (eq (oref o1 b) (oref o1 b)))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""ERR (void-function cl-defclass)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

@@ -25,12 +25,13 @@ fn oracle_gnu_make_network_process_advertises_full_linux_surface() {
  (featurep 'make-network-process :reuseaddr)
  (featurep 'make-network-process :keepalive)
  (featurep 'make-network-process :bindtodevice)
- (get 'make-network-process 'subfeatures))
+ (sort (copy-sequence (get 'make-network-process 'subfeatures))
+       (lambda (a b) (string< (prin1-to-string a) (prin1-to-string b)))))
 "#;
 
-    let expect = expect_test::expect![[
-        r#"OK (t t t t t t t t t t t t (:nodelay :reuseaddr :priority :oobinline :linger :keepalive :dontroute :broadcast :bindtodevice (:server t) (:service t) (:family ipv6) (:family ipv4) (:family local) (:type seqpacket) (:type datagram) (:nowait t)))"#
-    ]];
+    let expect = expect_test::expect![
+        "OK (t t t t t t t t t t t t ((:family ipv4) (:family ipv6) (:family local) (:nowait t) (:server t) (:service t) (:type datagram) (:type seqpacket) :bindtodevice :broadcast :dontroute :keepalive :linger :nodelay :oobinline :priority :reuseaddr))"
+    ];
     let oracle = crate::common::run_oracle_eval(form).expect("oracle eval should run");
     expect.assert_eq(&oracle);
 }

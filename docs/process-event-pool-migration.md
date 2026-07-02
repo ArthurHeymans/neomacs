@@ -99,10 +99,10 @@ Key contract points verified empirically this cycle:
 | D1 | `current-time` PSEC always 0 (µs truncation in `TimeMicros::now`) | **FIXED** `497350bff` |
 | D2 | Native timer "second brain" (`TimerManager`, unregistered `run-at-time`/`timer-activate` builtins, `now+interval` rescheduling) | **DELETED** `5829b6f11` (was dead code: no live writers; the real brain was already Lisp timer-list + `timer-event-handler`); the real psec bug was `decode_lisp_time`'s nil branch — **FIXED** `0dd82abd1` |
 | D3 | Wait loop serviced ripe timers after a wake even when the deadline had elapsed | **FIXED** `bf71ed726` (deadline-first, GNU loop order). Note: the exact-boundary fire-count (cx64/cx179/cx338) is a jitter race **inside GNU itself** (10 idle GNU runs: `21 20 20 20 20 20 20 20 20 21`); classified EXPECTED-TIMING |
-| D4 | Sentinel messages stored at event time instead of derived from current status at notify | **PARTIALLY FIXED** in `d02f31edb` (EOF path derives via `gnu_process_status_message_for_process`); remaining audit pass = S4c |
+| D4 | Sentinel messages stored at event time instead of derived from current status at notify | **FIXED — S4c** (terminal notifications now derive via `gnu_process_status_message_for_process`; accept / `:nowait` literals remain GNU push-style exceptions) |
 | D5 | Spurious `"open\n"` sentinel for blocking client connects | **FIXED** `d02f31edb` |
 | D6 | Network EOF set `(exit . 0)`; "connection broken" delivered rounds late; accepts/EOF treated as wait-completing activity | **FIXED**: exit-256 + derived message + reap in `d02f31edb`; completion semantics in S4b (in tree, see §4) |
-| D7 | `stop-process` eagerly sets status `stop` for real subprocesses | **OPEN — S5** |
+| D7 | `stop-process` eagerly sets status `stop` for real subprocesses | **FIXED — S5** (`stop-process` sends only SIGTSTP; stop/run status comes from `waitpid(WUNTRACED|WCONTINUED)`) |
 | D8 | seqpacket not advertised in `featurep 'make-network-process` though fully implemented | **FIXED** `69b874f9b` |
 | D9 | Child exit observed only inside wait iterations; `process-status` stale outside waits (the load-flaky family's root cause) | **IN TREE — S6** (see §4) |
 | D10 | Fixed 4096-byte reads; no `read-process-output-max`; no adaptive read buffering | **OPEN — S7** |
@@ -239,42 +239,48 @@ Remaining to finish S4b+S6 (exact list):
    --check` + `cargo check`, which QUEUES on the target-dir lock if a build
    or nextest compile is running — be patient, it is not hung).
 
+## 4.1. LANDED — S4c + S5 (current in-tree state)
+
+S4c completed the remaining derive-at-notify sweep for terminal process
+notifications. `notify_process_status_sentinel` now derives the sentinel text
+from the process's current status at delivery time. GNU's literal push-style
+exceptions remain literal: server accepts keep `"open from HOST\n"`, and
+`:nowait` connect completion keeps `"open\n"` / `"failed with code N\n"`.
+
+S5 implemented GNU's real-subprocess signal contract:
+
+- Unix child status observation now uses `waitpid(WNOHANG | WUNTRACED |
+  WCONTINUED)` before falling back to the portable child/pty paths, so
+  `(stop SIG)` and continued `run` states are observed by the wait loop.
+- `WIFSIGNALED` status preserves the core-dump bit, which keeps
+  `quit-process` sentinel text at GNU's `"quit (core dumped)\n"` when the
+  platform reports a core-dumping SIGQUIT.
+- Real-process `stop-process` sends SIGTSTP only; it does not publish a stop
+  status synchronously. `continue-process` sends SIGCONT and preserves GNU's
+  immediate `run` status/notification behavior.
+- Signal delivery targets the child process group on Unix, matching GNU's
+  subprocess setup for pipe children.
+- Input-only wait wakeups now still poll child status, so a quiet SIGSTOP or
+  SIGCONT cannot be hidden behind command-input readiness.
+
+Validated gates for this slice:
+
+- GNU source study: `process.c` `status_convert`, `status_message`,
+  `status_notify`, `Fstop_process`, `Fcontinue_process`, and `callproc.c`
+  process-session setup.
+- Live probes in `./tmp`: stop/continue, signal-combo, SIGSTOP continuation,
+  and process-attributes/kernel-state checks matched GNU byte-for-byte.
+- `cargo nextest run -p neovm-core -E 'test(process) or test(wait)'
+  --no-fail-fast`: 284/284 passed.
+- Focused oracle targets `div_u1_process_signal_combo`,
+  `div_core_divergence_surface_quit_process_sentinel_message`, and
+  `div_core_divergence_surface_stop_continue_delete_process_sentinels` passed.
+- Process/network/timer oracle family after refreshing stale inline GNU
+  expectations: 257 run, 255 passed, with only documented baseline failures
+  remaining (`div_core_divergence_surface_process_attributes_running_child_combo`
+  and `div_v3_window_margins_fringes_body_width_combo`).
+
 ## 5. REMAINING SLICES — detailed execution guidance
-
-### S4c — finish derive-at-notify (D4 residue)
-
-Sweep for any remaining sentinel deliveries that pass a stored/hardcoded
-message where GNU derives from current status at notify time. Known clean:
-accepts keep their literal `"open from HOST\n"` (GNU calls `exec_sentinel`
-directly at accept — the one push-style sentinel); `:nowait` completion keeps
-literal `"open\n"`/`"failed with code N\n"` (GNU wait-loop literals too).
-Audit `run_process_sentinel_callback` call sites; anything reporting a
-terminal state should route through `gnu_process_status_message_for_process`.
-Watch the `AcceptedNetworkConnection.sentinel_message` field (process.rs
-~1051): with accepts staying literal it is acceptable, but consider deriving
-at delivery for uniformity.
-
-### S5 — signal-send semantics (D7)
-
-- GNU `Fstop_process`/`Fcontinue_process` (process.c): for
-  network/serial/pipe-**connection** objects, set/clear `p->command = Qt` and
-  add/remove the read fd — status untouched. For real subprocesses,
-  `process_send_signal(SIGTSTP/SIGCONT, current_group)` — **status untouched**;
-  only `waitpid(WUNTRACED|WCONTINUED)` observation may set `stop`/`run`.
-- neomacs today: eagerly sets status `stop` on `stop-process` for real
-  children (u1 diverges: GNU `run`, NEO `stop`; the child never actually
-  stopped — kernel state S).
-- Implementation: find the native stop/continue/interrupt/quit/kill process
-  builtins; remove eager status writes for real children; ensure
-  `poll_child_exit_status` uses `WUNTRACED|WCONTINUED` semantics
-  (`try_wait` cannot see stops — this needs `waitpid(pid, &st, WNOHANG |
-  WUNTRACED | WCONTINUED)` via libc on unix, or keeping the current behavior
-  for stop-observation with a documented gap). Check what
-  `process_send_signal`-equivalent does about process groups (GNU signals the
-  pgrp for pty children, the pid for pipe children).
-- Oracle target: `div_u1_process_signal_combo` (`(stop . run)` expected).
-- Gate: probe `tmp/t_stop.el` pattern (kernel-state assertion) + family +
-  full regression.
 
 ### S7 — read-process-output-max + adaptive read buffering (D10)
 

@@ -26,7 +26,7 @@ fn div_v8_network_process_server_local_socket_outcome() {
   (file-error (list 'caught-file-error))
   (error (list 'caught-error)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (bound t nil)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -41,7 +41,9 @@ fn div_v8_format_network_address_proper_forms() {
       (format-network-address "192.168.1.1")
       (consp (network-interface-list)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"127.0.0.1\" \"<Family 127>\" \"<Family 192>\" \"<Family 192>\" \"192.168.1.1\" t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 
@@ -59,6 +61,6 @@ fn div_v8_network_stream_connect_refused_handling() {
   (file-error (list 'caught-connect-refused))
   (error (list 'caught-error)))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK (caught-connect-refused)""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }

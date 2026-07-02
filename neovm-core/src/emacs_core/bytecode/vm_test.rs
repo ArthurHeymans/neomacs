@@ -5456,7 +5456,9 @@ fn vm_process_control_and_send_builtins_use_shared_runtime_state() {
                 (eq (kill-process p3) p3)
                 (= (process-exit-status p3) 9)
                 (eq (stop-process p4) p4)
-                (eq (process-status p4) 'stop)
+                ;; Harness-only process records have no child to observe with waitpid,
+                ;; so stop-process must not publish a stop status synchronously.
+                (eq (process-status p4) 'run)
                 (eq (quit-process p5) p5)
                 (eq (process-status p5) 'run)
                 (eq (signal-process p6 15) 0)
@@ -5507,7 +5509,7 @@ fn vm_process_control_and_send_builtins_use_shared_runtime_state() {
     );
     assert_eq!(
         eval.processes.get_any(4).expect("stop process").status,
-        Value::list(vec![Value::symbol("stop"), Value::fixnum(0)])
+        Value::symbol("run")
     );
     assert_eq!(
         eval.processes.get_any(5).expect("quit process").status,

@@ -130,6 +130,6 @@ fn div_u5_condition_case_with_unwind_protect_cleanup_order() {
        (throw 'done 'caught)))
   (nreverse log))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[r#""OK nil""#]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
