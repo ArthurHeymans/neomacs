@@ -502,8 +502,39 @@ fn start_weston_headless(artifact_root: &Path) -> io::Result<DisplaySession> {
 }
 
 fn start_xvfb() -> io::Result<DisplaySession> {
-    let display_number = 90 + (std::process::id() % 1000);
+    // A crashed earlier run leaves /tmp/.X11-unix/X<N> and /tmp/.X<N>-lock
+    // behind (DisplaySession::drop SIGKILLs Xvfb, which never unlinks them).
+    // A stale socket makes a file-existence readiness check pass instantly
+    // for a DEAD display, so: pick a few candidate display numbers, remove
+    // provably-stale leftovers, and require that OUR Xvfb is still alive
+    // once the socket exists.
+    let base = 90 + (std::process::id() % 1000);
+    let mut last_err = None;
+    for offset in 0..8u32 {
+        let display_number = base + offset * 1000;
+        match start_xvfb_on(display_number) {
+            Ok(session) => return Ok(session),
+            Err(err) => last_err = Some(err),
+        }
+    }
+    Err(last_err.unwrap_or_else(|| {
+        io::Error::new(io::ErrorKind::Other, "no Xvfb display candidate worked")
+    }))
+}
+
+fn start_xvfb_on(display_number: u32) -> io::Result<DisplaySession> {
     let display = format!(":{display_number}");
+    let socket_path = PathBuf::from(format!("/tmp/.X11-unix/X{display_number}"));
+    let lock_path = PathBuf::from(format!("/tmp/.X{display_number}-lock"));
+
+    // Remove stale leftovers so Xvfb can bind; never touch a LIVE display's
+    // socket (a live server holds its socket open — fuser-style check via
+    // connect would race, so use the lock file's pid instead).
+    if socket_path.exists() && !x_lock_pid_alive(&lock_path) {
+        let _ = fs::remove_file(&socket_path);
+        let _ = fs::remove_file(&lock_path);
+    }
+
     let mut child = Command::new("Xvfb")
         .arg(&display)
         .arg("-screen")
@@ -515,21 +546,39 @@ fn start_xvfb() -> io::Result<DisplaySession> {
         .stderr(Stdio::null())
         .spawn()?;
 
-    let socket_path = PathBuf::from(format!("/tmp/.X11-unix/X{display_number}"));
     if wait_for_path(&socket_path, Duration::from_secs(5)) {
-        Ok(DisplaySession {
-            child: Some(child),
-            env: vec![("DISPLAY".to_string(), display)],
-            cleanup_dir: None,
-        })
-    } else {
-        let _ = child.kill();
-        let _ = child.wait();
-        Err(io::Error::new(
-            io::ErrorKind::TimedOut,
-            format!("Xvfb did not create X11 socket {}", socket_path.display()),
-        ))
+        // The socket exists — but a stale one plus an instantly-dead Xvfb
+        // (e.g. lock held by a live server we must not disturb) looks
+        // identical. Ready means: socket present AND our child still runs.
+        if child.try_wait()?.is_none() {
+            return Ok(DisplaySession {
+                child: Some(child),
+                env: vec![("DISPLAY".to_string(), display)],
+                cleanup_dir: None,
+            });
+        }
     }
+    let _ = child.kill();
+    let _ = child.wait();
+    Err(io::Error::new(
+        io::ErrorKind::TimedOut,
+        format!(
+            "Xvfb did not come up on display {display} (socket {})",
+            socket_path.display()
+        ),
+    ))
+}
+
+/// True when the X lock file names a live process (i.e. the display is
+/// genuinely in use). Lock format: "      <pid>\n".
+fn x_lock_pid_alive(lock_path: &Path) -> bool {
+    let Ok(contents) = fs::read_to_string(lock_path) else {
+        return false;
+    };
+    let Ok(pid) = contents.trim().parse::<i32>() else {
+        return false;
+    };
+    PathBuf::from(format!("/proc/{pid}")).exists()
 }
 
 fn wait_for_path(path: &Path, timeout: Duration) -> bool {

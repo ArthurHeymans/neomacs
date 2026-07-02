@@ -39,8 +39,6 @@
           (insert payload))))))
 
 (neomacs-gui-smoke-write-state)
-(run-at-time 2 nil (lambda () (kill-emacs 0)))
-
 ;; Frame snapshot artifacts: the display oracle (what redisplay actually
 ;; produced), superseding the Lisp-side gui-state for display assertions.
 (let ((snap-json (getenv "NEOMACS_GUI_FRAME_SNAPSHOT_JSON"))
@@ -51,3 +49,5 @@
   (when (and snap-txt (fboundp 'neomacs--write-frame-snapshot))
     (make-directory (file-name-directory snap-txt) t)
     (neomacs--write-frame-snapshot snap-txt t 'text-faces)))
+
+(run-at-time 2 nil (lambda () (kill-emacs 0)))

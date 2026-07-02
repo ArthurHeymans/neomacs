@@ -17,9 +17,15 @@ test-threads = 24
 # bootstrap time while still catching real hangs.
 slow-timeout = { period = "600s", terminate-after = 1, grace-period = "0s" }
 
-# Apply memory limit to all tests
+# Apply memory limit to all tests EXCEPT the real GUI smoke: that test
+# spawns a full GUI neomacs (wgpu + Vulkan software rasterizer), and
+# llvmpipe's virtual address-space reservations depend on the ambient
+# driver closure (nextest's LD_LIBRARY_PATH can select a mesa whose
+# per-thread VA reservations blow an 8GB RLIMIT_AS, failing pthread_create
+# with EAGAIN). The guardrail exists for unit-test allocation backtraces,
+# not for constraining a spawned production GUI stack.
 [[profile.default.scripts]]
-filter = 'all()'
+filter = 'not binary_id(neomacs-gui-tests::real_gui_smoke)'
 run-wrapper = 'memory-limit'
 
 # Minimax oracle cases intentionally evaluate game trees in both Neomacs
