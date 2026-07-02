@@ -582,6 +582,14 @@ pub enum Window {
         /// (width fraction of parent). GNU `w->normal_cols`
         /// (`src/window.h:129`).
         normal_cols: Value,
+        /// Character-line top edge, stored separately from `bounds` (pixels).
+        /// Mirrors GNU `w->top_line` (`src/window.h`). GNU maintains this in
+        /// parallel with `pixel_top`; in batch a menu bar occupies 1 *line* but
+        /// 0 *pixels*, so `top_line` can be nonzero while `bounds.y` is 0.
+        /// Set by the resize passes (root gets `FRAME_TOP_MARGIN`).
+        top_line: i64,
+        /// Character-column left edge; GNU `w->left_col`. See `top_line`.
+        left_col: i64,
     },
 
     /// Internal node: contains children split in a direction.
@@ -590,6 +598,10 @@ pub enum Window {
         direction: SplitDirection,
         children: Vec<Window>,
         bounds: Rect,
+        /// Character-line top edge; GNU `w->top_line`. See `Leaf::top_line`.
+        top_line: i64,
+        /// Character-column left edge; GNU `w->left_col`. See `Leaf::top_line`.
+        left_col: i64,
         /// Lisp-visible per-window parameter alist, newest entries first.
         parameters: WindowParameters,
         /// Combination limit — prevents recombination when non-nil.
@@ -648,6 +660,39 @@ impl Window {
             // `normal_cols` to 1.0 (`src/window.c:4603-4604`).
             normal_lines: Value::make_float(1.0),
             normal_cols: Value::make_float(1.0),
+            // GNU `make_window` leaves top_line/left_col zero; the resize passes
+            // assign them (root window gets `FRAME_TOP_MARGIN`).
+            top_line: 0,
+            left_col: 0,
+        }
+    }
+
+    /// Character-line top edge. GNU `w->top_line` (`WINDOW_TOP_EDGE_LINE`).
+    pub fn top_line(&self) -> i64 {
+        match self {
+            Window::Leaf { top_line, .. } | Window::Internal { top_line, .. } => *top_line,
+        }
+    }
+
+    /// Set the character-line top edge. GNU assigns `w->top_line` in the resize
+    /// passes / config restore.
+    pub fn set_top_line(&mut self, value: i64) {
+        match self {
+            Window::Leaf { top_line, .. } | Window::Internal { top_line, .. } => *top_line = value,
+        }
+    }
+
+    /// Character-column left edge. GNU `w->left_col` (`WINDOW_LEFT_EDGE_COL`).
+    pub fn left_col(&self) -> i64 {
+        match self {
+            Window::Leaf { left_col, .. } | Window::Internal { left_col, .. } => *left_col,
+        }
+    }
+
+    /// Set the character-column left edge. GNU `w->left_col`.
+    pub fn set_left_col(&mut self, value: i64) {
+        match self {
+            Window::Leaf { left_col, .. } | Window::Internal { left_col, .. } => *left_col = value,
         }
     }
 
@@ -2221,6 +2266,17 @@ impl Frame {
 
     pub fn reposition_minibuffer_below_root(&mut self) {
         let root_bounds = *self.root_window.bounds();
+        // GNU `resize_frame_windows` / `Fwindow_resize_apply_total` place the
+        // minibuffer's character-line edge directly below the root:
+        // `m->top_line = r->top_line + r->total_lines` (window.c:5127/5026).
+        // Because the top margin adds a line to the root's `top_line` but
+        // removes one from its `total_lines` (the menu-bar row has 0 pixel
+        // height in batch), that sum collapses to the root's *pixel* bottom --
+        // the minibuffer sits below the margin and so carries no offset, its
+        // character-line top equalling its pixel row.
+        let root_left_col = self.root_window.left_col();
+        let char_h = self.char_height.max(1.0);
+        let mini_top_line = ((root_bounds.y + root_bounds.height) / char_h).round() as i64;
         if let Some(mini) = self.minibuffer_leaf.as_mut() {
             let mini_h = mini
                 .bounds()
@@ -2233,6 +2289,8 @@ impl Frame {
                 root_bounds.width,
                 mini_h,
             ));
+            mini.set_top_line(mini_top_line);
+            mini.set_left_col(root_left_col);
             mini.invalidate_display_state();
         }
 
@@ -2270,6 +2328,24 @@ impl Frame {
         let char_height = self.char_height.max(1.0).round() as u32;
         self.menu_bar_height = lines.saturating_mul(char_height);
         self.sync_window_area_bounds();
+    }
+
+    /// GNU `FRAME_TOP_MARGIN(f)` (`frame.h:1132`) = `FRAME_MENU_BAR_LINES` +
+    /// `FRAME_TAB_BAR_LINES` (+ tool-bar top lines) in CHARACTER lines. Unlike
+    /// `chrome_top_height` (pixels, gated on `displays_chrome`), this row count
+    /// applies even in batch, so a window's `top_line` sits below the menu/tab
+    /// bar rows while its pixel top may be 0 (the bars have no pixel height
+    /// without a display).
+    pub fn frame_top_margin(&self) -> i64 {
+        let menu = self
+            .known_frame_parameter_int(FrameParam::MenuBarLines)
+            .unwrap_or(0)
+            .max(0);
+        let tab = self
+            .known_frame_parameter_int(FrameParam::TabBarLines)
+            .unwrap_or(0)
+            .max(0);
+        menu + tab
     }
 
     /// Recompute `tool_bar_height` from the `tool-bar-lines` frame parameter.
@@ -3361,6 +3437,11 @@ fn split_window_in_tree(
         let old_id = tree.id();
         let old_bounds = *tree.bounds();
         let old_window = tree.clone();
+        // The new internal (parent) node takes the old window's slot, so it
+        // inherits the old window's character-line position (GNU
+        // `split_window`); the subsequent resize pass refines both children.
+        let old_top_line = old_window.top_line();
+        let old_left_col = old_window.left_col();
 
         if let Window::Leaf {
             buffer_id: buf_id, ..
@@ -3528,6 +3609,8 @@ fn split_window_in_tree(
                 // leaf's pre-split proportional fractions.
                 normal_lines: inherited_normal_lines,
                 normal_cols: inherited_normal_cols,
+                top_line: old_top_line,
+                left_col: old_left_col,
             };
 
             return Some(());
@@ -3642,6 +3725,8 @@ fn split_window_in_tree(
             new_normal: Value::NIL,
             normal_lines: inherited_normal_lines,
             normal_cols: inherited_normal_cols,
+            top_line: old_top_line,
+            left_col: old_left_col,
         };
 
         return Some(());
@@ -4161,6 +4246,14 @@ pub fn window_resize_apply_total(
 
     let bounds = *window.bounds();
     let edge = if horflag { bounds.x } else { bounds.y };
+    // GNU `window_resize_apply_total` maintains the CHARACTER-line edge in
+    // parallel with the pixel edge, starting from this window's own top_line /
+    // left_col (which the caller/parent already assigned).
+    let char_edge_start = if horflag {
+        window.left_col()
+    } else {
+        window.top_line()
+    };
 
     if let Window::Internal {
         direction,
@@ -4169,24 +4262,34 @@ pub fn window_resize_apply_total(
     } = window
     {
         let mut edge = edge;
+        let mut char_edge = char_edge_start;
         let dir = *direction;
         for child in children.iter_mut() {
-            // Position child at current edge.
+            // Position child at current pixel edge.
             let cb = *child.bounds();
             if horflag {
                 child.set_bounds(Rect::new(edge, cb.y, cb.width, cb.height));
+                child.set_left_col(char_edge);
             } else {
                 child.set_bounds(Rect::new(cb.x, edge, cb.width, cb.height));
+                child.set_top_line(char_edge);
             }
 
             // Recurse.
             window_resize_apply_total(child, horflag, char_width, char_height);
 
-            // Accumulate edge.
+            // Accumulate the pixel edge and, in the same axis, the char edge
+            // by the child's total lines/cols (GNU `edge += c->total_lines`).
             let child_bounds = *child.bounds();
             match (dir, horflag) {
-                (SplitDirection::Horizontal, true) => edge += child_bounds.width,
-                (SplitDirection::Vertical, false) => edge += child_bounds.height,
+                (SplitDirection::Horizontal, true) => {
+                    edge += child_bounds.width;
+                    char_edge += (child_bounds.width / char_width).round() as i64;
+                }
+                (SplitDirection::Vertical, false) => {
+                    edge += child_bounds.height;
+                    char_edge += (child_bounds.height / char_height).round() as i64;
+                }
                 _ => {}
             }
         }
