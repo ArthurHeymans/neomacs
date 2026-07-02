@@ -446,6 +446,10 @@ pub(crate) fn leaf_content_hash(ops: &[Op], constants: &[Value], arity: usize) -
     // minor): a future SymId/Value-bearing `Op` variant fails to compile here
     // until it is explicitly classified as canonical-or-bail, so we can never
     // silently key the AOT cache on a session-specific op.
+    // One reusable buffer for the per-op Debug rendering (Gap 4b: a fresh
+    // `format!` String per op dominated the allocator profile of the startup
+    // prepopulate pass, which hashes every loadup body). Identical hash bytes.
+    let mut s = String::new();
     for op in ops {
         match op {
             // R2-E (must-nail #2, the cache-KEY half): CallBuiltinSym's Debug embeds
@@ -469,7 +473,9 @@ pub(crate) fn leaf_content_hash(ops: &[Op], constants: &[Value], arity: usize) -
                 if !op_debug_is_canonical(op) {
                     return None;
                 }
-                let s = format!("{op:?}");
+                use std::fmt::Write as _;
+                s.clear();
+                let _ = write!(s, "{op:?}"); // fmt to a String is infallible.
                 h.update((s.len() as u64).to_le_bytes());
                 h.update(s.as_bytes());
             }
@@ -2402,13 +2408,16 @@ pub(crate) fn try_load_leaf(
         return None;
     }
     let content_hash = leaf_content_hash(ops, constants, arity)?;
+    // Gap 4b fast-reject: resolve the unit (memo/index lookup — cheap) BEFORE the
+    // live-reloc collection (which runs `build_mir` — expensive), so a fn with no
+    // indexed `.so` does not pay a MIR build just to discover the miss.
+    let unit = load_unit(content_hash)?;
     // Audit #A: the leaf's reloc constants are the LIVE function's own constant
     // objects (re-collected here, NOT fresh copies rebuilt from the recipe), so the
     // AOT leaf is `eq`-identical to interp/JIT. Tier-selected to match the emit path
     // (the single source: `live_reloc_for_emit_tier`). `None` → non-recipe-able
     // baseline const → stay JIT-only.
     let live_reloc = live_reloc_for_emit_tier(ops, constants, arity)?;
-    let unit = load_unit(content_hash)?;
     load_leaf_from_unit(&unit, content_hash, arity, &live_reloc)
 }
 
@@ -2529,17 +2538,37 @@ pub(crate) fn load_leaf_from_unit(
     Some(leaf)
 }
 
+/// CHEAP preload-membership probe (Gap 4b fast-reject): does `unit` export the
+/// entry symbol for `content_hash`? A `dlsym` miss is a bloom-filtered hash-table
+/// probe (~µs) and is GROUND TRUTH for membership (the entry symbol embeds the
+/// content hash + ABI_TAG), vs the per-leaf live-reloc collection
+/// (`live_reloc_for_emit_tier` runs `build_mir`) it gates. Only symbol PRESENCE
+/// is checked; the pointer is neither called nor retained.
+fn unit_has_entry(unit: &super::compile::LoadedUnit, content_hash: u128) -> bool {
+    let entry_name = aot_entry_symbol(content_hash);
+    // SAFETY: a presence-only dlsym into a `.so` we emitted; the resolved address
+    // is dropped immediately (the real load path re-resolves + type-checks it).
+    unsafe {
+        unit.library()
+            .get::<*const u8>(entry_name.as_bytes())
+            .is_ok()
+    }
+}
+
 /// Stats from a prepopulate pass (logged so a degraded preload is visible).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PrepopulateStats {
-    /// Required-only fns enumerated + probed (hash + build_mir succeeded).
+    /// Required-only fns enumerated + probed (content hash succeeded; membership
+    /// is checked next — a hashable body always has a collectible reloc set, so
+    /// this is the same count the pre-gate pipeline produced).
     pub candidates: usize,
     /// CompiledLeaves successfully loaded from the preload `.so`.
     pub loaded: usize,
     /// COLD slots actually filled in COMPILED (insert-if-absent — a slot already
     /// holding a hook-compiled JIT leaf is KEPT, so `inserted` ≤ `loaded`).
     pub inserted: usize,
-    /// Probed fns whose entry was not in the preload / failed to load (→ JIT).
+    /// Probed fns whose entry was not in the preload (counted at the CHEAP dlsym
+    /// gate, before any MIR build — Gap 4b) or that failed to load/verify (→ JIT).
     pub missed: usize,
 }
 
@@ -2595,11 +2624,11 @@ pub fn prepopulate_aot_from_preload(
         live_reloc: Vec<Value>,
     }
     let mut preps: Vec<Prep> = Vec::new();
-    for name in ctx.obarray.all_symbols() {
-        let id = crate::emacs_core::intern::intern(name);
-        let Some(func_val) = ctx.obarray.symbol_function_id(id) else {
-            continue;
-        };
+    // Gap 4b fast-reject: iterate the bound function cells STRAIGHT off the
+    // obarray chunks (same interned_global + bound-ness filters as the previous
+    // all_symbols→intern→symbol_function_id walk, minus its per-symbol
+    // name→intern→slot round-trip — which profiling showed dominated this pass).
+    for func_val in ctx.obarray.interned_function_cells() {
         if !func_val.is_bytecode() {
             continue;
         }
@@ -2614,18 +2643,31 @@ pub fn prepopulate_aot_from_preload(
         let Some(content_hash) = leaf_content_hash(&bc.ops, &bc.constants, arity) else {
             continue;
         };
+        stats.candidates += 1;
         // Same D0 gate the emitter used (so the candidate set matches the `.so`).
         // NOTE: we deliberately do NOT call `is_d0_aot_candidate` here — it would
         // run a FULL Cranelift compile + object emit per loadup fn (~hundreds of
         // them) at EVERY startup, defeating the whole point of a prewarmed preload.
-        // `load_leaf_from_unit` below IS the real gate: a non-candidate fn has no
-        // entry in the preload `.so` (the producer skipped it), so its dlsym misses
-        // → None → that fn just JITs. We only need the content hash (to name the
-        // entry) + the live reloc consts (#A eq-identity), both cheap.
+        // The `unit_has_entry` dlsym probe IS the real gate: a non-candidate fn has
+        // no entry in the preload `.so` (the producer skipped it), so its dlsym
+        // misses → that fn just JITs.
+        //
+        // Gap 4b fast-reject (startup regression fix): the CHEAP membership gate
+        // runs FIRST. ~2/3 of loadup fns (~1489 of ~2195 measured) are NOT in the
+        // preload; paying `live_reloc_for_emit_tier` (which runs `build_mir`) per
+        // miss regressed NEOVM_AOT=force startup by ~34ms. Only a membership HIT
+        // pays the reloc collection below.
+        if !unit_has_entry(&unit, content_hash) {
+            stats.missed += 1; // cheap-gate miss (was: load_leaf_from_unit dlsym miss).
+            continue;
+        }
         // Tier-select the reloc collection to MATCH the emit tier (the single source
         // `live_reloc_for_emit_tier`; same choice as try_load_leaf). `None` →
-        // non-recipe-able baseline const → not preloaded; that fn will JIT.
+        // non-recipe-able baseline const — unreachable on a membership hit (a
+        // hashable body is recipe-able, and the producer only emitted recipe-able
+        // leaves); kept as a counted miss for visibility.
         let Some(live_reloc) = live_reloc_for_emit_tier(&bc.ops, &bc.constants, arity) else {
+            stats.missed += 1;
             continue;
         };
         preps.push(Prep {
@@ -2635,7 +2677,6 @@ pub fn prepopulate_aot_from_preload(
             live_reloc,
         });
     }
-    stats.candidates = preps.len();
 
     // Build the leaves (each from the shared preload unit) OUTSIDE the COMPILED
     // borrow, then hand them to the cache for the sync-first-insert-after step.
