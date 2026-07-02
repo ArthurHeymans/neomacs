@@ -118,6 +118,34 @@ fn row_hash_differs_for_different_vertical_offsets() {
 }
 
 #[test]
+fn row_hash_differs_for_materialized_slot_metadata() {
+    let mut row_a = GlyphRow::new(GlyphRowRole::Text);
+    row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0));
+
+    let mut glyph = Glyph::char('a', 0, 0);
+    glyph.bidi_level = 1;
+    glyph.wide = true;
+    let mut row_b = GlyphRow::new(GlyphRowRole::Text);
+    row_b.glyphs[GlyphArea::Text as usize].push(glyph);
+
+    assert_ne!(row_a.compute_hash(), row_b.compute_hash());
+}
+
+#[test]
+fn row_hash_differs_for_row_geometry() {
+    let mut row_a = GlyphRow::new(GlyphRowRole::Text);
+    row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0));
+
+    let mut row_b = GlyphRow::new(GlyphRowRole::Text);
+    row_b.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0));
+    row_b.pixel_y = 8.0;
+    row_b.height_px = 12.0;
+    row_b.ascent_px = 9.0;
+
+    assert_ne!(row_a.compute_hash(), row_b.compute_hash());
+}
+
+#[test]
 fn identical_rows_have_same_hash() {
     let mut row_a = GlyphRow::new(GlyphRowRole::Text);
     row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('x', 5, 100));
@@ -276,6 +304,70 @@ fn materialize_produces_correct_glyph_count_from_grid() {
     assert_eq!(buf.glyphs.len(), 5);
     for g in &buf.glyphs {
         assert!(matches!(g, FrameGlyph::Char { .. }));
+    }
+}
+
+#[test]
+fn materialize_with_cache_matches_uncached_output() {
+    let state = state_with_text("Hello");
+    let uncached = state.materialize();
+    let mut cache = FrameMaterializationCache::new();
+    let cached = state.materialize_with_cache(&mut cache);
+
+    assert_eq!(cache.len(), 1);
+    assert_eq!(cached.glyphs.len(), uncached.glyphs.len());
+    for (cached, uncached) in cached.glyphs.iter().zip(&uncached.glyphs) {
+        assert_eq!(format!("{cached:?}"), format!("{uncached:?}"));
+    }
+}
+
+#[test]
+fn materialize_with_cache_reuses_stable_rows() {
+    let mut cache = FrameMaterializationCache::new();
+
+    let first = state_with_text("Hello");
+    let _ = first.materialize_with_cache(&mut cache);
+    assert_eq!(cache.len(), 1);
+
+    let same = state_with_text("Hello");
+    let _ = same.materialize_with_cache(&mut cache);
+    assert_eq!(cache.len(), 1);
+
+    let changed = state_with_text("Hallo");
+    let _ = changed.materialize_with_cache(&mut cache);
+    assert_eq!(cache.len(), 2);
+}
+
+#[test]
+fn materialize_with_cache_invalidates_on_face_ascent_change() {
+    let mut cache = FrameMaterializationCache::new();
+
+    let mut first = state_with_text("A");
+    first.faces.get_mut(&0).unwrap().font_ascent = 9;
+    let first_buf = first.materialize_with_cache(&mut cache);
+    assert_eq!(cache.len(), 1);
+    match &first_buf.glyphs[0] {
+        FrameGlyph::Char {
+            baseline, ascent, ..
+        } => {
+            assert_eq!(*baseline, 9.0);
+            assert_eq!(*ascent, 9.0);
+        }
+        other => panic!("expected Char, got {other:?}"),
+    }
+
+    let mut second = state_with_text("A");
+    second.faces.get_mut(&0).unwrap().font_ascent = 12;
+    let second_buf = second.materialize_with_cache(&mut cache);
+    assert_eq!(cache.len(), 2);
+    match &second_buf.glyphs[0] {
+        FrameGlyph::Char {
+            baseline, ascent, ..
+        } => {
+            assert_eq!(*baseline, 12.0);
+            assert_eq!(*ascent, 12.0);
+        }
+        other => panic!("expected Char, got {other:?}"),
     }
 }
 

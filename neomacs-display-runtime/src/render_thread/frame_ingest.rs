@@ -284,10 +284,10 @@ impl RenderApp {
 
             // Materialize FrameDisplayState → FrameGlyphBuffer for the
             // existing rendering code.  The layout engine populates
-            // the grid and non-grid items; materialize() converts the
-            // grid into pixel-positioned glyphs and appends non-grid items.
+            // the grid and non-grid items; cached materialization converts
+            // changed rows into pixel-positioned glyphs and reuses stable rows.
             let materialize_started_at = std::time::Instant::now();
-            let mut frame = display_state.materialize();
+            let mut frame = display_state.materialize_with_cache(&mut self.materialization_cache);
             frame.perf_trace.materialize_started_at = Some(materialize_started_at);
             frame.perf_trace.materialize_ns =
                 perf_trace::duration_ns(materialize_started_at.elapsed());

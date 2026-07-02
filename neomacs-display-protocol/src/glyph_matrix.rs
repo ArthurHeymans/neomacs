@@ -345,7 +345,9 @@ impl GlyphRow {
         const FNV_PRIME: u64 = 0x100000001b3;
 
         let mut hash = FNV_OFFSET;
-        for area in &self.glyphs {
+        for (area_idx, area) in self.glyphs.iter().enumerate() {
+            hash ^= area_idx as u64;
+            hash = hash.wrapping_mul(FNV_PRIME);
             for glyph in area {
                 let ch_val = match &glyph.glyph_type {
                     GlyphType::Char { ch } => *ch as u64,
@@ -364,6 +366,12 @@ impl GlyphRow {
                 hash = hash.wrapping_mul(FNV_PRIME);
                 hash ^= glyph.face_id as u64;
                 hash = hash.wrapping_mul(FNV_PRIME);
+                hash ^= glyph.bidi_level as u64;
+                hash = hash.wrapping_mul(FNV_PRIME);
+                hash ^= glyph.wide as u64;
+                hash = hash.wrapping_mul(FNV_PRIME);
+                hash ^= glyph.padding as u64;
+                hash = hash.wrapping_mul(FNV_PRIME);
                 hash ^= glyph.pixel_width.to_bits() as u64;
                 hash = hash.wrapping_mul(FNV_PRIME);
                 hash ^= glyph.pixel_height.to_bits() as u64;
@@ -377,6 +385,14 @@ impl GlyphRow {
         // Right-to-left rows are aligned differently, so a direction flip on
         // otherwise-identical glyphs must still count as a change.
         hash ^= self.reversed_p as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+        hash ^= self.role as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+        hash ^= self.pixel_y.to_bits() as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+        hash ^= self.height_px.to_bits() as u64;
+        hash = hash.wrapping_mul(FNV_PRIME);
+        hash ^= self.ascent_px.to_bits() as u64;
         hash = hash.wrapping_mul(FNV_PRIME);
         hash
     }
@@ -563,6 +579,123 @@ pub struct FrameChromeRow {
     pub pixel_bounds: Rect,
     /// Row contents and row metrics.
     pub row: GlyphRow,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct RectBits {
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+}
+
+impl From<Rect> for RectBits {
+    fn from(rect: Rect) -> Self {
+        Self {
+            x: rect.x.to_bits(),
+            y: rect.y.to_bits(),
+            width: rect.width.to_bits(),
+            height: rect.height.to_bits(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct MaterializedRowKey {
+    frame_id: DisplayFrameId,
+    window_id: DisplayWindowId,
+    row_index: u32,
+    row_hash: u64,
+    role: GlyphRowRole,
+    pixel_bounds: RectBits,
+    row_clip: RectBits,
+    pixel_y: u32,
+    height_px: u32,
+    ascent_px: u32,
+    char_width: u32,
+    char_height: u32,
+    faces_fingerprint: u64,
+}
+
+impl MaterializedRowKey {
+    fn new(
+        frame_id: DisplayFrameId,
+        window_id: DisplayWindowId,
+        row_index: u32,
+        glyph_row: &GlyphRow,
+        pixel_bounds: Rect,
+        row_clip: Rect,
+        char_width: f32,
+        char_height: f32,
+        faces_fingerprint: u64,
+    ) -> Self {
+        let row_hash = if glyph_row.hash != 0 {
+            glyph_row.hash
+        } else {
+            glyph_row.compute_hash()
+        };
+        Self {
+            frame_id,
+            window_id,
+            row_index,
+            row_hash,
+            role: glyph_row.role,
+            pixel_bounds: RectBits::from(pixel_bounds),
+            row_clip: RectBits::from(row_clip),
+            pixel_y: glyph_row.pixel_y.to_bits(),
+            height_px: glyph_row.height_px.to_bits(),
+            ascent_px: glyph_row.ascent_px.to_bits(),
+            char_width: char_width.to_bits(),
+            char_height: char_height.to_bits(),
+            faces_fingerprint,
+        }
+    }
+}
+
+/// Reusable cache for row-level [`FrameDisplayState`] materialization.
+///
+/// Layout publishes immutable glyph-matrix rows with stable hashes. The render
+/// thread can reuse the already materialized `FrameGlyph` list for rows whose
+/// content, geometry, frame metrics, and materialization-relevant face fields
+/// have not changed across snapshots.
+#[derive(Debug)]
+pub struct FrameMaterializationCache {
+    rows: HashMap<MaterializedRowKey, Vec<FrameGlyph>>,
+    max_rows: usize,
+}
+
+impl Default for FrameMaterializationCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl FrameMaterializationCache {
+    pub fn new() -> Self {
+        Self {
+            rows: HashMap::new(),
+            max_rows: 8192,
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.rows.clear();
+    }
+
+    pub fn len(&self) -> usize {
+        self.rows.len()
+    }
+
+    fn get(&self, key: &MaterializedRowKey) -> Option<&[FrameGlyph]> {
+        self.rows.get(key).map(Vec::as_slice)
+    }
+
+    fn insert(&mut self, key: MaterializedRowKey, glyphs: Vec<FrameGlyph>) {
+        if self.rows.len() >= self.max_rows {
+            self.rows.clear();
+        }
+        self.rows.insert(key, glyphs);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1104,6 +1237,25 @@ impl FrameDisplayState {
     /// `FrameGlyph` entries and appends all non-grid items (backgrounds,
     /// borders, cursors, etc.).
     pub fn materialize(&self) -> FrameGlyphBuffer {
+        let mut buf = self.materialize_base();
+        self.for_each_glyph(|g| buf.glyphs.push(g));
+        self.materialize_cursors_into(&mut buf);
+        buf
+    }
+
+    /// Convert this `FrameDisplayState` into a `FrameGlyphBuffer`, reusing
+    /// cached materialized row glyphs when row content and geometry are stable.
+    pub fn materialize_with_cache(
+        &self,
+        cache: &mut FrameMaterializationCache,
+    ) -> FrameGlyphBuffer {
+        let mut buf = self.materialize_base();
+        self.for_each_glyph_with_cache(cache, |g| buf.glyphs.push(g));
+        self.materialize_cursors_into(&mut buf);
+        buf
+    }
+
+    fn materialize_base(&self) -> FrameGlyphBuffer {
         let mut buf = FrameGlyphBuffer::with_size(self.frame_pixel_width, self.frame_pixel_height);
         buf.perf_trace = self.perf_trace.clone();
         buf.char_width = self.char_width;
@@ -1146,11 +1298,10 @@ impl FrameDisplayState {
         buf.transition_hints = self.transition_hints.clone();
         buf.tab_bar = self.tab_bar.clone();
 
-        // --- Materialize all glyphs (backgrounds, grid, borders, images,
-        // videos, xwidgets, scroll bars) in the canonical order ---
-        self.for_each_glyph(|g| buf.glyphs.push(g));
+        buf
+    }
 
-        // --- Materialize cursors ---
+    fn materialize_cursors_into(&self, buf: &mut FrameGlyphBuffer) {
         // These are non-selected (decorative) cursors; CursorItem has no
         // cursor_fg/ascent. The selected window's active cursor is pushed by
         // set_phys_cursor below. These write to `buf.window_cursors`, not
@@ -1175,8 +1326,6 @@ impl FrameDisplayState {
         if let Some(cursor) = self.phys_cursor.clone() {
             buf.set_phys_cursor(cursor);
         }
-
-        buf
     }
 
     /// Visit every `FrameGlyph` this state materializes, in the canonical
@@ -1189,6 +1338,30 @@ impl FrameDisplayState {
     /// scroll bars. It does NOT emit cursors or write any `FrameGlyphBuffer`
     /// metadata.
     pub fn for_each_glyph(&self, mut push: impl FnMut(FrameGlyph)) {
+        self.for_each_glyph_impl(None, &mut push);
+    }
+
+    /// Visit every materialized `FrameGlyph`, reusing cached row glyphs when
+    /// possible while preserving the same output order as [`Self::for_each_glyph`].
+    pub fn for_each_glyph_with_cache(
+        &self,
+        cache: &mut FrameMaterializationCache,
+        mut push: impl FnMut(FrameGlyph),
+    ) {
+        self.for_each_glyph_impl(Some(cache), &mut push);
+    }
+
+    fn for_each_glyph_impl(
+        &self,
+        mut cache: Option<&mut FrameMaterializationCache>,
+        mut push: &mut impl FnMut(FrameGlyph),
+    ) {
+        let faces_fingerprint = if cache.is_some() {
+            self.materialized_faces_fingerprint()
+        } else {
+            0
+        };
+
         // --- Materialize backgrounds ---
         for bg in &self.backgrounds {
             push(FrameGlyph::Background {
@@ -1223,7 +1396,9 @@ impl FrameDisplayState {
 
         // --- Materialize grid content -> pixel-positioned Char/Stretch glyphs ---
         for frame_row in &self.frame_chrome_rows {
-            self.for_each_grid_row_glyph(
+            self.for_each_grid_row_glyph_maybe_cached(
+                &mut cache,
+                faces_fingerprint,
                 DisplayWindowId::new(0),
                 frame_row.row_index,
                 &frame_row.row,
@@ -1251,7 +1426,9 @@ impl FrameDisplayState {
                 } else {
                     self.char_width
                 };
-                self.for_each_grid_row_glyph(
+                self.for_each_grid_row_glyph_maybe_cached(
+                    &mut cache,
+                    faces_fingerprint,
                     DisplayWindowId::new(entry.window_id as i64),
                     row_idx as u32,
                     glyph_row,
@@ -1427,6 +1604,105 @@ impl FrameDisplayState {
                 thumb_color: sb.thumb_color,
             });
         }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn for_each_grid_row_glyph_maybe_cached(
+        &self,
+        cache: &mut Option<&mut FrameMaterializationCache>,
+        faces_fingerprint: u64,
+        window_id: DisplayWindowId,
+        row_index: u32,
+        glyph_row: &GlyphRow,
+        pixel_bounds: Rect,
+        row_clip: Rect,
+        char_w: f32,
+        char_h: f32,
+        push: &mut impl FnMut(FrameGlyph),
+    ) {
+        if !glyph_row.enabled {
+            return;
+        }
+
+        let Some(cache) = cache.as_mut() else {
+            self.for_each_grid_row_glyph(
+                window_id,
+                row_index,
+                glyph_row,
+                pixel_bounds,
+                row_clip,
+                char_w,
+                char_h,
+                push,
+            );
+            return;
+        };
+
+        let key = MaterializedRowKey::new(
+            self.frame_id,
+            window_id,
+            row_index,
+            glyph_row,
+            pixel_bounds,
+            row_clip,
+            char_w,
+            char_h,
+            faces_fingerprint,
+        );
+        if let Some(glyphs) = cache.get(&key) {
+            for glyph in glyphs.iter().cloned() {
+                push(glyph);
+            }
+            return;
+        }
+
+        let mut glyphs = Vec::new();
+        self.for_each_grid_row_glyph(
+            window_id,
+            row_index,
+            glyph_row,
+            pixel_bounds,
+            row_clip,
+            char_w,
+            char_h,
+            &mut |glyph| glyphs.push(glyph),
+        );
+        cache.insert(key, glyphs.clone());
+        for glyph in glyphs {
+            push(glyph);
+        }
+    }
+
+    fn materialized_faces_fingerprint(&self) -> u64 {
+        const FNV_OFFSET: u64 = 0xcbf29ce484222325;
+        const FNV_PRIME: u64 = 0x100000001b3;
+
+        fn mix(hash: &mut u64, value: u64) {
+            *hash ^= value;
+            *hash = hash.wrapping_mul(FNV_PRIME);
+        }
+
+        fn mix_color(hash: &mut u64, color: Color) {
+            mix(hash, color.r.to_bits() as u64);
+            mix(hash, color.g.to_bits() as u64);
+            mix(hash, color.b.to_bits() as u64);
+            mix(hash, color.a.to_bits() as u64);
+        }
+
+        let mut hash = FNV_OFFSET;
+        mix_color(&mut hash, self.background);
+        mix(&mut hash, self.font_pixel_size.to_bits() as u64);
+        mix(&mut hash, self.faces.len() as u64);
+
+        let mut faces: Vec<_> = self.faces.iter().collect();
+        faces.sort_unstable_by_key(|(face_id, _)| **face_id);
+        for (face_id, face) in faces {
+            mix(&mut hash, *face_id as u64);
+            mix_color(&mut hash, face.background);
+            mix(&mut hash, face.font_ascent as u32 as u64);
+        }
+
+        hash
     }
 
     /// Resolve face attributes for grid materialization.

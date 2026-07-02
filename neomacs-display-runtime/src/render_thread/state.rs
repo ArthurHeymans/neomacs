@@ -11,7 +11,7 @@ use crate::core::frame_glyphs::FrameTabBarState;
 pub use crate::thread_comm::MonitorInfo;
 use crate::thread_comm::RenderComms;
 use neomacs_display_protocol::glyph_matrix::{
-    GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
+    FrameMaterializationCache, GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
 };
 use neomacs_display_protocol::{EffectsConfig, ToolBarImageSource, TransitionPolicy};
 use neomacs_renderer_wgpu::{PopupMenuState, TooltipState, WgpuRenderer};
@@ -355,6 +355,7 @@ pub(super) struct RenderApp {
     pub(super) debug_surface_readback_frames_remaining: u32,
     pub(super) lifecycle_flags: RenderLifecycle,
     pub(super) last_present_time: Option<Instant>,
+    pub(super) materialization_cache: FrameMaterializationCache,
 }
 
 pub(super) struct RenderLifecycle {
@@ -455,6 +456,7 @@ impl RenderApp {
             }),
             lifecycle_flags: RenderLifecycle::new(poll_when_idle),
             last_present_time: None,
+            materialization_cache: FrameMaterializationCache::default(),
         }
     }
 }
