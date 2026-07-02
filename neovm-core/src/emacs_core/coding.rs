@@ -1012,6 +1012,17 @@ impl CodingSystemManager {
             return resolve_runtime_name(self, normalized);
         }
 
+        // A coding system whose eol_type is already a concrete value (e.g. the
+        // bare `unix`/`dos`/`mac` EOL codings, or `coding-system-for-read 'unix`)
+        // must NOT have its EOL overridden by detection: GNU only rewrites the
+        // EOL when eol_type is a vector (undecided). Otherwise reading a CRLF
+        // file with an explicit `unix` coding would wrongly strip the CR.
+        if let Some(info) = self.get(normalized) {
+            if info.eol_type.specified_index().is_some() {
+                return canonical_runtime_name(self, normalized);
+            }
+        }
+
         let eol = match eol_suffix {
             "-unix" => 0,
             "-dos" => 1,
