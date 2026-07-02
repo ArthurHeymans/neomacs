@@ -96,18 +96,27 @@ struct TimeMicros {
 
 impl TimeMicros {
     fn now() -> Self {
+        // GNU `current_timespec` has nanosecond resolution; `Ftime_convert`
+        // projects it as USEC = ns / 1000 and PSEC = (ns % 1000) * 1000
+        // (`src/timefns.c` timespec_to_lisp / decode_lisp_time). Keeping the
+        // nanosecond remainder matters observably: timer vectors built by
+        // `run-at-time` carry a nonzero PSEC field in GNU.
         match SystemTime::now().duration_since(UNIX_EPOCH) {
-            Ok(dur) => TimeMicros {
-                secs: dur.as_secs() as i64,
-                usecs: dur.subsec_micros() as i64,
-                psecs: 0,
-            },
+            Ok(dur) => {
+                let nanos = dur.subsec_nanos() as i64;
+                TimeMicros {
+                    secs: dur.as_secs() as i64,
+                    usecs: nanos / 1_000,
+                    psecs: (nanos % 1_000) * 1_000,
+                }
+            }
             Err(e) => {
                 let dur = e.duration();
+                let nanos = dur.subsec_nanos() as i64;
                 TimeMicros {
                     secs: -(dur.as_secs() as i64),
-                    usecs: -(dur.subsec_micros() as i64),
-                    psecs: 0,
+                    usecs: -(nanos / 1_000),
+                    psecs: -((nanos % 1_000) * 1_000),
                 }
             }
         }
