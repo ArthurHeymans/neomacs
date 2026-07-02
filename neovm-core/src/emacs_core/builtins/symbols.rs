@@ -5491,6 +5491,37 @@ pub(crate) fn builtin_dump_emacs_portable(
         .unwrap_or(Value::NIL);
     ctx.set_variable("post-gc-hook", Value::NIL);
     ctx.gc_collect_exact();
+    // A portable dump cannot represent finalizer objects (the pdump writer
+    // arms refuse them; see `pdump/convert.rs`). Pending finalizers are no
+    // obstacle: the collection above doomed them and ran their functions
+    // (GNU likewise runs pending finalizers before dumping), and each run can
+    // drop the last reference to further finalizers, so keep collecting until
+    // the live-finalizer registry stops shrinking.
+    let mut live_finalizers = ctx.tagged_heap.live_finalizer_count();
+    while live_finalizers > 0 {
+        ctx.gc_collect_exact();
+        let remaining = ctx.tagged_heap.live_finalizer_count();
+        if remaining >= live_finalizers {
+            break; // fixpoint: the survivors are genuinely reachable
+        }
+        live_finalizers = remaining;
+    }
+    debug_assert!(
+        !ctx.tagged_heap.has_pending_doomed_finalizers(),
+        "gc_collect_exact drains and runs the doomed-finalizer queue"
+    );
+    if live_finalizers > 0 {
+        // Refuse up front with an ordinary elisp error instead of reaching the
+        // writer's panic backstop. (GNU pdumper instead dumps a reachable
+        // finalizer as an inert object whose function never runs in the child;
+        // neomacs deliberately refuses rather than silently reviving a
+        // finalizer that will never fire.)
+        ctx.set_variable("post-gc-hook", saved_post_gc_hook);
+        return Err(signal(
+            "error",
+            vec![Value::string("Cannot dump Emacs with a finalizer object")],
+        ));
+    }
     ctx.set_variable("command-line-processed", Value::NIL);
     ctx.set_variable("process-environment", Value::NIL);
     let dump_result = crate::emacs_core::pdump::dump_to_file(ctx, dump_path);

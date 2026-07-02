@@ -339,6 +339,102 @@ fn dump_emacs_portable_rejects_other_live_lisp_threads() {
 }
 
 #[test]
+fn dump_emacs_portable_signals_error_for_live_finalizer() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let dir = tempdir().expect("dump tempdir");
+    let dump_path = dir.path().join("portable-finalizer-live-test.pdump");
+
+    // Variable-rooted, so the finalizer survives the builtin's pre-dump
+    // collections and stays in the live registry.
+    eval.eval_str_each("(setq dump-finalizer-keeper (make-finalizer (lambda () nil)))");
+
+    let err = crate::emacs_core::builtins::builtin_dump_emacs_portable(
+        &mut eval,
+        vec![Value::string(dump_path.to_string_lossy().into_owned())],
+    )
+    .expect_err("dump-emacs-portable must refuse a live finalizer with an error, not a panic");
+
+    match err {
+        crate::emacs_core::error::Flow::Signal(sig) => {
+            assert_eq!(sig.symbol_name(), "error");
+            assert_eq!(sig.data.len(), 1);
+            assert_eq!(
+                sig.data[0].as_str_owned().as_deref(),
+                Some("Cannot dump Emacs with a finalizer object"),
+                "unexpected error payload: {:?}",
+                sig.data
+            );
+        }
+        other => panic!("unexpected flow: {other:?}"),
+    }
+    assert!(!dump_path.exists(), "a refused dump must not produce a file");
+}
+
+#[test]
+fn dump_emacs_portable_succeeds_after_finalizer_is_collected() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let dir = tempdir().expect("dump tempdir");
+    let dump_path = dir.path().join("portable-finalizer-collected-test.pdump");
+
+    eval.eval_str_each("(setq dump-finalizer-ran nil)");
+    eval.eval_str_each(
+        "(setq dump-finalizer-keeper (make-finalizer (lambda () (setq dump-finalizer-ran t))))",
+    );
+    // Drop the only reference and force a collection: the finalizer is
+    // doomed, its function runs, and the registry empties — dumping must
+    // then proceed.
+    eval.eval_str_each("(setq dump-finalizer-keeper nil)");
+    eval.gc_collect_exact();
+    assert_eq!(
+        eval.obarray().symbol_value("dump-finalizer-ran"),
+        Some(&Value::T),
+        "the doomed finalizer's function must run before the dump"
+    );
+
+    crate::emacs_core::builtins::builtin_dump_emacs_portable(
+        &mut eval,
+        vec![Value::string(dump_path.to_string_lossy().into_owned())],
+    )
+    .expect("dump-emacs-portable should succeed once the finalizer is collected");
+
+    let loaded = crate::emacs_core::pdump::load_from_dump(&dump_path)
+        .expect("reloading the post-finalizer snapshot should succeed");
+    assert_eq!(
+        loaded.obarray().symbol_value("dump-finalizer-ran"),
+        Some(&Value::T)
+    );
+}
+
+#[test]
+fn dump_emacs_portable_runs_pending_finalizers_before_dumping() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let dir = tempdir().expect("dump tempdir");
+    let dump_path = dir.path().join("portable-finalizer-pending-test.pdump");
+
+    eval.eval_str_each("(setq dump-finalizer-ran nil)");
+    // Unreferenced from the start and NOT collected here: the builtin's own
+    // pre-dump collection must doom it, run its function, and then dump —
+    // GNU likewise runs pending finalizers before dumping.
+    eval.eval_str_each("(progn (make-finalizer (lambda () (setq dump-finalizer-ran t))) nil)");
+
+    crate::emacs_core::builtins::builtin_dump_emacs_portable(
+        &mut eval,
+        vec![Value::string(dump_path.to_string_lossy().into_owned())],
+    )
+    .expect("dump-emacs-portable should collect pending finalizers and succeed");
+
+    assert_eq!(
+        eval.obarray().symbol_value("dump-finalizer-ran"),
+        Some(&Value::T),
+        "the pre-dump collection must run the pending finalizer"
+    );
+    assert!(dump_path.exists(), "the dump file must be written");
+}
+
+#[test]
 fn raw_source_bootstrap_starts_without_extra_function_cells() {
     crate::test_utils::init_test_tracing();
     let eval = Context::new();

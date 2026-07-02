@@ -3756,6 +3756,26 @@ impl TaggedHeap {
         std::mem::take(&mut self.doomed_finalizer_functions)
     }
 
+    /// Number of live finalizer objects still registered. `dump-emacs-portable`
+    /// consults this after its pre-dump collection: the portable dump cannot
+    /// represent finalizer objects (the writer arms refuse them), so a
+    /// non-empty registry means the dump must be refused with an elisp error
+    /// before writing starts. Registry emptiness is a sound precondition for
+    /// the writer: every finalizer the dump walk could reach is live
+    /// (registered at allocation, deregistered only when doomed — at which
+    /// point it is unreachable and swept within the same completed cycle).
+    pub(crate) fn live_finalizer_count(&self) -> usize {
+        self.finalizer_registry.len()
+    }
+
+    /// True when doomed finalizer functions are queued but have not yet run.
+    /// Empty whenever `gc_collect_exact` returns (its cycle-completed block
+    /// drains and runs the whole batch); `dump-emacs-portable` asserts this
+    /// before writing so a dumped image can never silently lose pending runs.
+    pub(crate) fn has_pending_doomed_finalizers(&self) -> bool {
+        !self.doomed_finalizer_functions.is_empty()
+    }
+
     /// Resolve the weak hash tables discovered during this cycle's mark — GNU
     /// `mark_and_sweep_weak_table_contents` (alloc.c) + `sweep_weak_table`
     /// (fns.c). Runs at the stop-the-world `complete_collection` after the main

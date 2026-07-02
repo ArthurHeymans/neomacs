@@ -278,9 +278,13 @@ impl DumpEncoder {
                 panic!("pdump: symbol-with-pos is not yet supported in portable dumps")
             }
             ValueKind::Veclike(VecLikeType::Finalizer) => {
-                // GNU's pdumper refuses too (`dump_vectorlike`: "cannot dump
-                // finalizers"); a live finalizer must never be silently
-                // dropped from — or inertly revived in — an image.
+                // A live finalizer must never be silently dropped from — or
+                // inertly revived in — an image (GNU pdumper does the latter:
+                // `dump_finalizer` writes the object but the child never runs
+                // it). `dump-emacs-portable` pre-scans the heap's finalizer
+                // registry — a superset of anything this walk can reach — and
+                // signals an elisp error before writing, so this arm is an
+                // unreachable backstop for non-builtin dump entry points.
                 panic!("pdump: cannot dump finalizer objects")
             }
             ValueKind::Veclike(VecLikeType::Sqlite) => {
@@ -2581,7 +2585,9 @@ fn dump_heap_object_from_value(encoder: &mut DumpEncoder, value: Value) -> DumpH
             panic!("pdump: xwidget objects are not portable")
         }
         // Explicit (not the `Free` fallback) so a live finalizer can never be
-        // silently dropped from an image — GNU's pdumper refuses as well.
+        // silently dropped from an image. `dump-emacs-portable` pre-scans the
+        // finalizer registry and signals an elisp error before writing, so
+        // this is an unreachable backstop for non-builtin dump entry points.
         ValueKind::Veclike(VecLikeType::Finalizer) => {
             panic!("pdump: cannot dump finalizer objects")
         }
