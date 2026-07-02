@@ -71,7 +71,6 @@ rustc-hash = "2"
 num_enum = "0.7.6"
 strum = { version = "0.28", features = ["derive"] }
 unicode_names2 = "2.0.0"
-unicode-script = "0.5"
 unicode-general-category = "1.1.0"
 stacker = "0.1"
 dns-lookup = "3"

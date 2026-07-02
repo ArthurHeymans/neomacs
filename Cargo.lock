@@ -3101,7 +3101,6 @@ dependencies = [
  "strum",
  "tracing",
  "ttf-parser",
- "unicode-script",
  "x11-dl",
  "yeslogic-fontconfig-sys",
 ]

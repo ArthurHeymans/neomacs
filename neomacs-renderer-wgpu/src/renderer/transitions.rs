@@ -35,48 +35,6 @@ impl WgpuRenderer {
         let w = surface_width as f32 / sf;
         let h = surface_height as f32 / sf;
 
-        // Fullscreen quad with UV mapping
-        let vertices = [
-            GlyphVertex {
-                position: [0.0, 0.0],
-                tex_coords: [0.0, 0.0],
-                color: [1.0, 1.0, 1.0, 1.0],
-            },
-            GlyphVertex {
-                position: [w, 0.0],
-                tex_coords: [1.0, 0.0],
-                color: [1.0, 1.0, 1.0, 1.0],
-            },
-            GlyphVertex {
-                position: [w, h],
-                tex_coords: [1.0, 1.0],
-                color: [1.0, 1.0, 1.0, 1.0],
-            },
-            GlyphVertex {
-                position: [0.0, 0.0],
-                tex_coords: [0.0, 0.0],
-                color: [1.0, 1.0, 1.0, 1.0],
-            },
-            GlyphVertex {
-                position: [w, h],
-                tex_coords: [1.0, 1.0],
-                color: [1.0, 1.0, 1.0, 1.0],
-            },
-            GlyphVertex {
-                position: [0.0, h],
-                tex_coords: [0.0, 1.0],
-                color: [1.0, 1.0, 1.0, 1.0],
-            },
-        ];
-
-        let _vertex_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Crossfade Vertex Buffer"),
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
