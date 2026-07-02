@@ -5397,8 +5397,20 @@ impl super::eval::Context {
                     ProcessOutputRead::Eof if is_network => {
                         outcome.record_activity(is_target);
 
+                        // GNU: EOF on a running network connection sets
+                        // `(exit . 256)` (process.c:6090, "Preserve status of
+                        // processes already terminated" branch) -- exit code 0
+                        // means "deleted\n", non-zero "connection broken by
+                        // remote peer\n" (`status_message`). Derive the
+                        // sentinel text from the status so the two can never
+                        // disagree.
                         if let Some(proc) = self.processes.get_mut(pid) {
-                            proc.status = process_status_exit_value(0);
+                            if process_status_is_run(&proc.status)
+                                || ProcessStatusSymbol::from_status_value(proc.status)
+                                    == Some(ProcessStatusSymbol::Open)
+                            {
+                                proc.status = process_status_exit_value(256);
+                            }
                         }
                         self.processes.deactivate_network_process_io(pid);
                         let sentinel = self
@@ -5406,11 +5418,18 @@ impl super::eval::Context {
                             .get(pid)
                             .map(|p| p.sentinel)
                             .unwrap_or(Value::NIL);
-                        self.run_process_sentinel_callback(
-                            pid,
-                            sentinel,
-                            "connection broken by remote peer\n",
-                        )?;
+                        let msg = self
+                            .processes
+                            .get(pid)
+                            .map(gnu_process_status_message_for_process)
+                            .unwrap_or_else(|| "connection broken by remote peer\n".to_string());
+                        self.run_process_sentinel_callback(pid, sentinel, &msg)?;
+                        // GNU `status_notify`: a terminated network process is
+                        // removed from the process list when
+                        // `delete-exited-processes' is non-nil.
+                        if self.delete_exited_processes_enabled() {
+                            self.processes.reap_exited_process(pid);
+                        }
                         handled_terminal_eof = true;
                         break;
                     }
@@ -9989,14 +10008,11 @@ pub(crate) fn builtin_make_network_process(
                     )?;
                 }
                 eval.processes.register_socket_fd(id).ok();
-                let sentinel = eval
-                    .processes
-                    .get(id)
-                    .map(|p| p.sentinel)
-                    .unwrap_or(Value::NIL);
-                if !stop {
-                    eval.run_process_sentinel_callback(id, sentinel, "open\n")?;
-                }
+                // GNU fires NO sentinel for a synchronous (non-:nowait)
+                // connect: `connect_network_socket` (process.c) sets the
+                // status without `exec_sentinel`; only the deferred `:nowait`
+                // completion path in `wait_reading_process_output` delivers
+                // "open\n" / "failed with code N\n".
                 return Ok(Value::make_process(id));
             }
             #[cfg(unix)]
@@ -11401,15 +11417,8 @@ pub(crate) fn builtin_make_network_process(
 
     eval.processes.register_socket_fd(id).ok();
 
-    let sentinel = eval
-        .processes
-        .get(id)
-        .map(|p| p.sentinel)
-        .unwrap_or(Value::NIL);
-    if !stop {
-        eval.run_process_sentinel_callback(id, sentinel, "open\n")?;
-    }
-
+    // GNU fires NO sentinel for a synchronous (non-:nowait) connect -- see the
+    // TCP branch above.
     Ok(Value::make_process(id))
 }
 

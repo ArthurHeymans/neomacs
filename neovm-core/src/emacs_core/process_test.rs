@@ -4610,7 +4610,7 @@ fn accept_process_output_preserves_process_callback_runtime_state() {
 }
 
 #[test]
-fn make_network_process_open_sentinel_uses_shared_callback_runtime_state() {
+fn network_delete_process_sentinel_uses_shared_callback_runtime_state() {
     crate::test_utils::init_test_tracing();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind test listener");
     let port = listener.local_addr().expect("listener local addr").port();
@@ -4642,29 +4642,34 @@ fn make_network_process_open_sentinel_uses_shared_callback_runtime_state() {
                (string-match "yz" "xyz")
                (setq apio-net-before-buffer (current-buffer)
                      apio-net-before-match (match-data))
-               (let ((p (make-network-process :name "apio-net-open"
-                                               :host "127.0.0.1"
-                                               :service {port}
-                                               :sentinel 'apio-net-open-sentinel)))
-                 (unwind-protect
-                     (list (car apio-net-open-state)
-                           (nth 1 apio-net-open-state)
-                           (nth 2 apio-net-open-state)
-                           (nth 3 apio-net-open-state)
-                           (nth 4 apio-net-open-state)
-                           (eq (current-buffer) apio-net-before-buffer)
-                           (equal (match-data) apio-net-before-match)
-                           deactivate-mark
-                           last-nonmenu-event)
-                   (condition-case nil
-                       (delete-process p)
-                     (error nil))))))"#,
+               (let* ((p (make-network-process :name "apio-net-open"
+                                                :host "127.0.0.1"
+                                                :service {port}
+                                                :sentinel 'apio-net-open-sentinel))
+                      ;; GNU fires NO sentinel for a synchronous (non-:nowait)
+                      ;; connect (`connect_network_socket` never calls
+                      ;; `exec_sentinel`), so the state must still be nil here.
+                      (state-after-create apio-net-open-state))
+                 ;; `delete-process` on a network connection runs the sentinel
+                 ;; synchronously with "deleted\n" (Fdelete_process ->
+                 ;; status_notify), under the callback runtime-state rules.
+                 (delete-process p)
+                 (list state-after-create
+                       (car apio-net-open-state)
+                       (nth 1 apio-net-open-state)
+                       (nth 2 apio-net-open-state)
+                       (nth 3 apio-net-open-state)
+                       (nth 4 apio-net-open-state)
+                       (eq (current-buffer) apio-net-before-buffer)
+                       (equal (match-data) apio-net-before-match)
+                       deactivate-mark
+                       last-nonmenu-event))))"#,
         ),
     );
     let _ = accept_thread.join();
     assert_eq!(
         result,
-        r#"OK ("open
+        r#"OK (nil "deleted
 " t t nil t t t nil before)"#
     );
 }
