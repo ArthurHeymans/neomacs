@@ -162,6 +162,8 @@ pub struct WgpuRenderer {
     /// Whether any fancy (animated) border styles are present in the current frame
     pub has_animated_borders: bool,
     pub glyph_stats: GlyphRenderStats,
+    pub(super) rect_vertex_arena: FrameVertexArena<RectVertex>,
+    pub(super) rounded_rect_vertex_arena: FrameVertexArena<RoundedRectVertex>,
     pub(super) glyph_vertex_arena: FrameVertexArena<GlyphVertex>,
     pub(super) subpixel_vertex_arena: FrameVertexArena<SubpixelGlyphVertex>,
     pub(super) image_vertex_arena: FrameVertexArena<GlyphVertex>,
@@ -1608,6 +1610,8 @@ impl WgpuRenderer {
             render_start_time: std::time::Instant::now(),
             has_animated_borders: false,
             glyph_stats: GlyphRenderStats::new(),
+            rect_vertex_arena: FrameVertexArena::new("Rect Vertex Arena"),
+            rounded_rect_vertex_arena: FrameVertexArena::new("Rounded Rect Vertex Arena"),
             glyph_vertex_arena: FrameVertexArena::new("Glyph Vertex Arena"),
             subpixel_vertex_arena: FrameVertexArena::new("Subpixel Glyph Vertex Arena"),
             image_vertex_arena: FrameVertexArena::new("Image Vertex Arena"),

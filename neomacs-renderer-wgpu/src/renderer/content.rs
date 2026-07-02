@@ -112,6 +112,8 @@ impl WgpuRenderer {
         animated_cursor: Option<AnimatedCursor>,
         clip_corner_radius: f32,
     ) {
+        self.rect_vertex_arena.begin_frame();
+        self.rounded_rect_vertex_arena.begin_frame();
         self.glyph_vertex_arena.begin_frame();
         self.subpixel_vertex_arena.begin_frame();
 
@@ -1048,72 +1050,66 @@ impl WgpuRenderer {
 
             // --- Draw backgrounds ---
             if !bg_vertices.is_empty() {
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content BG Buffer"),
-                        contents: bytemuck::cast_slice(&bg_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+                let bg_upload =
+                    self.rect_vertex_arena
+                        .upload(&self.device, &self.queue, &bg_vertices);
                 pass.set_pipeline(rect_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
-                pass.draw(0..bg_vertices.len() as u32, 0..1);
+                if let Some(ref upload) = bg_upload {
+                    pass.set_vertex_buffer(0, self.rect_vertex_arena.slice(upload));
+                    pass.draw(0..bg_vertices.len() as u32, 0..1);
+                }
             }
 
             // --- Draw fringe bitmaps (own column, above backgrounds, below
             // text — fringes never overlap the text area). ---
             if !fringe_vertices.is_empty() {
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content Fringe Buffer"),
-                        contents: bytemuck::cast_slice(&fringe_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+                let fringe_upload =
+                    self.rect_vertex_arena
+                        .upload(&self.device, &self.queue, &fringe_vertices);
                 pass.set_pipeline(rect_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
-                pass.draw(0..fringe_vertices.len() as u32, 0..1);
+                if let Some(ref upload) = fringe_upload {
+                    pass.set_vertex_buffer(0, self.rect_vertex_arena.slice(upload));
+                    pass.draw(0..fringe_vertices.len() as u32, 0..1);
+                }
             }
 
             // Filled-box cursor backgrounds must be below text so the covered
             // glyph can be drawn with inverse foreground on top.
             if !cursor_bg_vertices.is_empty() {
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content Cursor BG Buffer"),
-                        contents: bytemuck::cast_slice(&cursor_bg_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+                let cursor_bg_upload =
+                    self.rect_vertex_arena
+                        .upload(&self.device, &self.queue, &cursor_bg_vertices);
                 pass.set_pipeline(rect_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
-                pass.draw(0..cursor_bg_vertices.len() as u32, 0..1);
+                if let Some(ref upload) = cursor_bg_upload {
+                    pass.set_vertex_buffer(0, self.rect_vertex_arena.slice(upload));
+                    pass.draw(0..cursor_bg_vertices.len() as u32, 0..1);
+                }
             }
 
             // --- Draw rounded box fills ---
             if !rounded_fill_vertices.is_empty() {
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content Box Fill Buffer"),
-                        contents: bytemuck::cast_slice(&rounded_fill_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+                let rounded_fill_upload = self.rounded_rect_vertex_arena.upload(
+                    &self.device,
+                    &self.queue,
+                    &rounded_fill_vertices,
+                );
                 pass.set_pipeline(rounded_rect_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
-                pass.draw(0..rounded_fill_vertices.len() as u32, 0..1);
+                if let Some(ref upload) = rounded_fill_upload {
+                    pass.set_vertex_buffer(0, self.rounded_rect_vertex_arena.slice(upload));
+                    pass.draw(0..rounded_fill_vertices.len() as u32, 0..1);
+                }
             }
 
             // --- Draw mask text glyphs ---
             if !mask_data.is_empty() {
-                let all_vertices: Vec<GlyphVertex> = mask_data
-                    .iter()
-                    .flat_map(|(_, verts)| verts.iter().copied())
-                    .collect();
+                let mut all_vertices = Vec::with_capacity(mask_data.len() * 6);
+                for (_, verts) in &mask_data {
+                    all_vertices.extend_from_slice(verts);
+                }
 
                 let mask_upload =
                     self.glyph_vertex_arena
@@ -1153,10 +1149,10 @@ impl WgpuRenderer {
 
             // --- Draw subpixel LCD text glyphs ---
             if !subpixel_data.is_empty() {
-                let all_vertices: Vec<SubpixelGlyphVertex> = subpixel_data
-                    .iter()
-                    .flat_map(|(_, verts)| verts.iter().copied())
-                    .collect();
+                let mut all_vertices = Vec::with_capacity(subpixel_data.len() * 6);
+                for (_, verts) in &subpixel_data {
+                    all_vertices.extend_from_slice(verts);
+                }
 
                 let subpixel_upload =
                     self.subpixel_vertex_arena
@@ -1196,10 +1192,10 @@ impl WgpuRenderer {
 
             // --- Draw color text glyphs (emoji) ---
             if !color_data.is_empty() {
-                let all_vertices: Vec<GlyphVertex> = color_data
-                    .iter()
-                    .flat_map(|(_, verts)| verts.iter().copied())
-                    .collect();
+                let mut all_vertices = Vec::with_capacity(color_data.len() * 6);
+                for (_, verts) in &color_data {
+                    all_vertices.extend_from_slice(verts);
+                }
 
                 let color_upload =
                     self.glyph_vertex_arena
@@ -1239,47 +1235,45 @@ impl WgpuRenderer {
 
             // --- Draw text decorations ---
             if !decoration_vertices.is_empty() {
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content Decoration Buffer"),
-                        contents: bytemuck::cast_slice(&decoration_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+                let decoration_upload =
+                    self.rect_vertex_arena
+                        .upload(&self.device, &self.queue, &decoration_vertices);
                 pass.set_pipeline(rect_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
-                pass.draw(0..decoration_vertices.len() as u32, 0..1);
+                if let Some(ref upload) = decoration_upload {
+                    pass.set_vertex_buffer(0, self.rect_vertex_arena.slice(upload));
+                    pass.draw(0..decoration_vertices.len() as u32, 0..1);
+                }
             }
 
             // --- Draw sharp box borders ---
             if !sharp_border_vertices.is_empty() {
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content Sharp Box Border Buffer"),
-                        contents: bytemuck::cast_slice(&sharp_border_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+                let sharp_border_upload = self.rect_vertex_arena.upload(
+                    &self.device,
+                    &self.queue,
+                    &sharp_border_vertices,
+                );
                 pass.set_pipeline(rect_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
-                pass.draw(0..sharp_border_vertices.len() as u32, 0..1);
+                if let Some(ref upload) = sharp_border_upload {
+                    pass.set_vertex_buffer(0, self.rect_vertex_arena.slice(upload));
+                    pass.draw(0..sharp_border_vertices.len() as u32, 0..1);
+                }
             }
 
             // --- Draw rounded box borders ---
             if !rounded_border_vertices.is_empty() {
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content Rounded Box Border Buffer"),
-                        contents: bytemuck::cast_slice(&rounded_border_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+                let rounded_border_upload = self.rounded_rect_vertex_arena.upload(
+                    &self.device,
+                    &self.queue,
+                    &rounded_border_vertices,
+                );
                 pass.set_pipeline(rounded_rect_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
-                pass.draw(0..rounded_border_vertices.len() as u32, 0..1);
+                if let Some(ref upload) = rounded_border_upload {
+                    pass.set_vertex_buffer(0, self.rounded_rect_vertex_arena.slice(upload));
+                    pass.draw(0..rounded_border_vertices.len() as u32, 0..1);
+                }
             }
 
             // --- Draw inline images ---
