@@ -3064,6 +3064,8 @@ dependencies = [
  "neomacs-layout-engine",
  "neovm-core",
  "pkg-config",
+ "serde",
+ "serde_json",
  "stacker",
  "tempfile",
  "tracing",

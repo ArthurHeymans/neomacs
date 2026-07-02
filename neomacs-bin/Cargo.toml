@@ -46,6 +46,8 @@ neomacs-display-protocol.workspace = true
 neomacs-display-runtime = { workspace = true, default-features = false }
 neomacs-layout-engine.workspace = true
 neovm-core.workspace = true
+serde.workspace = true
+serde_json = "1"
 mimalloc = { version = "0.1", optional = true, default-features = false }
 
 # Utilities

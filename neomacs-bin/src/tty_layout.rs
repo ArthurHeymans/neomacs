@@ -45,6 +45,92 @@ pub fn layout_frame_display_state(
     })
 }
 
+/// Lay out the frames a snapshot request covers — freshest state, on
+/// demand — stamping parent/origin/z-order exactly like `publish_gui_frame`
+/// so the result is the composited screen. Shared by the TTY and GUI
+/// frontends (both use the same thread-local `LAYOUT_ENGINE`).
+pub fn collect_snapshot_states(
+    evaluator: &mut Context,
+    target: &neovm_core::emacs_core::xdisp::SnapshotTarget,
+) -> Result<Vec<FrameDisplayState>, String> {
+    use neovm_core::emacs_core::xdisp::SnapshotTarget;
+
+    let selected =
+        current_layout_frame_id(evaluator).ok_or_else(|| "no selected frame".to_string())?;
+    let tree = evaluator
+        .frame_manager()
+        .render_frame_tree(selected, true)
+        .ok_or_else(|| "no render frame tree for the selected frame".to_string())?;
+
+    let mut states = Vec::new();
+    for node in tree.frames_bottom_to_top {
+        let keep = match target {
+            SnapshotTarget::All => true,
+            SnapshotTarget::Selected => node.frame_id == selected,
+            SnapshotTarget::Frame(id) => node.frame_id.0 == *id,
+        };
+        if !keep {
+            continue;
+        }
+        let Some(mut state) = layout_frame_display_state(evaluator, node.frame_id) else {
+            continue;
+        };
+        state.parent_id = DisplayFrameId::new(node.parent_id.map_or(0, |id| id.0));
+        state.parent_x = node.origin_in_root_x;
+        state.parent_y = node.origin_in_root_y;
+        state.z_order = node.z_order;
+        states.push(state);
+    }
+
+    // A live frame outside the selected frame's tree (another top-level
+    // frame): lay it out directly with root stamps.
+    if states.is_empty()
+        && let SnapshotTarget::Frame(id) = target
+        && let Some(state) = layout_frame_display_state(evaluator, FrameId(*id))
+    {
+        states.push(state);
+    }
+
+    if states.is_empty() {
+        return Err("frame snapshot: no frame produced display state".to_string());
+    }
+    Ok(states)
+}
+
+/// JSON envelope of a snapshot: `{"frames":[FrameDisplayState...]}` — the
+/// array form is uniform for one frame or many, and the wrapper leaves room
+/// for future metadata without a schema break.
+#[derive(serde::Serialize)]
+struct SnapshotDoc<'a> {
+    frames: &'a [FrameDisplayState],
+}
+
+/// Install the `neomacs--frame-snapshot` hook (`Context::frame_snapshot_fn`).
+///
+/// Called by both frontends right where they install `redisplay_fn`; batch
+/// mode installs nothing, so the subr signals "no display attached" there.
+pub fn install_frame_snapshot_fn(evaluator: &mut Context) {
+    use neovm_core::emacs_core::xdisp::SnapshotFormat;
+
+    evaluator.frame_snapshot_fn = Some(Box::new(|eval, request| {
+        let states = collect_snapshot_states(eval, &request.target)?;
+        Ok(match request.format {
+            SnapshotFormat::Json => serde_json::to_string(&SnapshotDoc { frames: &states })
+                .map_err(|error| format!("frame snapshot JSON serialization failed: {error}"))?,
+            SnapshotFormat::Text => states
+                .iter()
+                .map(|state| state.render_text())
+                .collect::<Vec<_>>()
+                .join("\n"),
+            SnapshotFormat::TextFaces => states
+                .iter()
+                .map(|state| state.render_text_faces())
+                .collect::<Vec<_>>()
+                .join("\n"),
+        })
+    }));
+}
+
 fn frame_origin_in_root(evaluator: &Context, frame_id: FrameId) -> (f32, f32) {
     evaluator
         .frame_manager()
@@ -178,4 +264,5 @@ pub fn install_tty_redisplay_callback_with_popup_redraw(
             run_tty_rif_redisplay(&mut tty_rif, &root, &children);
         }
     }));
+    install_frame_snapshot_fn(evaluator);
 }

@@ -3656,3 +3656,63 @@ fn gnu_startup_internal_set_lisp_face_attribute_without_getter_returns_on_live_g
         "ok"
     );
 }
+
+/// End-to-end frame snapshot: bootstrap a GUI evaluator, install the
+/// production hook, and drive it through the real subr. The JSON must be
+/// the serde form of FrameDisplayState ({"frames":[...]}) and the text form
+/// must carry the frame header and the scratch buffer name.
+#[test]
+fn frame_snapshot_subr_end_to_end_json_and_text() {
+    let mut eval = create_bootstrap_evaluator_cached_with_features(&["neomacs"])
+        .expect("cached bootstrap evaluator");
+    let _bootstrap = bootstrap_buffers(&mut eval, 960, 640, gui_display());
+    let frame_id = eval
+        .frame_manager()
+        .selected_frame()
+        .expect("selected frame after bootstrap")
+        .id;
+    configure_gnu_startup_state(&mut eval, frame_id, &gui_startup());
+    LAYOUT_ENGINE.with(|engine| {
+        engine.borrow_mut().enable_cosmic_metrics();
+    });
+    super::tty_layout::install_frame_snapshot_fn(&mut eval);
+
+    let json_value = eval
+        .eval_str("(neomacs--frame-snapshot t 'json)")
+        .expect("all-frames JSON snapshot");
+    let json = json_value.as_str_owned().expect("string result");
+    let doc: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+    let frames = doc["frames"].as_array().expect("frames array");
+    assert!(
+        !frames.is_empty(),
+        "at least the selected frame: {json:.200}"
+    );
+    let window_infos = frames[0]["window_infos"]
+        .as_array()
+        .expect("window_infos serialized");
+    assert!(
+        window_infos
+            .iter()
+            .any(|info| info["buffer_name"].as_str().is_some_and(|n| !n.is_empty())),
+        "window_infos carry buffer names: {window_infos:?}"
+    );
+
+    let text_value = eval
+        .eval_str("(neomacs--frame-snapshot)")
+        .expect("selected-frame text snapshot");
+    let text = text_value.as_str_owned().expect("string result");
+    assert!(text.starts_with("=== frame "), "frame header:\n{text}");
+    assert!(
+        text.contains("*scratch*"),
+        "scratch window visible:\n{text}"
+    );
+
+    let faces_value = eval
+        .eval_str("(neomacs--frame-snapshot nil 'text-faces)")
+        .expect("face-annotated snapshot");
+    let faces_text = faces_value.as_str_owned().expect("string result");
+    assert!(
+        faces_text.contains(": run ") && faces_text.contains("fg=#"),
+        "face runs with colors:\n{faces_text:.400}"
+    );
+}
