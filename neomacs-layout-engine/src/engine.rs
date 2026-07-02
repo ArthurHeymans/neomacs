@@ -1406,6 +1406,9 @@ impl LayoutEngine {
         scroll_replay: Option<ScrollReplay>,
         is_edit: bool,
     ) {
+        let _layout_window_timer = neomacs_display_protocol::perf_trace::phase_timer(
+            neomacs_display_protocol::perf_trace::DisplayPhase::LayoutWindow,
+        );
         let window_id = neovm_core::window::WindowId(params.window_id as u64);
         let scroll_dvpos = scroll_replay.as_ref().map(|replay| replay.dvpos).unwrap_or(0.0);
         // GNU `with_echo_area_buffer` (xdisp.c:12904): an inactive mini-window

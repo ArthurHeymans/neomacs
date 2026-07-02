@@ -15,6 +15,7 @@ pub type WakeupFd = RawFd;
 pub type WakeupFd = RawHandle;
 
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
+use neomacs_display_protocol::perf_trace::{self, DisplayInputTrace};
 pub use neomacs_display_protocol::{
     CursorEffectCommand, EffectsConfig, MenuBarItem, PopupMenuItem, TabBarItem, ToolBarImageSource,
     ToolBarItem, ToolBarItemType, TransitionPolicy,
@@ -37,6 +38,11 @@ pub struct MonitorInfo {
 /// Input event from render thread to Emacs
 #[derive(Debug, Clone)]
 pub enum InputEvent {
+    /// Env-gated wrapper carrying display performance trace metadata.
+    Traced {
+        trace: DisplayInputTrace,
+        event: Box<InputEvent>,
+    },
     Key {
         keysym: u32,
         modifiers: u32,
@@ -936,6 +942,9 @@ pub struct RenderComms {
 
 impl RenderComms {
     fn is_lossy_input_event(event: &InputEvent) -> bool {
+        if let InputEvent::Traced { event, .. } = event {
+            return Self::is_lossy_input_event(event);
+        }
         matches!(
             event,
             InputEvent::MouseMove { .. } | InputEvent::MenuSelection { index: -1 }
@@ -952,6 +961,9 @@ impl RenderComms {
     }
 
     fn should_log_delivery(event: &InputEvent) -> bool {
+        if let InputEvent::Traced { event, .. } = event {
+            return Self::should_log_delivery(event);
+        }
         matches!(
             event,
             InputEvent::WindowResize { .. }
@@ -962,7 +974,11 @@ impl RenderComms {
     }
 
     fn event_name(event: &InputEvent) -> &'static str {
+        if let InputEvent::Traced { event, .. } = event {
+            return Self::event_name(event);
+        }
         match event {
+            InputEvent::Traced { .. } => unreachable!("traced events are unwrapped above"),
             InputEvent::Key { .. } => "key",
             InputEvent::MouseButton { .. } => "mouse-button",
             InputEvent::MouseMove { .. } => "mouse-move",
@@ -996,6 +1012,13 @@ impl RenderComms {
     pub fn send_input(&self, event: InputEvent) {
         let log_delivery = Self::should_log_delivery(&event);
         let event_name = Self::event_name(&event);
+        let event = match perf_trace::begin_input_trace(event_name) {
+            Some(trace) => InputEvent::Traced {
+                trace,
+                event: Box::new(event),
+            },
+            None => event,
+        };
         if Self::is_lossy_input_event(&event) {
             match self.input_tx.try_send(event) {
                 Ok(()) => {

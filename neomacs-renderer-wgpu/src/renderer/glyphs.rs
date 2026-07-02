@@ -17,6 +17,7 @@ use neomacs_display_protocol::frame_glyphs::{
     WindowCursor,
 };
 use neomacs_display_protocol::gradient::{ColorStop, Gradient};
+use neomacs_display_protocol::perf_trace::{self, DisplayPhase};
 use neomacs_display_protocol::types::{AnimatedCursor, Color, DisplayWindowId, Rect};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::{
@@ -1041,6 +1042,7 @@ impl WgpuRenderer {
         mouse_pos: (f32, f32),
         background_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
     ) {
+        let _glyph_render_timer = perf_trace::phase_timer(DisplayPhase::GlyphRender);
         self.glyph_vertex_arena.begin_frame();
         self.subpixel_vertex_arena.begin_frame();
 
@@ -2005,6 +2007,18 @@ impl WgpuRenderer {
         // Render pass - Clear with frame background color since we rebuild
         // the entire frame from current_matrix each time (no incremental updates).
         let bg = &frame_glyphs.background;
+        let timestamp_query_set = self
+            .gpu_timestamp_profiler
+            .as_ref()
+            .map(|profiler| profiler.query_set.clone());
+        let timestamp_writes =
+            timestamp_query_set
+                .as_ref()
+                .map(|query_set| wgpu::RenderPassTimestampWrites {
+                    query_set,
+                    beginning_of_pass_write_index: Some(0),
+                    end_of_pass_write_index: Some(1),
+                });
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Frame Glyphs Pass"),
@@ -2024,7 +2038,7 @@ impl WgpuRenderer {
                     depth_slice: None,
                 })],
                 depth_stencil_attachment: None,
-                timestamp_writes: None,
+                timestamp_writes,
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -3757,6 +3771,10 @@ impl WgpuRenderer {
             self.draw_post_content_effects(&mut render_pass, &ctx, faces);
         }
 
+        if let Some(profiler) = &self.gpu_timestamp_profiler {
+            profiler.resolve_into_readback(&mut encoder);
+        }
+
         stats.unique_single_glyph_keys = seen_single_keys.len();
         stats.unique_composed_glyph_keys = seen_composed_keys.len();
         stats.cache_hits = glyph_atlas.cache_hits_this_frame;
@@ -3765,7 +3783,20 @@ impl WgpuRenderer {
         self.glyph_stats = stats.clone();
         stats.log_if_enabled();
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        let submission_index = {
+            let _glyph_submit_timer = perf_trace::phase_timer(DisplayPhase::GlyphSubmit);
+            self.queue.submit(std::iter::once(encoder.finish()))
+        };
+        if let Some(profiler) = &self.gpu_timestamp_profiler
+            && let Some(ms) = profiler.read_blocking_ms(&self.device, submission_index)
+        {
+            perf_trace::record_gpu_main_glyph_pass_ms(ms);
+            tracing::trace!(
+                target: "neomacs_display_trace",
+                gpu_main_glyph_pass_ms = ms,
+                "main glyph pass gpu timestamp"
+            );
+        }
     }
 
     fn refresh_frame_animation_state(&mut self, frame_glyphs: &FrameGlyphBuffer) {

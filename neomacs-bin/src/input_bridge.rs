@@ -33,6 +33,7 @@ pub(crate) fn convert_monitor_infos(monitors: &[DisplayMonitorInfo]) -> Vec<Neom
 /// releases, modifier-only keys).
 pub fn convert_display_event(event: &DisplayEvent) -> Option<KbInputEvent> {
     match event {
+        DisplayEvent::Traced { event, .. } => convert_display_event(event),
         DisplayEvent::Key {
             keysym,
             modifiers,

@@ -1067,13 +1067,18 @@ pub(crate) fn eval_status_line_format_value(
     // `%p`/`%l` reflect the final window-start). The reserved/reported height
     // is the *measured* row height, not a second eval.
     record_mode_line_eval(format_symbol);
-    let rendered = neovm_core::emacs_core::xdisp::format_mode_line_for_display(
-        evaluator,
-        format_value,
-        Value::make_window(window_id as u64),
-        Value::make_buffer(BufferId(buffer_id)),
-        target_cols,
-    );
+    let rendered = {
+        let _status_line_eval_timer = neomacs_display_protocol::perf_trace::phase_timer(
+            neomacs_display_protocol::perf_trace::DisplayPhase::StatusLineEval,
+        );
+        neovm_core::emacs_core::xdisp::format_mode_line_for_display(
+            evaluator,
+            format_value,
+            Value::make_window(window_id as u64),
+            Value::make_buffer(BufferId(buffer_id)),
+            target_cols,
+        )
+    };
     if rendered
         .as_runtime_string_owned()
         .is_some_and(|s| !s.is_empty())

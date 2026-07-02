@@ -4,6 +4,7 @@ use super::{
 use crate::render_thread::frame_windows::{FrameLifecycle, GuiFrameNativeWindowState};
 use crate::render_thread::state::RenderGpuContext;
 use crate::thread_comm::{InputEvent, RenderComms};
+use neomacs_display_protocol::perf_trace;
 use neomacs_renderer_wgpu::WgpuRenderer;
 use std::sync::Arc;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -62,10 +63,20 @@ impl RenderApp {
             adapter_info.backend
         );
 
+        let mut required_features = wgpu::Features::empty();
+        if perf_trace::enabled() {
+            if adapter.features().contains(wgpu::Features::TIMESTAMP_QUERY) {
+                required_features |= wgpu::Features::TIMESTAMP_QUERY;
+                tracing::info!("display trace: enabling wgpu timestamp queries");
+            } else {
+                tracing::warn!("display trace: adapter does not support wgpu timestamp queries");
+            }
+        }
+
         let (device, queue) =
             match pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
                 label: Some("Neomacs Render Thread Device"),
-                required_features: wgpu::Features::empty(),
+                required_features,
                 required_limits: wgpu::Limits::default(),
                 memory_hints: Default::default(),
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),

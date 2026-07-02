@@ -32,3 +32,10 @@ gstreamer-app = { workspace = true, optional = true }
 gstreamer-allocators = { workspace = true, optional = true }
 neomacs-display-protocol.workspace = true
 neomacs-layout-engine.workspace = true
+
+[dev-dependencies]
+criterion = { version = "0.8", default-features = false, features = ["plotters", "cargo_bench_support"] }
+
+[[bench]]
+name = "glyph_vertex_build"
+harness = false

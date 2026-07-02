@@ -28,3 +28,14 @@ num_enum.workspace = true
 fontconfig.workspace = true
 yeslogic-fontconfig-sys.workspace = true
 x11-dl.workspace = true
+
+[dev-dependencies]
+criterion = { version = "0.8", default-features = false, features = ["plotters", "cargo_bench_support"] }
+
+[[bench]]
+name = "font_metrics"
+harness = false
+
+[[bench]]
+name = "layout_window"
+harness = false

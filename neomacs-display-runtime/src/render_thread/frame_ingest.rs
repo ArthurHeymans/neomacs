@@ -7,6 +7,7 @@ use crate::render_thread::cursor::CursorTarget;
 use neomacs_display_protocol::glyph_matrix::{
     GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
 };
+use neomacs_display_protocol::perf_trace;
 
 #[derive(Clone, Copy)]
 struct CursorConfigSnapshot {
@@ -270,7 +271,11 @@ impl RenderApp {
             // existing rendering code.  The layout engine populates
             // the grid and non-grid items; materialize() converts the
             // grid into pixel-positioned glyphs and appends non-grid items.
-            let frame = display_state.materialize();
+            let materialize_started_at = std::time::Instant::now();
+            let mut frame = display_state.materialize();
+            frame.perf_trace.materialize_started_at = Some(materialize_started_at);
+            frame.perf_trace.materialize_ns =
+                perf_trace::duration_ns(materialize_started_at.elapsed());
 
             // ── Observation point: inspect what will be rendered ──
             // Set NEOMACS_DUMP_FRAME_GLYPHS=1 to dump every glyph.

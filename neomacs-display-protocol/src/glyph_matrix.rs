@@ -15,6 +15,7 @@ use super::frame_glyphs::{
     FringeSide, GlyphRowRole, MaterializedFaceData, PhysCursor, StipplePattern, WindowCursor,
     WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
+use super::perf_trace::DisplayFramePerfTrace;
 use super::types::{Color, DisplayFrameId, DisplayWindowId, ImageId, Rect, VideoId, XwidgetId};
 use super::ui_types::{MenuBarItem, ToolBarItem};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
@@ -681,6 +682,9 @@ pub struct ScrollBarItem {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FrameDisplayState {
+    /// Env-gated performance metadata carried through the display pipeline.
+    #[serde(skip, default)]
+    pub perf_trace: DisplayFramePerfTrace,
     pub window_matrices: Vec<WindowMatrixEntry>,
     /// Frame-level chrome rows that are not owned by any leaf window.
     pub frame_chrome_rows: Vec<FrameChromeRow>,
@@ -829,6 +833,7 @@ pub struct GuiCompactBarState {
 impl FrameDisplayState {
     pub fn new(frame_cols: usize, frame_rows: usize, char_width: f32, char_height: f32) -> Self {
         Self {
+            perf_trace: DisplayFramePerfTrace::default(),
             window_matrices: Vec::new(),
             frame_chrome_rows: Vec::new(),
             frame_cols,
@@ -906,6 +911,7 @@ impl FrameDisplayState {
         state.border_color = buf.border_color;
         state.background_alpha = buf.background_alpha;
         state.no_accept_focus = buf.no_accept_focus;
+        state.perf_trace = buf.perf_trace.clone();
         state.faces = buf.faces.clone();
         state.window_infos = buf.window_infos.clone();
         // Reconstruct the layout-internal phys_cursor from the unified list's
@@ -1099,6 +1105,7 @@ impl FrameDisplayState {
     /// borders, cursors, etc.).
     pub fn materialize(&self) -> FrameGlyphBuffer {
         let mut buf = FrameGlyphBuffer::with_size(self.frame_pixel_width, self.frame_pixel_height);
+        buf.perf_trace = self.perf_trace.clone();
         buf.char_width = self.char_width;
         buf.char_height = self.char_height;
         buf.font_pixel_size = self.font_pixel_size;

@@ -15,6 +15,7 @@ use super::transitions::{
 use super::{RenderApp, surface_readback};
 use crate::core::types::DisplayFrameId;
 use crate::thread_comm::{MenuBarItem, ToolBarItem};
+use neomacs_display_protocol::perf_trace;
 use neomacs_renderer_wgpu::{PopupMenuState, TooltipState, WgpuGlyphAtlas, WgpuRenderer};
 
 struct GuiFrameMenuBarOverlay<'a> {
@@ -932,6 +933,8 @@ impl RenderApp {
         if self.lifecycle_flags.shutdown_requested {
             return;
         }
+        perf_trace::reset_phase_counters();
+        let render_started_at = std::time::Instant::now();
         self.prepare_frame_state_for_render();
 
         let bg_gradient = if self.effects.bg_gradient.enabled {
@@ -952,7 +955,7 @@ impl RenderApp {
         };
         window_state.render.compositor.transitions.policy = self.transition_policy;
 
-        if let Some((output, frame)) = Self::render_frame_window_contents_to_surface(
+        if let Some((output, mut frame)) = Self::render_frame_window_contents_to_surface(
             renderer,
             &self.faces,
             window_state,
@@ -986,7 +989,21 @@ impl RenderApp {
                     h,
                 );
             }
+            frame.perf_trace.render_started_at = Some(render_started_at);
+            frame.perf_trace.render_window_ns =
+                perf_trace::duration_ns(render_started_at.elapsed());
+            let counters = perf_trace::take_phase_counters();
+            perf_trace::merge_phase_counters(&mut frame.perf_trace, counters);
+            let present_started_at = std::time::Instant::now();
             output.present();
+            frame.perf_trace.present_call_ns =
+                perf_trace::duration_ns(present_started_at.elapsed());
+            frame.perf_trace.presented_at = Some(std::time::Instant::now());
+            perf_trace::log_frame_summary(
+                frame.frame_id.get(),
+                frame.glyphs.len(),
+                &frame.perf_trace,
+            );
         }
     }
 }

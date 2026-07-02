@@ -5,6 +5,7 @@ use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
 use neomacs_display_protocol::frame_glyphs::{FringeBitmapData, StipplePattern};
+use neomacs_display_protocol::perf_trace;
 use neomacs_display_protocol::scene::{Scene, SceneCursorStyle};
 use neomacs_display_protocol::types::{Color, Rect};
 
@@ -174,6 +175,101 @@ pub struct WgpuRenderer {
     pub(super) stencil_image_pipeline: wgpu::RenderPipeline,
     pub(super) stencil_opaque_image_pipeline: wgpu::RenderPipeline,
     pub(super) stencil_write_pipeline: wgpu::RenderPipeline,
+    pub(super) gpu_timestamp_profiler: Option<GpuTimestampProfiler>,
+}
+
+pub(super) struct GpuTimestampProfiler {
+    pub(super) query_set: wgpu::QuerySet,
+    resolve_buffer: wgpu::Buffer,
+    readback_buffer: wgpu::Buffer,
+    timestamp_period_ns: f32,
+}
+
+impl GpuTimestampProfiler {
+    const QUERY_COUNT: u32 = 2;
+    const BUFFER_SIZE: wgpu::BufferAddress = Self::QUERY_COUNT as wgpu::BufferAddress * 8;
+
+    fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Option<Self> {
+        if !perf_trace::enabled() || !device.features().contains(wgpu::Features::TIMESTAMP_QUERY) {
+            return None;
+        }
+        let query_set = device.create_query_set(&wgpu::QuerySetDescriptor {
+            label: Some("Neomacs Main Glyph Pass Timestamp Query Set"),
+            ty: wgpu::QueryType::Timestamp,
+            count: Self::QUERY_COUNT,
+        });
+        let resolve_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Neomacs Main Glyph Pass Timestamp Resolve Buffer"),
+            size: Self::BUFFER_SIZE,
+            usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+        let readback_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Neomacs Main Glyph Pass Timestamp Readback Buffer"),
+            size: Self::BUFFER_SIZE,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        Some(Self {
+            query_set,
+            resolve_buffer,
+            readback_buffer,
+            timestamp_period_ns: queue.get_timestamp_period(),
+        })
+    }
+
+    fn resolve_into_readback(&self, encoder: &mut wgpu::CommandEncoder) {
+        encoder.resolve_query_set(
+            &self.query_set,
+            0..Self::QUERY_COUNT,
+            &self.resolve_buffer,
+            0,
+        );
+        encoder.copy_buffer_to_buffer(
+            &self.resolve_buffer,
+            0,
+            &self.readback_buffer,
+            0,
+            Self::BUFFER_SIZE,
+        );
+    }
+
+    fn read_blocking_ms(
+        &self,
+        device: &wgpu::Device,
+        submission_index: wgpu::SubmissionIndex,
+    ) -> Option<f64> {
+        let _ = device.poll(wgpu::PollType::Wait {
+            submission_index: Some(submission_index),
+            timeout: Some(std::time::Duration::from_millis(100)),
+        });
+        let slice = self.readback_buffer.slice(..);
+        let (tx, rx) = std::sync::mpsc::channel();
+        slice.map_async(wgpu::MapMode::Read, move |result| {
+            let _ = tx.send(result);
+        });
+        let _ = device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: Some(std::time::Duration::from_millis(100)),
+        });
+        if !matches!(
+            rx.recv_timeout(std::time::Duration::from_millis(100)),
+            Ok(Ok(()))
+        ) {
+            self.readback_buffer.unmap();
+            return None;
+        }
+        let data = slice.get_mapped_range();
+        let timestamps: &[u64] = bytemuck::cast_slice(&data);
+        let elapsed_ms = timestamps
+            .get(0)
+            .zip(timestamps.get(1))
+            .and_then(|(start, end)| end.checked_sub(*start))
+            .map(|ticks| ticks as f64 * f64::from(self.timestamp_period_ns) / 1_000_000.0);
+        drop(data);
+        self.readback_buffer.unmap();
+        elapsed_ms
+    }
 }
 
 /// Entry for an active scroll momentum indicator
@@ -1407,6 +1503,8 @@ impl WgpuRenderer {
             None
         };
 
+        let gpu_timestamp_profiler = GpuTimestampProfiler::new(&device, &queue);
+
         Self {
             device,
             queue,
@@ -1522,6 +1620,7 @@ impl WgpuRenderer {
             stencil_image_pipeline,
             stencil_opaque_image_pipeline,
             stencil_write_pipeline,
+            gpu_timestamp_profiler,
         }
     }
 
@@ -1545,10 +1644,20 @@ impl WgpuRenderer {
             .map_err(|e| format!("Failed to find a suitable GPU adapter: {}", e))?;
 
         // Request device and queue
+        let mut required_features = wgpu::Features::empty();
+        if perf_trace::enabled() {
+            if adapter.features().contains(wgpu::Features::TIMESTAMP_QUERY) {
+                required_features |= wgpu::Features::TIMESTAMP_QUERY;
+                tracing::info!("display trace: enabling wgpu timestamp queries");
+            } else {
+                tracing::warn!("display trace: adapter does not support wgpu timestamp queries");
+            }
+        }
+
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("Neomacs Device"),
-                required_features: wgpu::Features::empty(),
+                required_features,
                 required_limits: wgpu::Limits::default(),
                 memory_hints: Default::default(),
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),

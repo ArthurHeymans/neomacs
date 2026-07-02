@@ -5,6 +5,7 @@
 //! normally lives in `src/xdisp.c` / `src/dispnew.c`.
 
 use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
+use neomacs_display_protocol::perf_trace;
 use neomacs_display_protocol::tty_rif::TtyRif;
 use neomacs_display_protocol::types::DisplayFrameId;
 use neomacs_display_runtime::layout::LayoutEngine;
@@ -13,6 +14,7 @@ use neovm_core::emacs_core::value::Value;
 use neovm_core::window::FrameId;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 
 use super::StartupOptions;
 use super::tty_init;
@@ -40,6 +42,9 @@ pub fn layout_frame_display_state(
 ) -> Option<FrameDisplayState> {
     LAYOUT_ENGINE.with(|engine| {
         let mut engine = engine.borrow_mut();
+        perf_trace::reset_phase_counters();
+        let layout_started_at = Instant::now();
+
         // Smooth scroll (Phase 1, T4): drain a pending trackpad pixel-scroll for
         // this frame and apply it (sub-line vscroll) before re-laying.
         if let Some(delta) = evaluator.take_pending_pixel_scroll_for_frame(frame_id) {
@@ -54,8 +59,15 @@ pub fn layout_frame_display_state(
                 let _ = engine.pixel_scroll_window(evaluator, window_id, delta_px);
             }
         }
+
         engine.layout_frame_rust(evaluator, frame_id);
-        engine.last_frame_display_state.take()
+        let layout_total = layout_started_at.elapsed();
+        let counters = perf_trace::take_phase_counters();
+        engine.last_frame_display_state.take().map(|mut state| {
+            state.perf_trace.layout_total_ns = perf_trace::duration_ns(layout_total);
+            perf_trace::merge_phase_counters(&mut state.perf_trace, counters);
+            state
+        })
     })
 }
 

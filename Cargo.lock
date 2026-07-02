@@ -3026,6 +3026,7 @@ name = "neomacs-display-protocol"
 version = "0.0.11"
 dependencies = [
  "bitflags 2.11.1",
+ "criterion",
  "num_enum",
  "serde",
  "serde_json",
@@ -3090,6 +3091,7 @@ version = "0.0.11"
 dependencies = [
  "allsorts",
  "cosmic-text",
+ "criterion",
  "fontconfig",
  "fontdb",
  "neomacs-display-protocol",
@@ -3118,6 +3120,7 @@ dependencies = [
  "ash",
  "bytemuck",
  "cosmic-text",
+ "criterion",
  "fontdb",
  "gstreamer",
  "gstreamer-allocators",

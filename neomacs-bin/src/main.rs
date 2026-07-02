@@ -36,7 +36,9 @@ use std::time::{Duration, Instant};
 use arboard::Clipboard;
 #[cfg(target_os = "linux")]
 use arboard::{Clipboard, GetExtLinux, LinuxClipboardKind, SetExtLinux};
-use neomacs_display_protocol::{CursorEffectArg as RenderCursorEffectArg, CursorEffectCommand};
+use neomacs_display_protocol::{
+    CursorEffectArg as RenderCursorEffectArg, CursorEffectCommand, DisplayInputTrace, perf_trace,
+};
 use neomacs_display_runtime::render_thread::{
     RenderEventLoopProxy, RenderUserEvent, SharedImageDimensions, SharedMonitorInfo,
     build_render_event_loop, run_render_loop_current_thread,
@@ -925,6 +927,10 @@ fn prime_initial_monitor_snapshot(shared: &SharedMonitorInfo) {
 }
 
 fn record_primary_window_resize(shared: &SharedPrimaryWindowSize, event: &DisplayInputEvent) {
+    if let DisplayInputEvent::Traced { event, .. } = event {
+        record_primary_window_resize(shared, event);
+        return;
+    }
     let DisplayInputEvent::WindowResize {
         width,
         height,
@@ -948,6 +954,15 @@ fn record_primary_window_resize(shared: &SharedPrimaryWindowSize, event: &Displa
             state.width = *width;
             state.height = *height;
         }
+    }
+}
+
+fn unwrap_display_input_trace(
+    event: DisplayInputEvent,
+) -> (Option<DisplayInputTrace>, DisplayInputEvent) {
+    match event {
+        DisplayInputEvent::Traced { trace, event } => (Some(trace), *event),
+        event => (None, event),
     }
 }
 
@@ -2315,6 +2330,7 @@ fn run_gui_evaluator_worker(
         .name("input-bridge".to_string())
         .spawn(move || {
             while let Ok(event) = display_input_rx.recv() {
+                let (input_trace, event) = unwrap_display_input_trace(event);
                 tracing::info!("input-bridge: received display event {:?}", event);
                 record_primary_window_resize(&primary_window_size_for_input, &event);
                 if let Some(kb_event) = input_bridge::convert_display_event(&event) {
@@ -2330,6 +2346,9 @@ fn run_gui_evaluator_worker(
                     }
                     if input_tx.send(kb_event).is_err() {
                         break;
+                    }
+                    if let Some(trace) = input_trace {
+                        perf_trace::mark_input_delivered(trace);
                     }
                     if let Some(notifier) = &input_notifier {
                         notifier.notify();
@@ -2630,6 +2649,7 @@ pub fn run(mode: RuntimeMode) {
             .name("input-bridge".to_string())
             .spawn(move || {
                 while let Ok(event) = display_input_rx.recv() {
+                    let (input_trace, event) = unwrap_display_input_trace(event);
                     tracing::info!("input-bridge: received display event {:?}", event);
                     record_primary_window_resize(&primary_window_size_for_input, &event);
                     if let Some(kb_event) = input_bridge::convert_display_event(&event) {
@@ -2645,6 +2665,9 @@ pub fn run(mode: RuntimeMode) {
                         }
                         if input_tx.send(kb_event).is_err() {
                             break; // Context dropped
+                        }
+                        if let Some(trace) = input_trace {
+                            perf_trace::mark_input_delivered(trace);
                         }
                         if let Some(notifier) = &input_notifier {
                             notifier.notify();
@@ -3548,18 +3571,23 @@ fn publish_gui_frame(
         return;
     };
 
+    let active_input_trace = perf_trace::take_latest_input_trace();
+    let publish_started_at = Instant::now();
     let mut sent_any = false;
     for node in tree.frames_bottom_to_top {
         let display_state = tty_layout::layout_frame_display_state(evaluator, node.frame_id);
         let Some(mut display_state) = display_state else {
             continue;
         };
+        display_state.perf_trace.input = active_input_trace;
+        display_state.perf_trace.publish_started_at = Some(publish_started_at);
         display_state.parent_id = neomacs_display_protocol::types::DisplayFrameId::new(
             node.parent_id.map_or(0, |id| id.0),
         );
         display_state.parent_x = node.origin_in_root_x;
         display_state.parent_y = node.origin_in_root_y;
         display_state.z_order = node.z_order;
+        display_state.perf_trace.frame_sent_at = Some(Instant::now());
         if frame_tx.try_send(display_state).is_ok() {
             sent_any = true;
         }

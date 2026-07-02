@@ -6,6 +6,7 @@
 
 use crate::effect_config::EffectsConfig;
 use crate::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
+use crate::perf_trace::DisplayFramePerfTrace;
 use crate::scroll_animation::{ScrollEasing, ScrollEffect};
 use crate::types::{Color, DisplayFrameId, DisplayWindowId, ImageId, Rect, VideoId, XwidgetId};
 use crate::ui_types::TabBarItem;
@@ -772,6 +773,8 @@ pub enum WindowEffectHint {
 /// each frame by the C-side matrix walker. No incremental state management needed.
 #[derive(Debug, Default, Clone)]
 pub struct FrameGlyphBuffer {
+    /// Env-gated performance metadata carried through the display pipeline.
+    pub perf_trace: DisplayFramePerfTrace,
     /// Frame dimensions
     pub width: f32,
     pub height: f32,
@@ -1009,6 +1012,7 @@ impl FrameGlyphBuffer {
 
     pub fn new() -> Self {
         Self {
+            perf_trace: DisplayFramePerfTrace::default(),
             width: 0.0,
             height: 0.0,
             char_width: 8.0,
