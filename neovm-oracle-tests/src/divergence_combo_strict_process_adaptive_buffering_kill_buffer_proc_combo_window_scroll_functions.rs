@@ -76,6 +76,12 @@ fn div_u5_window_scroll_functions_hook() {
 #[test]
 fn div_u5_timer_create_cancel_reorder() {
     return_if_neovm_enable_oracle_proptest_not_set!();
+    // Printing raw `memq` tails would embed live timer vectors whose
+    // HIGH/LOW/USEC/PSEC fields are wall-clock readings and can never match
+    // across two processes; normalize membership to booleans and check the
+    // timer time structure (four integer time fields, timer.el layout)
+    // instead. The PSEC field being an integer (not nil) is the regression
+    // guard for `time-add nil` dropping sub-microsecond precision.
     let form = r##"
 (let ((t1 (run-at-time 100 nil (lambda () nil)))
       (t2 (run-at-time 200 nil (lambda () nil)))
@@ -84,15 +90,24 @@ fn div_u5_timer_create_cancel_reorder() {
         (timer--repeat-delay t1)
         (timer--repeat-delay t2)
         (timer--repeat-delay t3)
+        (mapcar (lambda (tm)
+                  (list (integerp (timer--high-seconds tm))
+                        (integerp (timer--low-seconds tm))
+                        (integerp (timer--usecs tm))
+                        (integerp (timer--psecs tm))
+                        (timer--triggered tm)))
+                (list t1 t2 t3))
         (progn (cancel-timer t2)
                (length timer-list))
-        (memq t1 timer-list)
-        (memq t2 timer-list)
-        (memq t3 timer-list)
+        (and (memq t1 timer-list) t)
+        (and (memq t2 timer-list) t)
+        (and (memq t3 timer-list) t)
         (progn (cancel-timer t1) (cancel-timer t3)
                (length timer-list))))
 "##;
-    let expect = expect_test::expect![[r#""""#]];
+    let expect = expect_test::expect![[
+        r#""OK (3 nil nil nil ((t t t t nil) (t t t t nil) (t t t t nil)) 2 t nil t 0)""#
+    ]];
     crate::common::assert_oracle_parity_expect(form, expect);
 }
 

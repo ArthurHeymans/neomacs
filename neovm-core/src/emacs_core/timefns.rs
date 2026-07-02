@@ -617,9 +617,14 @@ fn decode_lisp_time(val: &Value) -> Result<DecodedLispTime, Flow> {
             let now = TimeMicros::now();
             // current_time uses a 10**9 (nanosecond) clock; mirror GNU's
             // timespec-derived (TICKS . timespec_hz) for the current time.
+            // `psecs` holds the sub-microsecond part as (ns % 1000) * 1000, so
+            // its nanosecond contribution is psecs / 1000 — dropping it made
+            // `(time-add nil N)` (and thus timer.el's timer vectors) lose the
+            // PSEC field GNU carries.
             let hz = Integer::from(1_000_000_000i64);
-            let ticks =
-                Integer::from(now.secs) * &hz + Integer::from(now.usecs) * Integer::from(1000i64);
+            let ticks = Integer::from(now.secs) * &hz
+                + Integer::from(now.usecs) * Integer::from(1000i64)
+                + Integer::from(now.psecs / 1000);
             Ok(DecodedLispTime {
                 th: TicksHz { ticks, hz },
                 form: TimeInputForm::List,
