@@ -2133,7 +2133,14 @@ pub(crate) fn builtin_vertical_motion(
     // If COLS was specified, advance to that column.
     let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, pos);
     if let Some(target_col) = cols {
-        let _ = indent::builtin_move_to_column(eval, vec![Value::fixnum(target_col.max(0))])?;
+        // GNU positions to COLS through the display engine, which needs a live
+        // window with glyph matrices. Under `noninteractive` (batch) there is no
+        // display, so GNU's `vertical-motion` leaves point at the beginning of
+        // the line rather than at COLS. Mirror that so display-driven Lisp such
+        // as `shr-fill-line` sees GNU's line breaking.
+        if !eval.noninteractive() {
+            let _ = indent::builtin_move_to_column(eval, vec![Value::fixnum(target_col.max(0))])?;
+        }
     }
     Ok(Value::fixnum(moved))
 }
