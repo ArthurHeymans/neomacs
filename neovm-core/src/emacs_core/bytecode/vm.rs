@@ -4533,6 +4533,92 @@ impl<'a> Vm<'a> {
         Ok(result)
     }
 
+    /// Armed speculated direct-SUBR call for the JIT subr spec shim
+    /// (`jit::compile::neovm_jit_call_subr_spec`): the shim VALIDATED that
+    /// `sym_id`'s function cell still holds `subr_value` (per-site epoch check
+    /// against `function_epoch`, re-validated on epoch moves) and that no
+    /// compiler function overrides are active — so the symbol resolution that
+    /// `direct_subr_call_target` would perform is provably redundant and is
+    /// skipped. Everything ELSE mirrors [`call_for_jit_stack`] on a symbol
+    /// callee resolving to a builtin subr, clause by clause:
+    ///
+    /// * the recursion-depth guard (`with_bytecode_call_depth`) — one
+    ///   increment per call, `max-lisp-eval-depth` signals identically;
+    /// * the backtrace frame records the SYMBOL (what the generic path's
+    ///   `func_val` is at an `Op::Call` on a constant symbol), args read from
+    ///   the GC-traced `bc_buf` in place;
+    /// * the `SubrEntry` is read FRESH from the subr object on EVERY call —
+    ///   `update_static_subr_object_entry` rewrites entries IN PLACE keeping
+    ///   the value bits identical, so the fn pointer / arity / dispatch kind
+    ///   may all have changed since compile time while the armed check still
+    ///   passes. A rewritten entry that stopped being a plain builtin falls
+    ///   back to the traced `call_function` on the SYMBOL — the exact spot
+    ///   `direct_subr_call_target` would bail to on the generic path;
+    /// * the arity signal (`wrong-number-of-arguments`) is checked against
+    ///   that fresh entry INSIDE the backtrace frame, with the subr object as
+    ///   payload (`DirectSubrCallee::Value` parity);
+    /// * dispatch through the stack-args dispatcher (A0..A8 nil-padding;
+    ///   `Many`/`ManySlice` get the exact-length args, so even an in-place
+    ///   rewrite to a variadic entry stays correct);
+    /// * the debugger dispatch (`dispatch_signal_result_if_needed`) + frame
+    ///   pop with result.
+    ///
+    /// NOT replicated, by static exclusion at the speculation site: the
+    /// aset/fillarray mutating-first-string-arg writeback (those names are
+    /// never speculated, site or resolved) and the `+`/`logand`/`logior`/
+    /// `logxor` fixnum fast-value paths (all `Many`, never speculated — and
+    /// they are pure result-equal shortcuts anyway).
+    #[cfg(feature = "jit")]
+    pub(crate) fn call_spec_subr_stack(
+        &mut self,
+        sym_id: SymId,
+        subr_value: Value,
+        args_start: usize,
+        nargs: usize,
+    ) -> EvalResult {
+        self.with_bytecode_call_depth(|vm| {
+            let func_val = Value::from_sym_id(sym_id);
+            let entry = subr_entry_from_value(subr_value)
+                .map(|(_, entry)| entry)
+                .filter(|entry| entry.dispatch_kind == SubrDispatchKind::Builtin);
+            let Some(entry) = entry else {
+                // The in-place-rewritten entry is no longer a plain builtin:
+                // mirror call_for_jit_stack's non-subr arm — full traced call
+                // on the SYMBOL.
+                let args: LispArgVec = vm.ctx.bc_buf[args_start..args_start + nargs]
+                    .iter()
+                    .copied()
+                    .collect();
+                return vm.call_function(func_val, args);
+            };
+            let bt_count = vm.ctx.specpdl.len();
+            vm.ctx
+                .push_backtrace_frame_from_bc_stack(func_val, args_start, nargs);
+            let result = if nargs < entry.min_args as usize
+                || entry.max_args.is_some_and(|max| nargs > max as usize)
+            {
+                Err(signal(
+                    "wrong-number-of-arguments",
+                    vec![subr_value, Value::fixnum(nargs as i64)],
+                ))
+            } else {
+                match entry.function {
+                    Some(function) => vm
+                        .dispatch_builtin_subr_from_stack_args_unchecked(
+                            function, args_start, nargs,
+                        )
+                        .unwrap_or_else(|| {
+                            Err(signal("void-function", vec![func_val]))
+                        }),
+                    None => Err(signal("void-function", vec![func_val])),
+                }
+            };
+            let result = vm.ctx.dispatch_signal_result_if_needed(result);
+            vm.ctx
+                .pop_bytecode_backtrace_frame_with_result(bt_count, result)
+        })
+    }
+
     /// V3 + native-to-native speculated direct call: the caller's spec site is
     /// armed, so `callee` is the compile-time bytecode object the symbol still
     /// names, and `args_ptr` addresses `nargs` pre-marshaled argument words (the

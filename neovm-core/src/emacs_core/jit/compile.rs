@@ -65,12 +65,12 @@ use crate::emacs_core::bytecode::{ByteCodeFunction, Vm};
 use crate::emacs_core::error::{Flow, make_signal_binding_value, signal};
 use crate::emacs_core::eval::{
     ConditionFrame, Context, LispArgVec, ResumeTarget, push_scratch_gc_root,
-    restore_scratch_gc_roots, save_scratch_gc_roots,
+    restore_scratch_gc_roots, save_scratch_gc_roots, subr_entry_from_value,
 };
-use crate::emacs_core::intern::{SymId, intern};
+use crate::emacs_core::intern::{SymId, intern, resolve_sym};
 use crate::emacs_core::symbol::Obarray;
 use crate::emacs_core::value::{Value, ValueKind};
-use crate::tagged::header::ConsCell;
+use crate::tagged::header::{ConsCell, SubrDispatchKind};
 use crate::tagged::value::{
     FIXNUM_CHECK_MASK, FIXNUM_CHECK_VALUE, FIXNUM_SHIFT, TAG_BITS, TAG_CONS, TAG_MASK, TAG_STRING,
     TAG_SYMBOL,
@@ -162,6 +162,18 @@ pub const STATUS_SIGNAL: i64 = 2;
 /// Unlike [`STATUS_DEOPT`], this is sound even after side effects ran.
 pub const STATUS_DEOPT_AT: i64 = 3;
 
+/// Native return code (subr spec shims only, never crosses the leaf entry
+/// ABI): the speculated-SUBR site could not run its direct fast path (binding
+/// changed / compiler function overrides active / bitwise-eq miss on the
+/// `equal-including-properties` shim). NO work was done beyond the quit poll:
+/// the generated code branches to its per-site FALLBACK block, which performs
+/// the ORIGINAL generic `Op::Call` lowering (arg spill + residual rooting +
+/// `neovm_jit_call` on the constant symbol). Salted into the AOT `ABI_TAG`
+/// like the other STATUS codes (`aot::compute_abi_tag`), although AOT leaves
+/// can never contain subr spec sites (speculation requires `Some(obarray)`;
+/// AOT compiles at `None`).
+pub const STATUS_NEED_GENERIC: i64 = 4;
+
 /// Debug-build counter of speculated direct-call shim entries (test evidence
 /// that `find_spec_sites` + the spec lowering actually engage).
 #[cfg(debug_assertions)]
@@ -173,6 +185,26 @@ pub(crate) static SPEC_CALL_COUNT: AtomicU64 = AtomicU64::new(0);
 /// that the fast path actually fires instead of silently no-op'ing.
 #[cfg(debug_assertions)]
 pub(crate) static SPEC_FAST_CALL_COUNT: AtomicU64 = AtomicU64::new(0);
+
+/// Debug-build counter of speculated direct-SUBR shim entries (all three
+/// shims: general / predicate / equal-including-properties). Test evidence
+/// that the subr-kind sites in `find_spec_sites` + their lowering engage.
+#[cfg(debug_assertions)]
+pub(crate) static SUBR_SPEC_COUNT: AtomicU64 = AtomicU64::new(0);
+
+/// Debug-build counter of subr-spec FAST completions: the site was armed and
+/// the shim finished the call itself (direct subr dispatch, predicate tag
+/// test, or the bitwise-eq hit) — as opposed to bouncing to the generic
+/// fallback block. Proves the fast path fires instead of silently bouncing.
+#[cfg(debug_assertions)]
+pub(crate) static SUBR_SPEC_FAST_COUNT: AtomicU64 = AtomicU64::new(0);
+
+/// Debug-build counter of subr-spec [`STATUS_NEED_GENERIC`] bounces (binding
+/// changed, overrides active, or an eq-shim bitwise miss). Together with
+/// [`SUBR_SPEC_FAST_COUNT`] this lets tests prove a site RE-ARMED after an
+/// unrelated epoch bump (fast count grows, generic count doesn't).
+#[cfg(debug_assertions)]
+pub(crate) static SUBR_SPEC_GENERIC_COUNT: AtomicU64 = AtomicU64::new(0);
 
 /// Take the `Flow` stashed by a shim that returned [`STATUS_SIGNAL`].
 pub fn take_pending_flow() -> Option<Flow> {
@@ -904,18 +936,21 @@ pub extern "C" fn neovm_jit_call_spec(
             // SAFETY: slot points into the executing leaf's spec_slots.
             let slot = unsafe { &*(slot as *const SpecSlot) };
             let epoch = ctx.obarray.function_epoch();
-            let armed = slot.epoch.load(Ordering::Relaxed) == epoch || {
-                let cur = ctx.obarray.symbol_function_id(SymId(sym as u32));
-                if cur.is_some_and(|v| v.bits() as i64 == expected) {
-                    slot.epoch.store(epoch, Ordering::Relaxed);
-                    true
-                } else {
-                    // The binding changed: drop any cached callee leaf so a
-                    // later re-arm can't reuse a stale callee.
-                    slot.leaf.store(0, Ordering::Relaxed);
-                    false
-                }
-            };
+            // NEOVM_JIT_FORCE_SLOW_SPEC pretends the armed epoch is stale so
+            // every call exercises the re-validate/re-arm branch.
+            let armed = (!jit_force_slow_spec() && slot.epoch.load(Ordering::Relaxed) == epoch)
+                || {
+                    let cur = ctx.obarray.symbol_function_id(SymId(sym as u32));
+                    if cur.is_some_and(|v| v.bits() as i64 == expected) {
+                        slot.epoch.store(epoch, Ordering::Relaxed);
+                        true
+                    } else {
+                        // The binding changed: drop any cached callee leaf so a
+                        // later re-arm can't reuse a stale callee.
+                        slot.leaf.store(0, Ordering::Relaxed);
+                        false
+                    }
+                };
             // Armed: the symbol still names the compile-time bytecode object.
             // Try the fast path (cached leaf, native-to-native pass-through when
             // the callee is a pure fixed-arity match — no arg marshaling at
@@ -951,6 +986,238 @@ pub extern "C" fn neovm_jit_call_spec(
     };
     restore_scratch_gc_roots(saved);
     status
+}
+
+/// Predicate discriminator for [`neovm_jit_pred_spec`] (baked as an iconst by
+/// the lowering): `recordp`.
+pub(crate) const PRED_KIND_RECORDP: i64 = 0;
+/// Predicate discriminator for [`neovm_jit_pred_spec`]: `symbol-with-pos-p`.
+pub(crate) const PRED_KIND_SYMBOL_WITH_POS_P: i64 = 1;
+
+/// Shared arming check for the three subr spec shims: TRUE iff the site's
+/// direct fast path is still valid — the symbol's function cell (validated via
+/// the per-site epoch, re-validated on any epoch move exactly like
+/// [`neovm_jit_call_spec`]) still holds the compile-time subr VALUE, and no
+/// compiler function overrides are active. The overrides check has no
+/// bytecode-spec counterpart but is REQUIRED here for interpreter parity: the
+/// generic path's `direct_subr_call_target` refuses direct subr dispatch for a
+/// SYMBOL callee while overrides are active (they shadow function cells in
+/// `resolve_named_call_target_by_id` and live in a VARIABLE, invisible to
+/// `function_epoch`), so an armed site must bounce to the generic block then
+/// too. Never allocates, never runs lisp — callers rely on this being GC-free.
+#[inline]
+fn subr_spec_armed(ctx: &Context, sym: i64, expected: i64, slot: &SpecSlot) -> bool {
+    if ctx.compiler_function_overrides_active() {
+        return false;
+    }
+    let epoch = ctx.obarray.function_epoch();
+    // NEOVM_JIT_FORCE_SLOW_SPEC pretends the armed epoch is stale so every
+    // call exercises the re-validate/re-arm branch.
+    (!jit_force_slow_spec() && slot.epoch.load(Ordering::Relaxed) == epoch) || {
+        let cur = ctx.obarray.symbol_function_id(SymId(sym as u32));
+        if cur.is_some_and(|v| v.bits() as i64 == expected) {
+            slot.epoch.store(epoch, Ordering::Relaxed);
+            true
+        } else {
+            // The subr shims never populate `slot.leaf`; nothing to clear.
+            false
+        }
+    }
+}
+
+/// Speculated direct SUBR call (`Op::Call` whose callee slot provably holds a
+/// constant symbol fbound at compile time to a fixed-arity builtin subr — see
+/// `find_spec_sites`' subr classification). Quit poll FIRST (interpreter
+/// `Op::Call` order), then the validity check ([`subr_spec_armed`]):
+///
+/// * ARMED — the cell still holds the compile-time `#<subr>` VALUE. Dispatch
+///   it directly via `Vm::call_spec_subr_stack`, which replicates the generic
+///   path's subr protocol exactly (depth guard, backtrace frame recording the
+///   SYMBOL, arity signal against the FRESH entry, A0..A8 stack-args dispatch,
+///   debugger hook) minus the symbol resolution. The `SubrEntry` is re-read
+///   from the subr object on EVERY call: `update_static_subr_object_entry`
+///   rewrites entries IN PLACE keeping the value bits identical, so the fn
+///   pointer must never be cached across calls (only the stable VALUE bits are
+///   baked).
+/// * NOT ARMED — return [`STATUS_NEED_GENERIC`] with no side effects; the
+///   generated fallback block re-does this site as a plain generic call on the
+///   SYMBOL (fset/advice/overrides take effect immediately, GNU parity).
+///
+/// GC rooting: the args are pushed onto the GC-traced `bc_buf` (rooted across
+/// the subr call, which can allocate/GC/signal) — the same rooting scheme as
+/// [`neovm_jit_call`]; the generated code rooted its residual operand stack
+/// before this call. The recursion-depth guard is applied inside
+/// `call_spec_subr_stack` via `with_bytecode_call_depth`, exactly where
+/// `call_for_jit_stack` applies it on the generic path.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`]; `slot` points into the
+/// owning CompiledLeaf's spec_slots (alive whenever its code runs).
+///
+/// JIT-only by construction (NOT in `shim_names.rs`/`MIR_SHIM_NAMES`): subr
+/// spec sites exist only when compiling with `Some(obarray)`, and AOT compiles
+/// at `None` (`build_baseline_leaf_object` D0), so no AOT object can reference
+/// this symbol — `assert_aot_imports_exported` would refuse one that did.
+extern "C" fn neovm_jit_call_subr_spec(
+    ctx: *mut u8,
+    sym: i64,
+    expected: i64,
+    slot: i64,
+    args_ptr: *const i64,
+    nargs: i64,
+    out: *mut i64,
+) -> i64 {
+    #[cfg(debug_assertions)]
+    SUBR_SPEC_COUNT.fetch_add(1, Ordering::Relaxed);
+    let nargs = nargs as usize;
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    if let Err(flow) = ctx.maybe_quit() {
+        stash_pending_flow(flow);
+        return STATUS_SIGNAL;
+    }
+    // SAFETY: slot points into the executing leaf's spec_slots.
+    let slot = unsafe { &*(slot as *const SpecSlot) };
+    if !subr_spec_armed(ctx, sym, expected, slot) {
+        #[cfg(debug_assertions)]
+        SUBR_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
+        return STATUS_NEED_GENERIC;
+    }
+    #[cfg(debug_assertions)]
+    SUBR_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
+    let target = Value::from_bits(expected as usize);
+    let saved = save_scratch_gc_roots();
+    // Push the args straight onto bc_buf (GC-traced → rooted across the subr,
+    // and the stack-args dispatcher reads them in place — no LispArgVec). The
+    // callee needs no root: static subr objects are Box::leak'd, never freed.
+    let args_start = ctx.bc_buf.len();
+    for i in 0..nargs {
+        // SAFETY: the generated code stored exactly `nargs` argument words at
+        // `args_ptr` (its call-args slot) immediately before this call.
+        let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+        ctx.bc_buf.push(v);
+    }
+    let mut vm = Vm::from_context(ctx);
+    let res = vm.call_spec_subr_stack(SymId(sym as u32), target, args_start, nargs);
+    vm.bc_buf_truncate(args_start);
+    let status = match res {
+        Ok(value) => {
+            // SAFETY: `out` is the generated code's result stack slot.
+            unsafe { *out = value.bits() as i64 };
+            STATUS_OK
+        }
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+    };
+    restore_scratch_gc_roots(saved);
+    status
+}
+
+/// Speculated PREDICATE call: `recordp` / `symbol-with-pos-p` sites collapse
+/// to a hardcoded tag test when armed. Both predicates are pure single-tag
+/// checks, verified exact against their builtins (`builtin_recordp_1` =
+/// `Value::is_record`, `builtin_symbol_with_pos_p_1` =
+/// `Value::is_symbol_with_pos`; both independent of
+/// `symbols-with-pos-enabled` — which is why `keywordp`/`symbolp` are General
+/// only). NOT ARMED → [`STATUS_NEED_GENERIC`]; the generated fallback block
+/// runs the plain generic call (full rooting, override/redefinition parity).
+///
+/// GC-FREE INVARIANT (load-bearing): the generated code does NOT root its
+/// residual operand stack around this call, so no path here may allocate on
+/// the lisp heap or run lisp code. That holds: `maybe_quit`'s quit/throw Flow
+/// construction is pure Rust-heap (`signal("quit", vec![])` — no lisp
+/// allocation), `subr_spec_armed` only reads, and the armed test is a tag
+/// check on an immediate/heap header. The skipped backtrace frame is
+/// unobservable: the armed path cannot signal, GC, or run lisp between frame
+/// push and pop.
+/// SAFETY + JIT-only status: same as [`neovm_jit_call_subr_spec`].
+extern "C" fn neovm_jit_pred_spec(
+    ctx: *mut u8,
+    kind: i64,
+    sym: i64,
+    expected: i64,
+    slot: i64,
+    a: i64,
+    out: *mut i64,
+) -> i64 {
+    #[cfg(debug_assertions)]
+    SUBR_SPEC_COUNT.fetch_add(1, Ordering::Relaxed);
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    if let Err(flow) = ctx.maybe_quit() {
+        stash_pending_flow(flow);
+        return STATUS_SIGNAL;
+    }
+    // SAFETY: slot points into the executing leaf's spec_slots.
+    let slot = unsafe { &*(slot as *const SpecSlot) };
+    if !subr_spec_armed(ctx, sym, expected, slot) {
+        #[cfg(debug_assertions)]
+        SUBR_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
+        return STATUS_NEED_GENERIC;
+    }
+    #[cfg(debug_assertions)]
+    SUBR_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
+    let v = Value::from_bits(a as usize);
+    // `is_record`/`is_symbol_with_pos` = tag check BEFORE any header deref
+    // (`veclike_type` guards on `is_veclike` first) — safe on immediates.
+    let truth = if kind == PRED_KIND_RECORDP {
+        v.is_record()
+    } else {
+        debug_assert_eq!(kind, PRED_KIND_SYMBOL_WITH_POS_P);
+        v.is_symbol_with_pos()
+    };
+    let result = if truth { Value::T } else { Value::NIL };
+    // SAFETY: `out` is the generated code's result stack slot.
+    unsafe { *out = result.bits() as i64 };
+    STATUS_OK
+}
+
+/// Speculated `equal-including-properties` call (2 args): when armed and the
+/// arguments are BITWISE equal, the answer is `t` with zero dispatch —
+/// bit-equal ⟹ same object ⟹ equal-including-properties, which is literally
+/// the builtin's own first check (`try_equal_value_inner`'s
+/// `left.bits() == right.bits()`), so this covers same-object strings/conses,
+/// identical NaN boxes, fixnums, and interned symbols alike.
+///
+/// On a bitwise MISS the shim returns [`STATUS_NEED_GENERIC`] instead of
+/// invoking the builtin here: the deep comparison can allocate (its
+/// depth-overflow arm signals with a freshly allocated lisp string), and this
+/// site's direct path deliberately skips the residual-stack rooting — calling
+/// the builtin from here could GC with the caller's live registers unrooted.
+/// The generic fallback block does the fully-rooted call instead; the miss
+/// cost is one epoch check + bit compare on top of a deep structural
+/// comparison, i.e. noise. This keeps the same GC-FREE INVARIANT as
+/// [`neovm_jit_pred_spec`] (no allocation / no lisp on ANY path here).
+/// SAFETY + JIT-only status: same as [`neovm_jit_call_subr_spec`].
+extern "C" fn neovm_jit_eq_incl_props_spec(
+    ctx: *mut u8,
+    sym: i64,
+    expected: i64,
+    slot: i64,
+    a: i64,
+    b: i64,
+    out: *mut i64,
+) -> i64 {
+    #[cfg(debug_assertions)]
+    SUBR_SPEC_COUNT.fetch_add(1, Ordering::Relaxed);
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    if let Err(flow) = ctx.maybe_quit() {
+        stash_pending_flow(flow);
+        return STATUS_SIGNAL;
+    }
+    // SAFETY: slot points into the executing leaf's spec_slots.
+    let slot = unsafe { &*(slot as *const SpecSlot) };
+    if subr_spec_armed(ctx, sym, expected, slot) && a == b {
+        #[cfg(debug_assertions)]
+        SUBR_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
+        // SAFETY: `out` is the generated code's result stack slot.
+        unsafe { *out = Value::T.bits() as i64 };
+        return STATUS_OK;
+    }
+    #[cfg(debug_assertions)]
+    SUBR_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
+    STATUS_NEED_GENERIC
 }
 
 /// `Op::Throw`: stash `Flow::Throw{tag, value}` for the signal-exit path.
@@ -2134,6 +2401,21 @@ fn jit_force_deopt() -> bool {
     *FORCE.get_or_init(|| std::env::var("NEOVM_JIT_FORCE_DEOPT").as_deref() == Ok("1"))
 }
 
+/// Verification harness (Gap 1): when `NEOVM_JIT_FORCE_SLOW_SPEC=1`, EVERY
+/// speculated-call shim (the bytecode `neovm_jit_call_spec` + the three subr
+/// spec shims) treats its per-site armed epoch as stale on every call, forcing
+/// the epoch-mismatch/re-validate branch each time: the binding is re-read
+/// from the obarray and compared against the baked expectation before any
+/// direct dispatch. A suite run with this on (ideally with
+/// `NEOVM_JIT_THRESHOLD=1`) stress-tests the slow/re-arm paths everywhere the
+/// armed fast path would normally short-circuit — the spec-machinery analogue
+/// of [`jit_force_deopt`].
+fn jit_force_slow_spec() -> bool {
+    use std::sync::OnceLock;
+    static FORCE: OnceLock<bool> = OnceLock::new();
+    *FORCE.get_or_init(|| std::env::var("NEOVM_JIT_FORCE_SLOW_SPEC").as_deref() == Ok("1"))
+}
+
 fn jit_profile_emit(f: &ByteCodeFunction, obarray: Option<&Obarray>, compiled: bool) {
     let Some(path) = jit_profile_path() else {
         return;
@@ -2189,14 +2471,21 @@ fn jit_profile_emit(f: &ByteCodeFunction, obarray: Option<&Obarray>, compiled: b
     }
     // Inlinable call sites: those whose callee is a constant symbol currently
     // fbound to a BYTECODE object (the only directly-inlinable target) — the
-    // SAME shape `find_spec_sites` detects. `calls - inlinable` are subr /
-    // dynamic / non-bytecode callees inlining can't directly take. This sizes
-    // inlining's TRUE surface (vs the call-bearing upper bound).
+    // Bytecode-kind subset of what `find_spec_sites` detects (Gap 1 added
+    // subr-kind sites, which are NOT inlinable — keep this metric's meaning).
+    // `calls - inlinable` are subr / dynamic / non-bytecode callees inlining
+    // can't directly take. This sizes inlining's TRUE surface (vs the
+    // call-bearing upper bound).
     let arity =
         f.params.required.len() + f.params.optional.len() + usize::from(f.params.rest.is_some());
     let inlinable = match obarray {
         Some(ob) => analyze_cfg(ops, &f.constants, f.gnu_byte_offset_map.as_deref(), arity)
-            .map(|cfg| find_spec_sites(ops, &f.constants, &cfg.leaders, ob).len())
+            .map(|cfg| {
+                find_spec_sites(ops, &f.constants, &cfg.leaders, ob)
+                    .values()
+                    .filter(|site| site.kind == SpecCalleeKind::Bytecode)
+                    .count()
+            })
             .unwrap_or(0),
         None => 0,
     };
@@ -3290,8 +3579,9 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
         // when the body has a call. declare_rt_refs declares the full import set;
         // only the referenced shims (call/apply/gc_*) are resolved at finalize.
         let rt = if needs_rt {
-            // `module` is already `&mut M`; reborrow it for the call.
-            let refs = declare_rt_refs(&mut *module, fb.func, call_conv, ptr_ty)?;
+            // `module` is already `&mut M`; reborrow it for the call. The MIR
+            // tier never emits subr-speculated calls (subr_spec=false).
+            let refs = declare_rt_refs(&mut *module, fb.func, call_conv, ptr_ty, false)?;
             let vmctx_var = fb.declare_var(ptr_ty);
             let max_call_args = m
                 .blocks
@@ -3833,6 +4123,16 @@ struct RtRefs {
     named_builtin: FuncRef,
     save_window_excursion: FuncRef,
     call_spec: FuncRef,
+    /// The three subr-speculation shims (Gap 1), declared ONLY when the body
+    /// actually has subr-kind spec sites (`declare_rt_refs`' `subr_spec`
+    /// flag). `None` otherwise — in particular for EVERY AOT build
+    /// (`build_baseline_leaf_object` compiles with an empty site map), so an
+    /// AOT object can never acquire an import of these JIT-only shims (they
+    /// are deliberately NOT in `shim_names.rs`, and
+    /// `assert_aot_imports_exported` refuses foreign imports at emit time).
+    call_subr_spec: Option<FuncRef>,
+    pred_spec: Option<FuncRef>,
+    eq_incl_props_spec: Option<FuncRef>,
 }
 
 /// Declare the runtime-shim imports into `module`/`func` and return the callable
@@ -3843,11 +4143,19 @@ struct RtRefs {
 /// Generic over the module type (`M: Module`) so it serves both the `JITModule`
 /// JIT path and the future `ObjectModule` AOT path with no change — it only
 /// calls `Module::declare_function`, a trait method available on both.
+///
+/// `subr_spec`: declare the three JIT-only subr-speculation shims (Gap 1).
+/// Passed as TRUE only by `build_leaf_fn` when the body has subr-kind spec
+/// sites — which requires `Some(obarray)`, i.e. never AOT — so the shim names
+/// (absent from `shim_names.rs`) can never even be DECLARED into an
+/// `ObjectModule`, independent of whether unreferenced declarations would
+/// reach the emitted object.
 fn declare_rt_refs<M: Module>(
     module: &mut M,
     func: &mut Function,
     call_conv: cranelift_codegen::isa::CallConv,
     ptr_ty: Type,
+    subr_spec: bool,
 ) -> Result<RtRefs, CompileError> {
     let i64t = types::I64;
     let mut sig_ret = Signature::new(call_conv); // () -> i64
@@ -4011,6 +4319,26 @@ fn declare_rt_refs<M: Module>(
     sig_spec.params.push(AbiParam::new(ptr_ty));
     sig_spec.returns.push(AbiParam::new(i64t));
     let call_spec_id = declare(module, "neovm_jit_call_spec", &sig_spec)?;
+    // Gap 1: the subr-speculation shims, JIT-only (see the `subr_spec` doc).
+    // call_subr_spec shares sig_spec's shape; pred/eq share one 7-param shape:
+    // (vmctx, k1, k2, k3, k4, k5, out_ptr) -> status
+    //   pred: (vmctx, kind, sym, expected, slot_ptr, a, out_ptr)
+    //   eq:   (vmctx, sym, expected, slot_ptr, a, b, out_ptr)
+    let subr_spec_refs = if subr_spec {
+        let mut sig_pred = Signature::new(call_conv);
+        sig_pred.params.push(AbiParam::new(ptr_ty));
+        for _ in 0..5 {
+            sig_pred.params.push(AbiParam::new(i64t));
+        }
+        sig_pred.params.push(AbiParam::new(ptr_ty));
+        sig_pred.returns.push(AbiParam::new(i64t));
+        let subr_id = declare(module, "neovm_jit_call_subr_spec", &sig_spec)?;
+        let pred_id = declare(module, "neovm_jit_pred_spec", &sig_pred)?;
+        let eq_id = declare(module, "neovm_jit_eq_incl_props_spec", &sig_pred)?;
+        Some((subr_id, pred_id, eq_id))
+    } else {
+        None
+    };
 
     Ok(RtRefs {
         gc_save: module.declare_func_in_func(save_id, func),
@@ -4048,6 +4376,9 @@ fn declare_rt_refs<M: Module>(
         named_builtin: module.declare_func_in_func(named_id, func),
         save_window_excursion: module.declare_func_in_func(swe_id, func),
         call_spec: module.declare_func_in_func(call_spec_id, func),
+        call_subr_spec: subr_spec_refs.map(|(id, _, _)| module.declare_func_in_func(id, func)),
+        pred_spec: subr_spec_refs.map(|(_, id, _)| module.declare_func_in_func(id, func)),
+        eq_incl_props_spec: subr_spec_refs.map(|(_, _, id)| module.declare_func_in_func(id, func)),
     })
 }
 
@@ -4441,7 +4772,7 @@ fn lower_simple_op(
     rt: Option<&RtCtx>,
     handlers: &[HandlerStatic],
     pending: &mut Vec<PendingDispatch>,
-    spec: Option<(u32, u64, i64)>,
+    spec: Option<(u32, u64, i64, SpecCalleeKind)>,
     op: &Op,
     // Cross-block known-fixnum operand values at this block (seeded by
     // `lower_leaf_full` from `compute_known_fixnum_slots`); `guard_fixnum` elides
@@ -4849,16 +5180,33 @@ fn lower_simple_op(
                 return Err(CompileError::StackUnderflow);
             }
             let args_at = stack.len() - n;
-            // Spill the args into the call buffer for the shim.
-            for (i, &v) in stack[args_at..].iter().enumerate() {
-                fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
-            }
+            // Speculated direct call: the callee slot holds a constant symbol
+            // whose compile-time binding was a bytecode object or a fixed-arity
+            // builtin subr (Apply never speculates).
+            let spec = spec.filter(|_| matches!(op, Op::Call(_)));
+            // Pred/EqIncl sites pass their 1–2 args in REGISTERS on the direct
+            // path (no spill; their fallback block spills for itself). Every
+            // other shape spills the args into the call buffer for its shim.
+            let reg_args: Option<SmallVec<[ClifValue; 2]>> = match spec {
+                Some((_, _, _, kind)) if kind.is_reg_args() => {
+                    Some(stack[args_at..].iter().copied().collect())
+                }
+                _ => {
+                    for (i, &v) in stack[args_at..].iter().enumerate() {
+                        fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
+                    }
+                    None
+                }
+            };
             let func_val = stack[args_at - 1];
             stack.truncate(args_at - 1);
             // Root every value that stays live across the call (the callee +
             // args are rooted by the shim; the constants are rooted by the
-            // dispatch seam via the executing function).
-            let saved = if stack.is_empty() {
+            // dispatch seam via the executing function). Pred/EqIncl direct
+            // paths SKIP this: their shims are GC-free by contract (they bounce
+            // to the fallback block rather than run anything that could
+            // allocate), and the fallback block roots for itself.
+            let saved = if stack.is_empty() || reg_args.is_some() {
                 None
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
@@ -4872,32 +5220,129 @@ fn lower_simple_op(
             let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
             let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
             let n_val = fb.ins().iconst(types::I64, n as i64);
-            // Speculated direct call: the callee slot holds a constant symbol
-            // whose compile-time binding was a bytecode object — call through
-            // the epoch-validated spec shim instead (Apply never speculates).
-            let spec = spec.filter(|_| matches!(op, Op::Call(_)));
-            let call = if let Some((sym, expected, slot_ptr)) = spec {
-                let sym_v = fb.ins().iconst(types::I64, sym as i64);
-                let exp_v = fb.ins().iconst(types::I64, expected as i64);
-                let slot_v = fb.ins().iconst(types::I64, slot_ptr);
-                fb.ins().call(
-                    rt.refs.call_spec,
-                    &[vmctx, sym_v, exp_v, slot_v, args_addr, n_val, out_addr],
-                )
-            } else {
-                fb.ins()
-                    .call(shim, &[vmctx, func_val, args_addr, n_val, out_addr])
+            // Subr-kind sites can return STATUS_NEED_GENERIC, which routes to a
+            // fallback block that re-does this site as the ORIGINAL generic
+            // call; bytecode-kind sites keep their everything-inside-the-shim
+            // protocol. `None` = no NEED_GENERIC possible.
+            let mut generic_fallback: Option<Block> = None;
+            let call = match spec {
+                Some((sym, expected, slot_ptr, SpecCalleeKind::Bytecode)) => {
+                    let sym_v = fb.ins().iconst(types::I64, sym as i64);
+                    let exp_v = fb.ins().iconst(types::I64, expected as i64);
+                    let slot_v = fb.ins().iconst(types::I64, slot_ptr);
+                    fb.ins().call(
+                        rt.refs.call_spec,
+                        &[vmctx, sym_v, exp_v, slot_v, args_addr, n_val, out_addr],
+                    )
+                }
+                Some((sym, expected, slot_ptr, kind)) => {
+                    generic_fallback = Some(fb.create_block());
+                    let sym_v = fb.ins().iconst(types::I64, sym as i64);
+                    let exp_v = fb.ins().iconst(types::I64, expected as i64);
+                    let slot_v = fb.ins().iconst(types::I64, slot_ptr);
+                    // The refs are Some whenever a subr-kind site exists (the
+                    // declare is keyed on exactly that condition).
+                    match (kind, &reg_args) {
+                        (SpecCalleeKind::SubrGeneral, _) => {
+                            let f = rt
+                                .refs
+                                .call_subr_spec
+                                .ok_or(CompileError::UnsupportedOp("subr-spec-refs"))?;
+                            fb.ins().call(
+                                f,
+                                &[vmctx, sym_v, exp_v, slot_v, args_addr, n_val, out_addr],
+                            )
+                        }
+                        (
+                            SpecCalleeKind::PredRecordp | SpecCalleeKind::PredSymbolWithPos,
+                            Some(args),
+                        ) => {
+                            let f = rt
+                                .refs
+                                .pred_spec
+                                .ok_or(CompileError::UnsupportedOp("subr-spec-refs"))?;
+                            let kind_v = fb.ins().iconst(
+                                types::I64,
+                                if kind == SpecCalleeKind::PredRecordp {
+                                    PRED_KIND_RECORDP
+                                } else {
+                                    PRED_KIND_SYMBOL_WITH_POS_P
+                                },
+                            );
+                            fb.ins()
+                                .call(f, &[vmctx, kind_v, sym_v, exp_v, slot_v, args[0], out_addr])
+                        }
+                        (SpecCalleeKind::EqInclProps, Some(args)) => {
+                            let f = rt
+                                .refs
+                                .eq_incl_props_spec
+                                .ok_or(CompileError::UnsupportedOp("subr-spec-refs"))?;
+                            fb.ins().call(
+                                f,
+                                &[vmctx, sym_v, exp_v, slot_v, args[0], args[1], out_addr],
+                            )
+                        }
+                        // Reg-arg kinds always collected their args above.
+                        _ => return Err(CompileError::UnsupportedOp("subr-spec-shape")),
+                    }
+                }
+                None => fb
+                    .ins()
+                    .call(shim, &[vmctx, func_val, args_addr, n_val, out_addr]),
             };
             let status = fb.inst_results(call)[0];
             if let Some(s) = saved {
                 fb.ins().call(rt.refs.gc_restore, &[s]);
             }
-            // STATUS_OK -> continue with the result; anything else from the call
-            // shim is STATUS_SIGNAL -> propagate via the shared signal block.
+            // STATUS_OK -> continue with the result; STATUS_NEED_GENERIC (subr
+            // spec sites only) -> the generic fallback block; anything else is
+            // STATUS_SIGNAL -> propagate via the handler-aware signal target.
             let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
             let cont = fb.create_block();
             let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
-            fb.ins().brif(ok, cont, &[], se, &[]);
+            if let Some(gen_block) = generic_fallback {
+                let check = fb.create_block();
+                fb.ins().brif(ok, cont, &[], check, &[]);
+                fb.switch_to_block(check);
+                fb.seal_block(check);
+                let need_gen = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_NEED_GENERIC);
+                fb.ins().brif(need_gen, gen_block, &[], se, &[]);
+                // Fallback: the ORIGINAL generic Op::Call lowering for this
+                // site — spill the register args (if any), root the residual
+                // stack, call the plain generic shim on the constant SYMBOL
+                // (which resolves the live binding: fset/advice/overrides all
+                // take effect), same OK/signal branching.
+                fb.switch_to_block(gen_block);
+                fb.seal_block(gen_block);
+                if let Some(args) = &reg_args {
+                    for (i, &v) in args.iter().enumerate() {
+                        fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
+                    }
+                }
+                let saved_gen = if stack.is_empty() {
+                    None
+                } else {
+                    let c = fb.ins().call(rt.refs.gc_save, &[]);
+                    let s = fb.inst_results(c)[0];
+                    for &v in stack.iter() {
+                        fb.ins().call(rt.refs.gc_push, &[v]);
+                    }
+                    Some(s)
+                };
+                let vmctx_gen = fb.use_var(rt.vmctx_var);
+                let call_gen = fb
+                    .ins()
+                    .call(shim, &[vmctx_gen, func_val, args_addr, n_val, out_addr]);
+                let status_gen = fb.inst_results(call_gen)[0];
+                if let Some(s) = saved_gen {
+                    fb.ins().call(rt.refs.gc_restore, &[s]);
+                }
+                let se_gen = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
+                let ok_gen = fb.ins().icmp_imm(IntCC::Equal, status_gen, STATUS_OK);
+                fb.ins().brif(ok_gen, cont, &[], se_gen, &[]);
+            } else {
+                fb.ins().brif(ok, cont, &[], se, &[]);
+            }
             fb.switch_to_block(cont);
             fb.seal_block(cont);
             let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
@@ -5310,13 +5755,108 @@ pub(crate) fn simple_effect(op: &Op) -> Result<(usize, i64), CompileError> {
 /// `PushConditionCase`/`PushCatch` frames not yet popped, outermost first.
 type HandlerStatic = (usize, usize);
 
+/// What kind of callee a speculation site validated at compile time — decides
+/// which shim the armed site calls and how its lowering roots/falls back.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SpecCalleeKind {
+    /// A BYTECODE object: `neovm_jit_call_spec` (epoch logic inside the shim,
+    /// V3 native-to-native fast path, strict-symbol fallback inside the shim).
+    Bytecode,
+    /// A fixed-arity builtin SUBR: `neovm_jit_call_subr_spec` — armed direct
+    /// dispatch with a FRESH per-call entry read; NOT-armed returns
+    /// [`STATUS_NEED_GENERIC`] and the site's generated fallback block runs
+    /// the plain generic call.
+    SubrGeneral,
+    /// `recordp` (1 arg): `neovm_jit_pred_spec`, pure tag test when armed.
+    PredRecordp,
+    /// `symbol-with-pos-p` (1 arg): `neovm_jit_pred_spec`, pure tag test.
+    PredSymbolWithPos,
+    /// `equal-including-properties` (2 args): `neovm_jit_eq_incl_props_spec`,
+    /// bitwise-eq hit → `t`; anything else bounces to the generic block.
+    EqInclProps,
+}
+
+impl SpecCalleeKind {
+    /// Kinds whose direct path passes its 1–2 args in REGISTERS with no
+    /// call-args spill and no residual rooting (the shims are GC-free by
+    /// contract); their generated fallback block spills + roots itself.
+    fn is_reg_args(self) -> bool {
+        matches!(
+            self,
+            SpecCalleeKind::PredRecordp
+                | SpecCalleeKind::PredSymbolWithPos
+                | SpecCalleeKind::EqInclProps
+        )
+    }
+}
+
 /// A speculated direct-call site: an `Op::Call` whose callee slot provably
 /// holds the constant symbol `sym`, fbound at compile time to the bytecode
-/// object `expected_bits`. `slot` indexes the leaf's armed-epoch slots.
+/// object or fixed-arity builtin subr `expected_bits` (see `kind`). `slot`
+/// indexes the leaf's armed-epoch slots.
 struct SpecSite {
     sym: u32,
     expected_bits: u64,
     slot: usize,
+    kind: SpecCalleeKind,
+}
+
+/// Classify a compile-time function-cell binding for SUBR speculation at an
+/// `Op::Call(nargs)` site on `site_sym`, or `None` when the site must stay on
+/// the generic path. Every clause is load-bearing:
+///
+/// * `subr_entry_from_value` + `dispatch_kind == Builtin` — only plain
+///   builtins; special forms / context-callables have different call
+///   protocols. Checked again at run time (fresh entry read) since entries
+///   are rewritten in place.
+/// * FIXED-ARITY `A0..A8` only (`subr_entry_uses_fixed_value_call`) — the
+///   interpreter passes `Many`/`ManySlice` the EXACT-length argument vector
+///   (`dispatch_subr_func_unchecked`), so nil-padding them would diverge.
+///   (The armed dispatcher still handles an entry rewritten in place to
+///   `Many` correctly — the stack-args dispatcher passes the exact slice.)
+/// * `min_args <= nargs <= max_args` — a call that must signal
+///   wrong-number-of-arguments stays generic so the signal (payload, frame
+///   shape) is byte-identical.
+/// * `aset`/`fillarray` excluded on BOTH the site name and the resolved subr
+///   name — their mutating-first-string-arg WRITEBACK protocol
+///   (`Vm::mutates_first_arg_name` / `maybe_writeback_mutating_first_arg`)
+///   wraps the generic call; the resolved-name check also covers
+///   `(fset 'alias (symbol-function 'aset))` aliases, which
+///   `writeback_mutating_callable_names` detects through the cell.
+/// * `funcall`/`apply`/`eval` excluded (both names) — re-entrant drivers;
+///   depth/backtrace conservatism (`eval` IS a fixed-arity A2).
+/// * `vectorp` stays General (correct, just not a tag test): bool-vectors and
+///   sentinel char-tables are genuine `VecLikeType::Vector` objects that
+///   `builtin_vectorp_1` distinguishes semantically — an inline tag test
+///   would return `t` where the builtin returns `nil`. `keywordp`/`symbolp`
+///   stay General because their builtins consult `symbols-with-pos-enabled`.
+fn subr_spec_kind(binding: Value, site_sym: SymId, nargs: usize) -> Option<SpecCalleeKind> {
+    let (subr_sym, entry) = subr_entry_from_value(binding)?;
+    if entry.dispatch_kind != SubrDispatchKind::Builtin {
+        return None;
+    }
+    if !Context::subr_entry_uses_fixed_value_call(entry) {
+        return None;
+    }
+    if nargs < entry.min_args as usize {
+        return None;
+    }
+    if entry.max_args.is_none_or(|max| nargs > max as usize) {
+        return None;
+    }
+    let site_name = resolve_sym(site_sym);
+    let resolved_name = resolve_sym(subr_sym);
+    if [site_name, resolved_name].iter().any(|name| {
+        matches!(*name, "aset" | "fillarray" | "funcall" | "apply" | "eval")
+    }) {
+        return None;
+    }
+    Some(match (resolved_name, nargs) {
+        ("recordp", 1) => SpecCalleeKind::PredRecordp,
+        ("symbol-with-pos-p", 1) => SpecCalleeKind::PredSymbolWithPos,
+        ("equal-including-properties", 2) => SpecCalleeKind::EqInclProps,
+        _ => SpecCalleeKind::SubrGeneral,
+    })
 }
 
 /// Per-site speculation state, baked into generated code by raw address and
@@ -5339,13 +5879,22 @@ pub(crate) struct SpecSlot {
 /// shape `Constant(f) arg-push* Call(n)` where every op between the callee
 /// push and its call only PUSHES new slots (Constant/Nil/True/Dup/StackRef —
 /// the callee slot can't be rewritten), no jump target lands inside the
-/// window, and `f` is currently fbound to a BYTECODE object.
+/// window, and `f` is currently fbound to either
 ///
-/// Bytecode callees only for now: an epoch-equal check on a bytecode binding
-/// proves it still names the same immutable bytecode object. (Subr-entry
-/// rewrites — `register_global_subr_entry` — now also bump function_epoch via
-/// `defsubr_with_entry`, so extending speculation to subr bindings is
-/// unlocked; it just isn't implemented or measured yet.)
+/// * a BYTECODE object ([`SpecCalleeKind::Bytecode`]) — an epoch-equal check
+///   on a bytecode binding proves it still names the same immutable bytecode
+///   object; or
+/// * a FIXED-ARITY builtin SUBR passing [`subr_spec_kind`]'s constraints
+///   (Gap 1) — subr VALUE bits are stable (`Box::leak`'d, rewritten in place
+///   by `update_static_subr_object_entry` keeping bits identical, and
+///   `defsubr_with_entry` bumps `function_epoch` on every rewrite), so the
+///   same epoch/bits validation applies; the armed shims re-read the ENTRY
+///   fresh per call precisely because of those in-place rewrites.
+///
+/// This runs ONLY under `Some(obarray)` (see `lower_leaf_full`), which
+/// auto-excludes AOT: `build_baseline_leaf_object` compiles at `obarray=None`
+/// with an empty site map, so no AOT object ever bakes spec state or
+/// references the subr spec shims.
 fn find_spec_sites(
     ops: &[Op],
     constants: &[Value],
@@ -5382,15 +5931,20 @@ fn find_spec_sites(
         let Some(binding) = obarray.symbol_function_id(sym_id) else {
             continue;
         };
-        if binding.get_bytecode_data().is_none() {
+        let kind = if binding.get_bytecode_data().is_some() {
+            SpecCalleeKind::Bytecode
+        } else if let Some(kind) = subr_spec_kind(binding, sym_id, pushes) {
+            kind
+        } else {
             continue;
-        }
+        };
         sites.insert(
             call_idx,
             SpecSite {
                 sym: sym_id.0,
                 expected_bits: binding.bits() as u64,
                 slot: next_slot,
+                kind,
             },
         );
         next_slot += 1;
@@ -6369,6 +6923,18 @@ pub fn lower_leaf_full(
         neovm_jit_save_window_excursion as *const u8,
     );
     builder.symbol("neovm_jit_call_spec", neovm_jit_call_spec as *const u8);
+    // Gap 1 (JIT-only, by address — never in the dynamic symbol table): the
+    // subr-speculation shims. Registered unconditionally (harmless when the
+    // body has no subr sites; the declares are gated instead).
+    builder.symbol(
+        "neovm_jit_call_subr_spec",
+        neovm_jit_call_subr_spec as *const u8,
+    );
+    builder.symbol("neovm_jit_pred_spec", neovm_jit_pred_spec as *const u8);
+    builder.symbol(
+        "neovm_jit_eq_incl_props_spec",
+        neovm_jit_eq_incl_props_spec as *const u8,
+    );
     let mut module = JITModule::new(builder);
     // has_backedge + needs_rt via the shared single-source helpers (R2-E) — same
     // logic as before, just factored so the baseline-AOT emit can reuse it.
@@ -6614,8 +7180,15 @@ fn build_leaf_fn<M: Module>(
         // Declare the runtime-call machinery into this function if the body
         // re-enters the runtime (`Cons` / `Call`).
         let rt = if needs_rt {
+            // Declare the JIT-only subr-speculation shims iff the body has
+            // subr-kind spec sites. AOT always compiles with an EMPTY site map
+            // (`build_baseline_leaf_object`), so this is always false there —
+            // an ObjectModule never even declares those import names.
+            let subr_spec = spec_sites
+                .values()
+                .any(|site| site.kind != SpecCalleeKind::Bytecode);
             // `module` is already `&mut M`; reborrow it for the call.
-            let refs = declare_rt_refs(&mut *module, fb.func, call_conv, ptr_ty)?;
+            let refs = declare_rt_refs(&mut *module, fb.func, call_conv, ptr_ty, subr_spec)?;
             let vmctx_var = fb.declare_var(ptr_ty);
             let max_call_args = ops
                 .iter()
@@ -7073,6 +7646,7 @@ fn build_leaf_fn<M: Module>(
                                 site.sym,
                                 site.expected_bits,
                                 &spec_slots[site.slot] as *const SpecSlot as i64,
+                                site.kind,
                             )
                         });
                         lower_simple_op(

@@ -102,11 +102,15 @@ const fn compute_abi_tag() -> u32 {
         }};
     }
     mix_u64!(ABI_TAG_VERSION as u64);
-    // STATUS_* codes (the loader + code agree on these).
+    // STATUS_* codes (the loader + code agree on these). STATUS_NEED_GENERIC
+    // never crosses the leaf entry ABI (it is consumed inside a JIT leaf's own
+    // generated code, and AOT leaves can't contain subr spec sites), but it is
+    // part of the status-code SPACE — salt it so any renumbering re-tags.
     mix_u64!(super::compile::STATUS_OK as u64);
     mix_u64!(super::compile::STATUS_DEOPT as u64);
     mix_u64!(super::compile::STATUS_SIGNAL as u64);
     mix_u64!(super::compile::STATUS_DEOPT_AT as u64);
+    mix_u64!(super::compile::STATUS_NEED_GENERIC as u64);
     // Entry ABI shape: the unified 4-param entry ABI
     //   extern "C" fn(*mut u8, *const i64, *mut i64, *const LeafSidecar) -> i64
     // Encoded as <param_count><return_count> so a future arity/return change
