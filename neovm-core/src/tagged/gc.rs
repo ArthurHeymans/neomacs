@@ -212,6 +212,12 @@ struct ConcurrentMarkJob {
     /// vectors are marked concurrently instead of deferred to the STW termination.
     /// Always `Some` for a concurrent mark — the start handshake captures it.
     vectors: Option<crate::tagged::header::VectorScanSnapshot>,
+    /// CONCURRENT STRING MARKING: count of owned interval-free strings this
+    /// cycle's GC thread claimed via `concurrent_try_mark_string` (one per
+    /// successful `mark_claim`, Relaxed — single writer). Read by
+    /// `join_concurrent_mark` (after the exit handshake's happens-before) into
+    /// the cycle stats; sizes how much string work left the STW drain.
+    str_claimed: std::sync::Arc<AtomicUsize>,
 }
 
 /// A unit of work handed to the GC thread, plus a oneshot done-channel the GC
@@ -277,11 +283,77 @@ unsafe fn atomic_mark_owned_cons_ptr(ptr: *const ConsCell) -> bool {
     (word.fetch_or(mask, Ordering::Relaxed) & mask) == 0
 }
 
+/// CONCURRENT STRING MARKING: try to mark one discovered string on the GC
+/// thread. Returns `true` when fully handled here (claimed now, or already
+/// marked); `false` means the caller must park the value in `deferred` for the
+/// STW termination exactly as before. Called at all three discovery sinks
+/// (gray drain, obarray scan, vector-backing scan).
+///
+/// OWNERSHIP — the same dump-span test the cons drain uses: every mapped
+/// (pdump) string is registered via `register_mapped_string_object`, whose
+/// only caller (pdump convert) passes `size_of::<StringObj>()` (never 0), so
+/// registration ALWAYS `extend_dump_span`s over the object — no
+/// "mapped-non-dump string" exists (verified; unlike conses, which have
+/// non-dump mapped ranges). `alloc_string` is the only other producer of
+/// TAG_STRING values, so outside the span ⇒ owned by this heap. Inside the
+/// span ⇒ possibly mapped ⇒ DEFER unchanged: mapped strings are marked via a
+/// SEPARATE plain-bool (`MappedStringObject::marked`) that sweep/verify
+/// consult — claiming their `GcHeader` bit here would let the termination's
+/// `mark_value` skip the mapped mark and the interval trace, a use-after-free
+/// of their interval children. (An OWNED string that happens to sit inside
+/// the span is merely deferred — safe, identical to today's path.)
+///
+/// INTERVALS — the hard boundary: the GC thread reads ONLY the interval
+/// pointer WORD (`intervals_ptr`), NEVER the table behind it. The mutator can
+/// free the table at any instant via `clear_intervals`, so calling
+/// `intervals()` / `is_empty()` / `for_each_root()` here is a use-after-free.
+/// Any future "trace small interval trees concurrently" extension needs a
+/// retire/snapshot scheme like the Tier B vector backings — do not shortcut.
+///
+/// The null-check runs BEFORE the claim: claiming an interval-BEARING string
+/// and then deferring it would make the termination's `mark_value` see the
+/// mark bit and return without tracing the intervals. Staleness is safe both
+/// ways: a stale non-null word only defers spuriously; a "stale null" can
+/// only follow a real `clear_intervals`, whose SATB barrier (enforced inside
+/// the `LispString` mutators) logged the dropped children first. A table
+/// installed AFTER we claim is also safe: its children are values the mutator
+/// obtained from snapshot-reachable places or allocated black — live this
+/// cycle under SATB's invariant — and the next cycle re-traces fresh marks.
+#[inline]
+fn concurrent_try_mark_string(
+    val: TaggedValue,
+    dump_lo: usize,
+    dump_hi: usize,
+    str_claimed: &AtomicUsize,
+) -> bool {
+    debug_assert!(val.is_string());
+    let Some(ptr) = val.as_string_ptr() else {
+        return false; // malformed value — let the termination's mark_value decide
+    };
+    let addr = ptr as usize;
+    if addr >= dump_lo && addr < dump_hi {
+        return false; // inside the dump span: possibly mapped — defer (unchanged path)
+    }
+    // Owned string. Read the interval pointer WORD only (see doc above).
+    if !unsafe { (*ptr).data.intervals_ptr() }.is_null() {
+        return false; // interval-bearing: defer so mark_value traces the children
+    }
+    // Interval-free owned string: zero Lisp children, so claiming the mark bit
+    // IS the complete trace. A failed claim means someone already marked it
+    // (allocate-black, or an earlier edge this cycle) — equally done.
+    if unsafe { (*ptr).header.mark_claim() } {
+        str_claimed.fetch_add(1, Ordering::Relaxed);
+    }
+    true
+}
+
 /// The background concurrent-mark loop (Phase 5). Runs on the "neovm-gc" thread
 /// with no `&mut TaggedHeap`: it marks conses via atomic block-bitmap ops +
-/// atomic car/cdr loads, and defers all non-cons (and non-owned conses) to the
-/// mutator's stop-the-world termination. Loops draining its local gray queue and
-/// the shared SATB buffer until both are empty and the mutator asks it to stop.
+/// atomic car/cdr loads, claims owned INTERVAL-FREE strings via their atomic
+/// header mark bit (`concurrent_try_mark_string` — mark-only, zero children),
+/// and defers every other non-cons (and non-owned conses) to the mutator's
+/// stop-the-world termination. Loops draining its local gray queue and the
+/// shared SATB buffer until both are empty and the mutator asks it to stop.
 fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
     use std::sync::atomic::Ordering;
     // Stage 1b CONCURRENT OBARRAY SCAN: when an obarray snapshot was handed over,
@@ -320,8 +392,16 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
                     }
                 }
             } else if val.is_heap_object() {
-                // Float/string/veclike: backing may be reallocated by the mutator,
-                // so never read it here — defer the trace to the STW termination.
+                // Strings first: an owned, interval-free string is claimed right
+                // here (mark-only — it has zero Lisp children). Everything else
+                // — floats/veclikes whose backing the mutator may reallocate,
+                // and interval-bearing or mapped strings, which need the
+                // mutator's `mark_value` — is deferred to the STW termination.
+                if val.is_string()
+                    && concurrent_try_mark_string(val, job.dump_lo, job.dump_hi, &job.str_claimed)
+                {
+                    continue;
+                }
                 job.deferred.lock().unwrap().push(val);
             }
         }
@@ -343,7 +423,14 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
                     snap.scan(|child| {
                         if child.is_cons() {
                             job.gray.push(child);
-                        } else {
+                        } else if !(child.is_string()
+                            && concurrent_try_mark_string(
+                                child,
+                                job.dump_lo,
+                                job.dump_hi,
+                                &job.str_claimed,
+                            ))
+                        {
                             job.deferred.lock().unwrap().push(child);
                         }
                     });
@@ -372,7 +459,14 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
                     snap.scan(|child| {
                         if child.is_cons() {
                             job.gray.push(child);
-                        } else {
+                        } else if !(child.is_string()
+                            && concurrent_try_mark_string(
+                                child,
+                                job.dump_lo,
+                                job.dump_hi,
+                                &job.str_claimed,
+                            ))
+                        {
                             job.deferred.lock().unwrap().push(child);
                         }
                     });
@@ -520,6 +614,34 @@ pub(crate) fn note_root_overwrite(pre_image: TaggedValue) {
 #[inline]
 pub(crate) fn concurrent_mark_active() -> bool {
     TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.get())
+}
+
+/// SATB pre-image sink for STRING interval-table mutations, called from inside
+/// the `LispString` interval mutators themselves (`ensure_intervals` /
+/// `clear_intervals` in heap_types.rs) so the barrier is enforced at the only
+/// mutation choke points — no call site, wrapper or raw, can drop a string's
+/// interval children unlogged while the concurrent GC thread may have claimed
+/// the string as interval-free. Logs the table's current child VALUES (not an
+/// owner) to the shared SATB buffer, deduped once per string address per cycle
+/// (`satb_string_preimage_addrs`, cleared at `begin_collection`): the first
+/// pre-image is a superset of the start-of-cycle children — the same argument
+/// as `push_value_children_to_satb_shared`'s owner dedup. The caller has
+/// already checked `concurrent_mark_active()`.
+pub(crate) fn note_string_interval_preimage(
+    string_addr: usize,
+    table: &crate::buffer::text_props::TextPropertyTable,
+) {
+    with_tagged_heap(|heap| {
+        if !heap.satb_string_preimage_addrs.insert(string_addr) {
+            return; // this string's full pre-image was already logged this cycle
+        }
+        let mut shared = heap.satb_shared.lock().unwrap();
+        table.for_each_root(|value| {
+            if value.is_heap_object() {
+                shared.push(value);
+            }
+        });
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -1085,6 +1207,11 @@ pub(crate) struct SweepStats {
     /// classification's header reads are not free STW time.
     pub last_termination_kinds: DrainKinds,
     pub max_termination_kinds: DrainKinds,
+    /// CONCURRENT STRING MARKING: owned interval-free strings the GC thread
+    /// claimed concurrently last cycle — string marks that LEFT the STW drain
+    /// (the `kinds.string` bucket keeps counting the strings still parked:
+    /// interval-bearing + mapped/dump-span ones). Always populated.
+    pub last_concurrent_str_claimed: usize,
     /// Cost of the `join_concurrent_mark` fold itself (taking the SATB +
     /// deferred buffers, classifying, pushing to gray) — the cheap half of the
     /// termination; the mark fixpoint that follows is the trace line's `drain`.
@@ -1320,6 +1447,19 @@ pub struct TaggedHeap {
     /// GC thread sets this (Release) when gray + SATB are drained; the mutator
     /// polls it (Acquire) at safe points to decide when to terminate.
     gc_done: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// CONCURRENT STRING MARKING: shared claim counter for the in-flight cycle
+    /// (see `ConcurrentMarkJob::str_claimed`). Reset at `launch_concurrent_mark`,
+    /// folded into `last_concurrent_str_claimed` at `join_concurrent_mark`.
+    concurrent_str_claimed: std::sync::Arc<AtomicUsize>,
+    /// Strings the GC thread claimed concurrently in the last completed cycle
+    /// (diagnostics; the concurrent counterpart of `last_termination_kinds.string`).
+    last_concurrent_str_claimed: usize,
+    /// CONCURRENT STRING MARKING: per-cycle dedup for the ENFORCED in-mutator
+    /// string interval SATB barrier (`note_string_interval_preimage`), keyed by
+    /// `LispString` address — stable for the whole cycle because nothing is
+    /// freed while a mark runs. Cleared at `begin_collection`, like
+    /// `satb_snapshotted_owners`.
+    satb_string_preimage_addrs: FxHashSet<usize>,
     /// Mutator sets this (Release) to ask the GC thread to finish and exit.
     gc_stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// Receives when the GC thread has exited its mark loop (so the mutator's
@@ -1445,6 +1585,9 @@ impl TaggedHeap {
             satb_snapshotted_owners: FxHashSet::default(),
             deferred_veclikes: std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
             gc_done: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            concurrent_str_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
+            last_concurrent_str_claimed: 0,
+            satb_string_preimage_addrs: FxHashSet::default(),
             gc_stop: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             gc_exited: None,
             pending_obarray_scan: None,
@@ -1551,6 +1694,7 @@ impl TaggedHeap {
             last_termination_satb: self.last_termination_satb,
             last_termination_kinds: self.last_termination_kinds,
             max_termination_kinds: self.max_termination_kinds,
+            last_concurrent_str_claimed: self.last_concurrent_str_claimed,
             last_termination_fold_us: self.last_termination_fold_us,
             termination_count: self.termination_count,
             mark_us: self.sweep_mark_us,
@@ -2681,6 +2825,9 @@ impl TaggedHeap {
         // start-of-cycle reachability (a carried-over entry would wrongly suppress
         // the snapshot of an owner whose children differ this cycle).
         self.satb_snapshotted_owners.clear();
+        // CONCURRENT STRING MARKING: same per-cycle reset for the enforced
+        // in-mutator string interval pre-image dedup (`note_string_interval_preimage`).
+        self.satb_string_preimage_addrs.clear();
         // Stage 2 Tier B CONCURRENT VECTOR SCAN: the per-cycle clone-on-write dedup
         // set must start empty so each vector owner is cloned+retired at most once
         // per cycle (a carried-over entry would wrongly suppress this cycle's clone).
@@ -3988,6 +4135,8 @@ impl TaggedHeap {
         let (exited_tx, exited_rx) = std::sync::mpsc::channel();
         self.gc_done
             .store(false, std::sync::atomic::Ordering::Release);
+        // Fresh per-cycle concurrent string-claim counter.
+        self.concurrent_str_claimed.store(0, Ordering::Relaxed);
         self.gc_stop
             .store(false, std::sync::atomic::Ordering::Release);
         self.gc_exited = Some(exited_rx);
@@ -4010,6 +4159,7 @@ impl TaggedHeap {
             obarray: self.pending_obarray_scan.take(),
             // Stage 2 Tier B: the vector-backing snapshot captured just above.
             vectors,
+            str_claimed: self.concurrent_str_claimed.clone(),
         };
         gc_thread()
             .send(GcRequest::ConcurrentMark(job))
@@ -4039,6 +4189,10 @@ impl TaggedHeap {
         let deferred = std::mem::take(&mut *self.deferred_veclikes.lock().unwrap());
         self.last_termination_deferred = deferred.len();
         self.max_termination_deferred = self.max_termination_deferred.max(deferred.len());
+        // Strings the GC thread claimed concurrently (they never reached
+        // `deferred`); the exit handshake above (`rx.recv()`) established the
+        // happens-before, so a Relaxed read sees the final count.
+        self.last_concurrent_str_claimed = self.concurrent_str_claimed.load(Ordering::Relaxed);
         // Classify what the drain is about to trace, per kind — the measurement
         // that decides which kinds a concurrent-tracing extension should take
         // on. Pure counting (marking behavior is unchanged), but the header
@@ -5332,7 +5486,10 @@ mod ownership_tests {
     /// value is reachable ONLY through the rooted cons spine, so the GC
     /// thread's cons walk discovers it and parks it in `deferred` (vectors
     /// included — Tier B traces their BACKINGS concurrently, but the vector
-    /// VALUE is still parked for its header mark).
+    /// VALUE is still parked for its header mark). CONCURRENT STRING MARKING:
+    /// interval-FREE strings are now claimed on the GC thread instead of
+    /// parked, so the `str` bucket counts only the interval-BEARING ones and
+    /// the claim counter covers the rest.
     #[test]
     fn concurrent_termination_classifies_deferred_kinds() {
         use crate::emacs_core::value::{HashTableTest, LispHashTable};
@@ -5342,6 +5499,7 @@ mod ownership_tests {
         set_tagged_heap(&mut heap);
 
         const N_STR: usize = 300;
+        const N_STR_PROPS: usize = 40;
         const N_REC: usize = 200;
         const N_LAMBDA: usize = 150;
         const N_MACRO: usize = 30;
@@ -5352,6 +5510,17 @@ mod ownership_tests {
         let mut list = TaggedValue::fixnum(0);
         for _ in 0..N_STR {
             let s = heap.alloc_string(crate::heap_types::LispString::from_utf8("drain-kind"));
+            list = heap.alloc_cons(s, list);
+        }
+        // Interval-BEARING strings: still parked for the termination drain
+        // (their interval children must be traced by `mark_value`).
+        for _ in 0..N_STR_PROPS {
+            let s = heap.alloc_string(crate::heap_types::LispString::from_utf8("drain-props"));
+            let payload = heap.alloc_cons(TaggedValue::fixnum(9), TaggedValue::fixnum(0));
+            let ptr = s.as_string_ptr().unwrap() as *mut StringObj;
+            // Pre-mark direct install on a just-allocated string (unpublished
+            // to any concurrent cycle yet).
+            unsafe { *(*ptr).data.intervals_mut() = interval_table_carrying(payload) };
             list = heap.alloc_cons(s, list);
         }
         for i in 0..N_REC {
@@ -5390,7 +5559,23 @@ mod ownership_tests {
 
         let stats = heap.sweep_stats();
         let kinds = stats.last_termination_kinds;
-        assert!(kinds.string >= N_STR, "strings parked (str={})", kinds.string);
+        assert!(
+            stats.last_concurrent_str_claimed >= N_STR,
+            "interval-free strings are claimed concurrently, not parked \
+             (claimed={})",
+            stats.last_concurrent_str_claimed,
+        );
+        assert!(
+            kinds.string >= N_STR_PROPS,
+            "interval-bearing strings stay parked (str={})",
+            kinds.string,
+        );
+        assert!(
+            kinds.string < N_STR,
+            "the interval-free majority must have left the parked buffer \
+             (str={})",
+            kinds.string,
+        );
         assert!(kinds.record >= N_REC, "records parked (rec={})", kinds.record);
         assert!(
             kinds.closure >= N_LAMBDA + N_MACRO,
@@ -5428,6 +5613,405 @@ mod ownership_tests {
         heap.finish_incremental_sweep_now();
         assert!(!heap.sweep_in_progress());
         assert_eq!(heap.sweep_stats().noncons_freed, 0, "everything is rooted");
+    }
+
+    /// Build an interval table whose sole plist value is `v` (chars [0, 1)).
+    /// `for_each_root` yields the plist (a heap cons chain carrying `v`), so
+    /// marking the table's roots transitively keeps `v` alive. Allocates the
+    /// plist conses on the thread-local tagged heap.
+    fn interval_table_carrying(v: TaggedValue) -> crate::buffer::text_props::TextPropertyTable {
+        use crate::buffer::text_props::{PropertyInterval, TextPropertyTable};
+        let key = TaggedValue::fixnum(1);
+        let mut properties = std::collections::HashMap::new();
+        properties.insert(key, v);
+        TextPropertyTable::from_dump(vec![PropertyInterval {
+            start: 0,
+            end: 1,
+            properties,
+            key_order: vec![key],
+        }])
+    }
+
+    /// Drive one full concurrent cycle to completion: wait for the GC thread,
+    /// terminate stop-the-world with `root` re-seeded, and drain the deferred
+    /// sweep. Mirrors the driver's state machine (and the other tests here).
+    fn finish_concurrent_cycle(heap: &mut TaggedHeap, root: TaggedValue) {
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(root);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+        assert!(!heap.sweep_in_progress());
+    }
+
+    /// CONCURRENT STRING MARKING, load-bearing-barrier proof (production
+    /// path): a string S whose interval table is the ONLY reference to value V
+    /// has that table dropped MID-MARK through the `mutate.rs` wrapper. V must
+    /// survive the cycle purely via the SATB pre-image log — whichever side of
+    /// the clear the GC thread observed S on (non-null ⇒ deferred, then the
+    /// termination traces an already-empty table; null ⇒ claimed, never
+    /// re-traced).
+    #[test]
+    fn concurrent_string_claim_and_interval_clear_keep_children_alive() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // V (and its plist chain): reachable ONLY via S's interval table.
+        let v = heap.alloc_cons(TaggedValue::fixnum(41), TaggedValue::fixnum(42));
+        let s = heap.alloc_string(crate::heap_types::LispString::from_utf8("props"));
+        {
+            let ptr = s.as_string_ptr().unwrap() as *mut StringObj;
+            // Pre-mark install on a fresh string: no barrier needed yet.
+            unsafe { *(*ptr).data.intervals_mut() = interval_table_carrying(v) };
+        }
+        // S2: interval-free — exercises the claim fast path alongside.
+        let s2 = heap.alloc_string(crate::heap_types::LispString::from_utf8("plain"));
+        // Long spine so the GC thread is (almost certainly) still marking the
+        // list when the mutator clears. Both correctness outcomes are asserted
+        // identically, so the race direction cannot break the test.
+        let mut list = heap.alloc_cons(s2, TaggedValue::fixnum(0));
+        list = heap.alloc_cons(s, list);
+        for i in 0..300_000 {
+            list = heap.alloc_cons(TaggedValue::fixnum(i), list);
+        }
+        let root = list;
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+
+        // Mid-mark, on the mutator thread: drop S's whole interval table via
+        // the barrier wrapper (fires the StringData SATB pre-image push AND
+        // the enforced in-mutator interval barrier).
+        let cleared = crate::tagged::mutate::with_lisp_string_mut(s, |ls| ls.clear_intervals());
+        assert!(cleared.is_some());
+
+        finish_concurrent_cycle(&mut heap, root);
+
+        // V survived the cycle purely via SATB.
+        assert_eq!(
+            unsafe { (*v.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(41).0,
+        );
+        assert!(heap.owns_non_cons_object(s.as_string_ptr().unwrap() as *const u8));
+        assert!(heap.owns_non_cons_object(s2.as_string_ptr().unwrap() as *const u8));
+    }
+
+    /// Same as above, but the mid-mark clear BYPASSES the `mutate.rs` wrappers
+    /// entirely (raw `clear_intervals` on the payload) — proving the SATB
+    /// barrier is enforced INSIDE the `LispString` mutators and cannot be
+    /// skipped by any call site.
+    #[test]
+    fn concurrent_string_raw_interval_clear_keeps_children_alive() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let v = heap.alloc_cons(TaggedValue::fixnum(51), TaggedValue::fixnum(52));
+        let s = heap.alloc_string(crate::heap_types::LispString::from_utf8("raw-clear"));
+        let s_ptr = s.as_string_ptr().unwrap() as *mut StringObj;
+        unsafe { *(*s_ptr).data.intervals_mut() = interval_table_carrying(v) };
+        let mut list = heap.alloc_cons(s, TaggedValue::fixnum(0));
+        for i in 0..300_000 {
+            list = heap.alloc_cons(TaggedValue::fixnum(i), list);
+        }
+        let root = list;
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+
+        // Raw mutator call — no wrapper, no note_heap_write. The enforced
+        // in-mutator barrier inside clear_intervals must log V's plist.
+        unsafe { (*s_ptr).data.clear_intervals() };
+
+        finish_concurrent_cycle(&mut heap, root);
+
+        assert_eq!(
+            unsafe { (*v.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(51).0,
+        );
+        assert!(heap.owns_non_cons_object(s_ptr as *const u8));
+    }
+
+    /// The claim + clear flow under the ARMED partition/tricolor verifiers
+    /// (`NEOVM_GC_VERIFY_PARTITION=1`): `verify_incremental_tricolor` is the
+    /// oracle that a concurrently-claimed (black) string presents no
+    /// black->white edge at termination. The fake dump span only activates the
+    /// partition; it maps no objects, so every string stays span-outside
+    /// (owned, claim-eligible).
+    #[test]
+    fn concurrent_string_claim_passes_partition_verifier() {
+        crate::test_utils::init_test_tracing();
+        unsafe { std::env::set_var("NEOVM_GC_VERIFY_PARTITION", "1") };
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        heap.extend_dump_span(4096, 16);
+
+        // First partitioned cycle promotes + blackens; verifiers arm after it.
+        heap.begin_collection();
+        heap.complete_collection();
+        assert!(heap.dump_blackened);
+
+        let v = heap.alloc_cons(TaggedValue::fixnum(61), TaggedValue::fixnum(62));
+        let s = heap.alloc_string(crate::heap_types::LispString::from_utf8("verified"));
+        let s_ptr = s.as_string_ptr().unwrap() as *mut StringObj;
+        unsafe { *(*s_ptr).data.intervals_mut() = interval_table_carrying(v) };
+        let s2 = heap.alloc_string(crate::heap_types::LispString::from_utf8("verified-free"));
+        let mut list = heap.alloc_cons(s2, TaggedValue::fixnum(0));
+        list = heap.alloc_cons(s, list);
+        for i in 0..200_000 {
+            list = heap.alloc_cons(TaggedValue::fixnum(i), list);
+        }
+        let root = list;
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+        let _ = crate::tagged::mutate::with_lisp_string_mut(s, |ls| ls.clear_intervals());
+        // `incremental_finish` (inside) runs verify_dump_partition +
+        // verify_incremental_tricolor and panics on any violation.
+        finish_concurrent_cycle(&mut heap, root);
+
+        assert_eq!(
+            unsafe { (*v.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(61).0,
+        );
+        assert!(heap.owns_non_cons_object(s_ptr as *const u8));
+        assert!(heap.owns_non_cons_object(s2.as_string_ptr().unwrap() as *const u8));
+    }
+
+    /// MAPPED-STRING CLASSIFICATION (regression guard for the mis-claim UAF):
+    /// with the partition span covering a registered mapped string, the GC
+    /// thread must DEFER it (its `GcHeader` bit untouched — mapped strings
+    /// mark via the `MappedStringObject` side bool) and the termination must
+    /// mark it on the mapped path and trace its interval child.
+    #[test]
+    fn concurrent_mark_defers_mapped_strings_and_marks_their_interval_children() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // Fake-mapped string: a leaked StringObj registered exactly like the
+        // pdump loader registers image objects (extends the dump span over it).
+        let mapped = Box::into_raw(Box::new(StringObj {
+            header: GcHeader::new(HeapObjectKind::String),
+            data: crate::heap_types::LispString::from_utf8("mapped"),
+        }));
+        unsafe { heap.register_mapped_string_object(mapped, std::mem::size_of::<StringObj>()) };
+        // C: heap value reachable ONLY via the mapped string's interval table.
+        let c = heap.alloc_cons(TaggedValue::fixnum(7), TaggedValue::fixnum(8));
+        unsafe { *(*mapped).data.intervals_mut() = interval_table_carrying(c) };
+        let mapped_val = unsafe { TaggedValue::from_string_ptr(mapped) };
+        let root = heap.alloc_cons(mapped_val, TaggedValue::fixnum(0));
+
+        // First cycle with a partition is a full trace (dump not blackened):
+        // mapped marks were cleared, so the termination must re-mark the
+        // mapped string and trace its intervals.
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+
+        let stats = heap.sweep_stats();
+        assert!(
+            stats.last_termination_kinds.string >= 1,
+            "the mapped string must be parked, not claimed (str={})",
+            stats.last_termination_kinds.string,
+        );
+        assert_eq!(
+            stats.last_concurrent_str_claimed, 0,
+            "nothing here is claim-eligible",
+        );
+        assert!(
+            unsafe { !(*mapped).header.is_marked() },
+            "a mapped string's GcHeader bit must never be claimed by the GC \
+             thread (mapped marks live in the side table)",
+        );
+
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(root);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+
+        // Termination marked it on the mapped path and traced the child.
+        let idx = heap.mapped_string_index_by_addr[&(mapped as usize)];
+        assert!(heap.mapped_string_objects[idx].marked);
+        assert_eq!(
+            unsafe { (*c.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(7).0,
+        );
+
+        // Free the fake image object after the heap is gone.
+        drop(heap);
+        let _ = unsafe { Box::from_raw(mapped) };
+    }
+
+    /// RACE TEST: the mutator flips strings' interval tables None<->Some in a
+    /// loop (through the production wrappers) while the GC thread marks a
+    /// large spine. Liveness: every flipped-in value and every string must
+    /// survive; run under a data-race detector this is the strings race check
+    /// (the seqlock test is the precedent).
+    #[test]
+    fn concurrent_mark_races_interval_flips_and_retains_live_set() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        const N_STR: usize = 512;
+        let mut strings = Vec::with_capacity(N_STR);
+        let mut values = Vec::with_capacity(N_STR);
+        let mut list = TaggedValue::fixnum(0);
+        for i in 0..N_STR {
+            let v = heap.alloc_cons(TaggedValue::fixnum(i as i64), TaggedValue::fixnum(-1));
+            let s = heap.alloc_string(crate::heap_types::LispString::from_utf8("flip"));
+            let ptr = s.as_string_ptr().unwrap() as *mut StringObj;
+            unsafe { *(*ptr).data.intervals_mut() = interval_table_carrying(v) };
+            strings.push(s);
+            values.push(v);
+            list = heap.alloc_cons(s, list);
+        }
+        for i in 0..300_000 {
+            list = heap.alloc_cons(TaggedValue::fixnum(i), list);
+        }
+        let root = list;
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+
+        // Mutator: clear + reinstall every string's table, twice, while the
+        // GC thread walks the spine and claims/defers the strings.
+        for round in 0..2 {
+            for (i, s) in strings.iter().enumerate() {
+                let _ = crate::tagged::mutate::with_lisp_string_mut(*s, |ls| ls.clear_intervals());
+                if round == 0 || i % 2 == 0 {
+                    let table = interval_table_carrying(values[i]);
+                    let _ = crate::tagged::mutate::with_string_text_props_mut(*s, |t| *t = table);
+                }
+            }
+        }
+
+        finish_concurrent_cycle(&mut heap, root);
+
+        for (i, v) in values.iter().enumerate() {
+            assert_eq!(
+                unsafe { (*v.xcons_ptr()).load_car() }.0,
+                TaggedValue::fixnum(i as i64).0,
+                "flipped-in interval value #{i} must survive",
+            );
+        }
+        for s in &strings {
+            assert!(heap.owns_non_cons_object(s.as_string_ptr().unwrap() as *const u8));
+        }
+    }
+
+    /// CLAIM-AT-ALL-SINKS (vector sink): strings reachable ONLY through a
+    /// vector's slots are discovered by the Tier B backing scan on the GC
+    /// thread; the interval-free one must be claimed there (claim counter),
+    /// the interval-bearing one parked (str bucket) and its child traced.
+    #[test]
+    fn concurrent_claim_reaches_vector_slot_strings() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let s_free = heap.alloc_string(crate::heap_types::LispString::from_utf8("vec-free"));
+        let c = heap.alloc_cons(TaggedValue::fixnum(3), TaggedValue::fixnum(4));
+        let s_props = heap.alloc_string(crate::heap_types::LispString::from_utf8("vec-props"));
+        unsafe {
+            *(*(s_props.as_string_ptr().unwrap() as *mut StringObj))
+                .data
+                .intervals_mut() = interval_table_carrying(c)
+        };
+        let vec = heap.alloc_vector(vec![s_free, s_props]);
+        let root = heap.alloc_cons(vec, TaggedValue::fixnum(0));
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+
+        let stats = heap.sweep_stats();
+        assert!(
+            stats.last_concurrent_str_claimed >= 1,
+            "the interval-free vector-slot string must be claimed on the GC \
+             thread (claimed={})",
+            stats.last_concurrent_str_claimed,
+        );
+        assert!(
+            stats.last_termination_kinds.string >= 1,
+            "the interval-bearing vector-slot string must be parked (str={})",
+            stats.last_termination_kinds.string,
+        );
+
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(root);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+
+        assert!(heap.owns_non_cons_object(s_free.as_string_ptr().unwrap() as *const u8));
+        assert!(heap.owns_non_cons_object(s_props.as_string_ptr().unwrap() as *const u8));
+        assert_eq!(
+            unsafe { (*c.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(3).0,
+        );
+    }
+
+    /// CLAIM-AT-ALL-SINKS (obarray sink): a string reachable ONLY through an
+    /// obarray symbol's value cell is discovered by the Stage 1b symbol-cell
+    /// scan on the GC thread and must be claimed there.
+    #[test]
+    fn concurrent_claim_reaches_obarray_symbol_value_strings() {
+        crate::test_utils::init_test_tracing();
+        let mut ev = crate::emacs_core::eval::Context::new();
+        set_tagged_heap(&mut ev.tagged_heap);
+
+        // Interval-free string reachable ONLY via the symbol value cell.
+        let s = ev
+            .tagged_heap
+            .alloc_string(crate::heap_types::LispString::from_utf8("obarray-only"));
+        ev.obarray.set_symbol_value("neovm--str-claim-probe", s);
+
+        // Stage the obarray snapshot exactly like the start handshake does.
+        let snap = ev.obarray.scan_snapshot();
+        ev.tagged_heap.set_pending_obarray_scan(snap);
+        ev.tagged_heap.concurrent_begin();
+        ev.tagged_heap.launch_concurrent_mark();
+        while !ev.tagged_heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        ev.tagged_heap.join_concurrent_mark();
+
+        let stats = ev.tagged_heap.sweep_stats();
+        assert!(
+            stats.last_concurrent_str_claimed >= 1,
+            "the obarray-value string must be claimed via the symbol-cell scan \
+             (claimed={})",
+            stats.last_concurrent_str_claimed,
+        );
+        // The claimed string is black.
+        assert!(unsafe { (*(s.as_string_ptr().unwrap())).header.is_marked() });
+        // No sweep here: this bare-heap driver does not re-seed the Context
+        // roots at termination, so sweeping would free live Context objects.
+        // Claim + mark are the assertions under test (survival-under-sweep is
+        // covered by the vector-sink test); the heap frees everything at drop.
     }
 
     /// Gap 3: a dump-less heap enables the concurrent collector after its

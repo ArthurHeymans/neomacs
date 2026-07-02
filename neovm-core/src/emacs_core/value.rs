@@ -295,6 +295,19 @@ pub fn reset_string_text_properties() {}
 pub fn collect_string_text_prop_gc_roots(_roots: &mut Vec<Value>) {}
 
 pub fn set_string_text_properties_table_for_value(value: Value, table: TextPropertyTable) {
+    if table.is_empty() {
+        // Normalize "no properties" to a NULL interval pointer instead of
+        // Some(empty-table): every string property write-back funnels through
+        // here (`save_string_props_for_value`), so a removal that empties the
+        // table (remove-text-properties, set-text-properties nil over a
+        // subrange, ...) nulls the field like GNU's interval-free state. This
+        // keeps such strings eligible for the concurrent GC's interval-free
+        // claim instead of deferring them to the STW drain forever; readers
+        // already treat an empty table and no table identically
+        // (`get_string_text_properties_table_for_value` returns None for both).
+        clear_string_text_properties_for_value(value);
+        return;
+    }
     let _ = mutate::with_string_text_props_mut(value, |props| {
         *props = table;
     });

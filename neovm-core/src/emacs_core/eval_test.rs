@@ -17351,11 +17351,12 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
     let mut lines = String::new();
     for (i, s) in captures.iter().enumerate() {
         lines.push_str(&format!(
-            "cycle#{i} deferred={} satb={} fold={}us drain={}us kinds[{}]\n",
+            "cycle#{i} deferred={} satb={} fold={}us drain={}us str_claimed={} kinds[{}]\n",
             s.last_termination_deferred,
             s.last_termination_satb,
             s.last_termination_fold_us,
             s.mark_us,
+            s.last_concurrent_str_claimed,
             s.last_termination_kinds,
         ));
     }
@@ -17366,7 +17367,7 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
     let summary = format!(
         "config={} cycles_captured={} missed={} gc_collections={} \
          churn_chunks={chunks} live={}B\n\
-         medians: deferred={} satb={} fold_us={} drain_us={}\n\
+         medians: deferred={} satb={} fold_us={} drain_us={} str_claimed={}\n\
          kind medians: str={} vec={} rec={} clo={} bc={} ht={} ct={} f={} cons={} sub={} other={}\n\
          kind maxima (lifetime): {}\n",
         if pdump { "pdump(mapped-dump)" } else { "plain(dump-less)" },
@@ -17378,6 +17379,7 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
         med(|s| s.last_termination_satb as u64),
         med(|s| s.last_termination_fold_us),
         med(|s| s.mark_us),
+        med(|s| s.last_concurrent_str_claimed as u64),
         med(|s| s.last_termination_kinds.string as u64),
         med(|s| s.last_termination_kinds.vector as u64),
         med(|s| s.last_termination_kinds.record as u64),

@@ -9,7 +9,7 @@ use crate::emacs_core::emacs_char;
 use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicPtr, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 /// A Lisp string.
@@ -31,9 +31,20 @@ pub struct LispString {
     /// Byte count for multibyte strings, or GNU's negative unibyte marker.
     size_byte: i64,
     /// GNU Lisp_String-compatible interval pointer.  A null pointer in GNU
-    /// means no interval tree; `None` is also what a raw mapped string object
+    /// means no interval tree; null is also what a raw mapped string object
     /// contains before load installs Neomacs sidecars.
-    intervals: Option<Box<TextPropertyTable>>,
+    ///
+    /// CONCURRENT GC (interval-free string claiming): retyped from
+    /// `Option<Box<TextPropertyTable>>` to a raw atomic pointer — same size,
+    /// same null niche, same `#[repr(C)]` offset, and the mapped pdump image
+    /// still stores 0 here — so the concurrent GC thread can read the pointer
+    /// WORD without a data race while the mutator installs (`ensure_intervals`)
+    /// or frees (`clear_intervals`) tables. The GC thread may ONLY null-check
+    /// this word (`intervals_ptr`); it must NEVER dereference the table, which
+    /// the mutator can free at any moment. Managed via `Box::into_raw` /
+    /// `Box::from_raw`; every store that publishes a table is `Release` of a
+    /// fully-constructed table.
+    intervals: AtomicPtr<TextPropertyTable>,
     /// Direct string byte pointer, like GNU's `Lisp_String.u.s.data`.
     ///
     data: *const u8,
@@ -257,7 +268,7 @@ impl LispString {
         Self {
             size,
             size_byte,
-            intervals: None,
+            intervals: AtomicPtr::new(std::ptr::null_mut()),
             data,
             storage: Some(Box::new(storage)),
         }
@@ -275,10 +286,55 @@ impl LispString {
             .expect("LispString storage sidecar must be installed")
     }
 
+    /// SATB write barrier for the interval table, ENFORCED IN CODE at the only
+    /// two mutation choke points (`ensure_intervals` handing out `&mut`,
+    /// `clear_intervals` freeing the table) so no call site — wrapper or raw —
+    /// can drop a published string's interval children unlogged while the
+    /// concurrent GC thread may already have claimed this string as
+    /// interval-free (never to be re-traced this cycle). Logs the CURRENT
+    /// (pre-mutation) child values to the shared SATB buffer, deduped once per
+    /// string per cycle: the first pre-image is a superset of the
+    /// start-of-cycle children, and later mutations only unlink already-logged
+    /// or born-black values (same argument as
+    /// `push_value_children_to_satb_shared`). For UNPUBLISHED strings (fresh
+    /// locals under construction) this logs values that are live via the
+    /// mutator anyway — harmless floating garbage at worst. No-op (one
+    /// thread-local load) unless a concurrent mark is active.
+    ///
+    /// The `mutate.rs` wrappers (`with_string_text_props_mut` /
+    /// `with_lisp_string_mut`) remain the required route for PUBLISHED strings:
+    /// they additionally maintain the dump remembered set and dirty-owner
+    /// tracking for the owner value, which this value-only barrier cannot.
+    fn note_interval_preimage_for_satb(&self) {
+        if !crate::tagged::gc::concurrent_mark_active() {
+            return;
+        }
+        let ptr = self.intervals.load(Ordering::Acquire);
+        if ptr.is_null() {
+            return;
+        }
+        // Safety: we are on the mutator thread (the only thread that mutates
+        // strings), called from a `&mut self` context; the table is live
+        // because only `clear_intervals`/`Drop` (both `&mut self`) free it.
+        let table = unsafe { &*ptr };
+        crate::tagged::gc::note_string_interval_preimage(self as *const Self as usize, table);
+    }
+
     fn ensure_intervals(&mut self) -> &mut TextPropertyTable {
-        self.intervals
-            .get_or_insert_with(|| Box::new(TextPropertyTable::new()))
-            .as_mut()
+        // Barrier BEFORE the mutation the returned `&mut` enables.
+        self.note_interval_preimage_for_satb();
+        let mut ptr = self.intervals.load(Ordering::Acquire);
+        if ptr.is_null() {
+            ptr = Box::into_raw(Box::new(TextPropertyTable::new()));
+            // Release-publish the fully-constructed (empty) table: the
+            // concurrent GC thread's raw word load must never observe the
+            // pointer before the table's memory is initialized.
+            self.intervals.store(ptr, Ordering::Release);
+        }
+        // Safety: `ptr` is this string's live, uniquely-owned table (`&mut
+        // self` excludes other mutator references; the GC thread never
+        // dereferences it — see `intervals_ptr`).
+        unsafe { &mut *ptr }
     }
 
     fn refresh_data_ptr(&mut self) {
@@ -526,24 +582,66 @@ impl LispString {
         self.refresh_data_ptr();
     }
 
+    /// Raw interval-table pointer word (null = no table). The ONLY string
+    /// accessor the concurrent GC thread may use: reading the word is safe
+    /// from any thread, but DEREFERENCING the result is mutator-side only
+    /// (see `intervals`). Acquire pairs with `ensure_intervals`' Release
+    /// publish — the null check alone would be sound Relaxed, but Acquire is
+    /// the safe default (free on x86) and covers any reader that goes on to
+    /// dereference.
+    #[inline]
+    pub(crate) fn intervals_ptr(&self) -> *mut TextPropertyTable {
+        self.intervals.load(Ordering::Acquire)
+    }
+
     /// Text-property interval tree attached to this string, like GNU's
     /// `Lisp_String.u.s.intervals`.
+    ///
+    /// MUTATOR-SIDE ONLY: dereferences the interval table, which the mutator
+    /// can free at any time via `clear_intervals` — the concurrent GC thread
+    /// must never call this (it reads only the pointer word via
+    /// `intervals_ptr`; a dereference here on the GC thread is a
+    /// use-after-free).
     pub fn intervals(&self) -> &TextPropertyTable {
-        match self.intervals.as_deref() {
-            Some(intervals) => intervals,
-            None => empty_text_property_table(),
+        let ptr = self.intervals.load(Ordering::Acquire);
+        if ptr.is_null() {
+            empty_text_property_table()
+        } else {
+            // Safety: non-null means a live Box-allocated table; it is freed
+            // only by `clear_intervals`/`Drop` (both `&mut self`), which the
+            // caller's `&self` excludes on the mutator thread.
+            unsafe { &*ptr }
         }
     }
 
     pub fn has_intervals(&self) -> bool {
-        self.intervals.is_some()
+        !self.intervals.load(Ordering::Acquire).is_null()
     }
 
     pub fn clear_intervals(&mut self) {
-        self.intervals = None;
+        // SATB (enforced): log the children being dropped BEFORE unlinking —
+        // a concurrently-claimed interval-free string is never re-traced this
+        // cycle, so this log is the only thing keeping the dropped children
+        // of a mid-mark clear alive.
+        self.note_interval_preimage_for_satb();
+        let ptr = self.intervals.swap(std::ptr::null_mut(), Ordering::AcqRel);
+        if !ptr.is_null() {
+            // Safety: the swap took the unique owning pointer. The concurrent
+            // GC thread may still read the STALE non-null word this cycle but
+            // never dereferences it (a spurious defer at worst).
+            drop(unsafe { Box::from_raw(ptr) });
+        }
     }
 
     /// Mutable text-property interval tree attached to this string.
+    ///
+    /// SATB enforcement lives inside `ensure_intervals` (the pre-mutation
+    /// child values are logged), so no caller can drop interval children
+    /// unlogged. PUBLISHED strings must still be mutated via the `mutate.rs`
+    /// wrappers (`with_string_text_props_mut` / `with_lisp_string_mut`), which
+    /// also maintain the dump remembered set + dirty-owner tracking for the
+    /// OWNER value; direct calls are only appropriate on strings not yet
+    /// reachable from the Lisp graph (fresh locals under construction).
     pub fn intervals_mut(&mut self) -> &mut TextPropertyTable {
         self.ensure_intervals()
     }
@@ -691,14 +789,17 @@ impl LispString {
 }
 
 impl Clone for LispString {
+    /// Mutator-side only (dereferences the interval table via `intervals`).
     fn clone(&self) -> Self {
+        let intervals = if self.has_intervals() {
+            Box::into_raw(Box::new(self.intervals().clone()))
+        } else {
+            std::ptr::null_mut()
+        };
         let mut cloned = Self {
             size: self.size,
             size_byte: self.size_byte,
-            intervals: self
-                .intervals
-                .as_ref()
-                .map(|intervals| Box::new((**intervals).clone())),
+            intervals: AtomicPtr::new(intervals),
             data: std::ptr::null(),
             storage: Some(Box::new(LispStringStorage::owned_from_payload(
                 self.as_bytes().to_vec(),
@@ -706,6 +807,20 @@ impl Clone for LispString {
         };
         cloned.refresh_data_ptr();
         cloned
+    }
+}
+
+impl Drop for LispString {
+    fn drop(&mut self) {
+        // `&mut self` during drop: no concurrent GC read can be in flight for
+        // a string being freed (sweeps never overlap a concurrent mark), so
+        // `get_mut` needs no atomics.
+        let ptr = *self.intervals.get_mut();
+        if !ptr.is_null() {
+            // Safety: unique owner of a table created by `Box::into_raw` in
+            // `ensure_intervals`/`clone`.
+            drop(unsafe { Box::from_raw(ptr) });
+        }
     }
 }
 
@@ -789,8 +904,11 @@ mod tests {
             std::mem::size_of::<Option<Box<super::LispStringStorage>>>(),
             std::mem::size_of::<usize>()
         );
+        // The interval field is an AtomicPtr (concurrent GC null-check reads):
+        // same size + null niche as the GNU-compatible raw interval pointer,
+        // and as the Option<Box<_>> it replaced.
         assert_eq!(
-            std::mem::size_of::<Option<Box<crate::buffer::TextPropertyTable>>>(),
+            std::mem::size_of::<std::sync::atomic::AtomicPtr<crate::buffer::TextPropertyTable>>(),
             std::mem::size_of::<usize>()
         );
     }
