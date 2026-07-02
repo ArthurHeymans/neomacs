@@ -4184,7 +4184,7 @@ pub(crate) fn builtin_default_file_modes(args: Vec<Value>) -> EvalResult {
 /// Context-aware variant of `delete-file` that resolves relative paths
 /// against dynamic/default `default-directory`.
 pub(crate) fn builtin_delete_file(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    if let Some(result) = dispatch_file_handler(eval, "delete-file", &args)? {
+    if let Some(result) = dispatch_file_handler_expanding(eval, "delete-file", &args, 2)? {
         return Ok(result);
     }
     expect_min_args("delete-file", &args, 1)?;
@@ -4363,17 +4363,27 @@ pub(crate) fn builtin_rename_file(eval: &mut Context, args: Vec<Value>) -> EvalR
             ],
         ));
     }
-    let from = resolve_filename_lisp_for_eval(eval, &expect_lisp_string_strict(&args[0])?);
+    // GNU `Frename_file` expands FROM, applies `directory-file-name` to it (both
+    // dispatch their magic handlers), then expands NEWNAME, before the
+    // rename-file handler.
+    let from_expanded = builtin_expand_file_name(eval, vec![args[0], Value::NIL])?;
+    let from = resolve_filename_lisp_for_eval(eval, &expect_lisp_string_strict(&from_expanded)?);
+    let from_dfn = builtin_directory_file_name(eval, vec![Value::heap_string(from.clone())])?;
+    let to_expanded = builtin_expand_file_name(eval, vec![args[1], Value::NIL])?;
     let to = expand_cp_target_lisp_for_eval(
         eval,
-        &lisp_directory_file_name(&from),
-        &expect_lisp_string_strict(&args[1])?,
+        &expect_lisp_string_strict(&from_dfn)?,
+        &expect_lisp_string_strict(&to_expanded)?,
     );
-    let mut handler_args = Vec::with_capacity(args.len());
+    let mut handler_args = Vec::with_capacity(3);
     handler_args.push(Value::heap_string(from.clone()));
     handler_args.push(Value::heap_string(to.clone()));
     if let Some(extra) = args.get(2) {
         handler_args.push(*extra);
+    }
+    // rename-file arity 3 (FILE NEWNAME OK-IF-ALREADY-EXISTS).
+    while handler_args.len() < 3 {
+        handler_args.push(Value::NIL);
     }
     if let Some(result) = maybe_dispatch_resolved_file_handler(
         eval,
@@ -4412,12 +4422,20 @@ pub(crate) fn builtin_copy_file(eval: &mut Context, args: Vec<Value>) -> EvalRes
             vec![Value::symbol("copy-file"), Value::fixnum(args.len() as i64)],
         ));
     }
-    let from = resolve_filename_lisp_for_eval(eval, &expect_lisp_string_strict(&args[0])?);
-    let to = expand_cp_target_lisp_for_eval(eval, &from, &expect_lisp_string_strict(&args[1])?);
-    let mut handler_args = Vec::with_capacity(args.len());
+    // GNU `Fcopy_file` runs `Fexpand_file_name` on both FROM and TO first,
+    // dispatching the expand-file-name magic handler before the copy-file one.
+    let from_expanded = builtin_expand_file_name(eval, vec![args[0], Value::NIL])?;
+    let to_expanded = builtin_expand_file_name(eval, vec![args[1], Value::NIL])?;
+    let from = resolve_filename_lisp_for_eval(eval, &expect_lisp_string_strict(&from_expanded)?);
+    let to = expand_cp_target_lisp_for_eval(eval, &from, &expect_lisp_string_strict(&to_expanded)?);
+    let mut handler_args = Vec::with_capacity(6);
     handler_args.push(Value::heap_string(from.clone()));
     handler_args.push(Value::heap_string(to.clone()));
     handler_args.extend_from_slice(&args[2..]);
+    // copy-file arity 6 (FROM TO OK-IF-EXISTS KEEP-TIME PRESERVE-UID-GID PRESERVE-PERMISSIONS).
+    while handler_args.len() < 6 {
+        handler_args.push(Value::NIL);
+    }
     if let Some(result) = maybe_dispatch_resolved_file_handler(
         eval,
         "copy-file",
@@ -4772,6 +4790,33 @@ pub(crate) fn dispatch_file_handler(
     Ok(Some(result))
 }
 
+/// Like [`dispatch_file_handler`] but mirrors GNU's per-operation preamble for a
+/// single-filename op: it runs `Fexpand_file_name` on the filename first (which
+/// dispatches the expand-file-name magic handler), then invokes the operation's
+/// handler with the expanded name and the operation's full arglist padded to
+/// `arity` with nil (GNU calls handlers with all DEFUN args, optionals nil).
+fn dispatch_file_handler_expanding(
+    eval: &mut Context,
+    operation_name: &str,
+    args: &[Value],
+    arity: usize,
+) -> Result<Option<Value>, super::error::Flow> {
+    let Some(first) = args.first() else {
+        return Ok(None);
+    };
+    if first.as_lisp_string().is_none() {
+        return Ok(None);
+    }
+    let expanded = builtin_expand_file_name(eval, vec![*first, Value::NIL])?;
+    let mut call = Vec::with_capacity(arity.max(args.len()));
+    call.push(expanded);
+    call.extend_from_slice(&args[1..]);
+    while call.len() < arity {
+        call.push(Value::NIL);
+    }
+    dispatch_file_handler(eval, operation_name, &call)
+}
+
 /// Two-argument variant for builtins like `copy-file` and `rename-file`.
 /// Mirrors GNU's pattern of consulting the handler for the source
 /// first and falling back to the destination.
@@ -4809,7 +4854,7 @@ pub(crate) fn dispatch_file_handler_two_arg(
 
 /// `(directory-files DIRECTORY &optional FULL MATCH NOSORT COUNT)`
 pub(crate) fn builtin_directory_files(eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    if let Some(result) = dispatch_file_handler(eval, "directory-files", &args)? {
+    if let Some(result) = dispatch_file_handler_expanding(eval, "directory-files", &args, 5)? {
         return Ok(result);
     }
     expect_min_args("directory-files", &args, 1)?;
@@ -5997,7 +6042,10 @@ pub(crate) fn builtin_write_region(
 ) -> EvalResult {
     expect_min_args("write-region", &args, 3)?;
     expect_max_args("write-region", &args, 7)?;
-    let resolved = resolve_filename_lisp_for_eval(eval, &expect_lisp_string_strict(&args[2])?);
+    // GNU `Fwrite_region` runs `Fexpand_file_name` on FILENAME first, dispatching
+    // the expand-file-name magic handler before the write-region handler.
+    let expanded = builtin_expand_file_name(eval, vec![args[2], Value::NIL])?;
+    let resolved = resolve_filename_lisp_for_eval(eval, &expect_lisp_string_strict(&expanded)?);
     let visit_file = match args.get(4) {
         Some(v) if v.is_t() => Some(resolved.clone()),
         Some(v) if v.is_string() => Some(resolve_filename_lisp_for_eval(
@@ -6027,10 +6075,19 @@ pub(crate) fn builtin_write_region(
     let op = Value::symbol("write-region");
     let handler = find_file_name_handler_lisp_for_eval(eval, &resolved, op);
     if !handler.is_nil() {
-        let mut call_args = Vec::with_capacity(args.len() + 1);
+        // GNU calls the handler with the full arglist
+        // (START END FILENAME APPEND VISIT LOCKNAME MUSTBENEW), defaulting
+        // LOCKNAME to FILENAME.
+        let mut call_args = Vec::with_capacity(8);
         call_args.push(op);
         call_args.extend_from_slice(&args);
+        while call_args.len() < 8 {
+            call_args.push(Value::NIL);
+        }
         call_args[3] = Value::heap_string(resolved.clone());
+        if call_args[6].is_nil() {
+            call_args[6] = Value::heap_string(resolved.clone());
+        }
         return eval.funcall_general(handler, call_args);
     }
     if handler.is_nil() {
