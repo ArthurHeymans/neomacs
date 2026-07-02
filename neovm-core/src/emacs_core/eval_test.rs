@@ -17537,3 +17537,120 @@ fn alloc_class_profile_pdump() {
 fn alloc_class_profile_plain() {
     alloc_class_profile(false);
 }
+
+/// One phase of `alloc_probe_bytecode_hash_isolation`: (re)define the phase's
+/// defun, warm it once (so the engine's tiering settles before counting),
+/// then run 20 chunks under fresh `alloc_probe` counters.
+#[allow(dead_code)]
+fn bc_isolation_phase(ev: &mut Context, label: &str, defun: &str, call: &str, out: &mut String) {
+    use crate::tagged::gc::alloc_probe;
+    ev.eval_str(defun).expect("phase defun");
+    ev.eval_str(call).expect("phase warm");
+    alloc_probe::reset();
+    for _ in 0..20 {
+        ev.eval_str(call).expect("phase step");
+    }
+    out.push_str(&format!(
+        "=== {label} (20x200 iters) ===\n{}\n",
+        alloc_probe::report()
+    ));
+}
+
+/// Which construct in the drain-kinds churn recipe allocates `ByteCodeObj`?
+/// (Follow-up to `alloc_class_profile_*`, where ~2 ByteCode allocations per
+/// churn iteration appeared, 360B fixed each — suspicious next to the 2
+/// `puthash` calls.) Phases isolate puthash (hoisted table), per-iteration
+/// make-hash-table + puthash, the per-iteration lambda, the non-hash rest,
+/// and the full recipe; then Rust backtraces are captured for the first
+/// ByteCode-kind allocations of a short full-recipe run (needs debug info —
+/// run WITHOUT --release for symbolized traces).
+///
+/// VERDICT (2026-07, adjudicated with this probe): hash ops are innocent —
+/// puthash/make-hash-table allocate ZERO ByteCodeObj (phases A/B). The 2
+/// ByteCode per churn iteration come from the per-iteration INTERPRETED
+/// `(lambda (q) (cons q s))` (phase C: 2 ByteCode + 2 String + 1 Lambda per
+/// evaluation): under lexical binding with a non-empty lexenv, `sf_lambda` →
+/// `internal-make-interpreted-closure-function` (GNU loadup.el wiring) →
+/// byte-compiled `cconv-make-interpreted-closure`, whose implementation
+/// allocates two free-var-capturing closures per call via `make-closure` —
+/// `(lambda (fv) (assq fv env))` in cconv-make-interpreted-closure and
+/// `(lambda (var) (car (memq var dynvars)))` in `cconv-fv` (cconv.el). This
+/// is GNU-parity behavior of upstream cconv.el, not engine waste; compiled
+/// callers pay one `make-closure` per lambda and skip cconv entirely. Run:
+///   cargo nextest run -p neovm-core --run-ignored ignored-only \
+///     --no-capture -E 'test(alloc_probe_bytecode_hash_isolation)'
+#[test]
+#[ignore = "profiling aid; run explicitly with --no-capture"]
+fn alloc_probe_bytecode_hash_isolation() {
+    use crate::tagged::gc::alloc_probe;
+    crate::test_utils::init_test_tracing();
+    let mut ev = runtime_startup_context();
+    ev.set_lexical_binding(true);
+    let mut out = String::new();
+
+    bc_isolation_phase(
+        &mut ev,
+        "A: puthash-only (hoisted eq table, int keys/values)",
+        "(progn (defvar bcp--h (make-hash-table :test 'eq :size 8)) \
+           (defun bcp-a (n) (let ((k 0)) (while (< k n) \
+             (puthash 0 1 bcp--h) (puthash 1 2 bcp--h) (setq k (1+ k)))) nil) t)",
+        "(bcp-a 200)",
+        &mut out,
+    );
+    bc_isolation_phase(
+        &mut ev,
+        "B: make-hash-table + puthash (per-iteration table, int keys/values)",
+        "(progn (defun bcp-b (n) (let ((k 0)) (while (< k n) \
+             (let ((h (make-hash-table :test 'eq :size 8))) \
+               (puthash 0 1 h) (puthash 1 2 h)) (setq k (1+ k)))) nil) t)",
+        "(bcp-b 200)",
+        &mut out,
+    );
+    bc_isolation_phase(
+        &mut ev,
+        "C: lambda-only (per-iteration closure, no hash table)",
+        "(progn (defun bcp-c (n) (let ((k 0) (s \"x\")) (while (< k n) \
+             (let ((c (lambda (q) (cons q s)))) (ignore c)) (setq k (1+ k)))) nil) t)",
+        "(bcp-c 200)",
+        &mut out,
+    );
+    bc_isolation_phase(
+        &mut ev,
+        "D: rest (string/list/vector/record, no hash table, no lambda)",
+        "(progn (defun bcp-d (n) (let ((k 0)) (while (< k n) \
+             (let* ((s (make-string 64 ?s)) (l (make-list 32 k)) \
+                    (v (make-vector 24 s)) (r (record 'drain-probe s l v))) \
+               (ignore r)) (setq k (1+ k)))) nil) t)",
+        "(bcp-d 200)",
+        &mut out,
+    );
+    bc_isolation_phase(
+        &mut ev,
+        "E: full drain-kinds body",
+        "(progn (defun bcp-e (n) (let ((k 0)) (while (< k n) \
+             (let* ((s (make-string 64 ?s)) (l (make-list 32 k)) \
+                    (v (make-vector 24 s)) (r (record 'drain-probe s l v)) \
+                    (h (make-hash-table :test 'eq :size 8)) \
+                    (c (lambda (q) (cons q s)))) \
+               (puthash 0 r h) (puthash 1 c h)) (setq k (1+ k)))) nil) t)",
+        "(bcp-e 200)",
+        &mut out,
+    );
+
+    // Call-chain evidence: capture backtraces for the first ByteCode-kind
+    // allocations of a short full-recipe run.
+    alloc_probe::arm_bytecode_backtraces(6);
+    ev.eval_str("(bcp-e 3)").expect("backtrace step");
+    let traces = alloc_probe::bytecode_backtraces();
+    out.push_str(&format!(
+        "=== ByteCode alloc backtraces captured during (bcp-e 3): {} ===\n",
+        traces.len()
+    ));
+    for (i, t) in traces.iter().enumerate() {
+        out.push_str(&format!("--- trace #{i} ---\n{t}\n"));
+    }
+
+    // Like the other profiling aids, report via panic! so the dump surfaces
+    // under nextest's capture (NOT a failure).
+    panic!("BYTECODE-ALLOC ISOLATION PROBE (profiling aid, not a failure)\n{out}");
+}

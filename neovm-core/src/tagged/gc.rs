@@ -5307,6 +5307,7 @@ impl Drop for TaggedHeap {
 pub(crate) mod alloc_probe {
     use super::{GcHeader, HeapObjectKind, TaggedHeap, VecLikeHeader, VecLikeType};
     use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+    use std::sync::Mutex;
 
     const N_KINDS: usize = 28;
     const N_BUCKETS: usize = 11;
@@ -5409,6 +5410,28 @@ pub(crate) mod alloc_probe {
         }
     }
 
+    /// ByteCode-kind dense index in `KIND_NAMES`/`COUNTS` (2 + `ByteCode`'s
+    /// position in the `VecLikeType` arm of `kind_index`).
+    const BYTECODE_KIND: usize = 26;
+
+    /// Backtrace hook (call-chain evidence for probes): while armed, capture
+    /// a Rust backtrace for each ByteCode-kind allocation, up to the armed
+    /// budget. Zero cost unless a probe arms it.
+    static BC_TRACE_REMAINING: AtomicUsize = AtomicUsize::new(0);
+    static BC_TRACES: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+    /// Arm the ByteCode allocation backtrace hook for the next `n`
+    /// ByteCode-kind allocations (clears previously captured traces).
+    pub(crate) fn arm_bytecode_backtraces(n: usize) {
+        BC_TRACES.lock().unwrap().clear();
+        BC_TRACE_REMAINING.store(n, Ordering::SeqCst);
+    }
+
+    /// The backtraces captured since the last `arm_bytecode_backtraces`.
+    pub(crate) fn bytecode_backtraces() -> Vec<String> {
+        BC_TRACES.lock().unwrap().clone()
+    }
+
     /// Record one non-cons allocation at link time (`link_object` /
     /// `link_veclike`). The object is fully constructed before it is linked,
     /// so reading its payload sizes here is sound.
@@ -5418,6 +5441,16 @@ pub(crate) mod alloc_probe {
         COUNTS[k][bucket(bytes)].fetch_add(1, Ordering::Relaxed);
         TOTAL_BYTES[k].fetch_add(bytes as u64, Ordering::Relaxed);
         PEAK_ADDR_SET.fetch_max(addr_set_len, Ordering::Relaxed);
+        if k == BYTECODE_KIND
+            && BC_TRACE_REMAINING
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |v| v.checked_sub(1))
+                .is_ok()
+        {
+            BC_TRACES
+                .lock()
+                .unwrap()
+                .push(std::backtrace::Backtrace::force_capture().to_string());
+        }
     }
 
     /// Zero every counter (start of a probe's measured phase).
