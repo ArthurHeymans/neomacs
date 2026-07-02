@@ -148,12 +148,17 @@ def parse_c_arglist(c_args: str) -> list[str]:
     return args
 
 
-def format_fn_line(args: list[str]) -> str:
+def format_fn_line(args: list[str], min_args: int = 0) -> str:
     """Render `(fn ARG1 ARG2 ...)' GNU-style: uppercase, `_' -> `-',
     `defalt' -> `DEFAULT'. Empty args list still emits `(fn)'.
+
+    Mirrors GNU make-docfile.c::write_c_args, which inserts `&optional'
+    before the argument at index MIN_ARGS (the first optional parameter).
     """
     parts = []
-    for a in args:
+    for i, a in enumerate(args):
+        if i == min_args:
+            parts.append("&optional")
         if a == "defalt":
             parts.append("DEFAULT")
         else:
@@ -216,6 +221,7 @@ def extract_defuns(src: str) -> list[tuple[str, str]]:
         if not m:
             break
         name = m.group(1)
+        min_args = m.group(2)
         max_args = m.group(3)
         # Look for doc: starting from end of the matched DEFUN head
         doc, doc_end = find_doc_block(src, m.end())
@@ -236,7 +242,8 @@ def extract_defuns(src: str) -> list[tuple[str, str]]:
             c_arglist, next_pos = find_c_arglist_after(src, doc_end)
             if c_arglist is not None:
                 args = parse_c_arglist(c_arglist)
-                fn_line = format_fn_line(args)
+                min_args_n = int(min_args) if min_args.isdigit() else len(args)
+                fn_line = format_fn_line(args, min_args_n)
                 doc = doc.rstrip() + "\n\n" + fn_line
                 pos = next_pos
             else:
