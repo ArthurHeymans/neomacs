@@ -110,8 +110,6 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
             state.face_scan.next_check_mut(),
         );
         let face_id = state.face_ids.allocate();
-        let resolved_extend = resolved.extend;
-        let resolved_bg = resolved.bg;
         let resolved_box_type = resolved.box_type;
         *state.active_face_state = state.source_render.resolve_and_install_measured_face(
             self.measurement_policy,
@@ -126,11 +124,12 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
             .row_geometry
             .include_row_extents(face_metrics.row_height(), face_metrics.ascent());
 
-        if resolved_extend {
-            let ext_bg = Color::from_pixel(resolved_bg);
+        if let Some(fill) = state.active_face_state.row_extend_fill() {
             state
                 .row_extend
-                .activate(state.row_geometry.current_row_marker(), (ext_bg, face_id));
+                .activate(state.row_geometry.current_row_marker(), fill);
+        } else {
+            state.row_extend.clear();
         }
 
         if state.box_face.is_active() && resolved_box_type == 0 {

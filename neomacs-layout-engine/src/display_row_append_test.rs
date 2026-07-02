@@ -2752,6 +2752,8 @@ fn buffer_text_line_break_source_action_applies_after_transition() {
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let geometry = DisplayRowGeometryState::new(1, 16.0, 0.0, 16.0, 12.0);
     let action = BufferSourceLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
+    let active_face = test_active_face_state_with_extend(23, 8.0, true);
+    let mut row_extend = DisplayRowScopedValue::inactive();
     let mut box_face = BoxFaceRowState::inactive();
     box_face.activate(geometry.current_row_marker(), 8.0);
     let mut position = DisplaySourceTextPosition::new(2, 9);
@@ -2763,6 +2765,8 @@ fn buffer_text_line_break_source_action_applies_after_transition() {
         &mut position,
         &mut hit_row_range,
         &geometry,
+        &mut row_extend,
+        &active_face,
         &mut box_face,
         2.0,
     );
@@ -2770,6 +2774,10 @@ fn buffer_text_line_break_source_action_applies_after_transition() {
     assert_eq!(continuation, DisplayRowTransitionContinuation::Continue);
     assert_eq!(position, DisplaySourceTextPosition::new(2, 14));
     assert_eq!(hit_row_range.start(), 14);
+    assert_eq!(
+        row_extend.value_on(&geometry).copied(),
+        active_face.row_extend_fill()
+    );
     assert_eq!(box_face.row(), geometry.current_row_marker());
     assert_eq!(box_face.start_x(), Some(2.0));
 }
@@ -2785,6 +2793,8 @@ fn buffer_text_line_break_source_action_skips_after_state_when_transition_exhaus
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let geometry = DisplayRowGeometryState::new(1, 16.0, 0.0, 16.0, 12.0);
     let action = BufferSourceLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
+    let active_face = test_active_face_state_with_extend(23, 8.0, true);
+    let mut row_extend = DisplayRowScopedValue::inactive();
     let mut box_face = BoxFaceRowState::inactive();
     let mut position = DisplaySourceTextPosition::new(2, 9);
     let mut hit_row_range = HitRowRangeTracker::new(3);
@@ -2795,6 +2805,8 @@ fn buffer_text_line_break_source_action_skips_after_state_when_transition_exhaus
         &mut position,
         &mut hit_row_range,
         &geometry,
+        &mut row_extend,
+        &active_face,
         &mut box_face,
         2.0,
     );
@@ -2802,6 +2814,7 @@ fn buffer_text_line_break_source_action_skips_after_state_when_transition_exhaus
     assert_eq!(continuation, DisplayRowTransitionContinuation::Exhausted);
     assert_eq!(position, DisplaySourceTextPosition::new(2, 9));
     assert_eq!(hit_row_range.start(), 3);
+    assert_eq!(row_extend.value_on(&geometry), None);
     assert_eq!(box_face.start_x(), None);
 }
 
@@ -3985,10 +3998,19 @@ fn display_row_overflow_transition_request_marks_visual_wrap_rows_and_emits_boun
 }
 
 fn test_active_face_state(face_id: u32, char_width: f32) -> DisplayRowActiveFaceState {
+    test_active_face_state_with_extend(face_id, char_width, false)
+}
+
+fn test_active_face_state_with_extend(
+    face_id: u32,
+    char_width: f32,
+    extend: bool,
+) -> DisplayRowActiveFaceState {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let mut base = resolver.default_face().clone();
     base.set_measured_char_width_px(char_width);
+    base.extend = extend;
     let mut font_metrics = None;
     let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
         face_id,

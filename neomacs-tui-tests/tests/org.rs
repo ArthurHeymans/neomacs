@@ -15,6 +15,80 @@ fn grid_contains(session: &neomacs_tui_tests::TuiSession, needle: &str) -> bool 
     session.text_grid().iter().any(|row| row.contains(needle))
 }
 
+fn assert_org_block_blank_line_extends_block_background(session: &neomacs_tui_tests::TuiSession) {
+    let grid = session.text_grid();
+    let code_row = grid
+        .iter()
+        .position(|row| row.contains("(message \"block\")"))
+        .unwrap_or_else(|| {
+            panic!(
+                "{} should display the org source body line\n{}",
+                session.name,
+                grid.join("\n")
+            )
+        });
+    let blank_row = code_row + 1;
+    let code_col = grid[code_row]
+        .find("(message \"block\")")
+        .expect("source body column");
+    let Some(code_cell) = session.screen().cell(code_row as u16, code_col as u16) else {
+        panic!("{} missing code cell", session.name);
+    };
+    let Some(blank_cell) = session.screen().cell(blank_row as u16, code_col as u16) else {
+        panic!("{} missing blank block cell", session.name);
+    };
+
+    assert!(
+        blank_cell.contents().trim().is_empty(),
+        "{} expected an empty source-block row below the code line, got {:?}\n{}",
+        session.name,
+        blank_cell.contents(),
+        grid.join("\n")
+    );
+    assert_eq!(
+        blank_cell.bgcolor(),
+        code_cell.bgcolor(),
+        "{} should extend org-block background across blank source-block rows at row {blank_row}, col {code_col}; code bg {:?}, blank bg {:?}\n{}",
+        session.name,
+        code_cell.bgcolor(),
+        blank_cell.bgcolor(),
+        grid.join("\n")
+    );
+}
+
+#[test]
+fn org_block_background_extends_over_blank_source_rows() {
+    let (mut gnu, mut neo) = boot_pair("");
+
+    eval_expression(
+        &mut gnu,
+        &mut neo,
+        r#"(custom-set-faces '(org-block ((t (:background "gray93")))))"#,
+    );
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(8), |grid| {
+        grid.iter().any(|row| row.contains("nil"))
+    });
+
+    open_home_file(
+        &mut gnu,
+        &mut neo,
+        "org-block-bg-probe.org",
+        r#"#+begin_src emacs-lisp
+(message "block")
+
+#+end_src
+"#,
+        "C-x C-f",
+    );
+    wait_for_both(&mut gnu, &mut neo, Duration::from_secs(12), |grid| {
+        grid.iter().any(|row| row.contains("(message \"block\")"))
+    });
+    read_both(&mut gnu, &mut neo, Duration::from_secs(1));
+
+    assert_org_block_blank_line_extends_block_background(&gnu);
+    assert_org_block_blank_line_extends_block_background(&neo);
+}
+
 #[test]
 fn org_todo_via_cc_ct_cycles_heading_keyword() {
     let (mut gnu, mut neo) = boot_pair("");

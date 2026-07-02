@@ -884,6 +884,12 @@ impl DisplayRowActiveFaceState {
         self.render.resolved_face()
     }
 
+    pub(crate) fn row_extend_fill(&self) -> Option<(Color, u32)> {
+        self.resolved_face()
+            .extend
+            .then(|| (self.background(), self.face_id()))
+    }
+
     pub(crate) fn metrics(&self) -> DisplayRowMeasuredFaceMetrics {
         self.measurement.metrics()
     }

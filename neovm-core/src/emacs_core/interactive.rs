@@ -15,7 +15,7 @@ use std::collections::{HashMap, HashSet};
 
 use super::error::{EvalResult, Flow, signal};
 use super::eval::Context;
-use super::intern::{intern, resolve_sym};
+use super::intern::{intern, resolve_sym, resolve_sym_lisp_string};
 use super::keyboard::pure::{
     KEY_CHAR_ALT, KEY_CHAR_CTRL, KEY_CHAR_HYPER, KEY_CHAR_META, KEY_CHAR_MOD_MASK, KEY_CHAR_SHIFT,
     KEY_CHAR_SUPER, make_event_array_value,
@@ -1036,8 +1036,12 @@ fn resolve_function_designator_symbol_in_state(
         .map(|(resolved, value)| (resolved, value))
 }
 
+fn symbol_utf8_name(symbol: SymId) -> Option<&'static str> {
+    resolve_sym_lisp_string(symbol).as_utf8_str()
+}
+
 fn builtin_command_symbol(symbol: SymId) -> bool {
-    builtin_command_name(resolve_sym(symbol))
+    symbol_utf8_name(symbol).is_some_and(builtin_command_name)
 }
 
 fn command_object_p_in_state(
@@ -1115,8 +1119,7 @@ fn command_designator_p_in_state(
     for_call_interactively: bool,
 ) -> bool {
     if let Some(symbol) = designator.as_symbol_id() {
-        let name = resolve_sym(symbol);
-        if obarray.is_function_unbound(name) {
+        if obarray.is_function_unbound_id(symbol) {
             return false;
         }
         if let Some((resolved_symbol, resolved_value)) =
@@ -2967,8 +2970,7 @@ fn resolve_command_target_in_state(
         {
             return Some((Some(resolved_symbol), value));
         }
-        let name = resolve_sym(symbol);
-        if builtin_command_name(name) {
+        if symbol_utf8_name(symbol).is_some_and(builtin_command_name) {
             return Some((Some(symbol), Value::subr_from_sym_id(symbol)));
         }
         return None;

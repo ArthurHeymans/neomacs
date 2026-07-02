@@ -62,6 +62,18 @@ impl BufferSourceEndOfBufferTailRenderOutcome {
     }
 }
 
+fn sync_row_extend_to_active_face(
+    row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+    row_geometry: &DisplayRowGeometryState,
+    active_face_state: &DisplayRowActiveFaceState,
+) {
+    if let Some(fill) = active_face_state.row_extend_fill() {
+        row_extend.activate(row_geometry.current_row_marker(), fill);
+    } else {
+        row_extend.clear();
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum BufferSourceHscrollSkipAction {
     LineBreak {
@@ -1614,6 +1626,8 @@ impl<'a> BufferSourceLineBreakRenderRequest<'a> {
             &mut synced_source_position,
             hit_row_range,
             row_geometry,
+            row_extend,
+            context.active_face_state,
             box_face,
             context.content_x,
         );
@@ -1724,6 +1738,8 @@ impl BufferSourceLineBreakSourceAction {
         position: &mut DisplaySourceTextPosition,
         hit_row_range: &mut HitRowRangeTracker,
         row_geometry: &DisplayRowGeometryState,
+        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        active_face_state: &DisplayRowActiveFaceState,
         box_face: &mut BoxFaceRowState,
         content_x: f32,
     ) -> DisplayRowTransitionContinuation {
@@ -1731,6 +1747,7 @@ impl BufferSourceLineBreakSourceAction {
             return DisplayRowTransitionContinuation::Exhausted;
         }
         sync_position_after_row_transition(synced_charpos, position, hit_row_range);
+        sync_row_extend_to_active_face(row_extend, row_geometry, active_face_state);
         self.apply_after_row_transition(row_geometry, box_face, content_x);
         DisplayRowTransitionContinuation::Continue
     }

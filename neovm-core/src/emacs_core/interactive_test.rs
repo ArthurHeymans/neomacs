@@ -587,6 +587,20 @@ fn commandp_non_interactive() {
 }
 
 #[test]
+fn commandp_returns_nil_for_raw_unibyte_symbol_name() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let raw_name = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
+    let raw_symbol = ev
+        .apply(Value::symbol("intern"), vec![raw_name])
+        .expect("intern raw unibyte symbol");
+
+    let result = builtin_commandp_interactive(&mut ev, vec![raw_symbol]).unwrap();
+
+    assert_eq!(result, Value::NIL);
+}
+
+#[test]
 fn commandp_errors_on_uninterned_interactive_form_property_like_gnu() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

@@ -4,7 +4,9 @@ use crate::emacs_core::eval::{
     push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
 };
 use crate::emacs_core::fontset;
-use crate::emacs_core::intern::{NIL_SYM_ID, T_SYM_ID, intern, is_canonical_id};
+use crate::emacs_core::intern::{
+    NIL_SYM_ID, T_SYM_ID, intern, is_canonical_id, resolve_sym_lisp_string,
+};
 use crate::emacs_core::minibuffer;
 use crate::emacs_core::symbol::Obarray;
 use crate::emacs_core::{indent, xdisp};
@@ -1309,7 +1311,9 @@ pub(crate) fn symbol_function_cell_in_obarray(obarray: &Obarray, symbol: SymId) 
         return None;
     }
 
-    let current_name = resolve_sym(symbol);
+    let Some(current_name) = resolve_sym_lisp_string(symbol).as_utf8_str() else {
+        return None;
+    };
 
     if let Some(alias_target) = pure_builtin_symbol_alias_target(current_name) {
         return Some(Value::symbol(alias_target));
