@@ -22,12 +22,40 @@ bitflags! {
     }
 }
 
+// Serialize as the raw u32 bit pattern: stable, lossless, and a plain
+// integer in snapshot JSON (bitflags' own serde feature would emit the
+// "BOLD | ITALIC" string form, which is noisier for machine consumers).
+impl serde::Serialize for FaceAttributes {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_u32(self.bits())
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for FaceAttributes {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(FaceAttributes::from_bits_retain(u32::deserialize(
+            deserializer,
+        )?))
+    }
+}
+
 /// Underline style.
 ///
 /// The numeric values match GNU Emacs `enum face_underline_type` and the
 /// `Smulx` terminfo underline style parameter.
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, IntoPrimitive, TryFromPrimitive)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    IntoPrimitive,
+    TryFromPrimitive,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum UnderlineStyle {
     #[default]
     None = 0,
@@ -50,7 +78,18 @@ impl UnderlineStyle {
 
 /// Box type for face
 #[repr(u8)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, IntoPrimitive, TryFromPrimitive)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Default,
+    IntoPrimitive,
+    TryFromPrimitive,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum BoxType {
     #[default]
     None = 0,
@@ -139,7 +178,7 @@ impl BasicFaceId {
 
 /// A face defines text styling (colors, font, decorations)
 #[repr(C)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Face {
     /// Face ID
     pub id: u32,

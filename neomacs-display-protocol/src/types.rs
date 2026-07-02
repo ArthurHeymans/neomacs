@@ -5,7 +5,19 @@ use std::ops::{Add, Sub};
 macro_rules! display_id_type {
     ($name:ident, $raw:ty) => {
         #[repr(transparent)]
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+        #[derive(
+            Debug,
+            Clone,
+            Copy,
+            PartialEq,
+            Eq,
+            PartialOrd,
+            Ord,
+            Hash,
+            Default,
+            serde::Serialize,
+            serde::Deserialize,
+        )]
         pub struct $name($raw);
 
         impl $name {
@@ -35,7 +47,7 @@ display_id_type!(XwidgetId, u32);
 
 /// RGBA color with f32 components (0.0 - 1.0)
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Color {
     pub r: f32,
     pub g: f32,
@@ -144,7 +156,7 @@ impl Default for Color {
 
 /// 2D point with f32 coordinates
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, serde::Serialize, serde::Deserialize)]
 pub struct Point {
     pub x: f32,
     pub y: f32,
@@ -174,7 +186,7 @@ impl Sub for Point {
 
 /// 2D size with f32 dimensions
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, serde::Serialize, serde::Deserialize)]
 pub struct Size {
     pub width: f32,
     pub height: f32,
@@ -190,7 +202,7 @@ impl Size {
 
 /// Rectangle with position and size
 #[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default, serde::Serialize, serde::Deserialize)]
 pub struct Rect {
     pub x: f32,
     pub y: f32,

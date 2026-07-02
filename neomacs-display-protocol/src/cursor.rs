@@ -22,6 +22,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, TryFromPrimitive)]
 #[repr(i8)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub enum CursorKind {
     Default = -2,
     NoCursor = -1,
@@ -51,7 +52,9 @@ impl CursorKind {
 /// the nonnegative C `int` range.  Width zero is therefore a valid Lisp
 /// semantic value even though render backends clamp to one visible pixel when
 /// drawing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct CursorBarWidth(u32);
 
 impl CursorBarWidth {
@@ -99,7 +102,7 @@ impl fmt::Display for CursorBarWidth {
 }
 
 /// Resolved cursor kind plus semantic bar width.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CursorSpec {
     pub cursor_kind: CursorKind,
     pub bar_width: CursorBarWidth,
@@ -143,7 +146,7 @@ impl CursorSpec {
 /// Filled and hollow cursors use the owning slot rectangle as-is. Bar/Hbar
 /// variants carry the thin dimension (width or height) for rendering within
 /// that slot.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum CursorStyle {
     /// Filled box cursor (covers entire character cell).
     FilledBox,

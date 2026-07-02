@@ -16,7 +16,9 @@ pub use crate::cursor::{CursorBarWidth, CursorKind, CursorSpec, CursorStyle};
 /// Semantic role of a glyph row emitted by layout.
 ///
 /// This is authoritative layout metadata used by renderer ordering/clipping.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 pub enum GlyphRowRole {
     /// Regular buffer text rows.
     #[default]
@@ -49,7 +51,7 @@ impl GlyphRowRole {
 /// "the thing under point": the cursor points at a slot id, and the
 /// renderer can target that exact slot instead of re-discovering it
 /// from geometry.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct DisplaySlotId {
     /// Window that owns the slot.
     pub window_id: DisplayWindowId,
@@ -555,7 +557,7 @@ impl FrameGlyph {
 /// This mirrors GNU's `phys_cursor` / `phys_cursor_*` split at the
 /// display-protocol level: layout owns the cursor slot and geometry,
 /// the renderer only consumes it.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PhysCursor {
     /// Window that owns the cursor.
     pub window_id: DisplayWindowId,
@@ -590,7 +592,7 @@ pub struct PhysCursor {
 /// `FrameGlyphBuffer::phys_cursor`); non-selected windows are decorative.
 /// Geometry (x/y/width/height) lives here so animation/spacing/bidi code can
 /// adjust every cursor uniformly.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct WindowCursor {
     pub window_id: DisplayWindowId,
     pub slot_id: DisplaySlotId,
@@ -615,7 +617,7 @@ pub struct WindowCursor {
 /// Rendering still comes from the tab-bar row glyphs. This metadata exists so
 /// hit-testing can use the same published snapshot instead of a side-channel
 /// runtime command.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FrameTabBarState {
     pub items: Vec<TabBarItem>,
     pub y: f32,
@@ -623,7 +625,7 @@ pub struct FrameTabBarState {
 }
 
 /// Which fringe a [`FrameGlyph::FringeBitmap`] belongs to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum FringeSide {
     Left,
     Right,
@@ -632,7 +634,7 @@ pub enum FringeSide {
 /// Resolved fringe-bitmap data embedded once per frame in
 /// [`FrameGlyphBuffer::fringe_bitmaps`]. Mirrors the user-bitmap registry on
 /// the evaluator; `bits` rows are MSB-aligned `u16` (leftmost column is bit 15).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FringeBitmapData {
     /// One MSB-aligned row per `height`; column `b` of row `r` is set when
     /// `(bits[r] >> (15 - b)) & 1 == 1`.
@@ -648,7 +650,7 @@ pub struct FringeBitmapData {
 }
 
 /// Stipple pattern: XBM bitmap data for tiled background patterns
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StipplePattern {
     /// Pattern width in pixels
     pub width: u32,
@@ -659,7 +661,7 @@ pub struct StipplePattern {
 }
 
 /// Per-window metadata for animation transition detection
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct WindowInfo {
     /// Window pointer as i64 (unique window identifier)
     pub window_id: DisplayWindowId,
@@ -692,7 +694,7 @@ pub struct WindowInfo {
 }
 
 /// Transition kind emitted by authoritative layout producers.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum WindowTransitionKind {
     /// Crossfade the window bounds.
     Crossfade,
@@ -706,7 +708,7 @@ pub enum WindowTransitionKind {
 }
 
 /// Explicit transition hint from layout producers to render thread.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct WindowTransitionHint {
     /// Target window id.
     pub window_id: DisplayWindowId,
@@ -721,7 +723,7 @@ pub struct WindowTransitionHint {
 }
 
 /// Explicit effect hint from layout producers to render thread.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum WindowEffectHint {
     /// Fade in newly shown text in a window region.
     TextFadeIn {

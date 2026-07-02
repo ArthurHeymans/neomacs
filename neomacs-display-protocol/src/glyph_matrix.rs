@@ -22,7 +22,7 @@ use std::collections::HashMap;
 
 /// What kind of content this glyph represents.
 /// Matches GNU's `enum glyph_type` in `dispextern.h`.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum GlyphType {
     /// Regular character (including multibyte).
     Char { ch: char },
@@ -109,7 +109,7 @@ pub const NO_BUFFER_POSITION_CHARPOS: usize = usize::MAX;
 ///
 /// Grid-native: no pixel coordinates. Screen position is determined by
 /// the row index in `GlyphRow` and position within the area's glyph vector.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Glyph {
     /// What this glyph displays.
     pub glyph_type: GlyphType,
@@ -244,7 +244,7 @@ impl Glyph {
 /// Contains three glyph areas (left margin, text, right margin) matching
 /// GNU's layout. Row hashing enables fast diff: if hashes match, the rows
 /// are likely identical; if they differ, the row needs redrawing.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct GlyphRow {
     /// Glyphs per area: [left_margin, text, right_margin].
     pub glyphs: [Vec<Glyph>; 3],
@@ -301,7 +301,7 @@ pub struct GlyphRow {
 /// Per-row fringe-bitmap reference: the resolved registry index and the face id
 /// used for its foreground/background colors. The actual bits live once per
 /// frame in `FrameGlyphBuffer::fringe_bitmaps`, keyed by `bitmap_index`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FringeBitmapInfo {
     pub bitmap_index: u16,
     pub face_id: u32,
@@ -428,7 +428,7 @@ impl GlyphRow {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct GlyphMatrix {
     pub rows: Vec<GlyphRow>,
     pub nrows: usize,
@@ -493,7 +493,7 @@ impl GlyphMatrix {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct WindowMatrixEntry {
     pub window_id: u64,
     pub matrix: GlyphMatrix,
@@ -528,7 +528,7 @@ pub struct WindowMatrixEntry {
 /// Neomacs keeps immutable published display state, so we model the
 /// frame-level tab bar explicitly here instead of smuggling it into the first
 /// leaf window's matrix after layout.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FrameChromeRow {
     /// Visual row number in frame matrix space.
     pub row_index: u32,
@@ -544,7 +544,7 @@ pub struct FrameChromeRow {
 // ---------------------------------------------------------------------------
 
 /// A window background rectangle.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct BackgroundItem {
     pub bounds: Rect,
     pub color: Color,
@@ -556,7 +556,7 @@ pub struct BackgroundItem {
 /// region of a window whose background comes from buffer-local face remapping.
 /// It is intentionally face-based instead of color-only so TTY backends can
 /// preserve terminal-default foreground/background semantics.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FaceFillItem {
     pub window_id: DisplayWindowId,
     pub row_role: GlyphRowRole,
@@ -566,7 +566,7 @@ pub struct FaceFillItem {
 }
 
 /// A window border/divider rectangle.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct BorderItem {
     pub window_id: DisplayWindowId,
     pub x: f32,
@@ -577,7 +577,7 @@ pub struct BorderItem {
 }
 
 /// A cursor entry.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct CursorItem {
     pub window_id: DisplayWindowId,
     pub slot_id: DisplaySlotId,
@@ -590,7 +590,7 @@ pub struct CursorItem {
 }
 
 /// An inline image.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ImageItem {
     pub window_id: DisplayWindowId,
     pub row_role: GlyphRowRole,
@@ -604,7 +604,7 @@ pub struct ImageItem {
 }
 
 /// An inline video.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct VideoItem {
     pub window_id: DisplayWindowId,
     pub row_role: GlyphRowRole,
@@ -620,7 +620,7 @@ pub struct VideoItem {
 }
 
 /// An inline xwidget.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct XwidgetItem {
     pub window_id: DisplayWindowId,
     pub row_role: GlyphRowRole,
@@ -634,7 +634,7 @@ pub struct XwidgetItem {
 }
 
 /// A scroll bar.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ScrollBarItem {
     pub window_id: DisplayWindowId,
     pub row_role: GlyphRowRole,
@@ -653,7 +653,7 @@ pub struct ScrollBarItem {
     pub thumb_color: Color,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct FrameDisplayState {
     pub window_matrices: Vec<WindowMatrixEntry>,
     /// Frame-level chrome rows that are not owned by any leaf window.
@@ -732,7 +732,7 @@ pub struct FrameDisplayState {
 /// key (for future activation hit-testing); `def` is intentionally not
 /// carried across the display-protocol boundary because the renderer
 /// doesn't need it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct TtyMenuBarItem {
     /// Display label, e.g. `"File"`.
     pub label: String,
@@ -749,7 +749,7 @@ pub struct TtyMenuBarItem {
 /// `faces` HashMap (which is populated dynamically as text glyphs are
 /// emitted, and may not contain a `menu` entry at all when the menu
 /// bar holds the only references to that face).
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct TtyMenuBarState {
     /// Items in display order, left-to-right.
     pub items: Vec<TtyMenuBarItem>,
@@ -771,7 +771,7 @@ pub struct TtyMenuBarState {
 }
 
 /// GUI menu-bar overlay state carried in a frame snapshot.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct GuiMenuBarState {
     pub items: Vec<MenuBarItem>,
     pub height: f32,
@@ -780,7 +780,7 @@ pub struct GuiMenuBarState {
 }
 
 /// GUI tool-bar overlay state carried in a frame snapshot.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct GuiToolBarState {
     pub items: Vec<ToolBarItem>,
     pub height: f32,
@@ -789,7 +789,7 @@ pub struct GuiToolBarState {
 }
 
 /// GUI compact-bar overlay state carried in a frame snapshot.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct GuiCompactBarState {
     pub menu_items: Vec<MenuBarItem>,
     pub tool_items: Vec<ToolBarItem>,

@@ -3075,6 +3075,8 @@ version = "0.0.11"
 dependencies = [
  "bitflags 2.11.1",
  "num_enum",
+ "serde",
+ "serde_json",
  "strum",
  "tracing",
 ]

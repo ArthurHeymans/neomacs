@@ -16,6 +16,7 @@ macro_rules! effect_config {
     ) => {
         $(#[$meta])*
         #[derive(Clone, Debug, PartialEq)]
+        #[derive(serde::Serialize, serde::Deserialize)]
         pub struct $name {
             $(pub $field: $ty),*
         }
@@ -1572,7 +1573,7 @@ mod tests;
 ///
 /// Shared between `RenderApp` (stores for persistence/replay)
 /// and `WgpuRenderer` (uses for actual rendering).
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EffectsConfig {
     pub accent_strip: AccentStripConfig,
     pub argyle_pattern: ArgylePatternConfig,

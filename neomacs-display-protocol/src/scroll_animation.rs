@@ -31,6 +31,7 @@ use strum::{EnumString, IntoStaticStr};
 /// Select one at a time via configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub enum ScrollEffect {
     // ── Transition effects (2D, vertex position/alpha changes) ──────────
     /// Default: old content slides out, new content slides in.
@@ -252,6 +253,7 @@ impl Default for ScrollEffect {
 /// Physics model for scroll animation timing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub enum ScrollEasing {
     /// Standard ease-out quadratic (current default).
     #[strum(

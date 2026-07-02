@@ -14,5 +14,9 @@ neo-term = []
 [dependencies]
 bitflags.workspace = true
 num_enum.workspace = true
+serde.workspace = true
 strum.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+serde_json = "1"

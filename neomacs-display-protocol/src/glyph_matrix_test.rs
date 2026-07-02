@@ -1260,3 +1260,42 @@ fn materialize_emits_left_fringe_bitmap_glyph_from_row() {
     // The bits round-trip into the materialized buffer.
     assert!(buf.fringe_bitmaps.contains_key(&25));
 }
+
+// ---------------------------------------------------------------------------
+// serde snapshot serialization tests
+// ---------------------------------------------------------------------------
+
+/// The frame snapshot contract: serializing the real `FrameDisplayState` must
+/// be lossless (serialize → deserialize → serialize is a fixed point) so the
+/// JSON artifact is a faithful display oracle.
+#[test]
+fn frame_display_state_serde_round_trip() {
+    let state = state_with_text("hello serde");
+    let json = serde_json::to_string(&state).expect("serialize");
+    let back: FrameDisplayState = serde_json::from_str(&json).expect("deserialize");
+    let json2 = serde_json::to_string(&back).expect("re-serialize");
+    assert_eq!(json, json2, "serde round-trip must be lossless");
+    // Each Char glyph serializes individually: {"Char":{"ch":"h"}}.
+    assert!(
+        json.contains(r#""ch":"h""#),
+        "glyph chars must appear in JSON: {json}"
+    );
+}
+
+/// Integer-keyed maps (faces, fringe bitmaps, per-window effects) must
+/// survive JSON, where keys are strings.
+#[test]
+fn frame_display_state_integer_map_keys_round_trip() {
+    let mut state = state_with_text("k");
+    state.faces.insert(42, Face::new(42));
+    state
+        .cursor_effects_by_window
+        .insert(crate::types::DisplayWindowId::new(7), Default::default());
+    let json = serde_json::to_string(&state).expect("serialize");
+    let back: FrameDisplayState = serde_json::from_str(&json).expect("deserialize");
+    assert!(back.faces.contains_key(&42));
+    assert!(
+        back.cursor_effects_by_window
+            .contains_key(&crate::types::DisplayWindowId::new(7))
+    );
+}

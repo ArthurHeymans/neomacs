@@ -8,7 +8,7 @@ use crate::types::Color;
 use std::fmt;
 
 /// A color stop in a gradient (position and color pair).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ColorStop {
     /// Position along gradient (0.0 = start, 1.0 = end)
     pub position: f32,
@@ -27,7 +27,7 @@ impl ColorStop {
 /// These are rendered on the GPU, making them zero-cost for CPU execution.
 /// All gradient types are normalized to 0.0-1.0 coordinates within the region
 /// being rendered (e.g., a glyph cell or window region).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Gradient {
     /// Linear gradient sweeping in a given direction.
     ///
