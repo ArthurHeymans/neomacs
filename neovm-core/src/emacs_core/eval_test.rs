@@ -13412,6 +13412,440 @@ fn jit_direct_call_speculation_mid_execution_redefinition() {
     assert_eq!(print_value(&r), "(1 2)", "interpreter agrees on strictness");
 }
 
+/// Build `(lambda (a1..aK) (NAME a1..aK))` as hand-rolled bytecode — the exact
+/// `Constant(sym) StackRef* Call(k)` shape `find_spec_sites` speculates on.
+/// Callers disable the profitability gate (call-only body) before tiering.
+#[cfg(feature = "jit")]
+fn jit_subr_spec_caller(name: &str, nargs: usize, hot: bool) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: (1..=nargs as u32)
+            .map(crate::emacs_core::intern::SymId)
+            .collect(),
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    let mut ops = vec![Op::Constant(0)];
+    // After pushing the callee, every remaining arg sits `nargs` below the top.
+    for _ in 0..nargs {
+        ops.push(Op::StackRef(nargs as u16));
+    }
+    ops.push(Op::Call(nargs as u16));
+    ops.push(Op::Return);
+    f.ops = ops;
+    f.constants = vec![Value::symbol(name)];
+    f.max_stack = 16;
+    if hot {
+        f.runtime.set_hot_for_test();
+    }
+    Value::make_bytecode(f)
+}
+
+/// Debug-build snapshot of the three subr-spec counters (entries/fast/generic).
+#[cfg(all(feature = "jit", debug_assertions))]
+fn jit_subr_spec_counters() -> (u64, u64, u64) {
+    use crate::emacs_core::jit::compile;
+    use std::sync::atomic::Ordering;
+    (
+        compile::SUBR_SPEC_COUNT.load(Ordering::Relaxed),
+        compile::SUBR_SPEC_FAST_COUNT.load(Ordering::Relaxed),
+        compile::SUBR_SPEC_GENERIC_COUNT.load(Ordering::Relaxed),
+    )
+}
+
+/// Gap 1 engagement + parity: a hot `(recordp x)` compiles with a PREDICATE
+/// spec site (armed tag test), fires the fast path, and matches the
+/// interpreter on records, char-tables (a veclike that is NOT a record),
+/// symbols, fixnums, and nil.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_subr_spec_pred_recordp_engages_and_matches() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    let hot = jit_subr_spec_caller("recordp", 1, true);
+    let cold = jit_subr_spec_caller("recordp", 1, false);
+    let record = ev.eval_str("(record 'foo 1 2)").expect("record");
+    let chartable = ev.eval_str("(make-char-table 'test)").expect("char-table");
+    let cases = [
+        record,
+        chartable,
+        Value::symbol("x"),
+        Value::make_int(3),
+        Value::NIL,
+        Value::string("s"),
+    ];
+    #[cfg(debug_assertions)]
+    let (entries0, fast0, _) = jit_subr_spec_counters();
+    for arg in cases {
+        let native = ev
+            .funcall_general_untraced(hot, vec![arg])
+            .expect("native recordp caller");
+        let interp = ev
+            .funcall_general_untraced(cold, vec![arg])
+            .expect("interpreted recordp caller");
+        assert_eq!(native.bits(), interp.bits(), "recordp parity hot vs cold");
+    }
+    let native = ev
+        .funcall_general_untraced(hot, vec![record])
+        .expect("native");
+    assert!(native.is_truthy(), "recordp on a record is t");
+    let native = ev
+        .funcall_general_untraced(hot, vec![chartable])
+        .expect("native");
+    assert!(native.is_nil(), "recordp on a char-table is nil");
+    #[cfg(debug_assertions)]
+    {
+        let (entries1, fast1, _) = jit_subr_spec_counters();
+        assert!(
+            entries1 > entries0,
+            "the recordp site must route through a subr spec shim"
+        );
+        assert!(fast1 > fast0, "the armed predicate fast path must fire");
+    }
+}
+
+/// `vectorp` must stay a GENERAL site (correct through the real builtin, no
+/// tag test): bool-vectors and sentinel char-tables are genuine
+/// `VecLikeType::Vector` objects an inline tag test would misclassify as `t`.
+/// Runs THROUGH the JIT and expects the builtin's answers.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_subr_spec_vectorp_stays_general() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    let hot = jit_subr_spec_caller("vectorp", 1, true);
+    let boolvec = ev
+        .eval_str("(make-bool-vector 3 t)")
+        .expect("make-bool-vector");
+    let chartable = ev.eval_str("(make-char-table 'test)").expect("char-table");
+    let vector = ev.eval_str("[1 2 3]").expect("vector");
+    #[cfg(debug_assertions)]
+    let (_, fast0, _) = jit_subr_spec_counters();
+    let native = ev
+        .funcall_general_untraced(hot, vec![boolvec])
+        .expect("native vectorp caller");
+    assert!(
+        native.is_nil(),
+        "(vectorp (make-bool-vector 3 t)) is nil THROUGH the JIT — vectorp stayed General"
+    );
+    let native = ev
+        .funcall_general_untraced(hot, vec![chartable])
+        .expect("native");
+    assert!(native.is_nil(), "(vectorp (make-char-table)) is nil");
+    let native = ev
+        .funcall_general_untraced(hot, vec![vector])
+        .expect("native");
+    assert!(native.is_truthy(), "(vectorp [1 2 3]) is t");
+    #[cfg(debug_assertions)]
+    {
+        let (_, fast1, _) = jit_subr_spec_counters();
+        assert!(
+            fast1 > fast0,
+            "vectorp engages as a GENERAL subr spec site (direct dispatch of the real builtin)"
+        );
+    }
+}
+
+/// `symbol-with-pos-p` predicate site: exact under BOTH
+/// `symbols-with-pos-enabled` states (the builtin is flag-independent — it
+/// tests the representation, not the bare-symbol view).
+#[cfg(feature = "jit")]
+#[test]
+fn jit_subr_spec_symbol_with_pos_p_both_flag_states() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    let hot = jit_subr_spec_caller("symbol-with-pos-p", 1, true);
+    let cold = jit_subr_spec_caller("symbol-with-pos-p", 1, false);
+    let swp = ev
+        .eval_str("(position-symbol 'foo 5)")
+        .expect("position-symbol");
+    for flag in ["t", "nil"] {
+        ev.eval_str(&format!("(setq symbols-with-pos-enabled {flag})"))
+            .expect("set flag");
+        for arg in [swp, Value::symbol("foo"), Value::make_int(1)] {
+            let native = ev
+                .funcall_general_untraced(hot, vec![arg])
+                .expect("native swp-p caller");
+            let interp = ev
+                .funcall_general_untraced(cold, vec![arg])
+                .expect("interpreted swp-p caller");
+            assert_eq!(
+                native.bits(),
+                interp.bits(),
+                "symbol-with-pos-p parity (flag={flag})"
+            );
+        }
+        let native = ev
+            .funcall_general_untraced(hot, vec![swp])
+            .expect("native");
+        assert!(native.is_truthy(), "swp-p on a symbol-with-pos (flag={flag})");
+    }
+}
+
+/// `equal-including-properties` site: bitwise-equal args hit the shim fast
+/// path (`t`, FAST counter); everything else bounces to the generic block and
+/// runs the REAL builtin — equal-but-distinct strings (t), property mismatch
+/// (nil), and distinct same-bit NaN boxes (t, GNU bit-pattern float equality).
+#[cfg(feature = "jit")]
+#[test]
+fn jit_subr_spec_eq_incl_props_hit_and_miss() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    let hot = jit_subr_spec_caller("equal-including-properties", 2, true);
+    let cold = jit_subr_spec_caller("equal-including-properties", 2, false);
+    let s = Value::string("hello");
+    // Same object: the bitwise fast path answers t.
+    #[cfg(debug_assertions)]
+    let (_, fast0, _) = jit_subr_spec_counters();
+    let native = ev
+        .funcall_general_untraced(hot, vec![s, s])
+        .expect("native eq-incl-props");
+    assert!(native.is_truthy(), "same-object strings are t");
+    #[cfg(debug_assertions)]
+    {
+        let (_, fast1, _) = jit_subr_spec_counters();
+        assert!(fast1 > fast0, "bitwise-equal args take the shim fast path");
+    }
+    // Distinct but equal strings, no properties: miss -> generic -> t.
+    let cases: Vec<(Value, Value)> = {
+        let with_props = Value::string("abcd");
+        crate::emacs_core::value::set_string_text_properties_for_value(
+            with_props,
+            vec![crate::emacs_core::value::StringTextPropertyRun {
+                start: 1,
+                end: 3,
+                plist: Value::list(vec![Value::symbol("face"), Value::symbol("bold")]),
+            }],
+        );
+        vec![
+            (Value::string("hello"), Value::string("hello")), // t (deep equal)
+            (with_props, Value::string("abcd")),              // nil (props differ)
+            (Value::string("ab"), Value::string("ac")),       // nil
+            // Distinct NaN boxes, same bit pattern: t (GNU float equality).
+            (Value::make_float(f64::NAN), Value::make_float(f64::NAN)),
+            (Value::make_int(7), Value::make_int(7)),         // t (bitwise hit)
+        ]
+    };
+    for (a, b) in cases {
+        let native = ev
+            .funcall_general_untraced(hot, vec![a, b])
+            .expect("native eq-incl-props caller");
+        let interp = ev
+            .funcall_general_untraced(cold, vec![a, b])
+            .expect("interpreted eq-incl-props caller");
+        assert_eq!(
+            native.bits(),
+            interp.bits(),
+            "equal-including-properties parity hot vs cold"
+        );
+    }
+}
+
+/// GENERAL-kind engagement on a side-effecting builtin: `(put sym prop val)`
+/// dispatches directly when armed and the effect + result match the
+/// interpreter.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_subr_spec_put_general_engages_and_matches() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    let hot = jit_subr_spec_caller("put", 3, true);
+    #[cfg(debug_assertions)]
+    let (entries0, fast0, _) = jit_subr_spec_counters();
+    let r = ev
+        .funcall_general_untraced(
+            hot,
+            vec![
+                Value::symbol("jit-subr-spec-put-sym"),
+                Value::symbol("prop"),
+                Value::make_int(41),
+            ],
+        )
+        .expect("native put caller");
+    assert_eq!(r, Value::make_int(41), "put returns the value");
+    assert_eq!(
+        format_eval_result(&ev.eval_str("(get 'jit-subr-spec-put-sym 'prop)")),
+        "OK 41",
+        "the armed direct dispatch performed put's side effect"
+    );
+    #[cfg(debug_assertions)]
+    {
+        let (entries1, fast1, _) = jit_subr_spec_counters();
+        assert!(entries1 > entries0, "put site routes through the subr shim");
+        assert!(fast1 > fast0, "put site dispatches directly when armed");
+    }
+}
+
+/// Redefinition semantics (GNU default parity): fset over a speculated subr
+/// takes effect on the very next call (disarmed site -> generic block resolves
+/// the new binding); restoring the ORIGINAL subr object re-arms the site
+/// (fast path resumes — counters prove re-arm, not permanent slow); an
+/// UNRELATED epoch bump also re-arms.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_subr_spec_tracks_redefinition_and_rearms() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    let hot = jit_subr_spec_caller("recordp", 1, true);
+    let record = ev.eval_str("(record 'foo 1)").expect("record");
+    let original = ev
+        .eval_str("(symbol-function 'recordp)")
+        .expect("original recordp");
+
+    // 1) Armed: t.
+    let r = ev
+        .funcall_general_untraced(hot, vec![record])
+        .expect("native");
+    assert!(r.is_truthy());
+
+    // 2) Redefine recordp -> a lambda returning 'redefined. MUST take effect
+    //    on the next call (site disarms, generic path resolves the closure).
+    ev.eval_str("(fset 'recordp (lambda (x) 'redefined))")
+        .expect("fset recordp");
+    let r = ev
+        .funcall_general_untraced(hot, vec![record])
+        .expect("native after fset");
+    assert_eq!(
+        r,
+        Value::symbol("redefined"),
+        "fset takes effect immediately on the speculated site"
+    );
+
+    // 3) Restore the ORIGINAL subr object: bits == expected again, so the
+    //    next call re-validates and RE-ARMS (fast path resumes).
+    let ValueKind::Symbol(recordp_id) = Value::symbol("recordp").kind() else {
+        panic!("symbol expected");
+    };
+    ev.obarray.set_symbol_function_id(recordp_id, original);
+    #[cfg(debug_assertions)]
+    let (_, fast0, gen0) = jit_subr_spec_counters();
+    let r = ev
+        .funcall_general_untraced(hot, vec![record])
+        .expect("native after restore");
+    assert!(r.is_truthy(), "restored recordp answers t again");
+    #[cfg(debug_assertions)]
+    {
+        let (_, fast1, gen1) = jit_subr_spec_counters();
+        assert!(fast1 > fast0, "restoring the same subr object re-arms the site");
+        assert_eq!(gen1, gen0, "the re-armed call does not bounce generic");
+    }
+
+    // 4) UNRELATED epoch bump: still fast (re-validate + re-arm, not slow).
+    ev.eval_str("(fset 'jit-subr-spec-unrelated (lambda () 1))")
+        .expect("unrelated fset");
+    #[cfg(debug_assertions)]
+    let (_, fast2, gen2) = jit_subr_spec_counters();
+    let r = ev
+        .funcall_general_untraced(hot, vec![record])
+        .expect("native after unrelated bump");
+    assert!(r.is_truthy());
+    #[cfg(debug_assertions)]
+    {
+        let (_, fast3, gen3) = jit_subr_spec_counters();
+        assert!(fast3 > fast2, "unrelated epoch bump re-arms via re-validation");
+        assert_eq!(gen3, gen2, "no generic bounce after an unrelated bump");
+    }
+}
+
+/// Arity conservatism: `(put 'a 'b)` (n < min_args) must NOT be speculated —
+/// the generic path signals wrong-number-of-arguments byte-identically hot vs
+/// cold. And a `Many`-variant builtin (`+`) gets NO subr site at all.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_subr_spec_arity_and_variadic_stay_generic() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    use crate::emacs_core::error::map_flow;
+    let mut ev = Context::new();
+
+    // n=2 < put's min_args=3: no site; identical signal hot vs cold.
+    let hot = jit_subr_spec_caller("put", 2, true);
+    let cold = jit_subr_spec_caller("put", 2, false);
+    #[cfg(debug_assertions)]
+    let (entries0, _, _) = jit_subr_spec_counters();
+    let args = || vec![Value::symbol("a"), Value::symbol("b")];
+    let native_err = ev
+        .funcall_general_untraced(hot, args())
+        .expect_err("put with 2 args signals");
+    let interp_err = ev
+        .funcall_general_untraced(cold, args())
+        .expect_err("interpreter agrees");
+    assert_eq!(
+        format!("{:?}", map_flow(native_err)),
+        format!("{:?}", map_flow(interp_err)),
+        "wrong-number-of-arguments is byte-identical hot vs cold"
+    );
+
+    // A Many-variant builtin (+) is never speculated.
+    let plus_hot = jit_subr_spec_caller("+", 2, true);
+    let r = ev
+        .funcall_general_untraced(plus_hot, vec![Value::make_int(1), Value::make_int(2)])
+        .expect("native + caller");
+    assert_eq!(r, Value::make_int(3));
+    #[cfg(debug_assertions)]
+    {
+        let (entries1, _, _) = jit_subr_spec_counters();
+        assert_eq!(
+            entries1, entries0,
+            "neither the under-arity put nor the Many-variant + creates a subr spec site"
+        );
+    }
+}
+
+/// In-place entry-rewrite soundness: `defsubr_1` under the SAME name rewrites
+/// the leaked SubrObj IN PLACE (`update_static_subr_object_entry` — cell bits
+/// unchanged) and bumps function_epoch. The site re-validates, RE-ARMS (bits
+/// still match), and the ARMED path must call the NEW function — proving the
+/// shim reads the entry FRESH per call instead of caching the fn pointer.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_subr_spec_inplace_rewrite_calls_fresh_entry() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    fn f1(_: &mut Context, _: Value) -> crate::emacs_core::error::EvalResult {
+        Ok(Value::make_int(1))
+    }
+    fn f2(_: &mut Context, _: Value) -> crate::emacs_core::error::EvalResult {
+        Ok(Value::make_int(2))
+    }
+    let mut ev = Context::new();
+    ev.defsubr_1("jit-subr-spec-rewrite", f1, 1);
+    let hot = jit_subr_spec_caller("jit-subr-spec-rewrite", 1, true);
+    #[cfg(debug_assertions)]
+    let (_, fast0, _) = jit_subr_spec_counters();
+    let r = ev
+        .funcall_general_untraced(hot, vec![Value::NIL])
+        .expect("native rewrite caller");
+    assert_eq!(r, Value::make_int(1), "armed dispatch runs f1");
+    // Re-register: entry rewritten in place (bits identical), epoch bumped.
+    ev.defsubr_1("jit-subr-spec-rewrite", f2, 1);
+    let r = ev
+        .funcall_general_untraced(hot, vec![Value::NIL])
+        .expect("native after in-place rewrite");
+    assert_eq!(
+        r,
+        Value::make_int(2),
+        "the ARMED path calls the NEW function (fresh entry read)"
+    );
+    #[cfg(debug_assertions)]
+    {
+        let (_, fast1, _) = jit_subr_spec_counters();
+        assert!(
+            fast1 >= fast0 + 2,
+            "both calls (pre- and post-rewrite) took the armed fast path"
+        );
+    }
+}
+
 /// End-to-end: the classic hot shapes the poisoning analysis used to BAIL on
 /// now compile — recursive fib (arithmetic after recursive calls) and a
 /// while-loop mixing a call with arithmetic (guards at the loop join). Both
