@@ -79,6 +79,15 @@ const GC_DEFAULT_THRESHOLD_BYTES: usize = 100_000 * std::mem::size_of::<usize>()
 const GC_THRESHOLD_FLOOR_BYTES: usize = GC_DEFAULT_THRESHOLD_BYTES / 10;
 const GC_HI_THRESHOLD_BYTES: usize = (i64::MAX as usize) / 2;
 const GC_PERCENT_SCALE: u64 = 1_000_000;
+/// Live-proportional adaptive trigger (`effective_gc_threshold_bytes`): do not
+/// start the next cycle until at least `live_bytes × NUM/DEN` fresh bytes have
+/// been allocated, so the O(live) full-mark cost amortizes as the live heap
+/// grows (total mark work stays O(bytes allocated)) instead of re-marking the
+/// whole heap every fixed `gc-cons-threshold` bytes. The elisp-derived value
+/// (`gc-cons-threshold`/`gc-cons-percentage`) is a FLOOR this term can only
+/// raise, never lower, and `GC_HI_THRESHOLD_BYTES` still caps the result.
+const GC_LIVE_GROWTH_NUM: u128 = 1;
+const GC_LIVE_GROWTH_DEN: u128 = 2;
 pub(crate) const INTERNAL_COMPILER_FUNCTION_OVERRIDES: &str =
     "internal--compiler-function-overrides";
 
@@ -5411,6 +5420,22 @@ impl Context {
                 .min(GC_HI_THRESHOLD_BYTES as u128) as usize;
             threshold = threshold.max(pct_threshold);
         }
+        // Internal live-proportional growth term: trigger only once at least
+        // GC_LIVE_GROWTH_NUM/GC_LIVE_GROWTH_DEN of the live heap has been
+        // allocated since the last cycle, so the full-mark cost (O(live))
+        // amortizes as the heap grows. Invariants: strict max — the
+        // elisp-derived value above stays a floor this term never lowers (user
+        // settings and the defaults keep their meaning as minimum budgets);
+        // overridden thresholds (`set_gc_threshold`) are unaffected because
+        // this value only flows through `set_gc_threshold_from_runtime`; the
+        // GC_HI clamp below still bounds the result. `live_bytes` only grows
+        // between sweeps (it is recomputed exactly at each sweep), which is
+        // safe for a max term.
+        let live_growth = ((self.tagged_heap.live_bytes() as u128)
+            .saturating_mul(GC_LIVE_GROWTH_NUM)
+            / GC_LIVE_GROWTH_DEN)
+            .min(GC_HI_THRESHOLD_BYTES as u128) as usize;
+        threshold = threshold.max(live_growth);
         threshold.clamp(1, GC_HI_THRESHOLD_BYTES)
     }
 

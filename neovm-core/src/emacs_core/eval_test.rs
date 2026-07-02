@@ -14793,6 +14793,45 @@ fn gc_threshold_adapts_after_collection() {
 }
 
 #[test]
+fn gc_threshold_grows_with_live_heap() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    // Retain ~200k conses (~3.2 MB of cons cells alone) so the live heap far
+    // exceeds the default 800 KB byte budget, then collect so `live_bytes` is
+    // recomputed exactly at the sweep and the threshold re-synced from it.
+    ev.eval_str_each("(setq gc-live-growth-anchor (make-list 200000 0))");
+    ev.gc_collect();
+    let retained_bytes = 200_000 * 2 * std::mem::size_of::<usize>();
+    assert!(
+        ev.tagged_heap.live_bytes() >= retained_bytes,
+        "live heap should include the retained structure, got {}",
+        ev.tagged_heap.live_bytes()
+    );
+    // The live-proportional trigger requires allocating at least half the live
+    // heap before the next cycle (the elisp defaults stay floors below it).
+    assert!(
+        ev.tagged_heap.gc_threshold() >= retained_bytes / 2,
+        "threshold should grow with the live heap, got {}",
+        ev.tagged_heap.gc_threshold()
+    );
+}
+
+#[test]
+fn gc_explicit_huge_cons_threshold_stays_the_floor() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    // An explicit `gc-cons-threshold` far above the live-proportional term
+    // must win exactly: elisp settings are floors the adaptive term never
+    // trims (and here it is also the max, so the threshold equals it).
+    ev.eval_str_each(
+        "(progn
+           (setq gc-cons-percentage nil)
+           (setq gc-cons-threshold 268435456))",
+    );
+    assert_eq!(ev.tagged_heap.gc_threshold(), 268_435_456);
+}
+
+#[test]
 fn gc_runtime_setting_mutation_reloads_threshold_immediately() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
