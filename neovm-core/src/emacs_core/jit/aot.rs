@@ -435,6 +435,10 @@ fn op_debug_is_canonical(op: &Op) -> bool {
 
 pub(crate) fn leaf_content_hash(ops: &[Op], constants: &[Value], arity: usize) -> Option<u128> {
     use sha2::{Digest, Sha256};
+    // Probe seam (task #11): count hash ATTEMPTS so a test can assert the
+    // manifest pre-filter skipped a candidate without paying this function.
+    #[cfg(test)]
+    test_support::note_hash_call();
     let mut h = Sha256::new();
     h.update(ABI_TAG.to_le_bytes());
     h.update((arity as u64).to_le_bytes());
@@ -1119,41 +1123,251 @@ pub fn build_preload_object(
 
 /// File name of the dump-time AOT preload shared object (beside the pdump).
 pub const PRELOAD_SO_NAME: &str = "libneomacs-preload.so";
-/// File name of the preload manifest (fingerprint interlock + emitted hashes).
+/// File name of the preload manifest (fingerprint interlock + per-name pre-keys).
 pub const PRELOAD_MANIFEST_NAME: &str = "libneomacs-preload.manifest";
 /// Manifest format version (bump on any manifest schema change).
-const PRELOAD_MANIFEST_VERSION: u32 = 1;
+///
+/// v2 (task #11): the per-unique-hash `hash …` diagnostic lines were replaced by
+/// per-NAME `leaf …` pre-key lines (see [`manifest_leaf_line`]) so the startup
+/// prepopulate pass can resolve membership by symbol name WITHOUT paying the
+/// SHA-256 content hash for every loadup candidate. A version-1 manifest fails
+/// the interlock and is treated as ABSENT-preload (skip→JIT) — the simpler sound
+/// compat arm: manifests are co-produced with the `.so` on every fresh-build and
+/// pinned to the pdump by the fingerprint interlock, so a live v1 manifest is
+/// stale by construction.
+const PRELOAD_MANIFEST_VERSION: u32 = 2;
+
+/// One parsed v2 manifest pre-key (task #11): the cheap per-NAME discriminators
+/// the prepopulate pass consults BEFORE paying the SHA-256 content hash.
+/// `member` distinguishes the emitted preload set (`m` lines) from dump-time
+/// hashable NON-members (`x` lines — the skip class: a verified `x` key means
+/// the dlsym membership probe would miss, so the hash can be skipped outright).
+/// `hash` is the dump-time content hash (diagnostic: the runtime always
+/// recomputes the LIVE body's hash before consulting the dlsym gate, which stays
+/// the membership ground truth; the recorded hash only feeds drift tracing).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ManifestPreKey {
+    pub(crate) member: bool,
+    pub(crate) ops_len: usize,
+    pub(crate) arity: usize,
+    pub(crate) hash: u128,
+}
+
+/// Symbol-name → pre-key map parsed from a v2 preload manifest.
+pub(crate) type PreKeyMap = std::collections::HashMap<Box<str>, ManifestPreKey>;
+
+/// Escape a symbol name into a single whitespace-free manifest token. Names are
+/// emitted RAW unless empty, `%`-leading, or containing whitespace/control
+/// characters (which would corrupt the line-based format) — those are emitted as
+/// `%` + lowercase hex of the UTF-8 bytes. Unambiguous: a raw emission never
+/// starts with `%`, so the loader unescapes exactly the `%`-leading tokens.
+fn manifest_escape_name(name: &str) -> std::borrow::Cow<'_, str> {
+    let needs_escape = name.is_empty()
+        || name.starts_with('%')
+        || name.chars().any(|c| c.is_whitespace() || c.is_control());
+    if !needs_escape {
+        return std::borrow::Cow::Borrowed(name);
+    }
+    use std::fmt::Write as _;
+    let mut out = String::with_capacity(1 + name.len() * 2);
+    out.push('%');
+    for b in name.bytes() {
+        let _ = write!(out, "{b:02x}");
+    }
+    std::borrow::Cow::Owned(out)
+}
+
+/// Inverse of [`manifest_escape_name`]. `None` on a malformed escape (the caller
+/// treats the whole pre-key section as malformed — fail-closed to the no-filter
+/// path).
+fn manifest_unescape_name(tok: &str) -> Option<String> {
+    let Some(hex) = tok.strip_prefix('%') else {
+        return Some(tok.to_string());
+    };
+    if hex.len() % 2 != 0 {
+        return None;
+    }
+    let mut bytes = Vec::with_capacity(hex.len() / 2);
+    for i in (0..hex.len()).step_by(2) {
+        bytes.push(u8::from_str_radix(hex.get(i..i + 2)?, 16).ok()?);
+    }
+    String::from_utf8(bytes).ok()
+}
+
+/// Render ONE v2 pre-key line: `leaf <m|x> <ops_len> <arity> <hash> <name>\n`.
+/// The single source for the line format — the parser ([`parse_preload_manifest`])
+/// and the producer ([`build_and_link_preload`]) both go through it / its tests.
+fn manifest_leaf_line(member: bool, ops_len: usize, arity: usize, hash: u128, name: &str) -> String {
+    format!(
+        "leaf {} {ops_len} {arity} {hash:032x} {}\n",
+        if member { 'm' } else { 'x' },
+        manifest_escape_name(name),
+    )
+}
+
+/// A parsed preload manifest: the interlock header fields plus (v2) the pre-key
+/// map. `prekeys` is `None` when the pre-key section is absent/malformed
+/// (truncated file, corrupt line, duplicate name, `leaves` count mismatch) —
+/// the FAIL-CLOSED signal: the prepopulate pass then hashes every candidate
+/// exactly as before (the pre-filter is strictly an optimization; a manifest
+/// that fails only its pre-key section still serves the `.so` via the header
+/// interlock).
+struct ParsedPreloadManifest {
+    version: Option<u32>,
+    abi_tag: Option<u32>,
+    fingerprint: Option<String>,
+    prekeys: Option<PreKeyMap>,
+}
+
+/// Parse a preload manifest's text. Unknown line tags are ignored (forward
+/// compatibility; also tolerates v1 `hash …` diagnostic lines). See
+/// [`ParsedPreloadManifest`] for the fail-closed `prekeys` contract.
+fn parse_preload_manifest(text: &str) -> ParsedPreloadManifest {
+    let mut version: Option<u32> = None;
+    let mut abi_tag: Option<u32> = None;
+    let mut fingerprint: Option<String> = None;
+    let mut declared_leaves: Option<usize> = None;
+    let mut map: PreKeyMap = PreKeyMap::new();
+    let mut malformed = false;
+    for line in text.lines() {
+        let mut it = line.split_whitespace();
+        let Some(tag) = it.next() else { continue };
+        match tag {
+            "version" => version = it.next().and_then(|v| v.parse().ok()),
+            "abi_tag" => abi_tag = it.next().and_then(|v| u32::from_str_radix(v, 16).ok()),
+            "fingerprint" => fingerprint = it.next().map(str::to_string),
+            "leaves" => declared_leaves = it.next().and_then(|v| v.parse().ok()),
+            "leaf" => {
+                let parsed = (|| {
+                    let member = match it.next()? {
+                        "m" => true,
+                        "x" => false,
+                        _ => return None,
+                    };
+                    let ops_len: usize = it.next()?.parse().ok()?;
+                    let arity: usize = it.next()?.parse().ok()?;
+                    let hash = u128::from_str_radix(it.next()?, 16).ok()?;
+                    let name = manifest_unescape_name(it.next()?)?;
+                    if it.next().is_some() {
+                        return None; // trailing junk → malformed line.
+                    }
+                    Some((
+                        name,
+                        ManifestPreKey {
+                            member,
+                            ops_len,
+                            arity,
+                            hash,
+                        },
+                    ))
+                })();
+                match parsed {
+                    // A duplicate name is a producer impossibility (obarray names
+                    // are unique) → treat as corruption.
+                    Some((name, key)) => {
+                        if map.insert(name.into_boxed_str(), key).is_some() {
+                            malformed = true;
+                        }
+                    }
+                    None => malformed = true,
+                }
+            }
+            _ => {} // unknown/diagnostic lines: ignore.
+        }
+    }
+    // The declared count must cover the parsed map exactly — catches truncation
+    // between the header and the tail of the pre-key list.
+    let prekeys = (!malformed && declared_leaves == Some(map.len())).then_some(map);
+    ParsedPreloadManifest {
+        version,
+        abi_tag,
+        fingerprint,
+        prekeys,
+    }
+}
+
+/// The STALE INTERLOCK on a parsed manifest: `version`, `abi_tag`, and
+/// `fingerprint` must all match the RUNNING build, else the whole preload is
+/// skipped (→ JIT) — a foreign / stale / ABI-incompatible preload never
+/// mis-serves native code. Mismatches are logged at debug.
+fn manifest_interlock_ok(parsed: &ParsedPreloadManifest) -> bool {
+    if parsed.version != Some(PRELOAD_MANIFEST_VERSION) {
+        tracing::debug!(
+            "aot-preload: manifest version mismatch ({:?}); skip→JIT",
+            parsed.version
+        );
+        return false;
+    }
+    if parsed.abi_tag != Some(ABI_TAG) {
+        tracing::debug!(
+            "aot-preload: manifest abi_tag mismatch ({:?}); skip→JIT",
+            parsed.abi_tag
+        );
+        return false;
+    }
+    // The interlock: the manifest fingerprint must equal the RUNNING pdump's.
+    let running = crate::emacs_core::pdump::fingerprint_hex();
+    if parsed.fingerprint.as_deref() != Some(running) {
+        tracing::debug!(
+            "aot-preload: manifest fingerprint mismatch (manifest={:?} running={running}); skip→JIT",
+            parsed.fingerprint
+        );
+        return false;
+    }
+    true
+}
 
 /// R2-B6: enumerate `ctx`'s loadup AOT candidates, build ONE preload object,
 /// link it to `out_dir/libneomacs-preload.so`, and write
 /// `out_dir/libneomacs-preload.manifest`. The manifest carries the running
 /// pdump's `fingerprint_hex` (the STALE INTERLOCK — the loader refuses a `.so`
 /// whose manifest fingerprint ≠ the running pdump, so a foreign/stale preload is
-/// a clean skip→JIT, never a crash), the ABI_TAG, the manifest version, and the
-/// emitted content hashes (one per unique body) for diagnostics. `ctx` is the
-/// final pdump loaded in-process (the loadup closure). Returns the build stats.
+/// a clean skip→JIT, never a crash), the ABI_TAG, the manifest version, and (v2,
+/// task #11) one PRE-KEY line per hashable required-only loadup fn: NAME +
+/// ops-count + arity + content hash, classed `m` (emitted preload member) or `x`
+/// (hashable non-member). The `x` class is what the startup prepopulate pass
+/// skips WITHOUT hashing (previously it paid a SHA-256 for all ~2195 candidates
+/// to discover the ~1489 non-members); `m` lines double as the name-attributed
+/// replacement for v1's anonymous per-hash diagnostic listing. Dedup'd bodies
+/// (distinct names, identical body) each get their own `m` line sharing the
+/// hash. `ctx` is the final pdump loaded in-process (the loadup closure).
+/// Returns the build stats.
 pub fn build_and_link_preload(
     ctx: &crate::emacs_core::eval::Context,
     out_dir: &std::path::Path,
 ) -> Result<PreloadBuildStats, CompileError> {
-    let leaves = enumerate_loadup_leaves(ctx, /*d0_filter=*/ true);
-    // Re-derive the emitted unique hashes for the manifest (build_preload_object
-    // dedups internally; recompute the unique set here for the manifest listing).
-    let (obj, stats) = build_preload_object(&leaves)?;
+    // Enumerate WITHOUT the D0 filter so the manifest can carry a pre-key for
+    // EVERY hashable candidate (member and non-member), then partition by the
+    // same `is_d0_aot_candidate` gate the v1 path applied inside enumerate —
+    // same emitted set, one full-compile probe per fn instead of v1's two.
+    let all = enumerate_loadup_leaves(ctx, /*d0_filter=*/ false);
+    let mut members: Vec<LoadupLeaf> = Vec::new();
+    let mut prekey_lines = String::new();
+    let mut prekey_count = 0usize;
+    for leaf in all {
+        // Unhashable body (non-canonical op / non-recipe-able const): no
+        // pre-key. The runtime then takes the exact pre-v2 path for that fn
+        // (a failed hash attempt → skip), preserving behavior + counts.
+        let Some(hash) = leaf_content_hash(leaf.ops, leaf.constants, leaf.arity) else {
+            continue;
+        };
+        let member = is_d0_aot_candidate(leaf.ops, leaf.constants, leaf.arity);
+        prekey_lines.push_str(&manifest_leaf_line(
+            member,
+            leaf.ops.len(),
+            leaf.arity,
+            hash,
+            &leaf.name,
+        ));
+        prekey_count += 1;
+        if member {
+            members.push(leaf);
+        }
+    }
+    let (obj, stats) = build_preload_object(&members)?;
     let so_path = out_dir.join(PRELOAD_SO_NAME);
     link_object_to_so(&obj, &so_path)?;
 
-    // Collect the unique content hashes that were emitted (same dedup order).
-    let mut seen = std::collections::HashSet::new();
-    let mut hashes = Vec::new();
-    for leaf in &leaves {
-        if let Some(h) = leaf_content_hash(leaf.ops, leaf.constants, leaf.arity)
-            && is_d0_aot_candidate(leaf.ops, leaf.constants, leaf.arity)
-            && seen.insert(h)
-        {
-            hashes.push(h);
-        }
-    }
     let mut manifest = String::new();
     manifest.push_str(&format!("version {PRELOAD_MANIFEST_VERSION}\n"));
     manifest.push_str(&format!("abi_tag {ABI_TAG:08x}\n"));
@@ -1161,10 +1375,8 @@ pub fn build_and_link_preload(
         "fingerprint {}\n",
         crate::emacs_core::pdump::fingerprint_hex()
     ));
-    manifest.push_str(&format!("leaves {}\n", hashes.len()));
-    for h in &hashes {
-        manifest.push_str(&format!("hash {h:032x}\n"));
-    }
+    manifest.push_str(&format!("leaves {prekey_count}\n"));
+    manifest.push_str(&prekey_lines);
     let manifest_path = out_dir.join(PRELOAD_MANIFEST_NAME);
     std::fs::write(&manifest_path, manifest)
         .map_err(|e| module_init_err(format!("write preload manifest: {e}")))?;
@@ -2259,11 +2471,14 @@ pub fn preload_manifest_path_for_executable(exe: &std::path::Path) -> std::path:
 }
 
 /// Parse + validate the preload manifest at `manifest_path` against THIS image.
-/// Returns `true` only when the manifest is well-formed AND its `version`,
-/// `abi_tag`, and `fingerprint` all match the running build — the STALE
-/// INTERLOCK: a foreign / stale / ABI-incompatible preload fails here so the
-/// loader skips it (→ JIT), never mis-serving native code built for a different
-/// image. Any parse/IO/mismatch → `false` (logged at debug).
+/// Returns `true` only when the manifest header is well-formed AND its
+/// `version`, `abi_tag`, and `fingerprint` all match the running build — the
+/// STALE INTERLOCK: a foreign / stale / ABI-incompatible preload fails here so
+/// the loader skips it (→ JIT), never mis-serving native code built for a
+/// different image. Any parse/IO/mismatch → `false` (logged at debug). The v2
+/// pre-key section is NOT part of the interlock (a manifest with a valid header
+/// but a corrupt pre-key list still serves the `.so`; only the pre-FILTER is
+/// disabled — see [`load_preload_prekeys`]).
 fn preload_manifest_matches(manifest_path: &std::path::Path) -> bool {
     let text = match std::fs::read_to_string(manifest_path) {
         Ok(t) => t,
@@ -2272,35 +2487,40 @@ fn preload_manifest_matches(manifest_path: &std::path::Path) -> bool {
             return false;
         }
     };
-    let mut version: Option<u32> = None;
-    let mut abi_tag: Option<u32> = None;
-    let mut fingerprint: Option<String> = None;
-    for line in text.lines() {
-        let mut it = line.split_whitespace();
-        match (it.next(), it.next()) {
-            (Some("version"), Some(v)) => version = v.parse().ok(),
-            (Some("abi_tag"), Some(v)) => abi_tag = u32::from_str_radix(v, 16).ok(),
-            (Some("fingerprint"), Some(v)) => fingerprint = Some(v.to_string()),
-            _ => {} // `leaves`/`hash` lines are diagnostics; ignore here.
-        }
+    manifest_interlock_ok(&parse_preload_manifest(&text))
+}
+
+/// Load the v2 pre-key map for the preload beside the running executable
+/// (task #11). `None` when there is no manifest, the interlock fails, or the
+/// pre-key section is absent/malformed — in every case the caller
+/// ([`prepopulate_aot_from_preload`]) falls back to the exact pre-v2 per-fn
+/// hash+dlsym path (FAIL-CLOSED: the pre-filter can only be an optimization,
+/// never the difference between serving and not serving a leaf the `.so` has).
+/// Re-reads + re-interlocks the manifest independently of [`load_preload`]'s
+/// validation: prepopulate runs once per startup, and a manifest swapped in
+/// between the two reads either carries the same fingerprint (same image →
+/// consistent pre-keys) or fails the interlock here (→ no pre-filter).
+fn load_preload_prekeys() -> Option<PreKeyMap> {
+    // Test seam: directly-injected pre-keys let a unit test drive the pre-filter
+    // without a real manifest beside the test binary.
+    #[cfg(test)]
+    if let Some(injected) = test_support::injected_prekeys() {
+        return Some(injected);
     }
-    if version != Some(PRELOAD_MANIFEST_VERSION) {
-        tracing::debug!("aot-preload: manifest version mismatch ({version:?}); skip→JIT");
-        return false;
+    let exe = std::env::current_exe().ok()?;
+    let manifest_path = preload_manifest_path_for_executable(&exe);
+    let text = std::fs::read_to_string(&manifest_path).ok()?;
+    let parsed = parse_preload_manifest(&text);
+    if !manifest_interlock_ok(&parsed) {
+        return None;
     }
-    if abi_tag != Some(ABI_TAG) {
-        tracing::debug!("aot-preload: manifest abi_tag mismatch ({abi_tag:?}); skip→JIT");
-        return false;
-    }
-    // The interlock: the manifest fingerprint must equal the RUNNING pdump's.
-    let running = crate::emacs_core::pdump::fingerprint_hex();
-    if fingerprint.as_deref() != Some(running) {
+    if parsed.prekeys.is_none() {
         tracing::debug!(
-            "aot-preload: manifest fingerprint mismatch (manifest={fingerprint:?} running={running}); skip→JIT"
+            "aot-preload: manifest pre-key section absent/malformed; \
+             prepopulate hashes every candidate (fail-closed)"
         );
-        return false;
     }
-    true
+    parsed.prekeys
 }
 
 thread_local! {
@@ -2558,17 +2778,22 @@ fn unit_has_entry(unit: &super::compile::LoadedUnit, content_hash: u128) -> bool
 /// Stats from a prepopulate pass (logged so a degraded preload is visible).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct PrepopulateStats {
-    /// Required-only fns enumerated + probed (content hash succeeded; membership
-    /// is checked next — a hashable body always has a collectible reloc set, so
-    /// this is the same count the pre-gate pipeline produced).
+    /// Required-only fns probed for membership: hash-probed (content hash
+    /// succeeded → dlsym gate) or, under the v2 manifest pre-filter (task #11),
+    /// name-probed non-members skipped WITHOUT hashing. Same count as the
+    /// pre-filter-less pass for an unchanged image: every skip-counted fn is a
+    /// dump-time-verified hashable non-member (it would have hashed OK and then
+    /// dlsym-missed).
     pub candidates: usize,
     /// CompiledLeaves successfully loaded from the preload `.so`.
     pub loaded: usize,
     /// COLD slots actually filled in COMPILED (insert-if-absent — a slot already
     /// holding a hook-compiled JIT leaf is KEPT, so `inserted` ≤ `loaded`).
     pub inserted: usize,
-    /// Probed fns whose entry was not in the preload (counted at the CHEAP dlsym
-    /// gate, before any MIR build — Gap 4b) or that failed to load/verify (→ JIT).
+    /// Probed fns not in the preload — counted at the manifest NAME pre-filter
+    /// (task #11: a verified `x` pre-key, no hash paid) or at the CHEAP dlsym
+    /// gate (Gap 4b, before any MIR build) — or that failed to load/verify
+    /// (→ JIT).
     pub missed: usize,
 }
 
@@ -2581,6 +2806,11 @@ pub struct PrepopulateStats {
 /// and inserts it into `COMPILED` keyed by that function's `compiled_id`. The 13
 /// dedup'd bodies (distinct fns, one shared `.so` entry) each get their OWN
 /// `CompiledLeaf` (own `reloc_data` + `compiled_id`) pointing at the shared entry.
+///
+/// Task #11: candidates are pre-filtered by the v2 manifest PRE-KEYS (symbol
+/// name → member?/ops-count/arity) so a dump-time-verified non-member skips its
+/// SHA-256 content hash outright; members and anything absent/mismatched take
+/// the exact hash + dlsym path (dlsym stays the membership ground truth).
 ///
 /// CRITICAL ordering (R1a heap-identity guard): `cache::prepopulate_aot_leaves`
 /// FIRST syncs `COMPILED_HEAP` to the current heap (clearing the then-empty
@@ -2624,11 +2854,20 @@ pub fn prepopulate_aot_from_preload(
         live_reloc: Vec<Value>,
     }
     let mut preps: Vec<Prep> = Vec::new();
+    // Task #11 manifest pre-filter: the v2 pre-key map (name → member?/ops_len/
+    // arity/hash) lets a dump-time-verified NON-member skip its SHA-256 content
+    // hash outright — after the Gap 4b dlsym fast-reject, that hash (run for all
+    // ~2195 loadup candidates, only ~706 of them members) WAS the remaining
+    // startup floor (~16.8ms). `None` (no/invalid/pre-v2 manifest) → the exact
+    // pre-filter-less path below for every fn.
+    let prekeys = load_preload_prekeys();
     // Gap 4b fast-reject: iterate the bound function cells STRAIGHT off the
     // obarray chunks (same interned_global + bound-ness filters as the previous
     // all_symbols→intern→symbol_function_id walk, minus its per-symbol
     // name→intern→slot round-trip — which profiling showed dominated this pass).
-    for func_val in ctx.obarray.interned_function_cells() {
+    // The NameId rides along unresolved; only fns that survive the bytecode +
+    // required-only filters pay the name resolution (a registry read-lock).
+    for (name_id, func_val) in ctx.obarray.interned_function_cells_with_names() {
         if !func_val.is_bytecode() {
             continue;
         }
@@ -2640,6 +2879,26 @@ pub fn prepopulate_aot_from_preload(
             continue;
         }
         let arity = bc.params.required.len();
+        // MANIFEST PRE-FILTER (task #11): skip WITHOUT hashing exactly when the
+        // dump-time manifest carries a VERIFIED non-member pre-key for this
+        // name — `x` class with matching ops-count + arity, i.e. the body still
+        // has the shape the producer hashed, so the dlsym gate below would
+        // miss. Everything else falls through to the exact pre-existing
+        // hash+dlsym path (FAIL-CLOSED): an ABSENT name (unhashable at dump —
+        // or a post-dump definition), an `m` key (member: the hash is needed to
+        // name its entry symbol; dlsym stays the membership ground truth), and
+        // any ops_len/arity MISMATCH (body redefined between pdump load and
+        // prepopulate, e.g. by `after-pdump-load-hook`).
+        if let Some(key) = prekeys.as_ref().and_then(|map| {
+            map.get(crate::emacs_core::intern::resolve_name(name_id))
+        }) && !key.member
+            && key.ops_len == bc.ops.len()
+            && key.arity == arity
+        {
+            stats.candidates += 1; // same outcome the hash+dlsym path counted.
+            stats.missed += 1;
+            continue;
+        }
         let Some(content_hash) = leaf_content_hash(&bc.ops, &bc.constants, arity) else {
             continue;
         };
@@ -2980,7 +3239,7 @@ fn build_object_for_leaf_inner(
 /// compile this; `aot_enabled`/`load_unit` consult it only under `cfg(test)`.
 #[cfg(test)]
 pub(crate) mod test_support {
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
     use std::collections::HashMap;
     use std::sync::Arc;
 
@@ -2995,6 +3254,14 @@ pub(crate) mod test_support {
         static INJECTED_PRELOAD: RefCell<
             Option<Option<Arc<super::super::compile::LoadedUnit>>>,
         > = const { RefCell::new(None) };
+        /// Injected v2 manifest pre-keys for `load_preload_prekeys` (task #11):
+        /// `None` = not injected (fall through to the real resolver, which in a
+        /// test binary finds no manifest → no pre-filter).
+        static INJECTED_PREKEYS: RefCell<Option<super::PreKeyMap>> =
+            const { RefCell::new(None) };
+        /// `leaf_content_hash` call counter (task #11 probe seam): lets a test
+        /// assert the manifest pre-filter skipped a candidate WITHOUT hashing.
+        static HASH_CALLS: Cell<usize> = const { Cell::new(0) };
     }
 
     /// The forced `aot_enabled()` value, if a test set one.
@@ -3012,6 +3279,8 @@ pub(crate) mod test_support {
         FORCE_ENABLED.with(|c| *c.borrow_mut() = None);
         INJECTED.with(|m| m.borrow_mut().clear());
         INJECTED_PRELOAD.with(|c| *c.borrow_mut() = None);
+        INJECTED_PREKEYS.with(|c| *c.borrow_mut() = None);
+        HASH_CALLS.with(|c| c.set(0));
     }
 
     /// Inject a pre-loaded unit for `content_hash` so `load_unit` returns it.
@@ -3047,6 +3316,32 @@ pub(crate) mod test_support {
     pub(crate) fn injected_preload()
     -> Option<Option<Arc<super::super::compile::LoadedUnit>>> {
         INJECTED_PRELOAD.with(|c| c.borrow().clone())
+    }
+
+    /// Inject a v2 pre-key map so `load_preload_prekeys` returns it (task #11:
+    /// drives the prepopulate manifest pre-filter without a real manifest).
+    pub(crate) fn inject_prekeys(map: super::PreKeyMap) {
+        INJECTED_PREKEYS.with(|c| *c.borrow_mut() = Some(map));
+    }
+
+    /// The injected pre-key map, if a test set one.
+    pub(crate) fn injected_prekeys() -> Option<super::PreKeyMap> {
+        INJECTED_PREKEYS.with(|c| c.borrow().clone())
+    }
+
+    /// Count one `leaf_content_hash` attempt (called from that fn under test).
+    pub(crate) fn note_hash_call() {
+        HASH_CALLS.with(|c| c.set(c.get() + 1));
+    }
+
+    /// `leaf_content_hash` attempts since the last [`reset_hash_calls`]/[`reset`].
+    pub(crate) fn hash_calls() -> usize {
+        HASH_CALLS.with(|c| c.get())
+    }
+
+    /// Zero the hash-attempt counter.
+    pub(crate) fn reset_hash_calls() {
+        HASH_CALLS.with(|c| c.set(0));
     }
 }
 
@@ -4198,6 +4493,362 @@ mod tests {
                 b.max_stack = 16;
                 b
             }),
+        );
+
+        super::super::cache::clear();
+        test_support::reset();
+    }
+
+    /// Task #11 format gate: the v2 pre-key line renderer and the manifest
+    /// parser round-trip (incl. names that need escaping), and every malformed
+    /// shape FAILS CLOSED to `prekeys: None` (pre-filter disabled) rather than
+    /// yielding a partial map that could wrongly skip a member.
+    #[test]
+    fn manifest_v2_prekeys_round_trip_and_fail_closed_parsing() {
+        let entries: [(&str, ManifestPreKey); 4] = [
+            (
+                "plain-name",
+                ManifestPreKey { member: true, ops_len: 3, arity: 1, hash: 0xdead_beef },
+            ),
+            (
+                "with space", // whitespace → hex-escaped token
+                ManifestPreKey { member: false, ops_len: 7, arity: 2, hash: 1 },
+            ),
+            (
+                "%leading", // leading '%' → hex-escaped (escape marker collision)
+                ManifestPreKey { member: false, ops_len: 1, arity: 0, hash: 2 },
+            ),
+            (
+                "", // empty name → escapes to the bare "%" token
+                ManifestPreKey { member: true, ops_len: 2, arity: 3, hash: u128::MAX },
+            ),
+        ];
+        let mut text = String::from("version 2\nabi_tag 00000000\nfingerprint f00\nleaves 4\n");
+        for (name, key) in &entries {
+            text.push_str(&manifest_leaf_line(
+                key.member, key.ops_len, key.arity, key.hash, name,
+            ));
+        }
+        let parsed = parse_preload_manifest(&text);
+        assert_eq!(parsed.version, Some(2));
+        assert_eq!(parsed.abi_tag, Some(0));
+        assert_eq!(parsed.fingerprint.as_deref(), Some("f00"));
+        let map = parsed.prekeys.expect("well-formed pre-key section parses");
+        assert_eq!(map.len(), 4);
+        for (name, key) in &entries {
+            assert_eq!(map.get(*name), Some(key), "round-trip for {name:?}");
+        }
+
+        // v1-shaped manifest: header parses (interlock rejects it upstream by
+        // version), and the `hash` diagnostic lines never form a pre-key map
+        // (declared `leaves` ≠ zero parsed `leaf` lines).
+        let v1 = "version 1\nabi_tag 00000000\nfingerprint f00\nleaves 2\n\
+                  hash 000000000000000000000000000000ff\n\
+                  hash 0000000000000000000000000000ff00\n";
+        let parsed_v1 = parse_preload_manifest(v1);
+        assert_eq!(parsed_v1.version, Some(1));
+        assert!(parsed_v1.prekeys.is_none(), "v1 text yields no pre-keys");
+
+        // FAIL-CLOSED shapes: each corrupt variant discards the WHOLE map.
+        let hdr = "version 2\nabi_tag 00000000\nfingerprint f00\n";
+        for (label, body) in [
+            ("bad class", "leaves 1\nleaf z 3 1 00 name\n"),
+            ("trailing junk", "leaves 1\nleaf m 3 1 00 name extra\n"),
+            ("truncated fields", "leaves 1\nleaf m 3\n"),
+            ("count mismatch", "leaves 2\nleaf m 3 1 00 name\n"),
+            ("missing leaves line", "leaf m 3 1 00 name\n"),
+            ("duplicate name", "leaves 2\nleaf m 3 1 00 dup\nleaf x 4 2 01 dup\n"),
+            ("odd escape hex", "leaves 1\nleaf m 3 1 00 %abc\n"),
+            ("non-hex hash", "leaves 1\nleaf m 3 1 zz name\n"),
+        ] {
+            let parsed = parse_preload_manifest(&format!("{hdr}{body}"));
+            assert!(
+                parsed.prekeys.is_none(),
+                "malformed pre-key section ({label}) must fail closed"
+            );
+        }
+    }
+
+    /// Task #11 producer gate: `build_and_link_preload` writes a v2 manifest
+    /// with one pre-key line per HASHABLE required-only loadup fn — `m` for the
+    /// emitted member, `x` for a hashable non-member (here: a `Throw` body, MIR
+    /// unmodelled-control + outside the baseline allowlist) — and none for an
+    /// `&optional` fn (not required-only). The written text parses back into
+    /// the exact pre-keys the runtime pre-filter consumes.
+    #[test]
+    fn build_and_link_preload_writes_v2_prekey_manifest() {
+        use crate::emacs_core::bytecode::ByteCodeFunction;
+        use crate::emacs_core::intern::SymId;
+        use crate::emacs_core::value::LambdaParams;
+
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let mk = |required: Vec<SymId>, optional: Vec<SymId>, ops: Vec<Op>, consts: Vec<Value>| {
+            let mut f = ByteCodeFunction::new(LambdaParams {
+                required,
+                optional,
+                rest: None,
+            });
+            f.lexical = true;
+            f.ops = ops;
+            f.constants = consts;
+            f.max_stack = 16;
+            f
+        };
+        let member_ops = vec![Op::Constant(0), Op::Add, Op::Return];
+        let member_consts = vec![Value::make_int(5)];
+        let throw_ops = vec![Op::Constant(0), Op::Constant(1), Op::Throw];
+        let throw_consts = vec![Value::symbol("prod-pf-tag"), Value::make_int(1)];
+        for (name, f) in [
+            (
+                "prod-pf-member-add5",
+                mk(vec![SymId(1)], vec![], member_ops.clone(), member_consts.clone()),
+            ),
+            (
+                "prod-pf-nonmember-throw",
+                mk(vec![SymId(1)], vec![], throw_ops.clone(), throw_consts.clone()),
+            ),
+            (
+                "prod-pf-optional",
+                mk(vec![], vec![SymId(1)], member_ops.clone(), member_consts.clone()),
+            ),
+        ] {
+            let sym = crate::emacs_core::intern::intern(name);
+            ev.obarray.set_symbol_function_id(sym, Value::make_bytecode(f));
+        }
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        build_and_link_preload(&ev, dir.path()).expect("build_and_link_preload");
+        let text = std::fs::read_to_string(dir.path().join(PRELOAD_MANIFEST_NAME))
+            .expect("manifest written");
+        let parsed = parse_preload_manifest(&text);
+        assert_eq!(parsed.version, Some(PRELOAD_MANIFEST_VERSION));
+        assert_eq!(parsed.abi_tag, Some(ABI_TAG));
+        assert_eq!(
+            parsed.fingerprint.as_deref(),
+            Some(crate::emacs_core::pdump::fingerprint_hex()),
+            "manifest carries the running fingerprint (stale interlock)"
+        );
+        let map = parsed.prekeys.expect("v2 manifest carries a well-formed pre-key map");
+
+        let member_hash = leaf_content_hash(&member_ops, &member_consts, 1).expect("hashable");
+        assert_eq!(
+            map.get("prod-pf-member-add5"),
+            Some(&ManifestPreKey {
+                member: true,
+                ops_len: 3,
+                arity: 1,
+                hash: member_hash
+            }),
+            "the D0 candidate gets an `m` pre-key"
+        );
+        let throw_hash = leaf_content_hash(&throw_ops, &throw_consts, 1).expect("hashable");
+        assert_eq!(
+            map.get("prod-pf-nonmember-throw"),
+            Some(&ManifestPreKey {
+                member: false,
+                ops_len: 3,
+                arity: 1,
+                hash: throw_hash
+            }),
+            "the hashable non-candidate gets an `x` pre-key (the skip class)"
+        );
+        assert!(
+            !map.contains_key("prod-pf-optional"),
+            "&optional fns are not required-only → no pre-key"
+        );
+    }
+
+    /// Task #11 THE GATE: with a v2 pre-key map injected, prepopulate skips a
+    /// verified non-member WITHOUT calling `leaf_content_hash` (asserted via
+    /// the hash-call probe seam, as a control-vs-filtered DELTA so unrelated
+    /// harness fns can't skew it), while the member still loads from the `.so`
+    /// and every stat (candidates/loaded/missed) matches the pre-filter-less
+    /// pass — the "counts stay 706 / 2195" property in miniature.
+    #[test]
+    fn prepopulate_manifest_prefilter_skips_nonmember_without_hashing() {
+        use crate::emacs_core::bytecode::ByteCodeFunction;
+        use crate::emacs_core::intern::SymId;
+        use crate::emacs_core::value::LambdaParams;
+
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let mk = |ops: Vec<Op>, consts: Vec<Value>| {
+            let mut f = ByteCodeFunction::new(LambdaParams {
+                required: vec![SymId(1)],
+                optional: Vec::new(),
+                rest: None,
+            });
+            f.lexical = true;
+            f.ops = ops;
+            f.constants = consts;
+            f.max_stack = 16;
+            f
+        };
+        let member_ops = vec![Op::Constant(0), Op::Add, Op::Return];
+        let member_consts = vec![Value::make_int(5)];
+        let nonmember_ops = vec![Op::Constant(0), Op::Sub, Op::Return];
+        let nonmember_consts = vec![Value::make_int(1)];
+        let m_sym = crate::emacs_core::intern::intern("pf-member-add5");
+        let x_sym = crate::emacs_core::intern::intern("pf-nonmember-sub1");
+        ev.obarray.set_symbol_function_id(
+            m_sym,
+            Value::make_bytecode(mk(member_ops.clone(), member_consts.clone())),
+        );
+        ev.obarray.set_symbol_function_id(
+            x_sym,
+            Value::make_bytecode(mk(nonmember_ops.clone(), nonmember_consts.clone())),
+        );
+        let id_of = |ev: &crate::emacs_core::eval::Context, sym| {
+            ev.obarray
+                .symbol_function_id(sym)
+                .and_then(|v| v.get_bytecode_data())
+                .map(|bc| bc.runtime.compiled_id_or_assign())
+                .expect("fn id")
+        };
+        let m_id = id_of(&ev, m_sym);
+        let x_id = id_of(&ev, x_sym);
+
+        // Preload `.so` containing ONLY the member leaf (the nonmember is a
+        // genuine dlsym miss).
+        let member_leaf = LoadupLeaf {
+            name: "pf-member-add5".to_string(),
+            ops: Box::leak(member_ops.clone().into_boxed_slice()),
+            constants: Box::leak(member_consts.clone().into_boxed_slice()),
+            arity: 1,
+        };
+        let (obj, _) =
+            build_preload_object(std::slice::from_ref(&member_leaf)).expect("build preload");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let so_path = dir.path().join(PRELOAD_SO_NAME);
+        link_object_to_so(&obj, &so_path).expect("link");
+        let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
+        let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
+        test_support::set_forced_enabled(true);
+        test_support::inject_preload(unit);
+
+        let m_hash = leaf_content_hash(&member_ops, &member_consts, 1).expect("hashable");
+        let x_hash = leaf_content_hash(&nonmember_ops, &nonmember_consts, 1).expect("hashable");
+
+        // CONTROL: no pre-keys → the exact pre-filter-less path (both fns hash).
+        test_support::reset_hash_calls();
+        let control = prepopulate_aot_from_preload(&ev);
+        let control_hashes = test_support::hash_calls();
+        assert!(control.loaded >= 1, "member loads in control; got {control:?}");
+        assert!(control.missed >= 1, "nonmember misses in control; got {control:?}");
+        super::super::cache::clear();
+
+        // FILTERED: inject the v2 pre-keys — `m` for the member, verified `x`
+        // for the nonmember.
+        let mut map = PreKeyMap::new();
+        map.insert(
+            "pf-member-add5".into(),
+            ManifestPreKey { member: true, ops_len: 3, arity: 1, hash: m_hash },
+        );
+        map.insert(
+            "pf-nonmember-sub1".into(),
+            ManifestPreKey { member: false, ops_len: 3, arity: 1, hash: x_hash },
+        );
+        test_support::inject_prekeys(map);
+        test_support::reset_hash_calls();
+        let filtered = prepopulate_aot_from_preload(&ev);
+        let filtered_hashes = test_support::hash_calls();
+
+        // THE WIN: exactly the x-keyed nonmember skipped its hash; nothing else
+        // changed. (Delta-based so unrelated harness fns can't skew it.)
+        assert_eq!(
+            filtered_hashes,
+            control_hashes - 1,
+            "the verified non-member must be skipped WITHOUT a leaf_content_hash call"
+        );
+        // Count parity with the pre-filter-less pass.
+        assert_eq!(filtered.candidates, control.candidates, "candidates preserved");
+        assert_eq!(filtered.missed, control.missed, "missed preserved");
+        assert_eq!(filtered.loaded, control.loaded, "loaded preserved");
+        // Membership outcome: member native + AOT-backed, nonmember untouched.
+        assert!(
+            super::super::cache::is_compiled_for_test(m_id),
+            "member serves native from the preload under the pre-filter"
+        );
+        assert_eq!(
+            super::super::cache::cached_leaf_is_aot_for_test(m_id),
+            Some(true)
+        );
+        assert!(
+            !super::super::cache::is_compiled_for_test(x_id),
+            "nonmember stays uncompiled (it will JIT normally)"
+        );
+
+        super::super::cache::clear();
+        test_support::reset();
+    }
+
+    /// Task #11 FAIL-CLOSED gate: a STALE pre-key (here an `x` key whose
+    /// ops-count no longer matches the live body — e.g. the fn was redefined
+    /// between dump and prepopulate) must NOT be trusted: the pass falls
+    /// through to the exact hash+dlsym path, which still loads the member.
+    #[test]
+    fn prepopulate_prekey_mismatch_fails_closed_to_hash_path() {
+        use crate::emacs_core::bytecode::ByteCodeFunction;
+        use crate::emacs_core::intern::SymId;
+        use crate::emacs_core::value::LambdaParams;
+
+        let mut ev = crate::emacs_core::eval::Context::new_minimal_vm_harness();
+        let ops = vec![Op::Constant(0), Op::Add, Op::Return];
+        let consts = vec![Value::make_int(5)];
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops.clone();
+        f.constants = consts.clone();
+        f.max_stack = 16;
+        let sym = crate::emacs_core::intern::intern("pf-fc-add5");
+        ev.obarray.set_symbol_function_id(sym, Value::make_bytecode(f));
+        let id = ev
+            .obarray
+            .symbol_function_id(sym)
+            .and_then(|v| v.get_bytecode_data())
+            .map(|bc| bc.runtime.compiled_id_or_assign())
+            .expect("fn id");
+
+        let leaf = LoadupLeaf {
+            name: "pf-fc-add5".to_string(),
+            ops: Box::leak(ops.clone().into_boxed_slice()),
+            constants: Box::leak(consts.clone().into_boxed_slice()),
+            arity: 1,
+        };
+        let (obj, _) = build_preload_object(std::slice::from_ref(&leaf)).expect("build preload");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let so_path = dir.path().join(PRELOAD_SO_NAME);
+        link_object_to_so(&obj, &so_path).expect("link");
+        let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
+        let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
+        test_support::set_forced_enabled(true);
+        test_support::inject_preload(unit);
+
+        // Stale `x` key: wrong ops_len (99 ≠ 3). Discriminator mismatch → the
+        // pre-filter must fall through, NOT skip.
+        let mut map = PreKeyMap::new();
+        map.insert(
+            "pf-fc-add5".into(),
+            ManifestPreKey { member: false, ops_len: 99, arity: 1, hash: 0 },
+        );
+        test_support::inject_prekeys(map);
+        test_support::reset_hash_calls();
+        let stats = prepopulate_aot_from_preload(&ev);
+        assert!(
+            test_support::hash_calls() >= 1,
+            "mismatched pre-key must fall through to the hash path"
+        );
+        assert!(stats.loaded >= 1, "member still loads; got {stats:?}");
+        assert!(
+            super::super::cache::is_compiled_for_test(id),
+            "a stale pre-key must not suppress a member load (fail-closed)"
+        );
+        assert_eq!(
+            super::super::cache::cached_leaf_is_aot_for_test(id),
+            Some(true)
         );
 
         super::super::cache::clear();

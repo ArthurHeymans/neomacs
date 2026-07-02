@@ -2636,21 +2636,26 @@ impl Obarray {
             .collect()
     }
 
-    /// All interned symbols' BOUND function-cell values, straight off the chunk
-    /// storage — the whole-obarray-scan fast path (Gap 4b:
-    /// `jit::aot::prepopulate_aot_from_preload`, which runs at every
-    /// `NEOVM_AOT` startup). Same visibility filter as [`Self::all_symbols`]
-    /// (`interned_global`) and the same bound-ness rule as
-    /// [`Self::symbol_function_id`] (skip `function_unbound` / nil cells), but
-    /// WITHOUT the per-symbol name→`intern`→`slot` round-trip a name-based walk
-    /// pays (~3 lookups × every interned symbol; measured as the dominant cost
-    /// of the AOT prepopulate pass).
-    pub fn interned_function_cells(&self) -> impl Iterator<Item = Value> + '_ {
+    /// All interned symbols' BOUND function-cell values (with the symbol's
+    /// `NameId`), straight off the chunk storage — the whole-obarray-scan fast
+    /// path (Gap 4b: `jit::aot::prepopulate_aot_from_preload`, which runs at
+    /// every `NEOVM_AOT` startup). Same visibility filter as
+    /// [`Self::all_symbols`] (`interned_global`) and the same bound-ness rule
+    /// as [`Self::symbol_function_id`] (skip `function_unbound` / nil cells),
+    /// but WITHOUT the per-symbol name→`intern`→`slot` round-trip a name-based
+    /// walk pays (~3 lookups × every interned symbol; measured as the dominant
+    /// cost of the AOT prepopulate pass). The `NameId` is handed out UNresolved
+    /// so a caller that filters further (e.g. to bytecode-bound symbols) only
+    /// pays the name resolution for the survivors (task #11: the manifest
+    /// pre-filter keys candidates by symbol name).
+    pub fn interned_function_cells_with_names(
+        &self,
+    ) -> impl Iterator<Item = (NameId, Value)> + '_ {
         self.symbols
             .iter()
             .flatten()
             .filter(|sym| sym.interned_global && !sym.function_unbound && !sym.function.is_nil())
-            .map(|sym| sym.function)
+            .map(|sym| (sym.name, sym.function))
     }
 
     /// Remove a symbol from the obarray.  Returns `true` if it was present.
