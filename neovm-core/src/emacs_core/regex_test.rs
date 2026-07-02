@@ -2649,3 +2649,469 @@ fn test_lazy_interval() {
     assert_eq!(regs.start[0], 0);
     assert_eq!(regs.end[0], 4); // matches "aaab"
 }
+
+// =========================================================================
+// regex_bench_* — regex engine recon macro-benchmarks
+// =========================================================================
+//
+// Mirrors the `jit_bench_*` pattern in `eval_test.rs`: `#[ignore]`d
+// bench-style tests that warm up, take min-of-N, and report by panicking
+// with a `BENCH ...` message. Run in release:
+//
+//   cargo nextest run -p neovm-core --release --run-ignored ignored-only \
+//       -E 'test(/regex_bench/)' --no-fail-fast --test-threads 1
+//
+// The `engine` benches drive `regex_emacs::re_search` directly on a byte
+// haystack (no elisp dispatch, `DefaultSyntaxLookup`, multibyte target —
+// the same configuration `string-match` uses). The `elisp` benches go
+// through `Context::eval_str` and the real `re-search-forward` builtin,
+// i.e. the exact path font-lock takes.
+//
+// The haystack is the first ~256 KiB of `lisp/subr.el` — real elisp text.
+// The font-lock patterns are the real GNU Emacs 31 `lisp-mode.el` matcher
+// regexps (from `lisp-el-font-lock-keywords-2`, `lisp--el-match-keyword`,
+// and `lisp-mode--search-key`), transcribed byte-for-byte.
+
+/// Real GNU Emacs 31 emacs-lisp-mode font-lock matcher regexps.
+const REGEX_BENCH_FONTLOCK_PATTERNS: &[(&str, &str)] = &[
+    (
+        "el-defs",
+        "(\\(cl-def\\(?:generic\\|m\\(?:acro\\|ethod\\)\\|s\\(?:\\(?:truc\\|ubs\\)t\\)\\|type\\|un\\)\\|def\\(?:a\\(?:dvice\\|lias\\)\\|c\\(?:lass\\|onst\\|ustom\\)\\|face\\|g\\(?:eneric\\|roup\\)\\|ine-\\(?:advice\\|derived-mode\\|error\\|g\\(?:\\(?:eneric\\|lobalized-minor\\)-mode\\)\\|inline\\|minor-mode\\|skeleton\\|widget\\)\\|m\\(?:acro\\|ethod\\)\\|subst\\|theme\\|un\\|var\\(?:-local\\|alias\\)?\\)\\|ert-deftest\\)\\_>[ \t']*\\(([ \t']*\\)?\\(\\(setf\\)[ \t]+\\(?:\\w\\|\\s_\\|\\\\.\\)+\\|\\(?:\\w\\|\\s_\\|\\\\.\\)+\\)?",
+    ),
+    ("sexp-head-kw", "(\\(\\(?:\\w\\|\\s_\\|\\\\.\\)+\\)\\_>"),
+    (
+        "autoload-cookie",
+        "^;;;###\\(\\([-[:alnum:]]+?\\)-\\)?\\(autoload\\)",
+    ),
+    (
+        "el-errors",
+        "(\\(cl-\\(?:assert\\|check-type\\)\\|error\\|signal\\|user-error\\|warn\\)\\_>",
+    ),
+    (
+        "catch-throw",
+        "(\\(catch\\|throw\\|featurep\\|provide\\|require\\)\\_>[ \t']*\\(\\(?:\\w\\|\\s_\\|\\\\.\\)+\\)?",
+    ),
+    (
+        "quoted-symbol",
+        "[`\u{2018}']\\(\\(?:\\w\\|\\s_\\|\\\\.\\)+\\)['\u{2019}]",
+    ),
+    ("keyword-colon", "\\_<:\\(?:\\w\\|\\s_\\|\\\\.\\)+\\_>"),
+    ("backslash-esc", "\\(\\\\\\)\\([^\"\\]\\)"),
+];
+
+/// First ~256 KiB of `lisp/subr.el`, cut at a char boundary.
+fn regex_bench_haystack() -> String {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../lisp/subr.el");
+    let text = std::fs::read_to_string(path).expect("read lisp/subr.el haystack");
+    let mut end = text.len().min(256 * 1024);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    text[..end].to_string()
+}
+
+fn regex_bench_min(iters: u32, mut f: impl FnMut()) -> std::time::Duration {
+    // Warm once (compile caches, page in the haystack).
+    f();
+    let mut best = std::time::Duration::MAX;
+    for _ in 0..iters {
+        let t = std::time::Instant::now();
+        f();
+        best = best.min(t.elapsed());
+    }
+    best
+}
+
+fn regex_bench_compile(pattern: &str, case_fold: bool) -> regex_emacs::CompiledPattern {
+    regex_emacs::regex_compile_lisp(&LispString::from_utf8(pattern), false, case_fold)
+        .expect("bench pattern should compile")
+}
+
+/// Emulate the font-lock `(while (re-search-forward P nil t))` loop over
+/// `text` with the already-compiled pattern; returns the match count.
+fn regex_bench_engine_scan(cp: &regex_emacs::CompiledPattern, text: &[u8]) -> usize {
+    let syn = DefaultSyntaxLookup;
+    let mut n = 0usize;
+    let mut at = 0usize;
+    while at <= text.len() {
+        let Some((_pos, regs)) =
+            regex_emacs::re_search(cp, text, at, (text.len() - at) as isize, &syn, at)
+        else {
+            break;
+        };
+        n += 1;
+        let end = regs.end[0].max(0) as usize;
+        if end > at {
+            at = end;
+        } else {
+            // Zero-width match: advance one char like `re-search-forward`.
+            match next_search_char_boundary(text, end) {
+                Some(next) if next > at => at = next,
+                _ => break,
+            }
+        }
+    }
+    n
+}
+
+/// (a) Literal-heavy search over ~256 KiB of real elisp:
+///   - the `Literal` fast path (`str::find` / naive case-fold window scan),
+///   - the same literal forced through the GNU-bytecode engine (`Exactn`),
+///   - both case-fold variants.
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn regex_bench_literal_100kb() {
+    crate::test_utils::init_test_tracing();
+    let hay = regex_bench_haystack();
+    let bytes = hay.as_bytes();
+    let kib = bytes.len() as f64 / 1024.0;
+    let needle = "unread-command-events"; // real symbol, occurs in subr.el
+    let iters = 15;
+
+    let t_find = regex_bench_min(iters, || {
+        assert!(literal_find(&hay, needle, false).is_some());
+    });
+    let t_find_fold = regex_bench_min(iters, || {
+        assert!(literal_find(&hay, "UNREAD-COMMAND-EVENTS", true).is_some());
+    });
+
+    let cp = regex_bench_compile(needle, false);
+    assert!(cp.fastmap_accurate && !cp.uses_syntax);
+    let t_engine = regex_bench_min(iters, || {
+        let syn = DefaultSyntaxLookup;
+        assert!(regex_emacs::re_search(&cp, bytes, 0, bytes.len() as isize, &syn, 0).is_some());
+    });
+    let cp_fold = regex_bench_compile("UNREAD-COMMAND-EVENTS", true);
+    let t_engine_fold = regex_bench_min(iters, || {
+        let syn = DefaultSyntaxLookup;
+        assert!(
+            regex_emacs::re_search(&cp_fold, bytes, 0, bytes.len() as isize, &syn, 0).is_some()
+        );
+    });
+
+    // Count full-scan throughput too (needle near start would flatter us):
+    // scan for a needle that never occurs, so every byte is visited.
+    let cp_miss = regex_bench_compile("neverxyzzyneverxyzzy", false);
+    let t_engine_miss = regex_bench_min(iters, || {
+        let syn = DefaultSyntaxLookup;
+        assert!(regex_emacs::re_search(&cp_miss, bytes, 0, bytes.len() as isize, &syn, 0).is_none());
+    });
+    let t_find_miss = regex_bench_min(iters, || {
+        assert!(literal_find(&hay, "neverxyzzyneverxyzzy", false).is_none());
+    });
+
+    panic!(
+        "BENCH regex literal ({kib:.0} KiB subr.el): \
+         hit: str::find {t_find:?} | engine-Exactn {t_engine:?} | \
+         fold: window-scan {t_find_fold:?} | engine-translate {t_engine_fold:?} || \
+         full-scan miss: str::find {t_find_miss:?} ({:.0} MiB/s) | engine {t_engine_miss:?} ({:.0} MiB/s)",
+        kib / 1024.0 / t_find_miss.as_secs_f64(),
+        kib / 1024.0 / t_engine_miss.as_secs_f64(),
+    );
+}
+
+/// (b) Font-lock-ish workload, engine level: run each real emacs-lisp-mode
+/// font-lock matcher over the haystack in the `(while (re-search-forward))`
+/// shape. This is the per-fontification cost with zero elisp overhead.
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn regex_bench_fontlock_engine() {
+    crate::test_utils::init_test_tracing();
+    let hay = regex_bench_haystack();
+    let bytes = hay.as_bytes();
+    let kib = bytes.len() as f64 / 1024.0;
+    let iters = 7;
+
+    let mut report = format!("BENCH regex fontlock engine ({kib:.0} KiB subr.el):\n");
+    let mut total = std::time::Duration::ZERO;
+    for (name, pat) in REGEX_BENCH_FONTLOCK_PATTERNS {
+        let cp = regex_bench_compile(pat, false);
+        let matches = regex_bench_engine_scan(&cp, bytes);
+        let t = regex_bench_min(iters, || {
+            assert_eq!(regex_bench_engine_scan(&cp, bytes), matches);
+        });
+        total += t;
+        report.push_str(&format!(
+            "  {name:<16} {t:>10.1?}  {matches:>5} matches  fastmap={} uses_syntax={} ({:.1} MiB/s)\n",
+            !cp.can_be_null && cp.fastmap_accurate && !cp.uses_syntax,
+            cp.uses_syntax,
+            kib / 1024.0 / t.as_secs_f64(),
+        ));
+    }
+    report.push_str(&format!("  TOTAL one fontify pass over all patterns: {total:.1?}"));
+    panic!("{report}");
+}
+
+/// Fastmap A/B: the same effective search (find `(defun` heads) with a
+/// syntax-free pattern (fastmap ON — skip loop over the first-byte table)
+/// vs a `\_>`-terminated pattern (uses_syntax → fastmap disabled →
+/// `re_match` attempted at every char position).
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn regex_bench_fastmap_on_vs_off() {
+    crate::test_utils::init_test_tracing();
+    let hay = regex_bench_haystack();
+    let bytes = hay.as_bytes();
+    let iters = 7;
+
+    let cp_on = regex_bench_compile("(defun[ \t]", false);
+    assert!(!cp_on.uses_syntax, "charset-only pattern must keep fastmap");
+    let cp_off = regex_bench_compile("(defun\\_>", false);
+    assert!(cp_off.uses_syntax, "\\_> must mark uses_syntax");
+
+    let n_on = regex_bench_engine_scan(&cp_on, bytes);
+    let n_off = regex_bench_engine_scan(&cp_off, bytes);
+    let t_on = regex_bench_min(iters, || {
+        assert_eq!(regex_bench_engine_scan(&cp_on, bytes), n_on);
+    });
+    let t_off = regex_bench_min(iters, || {
+        assert_eq!(regex_bench_engine_scan(&cp_off, bytes), n_off);
+    });
+
+    panic!(
+        "BENCH regex fastmap A/B ((defun heads, {} KiB): \
+         fastmap-on \"(defun[ \\t]\" {t_on:?} ({n_on} matches) | \
+         fastmap-off \"(defun\\\\_>\" {t_off:?} ({n_off} matches) -> {:.1}x",
+        bytes.len() / 1024,
+        t_off.as_secs_f64() / t_on.as_secs_f64(),
+    );
+}
+
+/// (c) Backtracking-heavy: `a*a*b` — the classic quadratic/cubic
+/// backtracker — anchored at position 0 (`looking-at` shape) so the cost
+/// is the failure-stack churn itself, not the outer scan loop.
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn regex_bench_backtracking() {
+    crate::test_utils::init_test_tracing();
+    let n = 2048usize;
+    let mut text = "a".repeat(n);
+    text.push('!');
+    let bytes = text.as_bytes();
+    let iters = 7;
+
+    let cp = regex_bench_compile("a*a*b", false);
+    let syn = DefaultSyntaxLookup;
+    let t_match = regex_bench_min(iters, || {
+        assert!(regex_emacs::re_match(&cp, bytes, 0, bytes.len(), &syn, 0).is_none());
+    });
+
+    // The same catastrophe under a scan (what `re-search-forward` does):
+    // every start position re-runs the quadratic failure.
+    let n_scan = 256usize;
+    let mut scan_text = "a".repeat(n_scan);
+    scan_text.push('!');
+    let scan_bytes = scan_text.as_bytes();
+    let t_scan = regex_bench_min(iters, || {
+        assert!(
+            regex_emacs::re_search(&cp, scan_bytes, 0, scan_bytes.len() as isize, &syn, 0)
+                .is_none()
+        );
+    });
+
+    panic!(
+        "BENCH regex backtracking a*a*b: anchored fail over {n} a's: {t_match:?} | \
+         scan fail over {n_scan} a's: {t_scan:?} \
+         (NOTE: no failure-stack limit in re_match — GNU signals at re_max_failures)"
+    );
+}
+
+/// (d) Case-fold + multibyte: the `quoted-symbol` matcher (multibyte
+/// pattern chars U+2018/U+2019) and a case-folded keyword alternation,
+/// both over the multibyte haystack.
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn regex_bench_casefold_multibyte() {
+    crate::test_utils::init_test_tracing();
+    let hay = regex_bench_haystack();
+    let bytes = hay.as_bytes();
+    let iters = 7;
+
+    let alt = "(\\(?:defun\\|defmacro\\|defvar\\|defconst\\|defsubst\\)[ \t]";
+    let cp_nofold = regex_bench_compile(alt, false);
+    let cp_fold = regex_bench_compile(alt, true);
+    let n_nofold = regex_bench_engine_scan(&cp_nofold, bytes);
+    let n_fold = regex_bench_engine_scan(&cp_fold, bytes);
+    let t_nofold = regex_bench_min(iters, || {
+        assert_eq!(regex_bench_engine_scan(&cp_nofold, bytes), n_nofold);
+    });
+    let t_fold = regex_bench_min(iters, || {
+        assert_eq!(regex_bench_engine_scan(&cp_fold, bytes), n_fold);
+    });
+
+    let (mb_name, mb_pat) = REGEX_BENCH_FONTLOCK_PATTERNS
+        .iter()
+        .find(|(name, _)| *name == "quoted-symbol")
+        .expect("quoted-symbol pattern present");
+    let cp_mb = regex_bench_compile(mb_pat, false);
+    let n_mb = regex_bench_engine_scan(&cp_mb, bytes);
+    let t_mb = regex_bench_min(iters, || {
+        assert_eq!(regex_bench_engine_scan(&cp_mb, bytes), n_mb);
+    });
+
+    panic!(
+        "BENCH regex case-fold/multibyte ({} KiB): def-alternation nofold {t_nofold:?} \
+         ({n_nofold}) vs fold {t_fold:?} ({n_fold}) -> {:.1}x | \
+         {mb_name} (multibyte chars) {t_mb:?} ({n_mb} matches)",
+        bytes.len() / 1024,
+        t_fold.as_secs_f64() / t_nofold.as_secs_f64(),
+    );
+}
+
+/// (2) Pattern-compilation cost: fresh `regex_compile_lisp` per pattern
+/// (a cache miss) vs the LRU cache hit path (`compile_lisp_pattern_with_posix`),
+/// vs one engine scan — how hot is compilation relative to matching?
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn regex_bench_compile_cost() {
+    crate::test_utils::init_test_tracing();
+    let mut report = String::from("BENCH regex compile cost:\n");
+
+    for (name, pat) in REGEX_BENCH_FONTLOCK_PATTERNS {
+        let lisp = LispString::from_utf8(pat);
+        let compiles = 200u32;
+        let t_miss = regex_bench_min(5, || {
+            for _ in 0..compiles {
+                let cp = regex_emacs::regex_compile_lisp(&lisp, false, false)
+                    .expect("pattern compiles");
+                std::hint::black_box(&cp);
+            }
+        });
+        // Cached path: same key each call — a hit after the first.
+        let t_hit = regex_bench_min(5, || {
+            for _ in 0..compiles {
+                let cp = compile_lisp_pattern_with_posix(&lisp, false, false, true)
+                    .expect("pattern compiles");
+                std::hint::black_box(&cp);
+            }
+        });
+        report.push_str(&format!(
+            "  {name:<16} compile-miss {:>8.2?}/ea  cache-hit {:>8.2?}/ea\n",
+            t_miss / compiles,
+            t_hit / compiles,
+        ));
+    }
+    panic!("{report}");
+}
+
+fn regex_bench_elisp_escape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len() + 1024);
+    for ch in text.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
+/// (b, full stack) Font-lock-ish workload through the real elisp builtins:
+/// insert the haystack into a buffer, then per pattern run the exact
+/// font-lock loop `(goto-char (point-min)) (while (re-search-forward P nil t))`.
+/// Also re-runs one pattern with the gap parked mid-buffer (as after a
+/// keystroke at the middle) — `with_buffer_emacs_bytes` then copies the
+/// whole accessible region on every `re-search-forward` call (audit #17).
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn regex_bench_fontlock_elisp() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::eval::Context::new();
+    let hay = regex_bench_haystack();
+    let kib = hay.len() as f64 / 1024.0;
+    ev.eval_str(&format!(
+        "(progn (insert \"{}\") (goto-char (point-max)) (insert \"\\n\") nil)",
+        regex_bench_elisp_escape(&hay)
+    ))
+    .expect("insert haystack");
+    // Gap now sits at point-max: the whole accessible region is contiguous,
+    // so buffer searches borrow zero-copy.
+
+    let iters = 5;
+    let mut report = format!("BENCH regex fontlock elisp ({kib:.0} KiB buffer):\n");
+    let mut total = std::time::Duration::ZERO;
+    for (name, pat) in REGEX_BENCH_FONTLOCK_PATTERNS {
+        let form = format!(
+            "(progn (goto-char (point-min)) (let ((n 0)) (while (re-search-forward \"{}\" nil t) (setq n (1+ n))) n))",
+            regex_bench_elisp_escape(pat)
+        );
+        let matches = ev
+            .eval_str(&form)
+            .expect("fontlock pass evaluates")
+            .as_int()
+            .expect("match count");
+        let t = regex_bench_min(iters, || {
+            let got = ev.eval_str(&form).expect("fontlock pass evaluates");
+            assert_eq!(got.as_int(), Some(matches));
+        });
+        total += t;
+        report.push_str(&format!(
+            "  {name:<16} {t:>10.1?}  {matches:>5} matches\n"
+        ));
+    }
+    report.push_str(&format!(
+        "  TOTAL one fontify pass over all patterns: {total:.1?}\n"
+    ));
+
+    // Park the gap mid-buffer: insert+delete a char at the middle. Every
+    // subsequent whole-buffer search must copy the accessible region.
+    // (Core builtins only — a bare Context has no subr.el, so no delete-char.)
+    ev.eval_str(
+        "(progn (goto-char (/ (point-max) 2)) (insert \"z\") (delete-region (- (point) 1) (point)) nil)",
+    )
+    .expect("park gap mid-buffer");
+    let (name, pat) = REGEX_BENCH_FONTLOCK_PATTERNS[1]; // sexp-head-kw
+    let form = format!(
+        "(progn (goto-char (point-min)) (let ((n 0)) (while (re-search-forward \"{}\" nil t) (setq n (1+ n))) n))",
+        regex_bench_elisp_escape(pat)
+    );
+    let matches = ev
+        .eval_str(&form)
+        .expect("gap-split pass evaluates")
+        .as_int()
+        .expect("match count");
+    let t_split = regex_bench_min(iters, || {
+        let got = ev.eval_str(&form).expect("gap-split pass evaluates");
+        assert_eq!(got.as_int(), Some(matches));
+    });
+    report.push_str(&format!(
+        "  {name} with gap mid-buffer (copy per call): {t_split:.1?}  {matches} matches"
+    ));
+    panic!("{report}");
+}
+
+/// `string-match` per-call overhead: a short hot-cache `string-match` on a
+/// small string (per-call fixed costs: cache probe, pattern copy, match-data
+/// conversion) vs a full-scan miss over the big string (throughput).
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn regex_bench_string_match_elisp() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::eval::Context::new();
+    let hay = regex_bench_haystack();
+    ev.eval_str(&format!(
+        "(progn (defvar regex-bench-big \"{}\") (defvar regex-bench-small (substring regex-bench-big 0 512)) nil)",
+        regex_bench_elisp_escape(&hay)
+    ))
+    .expect("define bench strings");
+
+    let iters = 7;
+    let calls = 1000u32;
+    // Core builtins only — a bare Context has no subr.el (no dotimes/when).
+    let t_small = regex_bench_min(iters, || {
+        ev.eval_str(
+            "(let ((n 0) (i 0)) (while (< i 1000) (if (string-match \"(\\\\(\\\\(?:\\\\w\\\\|\\\\s_\\\\)+\\\\)\\\\_>\" regex-bench-small) (setq n (1+ n))) (setq i (1+ i))) n)",
+        )
+        .expect("small string-match loop");
+    });
+    let t_miss = regex_bench_min(iters, || {
+        ev.eval_str("(string-match \"neverxyzzyneverxyzzy\" regex-bench-big)")
+            .expect("big string-match miss");
+    });
+    panic!(
+        "BENCH regex string-match elisp: hot small (512B, first match) {:?}/call | \
+         literal full-scan miss over {} KiB: {t_miss:?}",
+        t_small / calls,
+        hay.len() / 1024,
+    );
+}
