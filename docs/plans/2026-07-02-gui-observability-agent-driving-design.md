@@ -12,6 +12,11 @@ read screenshots — so every GUI fact an agent needs (displayed text, resolved
 colors, element geometry, cursor, chrome) must be obtainable as text, on
 demand, from a live or test instance.
 
+**Scope decision (2026-07-02):** this design provides *what is on screen*,
+completely — and only that. Diagnostic subsystems (redisplay decision
+tracing, face provenance, hang probes, pixel sampling) are explicitly out of
+scope; if a bug class later demands one, it gets its own design.
+
 ## Problem
 
 Agents developing NeoMacs can test the TUI (text grid via tmux, batch oracle
@@ -108,6 +113,37 @@ VM-side at realization time — add `lisp_name: Option<String>` to the
 protocol `Face` so snapshots and tests can assert faces by name. With
 proportional fonts the text grid is logical (row/column), not pixel-aligned;
 pixel geometry is authoritative in the JSON.
+
+### The 100% completeness contract
+
+"The agent knows 100% of what is on screen" is enforceable by construction,
+because the render thread draws exclusively from `FrameDisplayState`. The
+contract has four clauses:
+
+1. **If it is not in the snapshot, the renderer cannot draw it.** Any new
+   visual feature must extend `FrameDisplayState` (and therefore the
+   snapshot) before the renderer may paint it. Rows already model fringes
+   (`GlyphRow::left_fringe_bitmap`/`right_fringe_bitmap`, GNU
+   `glyph_row::left_fringe_bitmap` analog); implementation includes an audit
+   that every currently drawn element (margins, dividers, open popup-menu
+   state, IME preedit, drag highlights, …) is represented or gets added.
+2. **All visible frames, not one.** Today a single thread-local
+   `LayoutEngine` (`neomacs-bin/src/tty_layout.rs:24`) retains only the most
+   recently laid-out frame (`engine.rs:178`), so child frames — posframe /
+   corfu popups, tooltips — would be invisible to a snapshot. Retention
+   becomes per-frame (keyed by `DisplayFrameId`), and
+   `(neomacs--frame-snapshot t FORMAT)` returns every visible frame with its
+   `parent_id`/`parent_x`/`parent_y`/`z_order`, i.e. the full composited
+   screen.
+3. **Settled-frame semantics.** Render-side animations (scroll animation,
+   cursor effects) interpolate *toward* the published state; the snapshot is
+   the settled screen, which is the correct oracle for tests. Mid-animation
+   pixel states are cosmetic and not part of the contract.
+4. **External content boundary.** For xwidgets and video, the snapshot
+   carries existence, geometry, and source; the inner pixels belong to the
+   external engine (WPE/webkit, video decoder). Pixel-level truth overall
+   (font fallback, GPU correctness) remains the PNG readback's job — the
+   snapshot is the semantic screen, the readback proves it was painted.
 
 ### Phase 1b — GUI test harness integration
 
@@ -220,10 +256,17 @@ Use `cargo nextest`, output redirected to a file under `./tmp/`.
    round-trip test.
 2. `lisp_name` on protocol `Face`, populated at face realization.
 3. `FrameDisplayState::render_text()` + golden tests.
-4. `neomacs--frame-snapshot` / `neomacs--write-frame-snapshot` subrs: force
-   redisplay, read `engine.last_frame_display_state`, serialize.
-5. Harness: new `GuiArtifactSet` entries, manifest fields, fixture switch,
+4. Per-frame retention: replace the engine's single
+   `last_frame_display_state` slot with a `DisplayFrameId`-keyed map so
+   child frames/popups are snapshot-visible.
+5. `neomacs--frame-snapshot` / `neomacs--write-frame-snapshot` subrs: force
+   redisplay, read the retained state (FRAME = `t` → all visible frames),
+   serialize.
+6. Completeness audit: enumerate everything the renderer draws; verify each
+   element originates from a serialized `FrameDisplayState` field; add what
+   is missing.
+7. Harness: new `GuiArtifactSet` entries, manifest fields, fixture switch,
    smoke assertions from the snapshot.
-6. Verify/fix `server-start` + `emacsclient` on the GUI build; write
+8. Verify/fix `server-start` + `emacsclient` on the GUI build; write
    `docs/gui-agent-testing.md` with the canonical agent loop.
-7. (Separate, later) AccessKit adapter fed by the same snapshot.
+9. (Separate, later) AccessKit adapter fed by the same snapshot.
