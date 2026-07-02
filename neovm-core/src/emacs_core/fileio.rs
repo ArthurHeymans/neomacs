@@ -5717,10 +5717,19 @@ pub(crate) fn builtin_insert_file_contents(
         .visible_variable_value_or_nil("set-auto-coding-for-load")
         .is_truthy();
 
-    let resolved = resolve_filename_lisp_for_eval(eval, &expect_lisp_string_strict(&args[0])?);
-    let mut handler_args = Vec::with_capacity(args.len());
+    // GNU `Finsert_file_contents` runs `Fexpand_file_name` on the filename
+    // first (dispatching the expand-file-name magic handler) before looking up
+    // the insert-file-contents handler.
+    let expanded = builtin_expand_file_name(eval, vec![args[0], Value::NIL])?;
+    let resolved = resolve_filename_lisp_for_eval(eval, &expect_lisp_string_strict(&expanded)?);
+    let mut handler_args = Vec::with_capacity(5);
     handler_args.push(Value::heap_string(resolved.clone()));
     handler_args.extend_from_slice(&args[1..]);
+    // GNU calls the handler with the operation's full arglist (optional args
+    // default to nil): insert-file-contents has arity 5.
+    while handler_args.len() < 5 {
+        handler_args.push(Value::NIL);
+    }
     if let Some(result) = maybe_dispatch_resolved_file_handler(
         eval,
         "insert-file-contents",
