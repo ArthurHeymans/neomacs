@@ -17420,3 +17420,120 @@ fn gc_drain_kinds_profile_pdump() {
 fn gc_drain_kinds_profile_plain() {
     gc_drain_kinds_profile(false, 400);
 }
+
+/// Shared driver for the `alloc_class_profile_*` probes (size-class arena
+/// design input): capture the NON-CONS allocation-rate and size-class
+/// distribution (per kind, total-bytes histogram, peak
+/// `non_cons_object_addrs` population) over three real phases —
+///   1. startup (pdump load / live bootstrap = the expanded-cache replay),
+///   2. the drain-kinds mixed churn workload (same recipe as
+///      `gc_drain_kinds_profile`),
+///   3. a byte-compile workload (the `vm_subr_mix_byte_compile` recipe).
+///
+/// Counters live in `crate::tagged::gc::alloc_probe` (test-only statics fed
+/// by `link_object`/`link_veclike`).
+#[allow(dead_code)]
+fn alloc_class_profile(pdump: bool) {
+    use crate::tagged::gc::alloc_probe;
+    crate::test_utils::init_test_tracing();
+    if !pdump {
+        unsafe { std::env::set_var("NEOVM_DISABLE_PDUMP", "1") };
+    }
+
+    // -- Phase 1: startup allocation profile --
+    alloc_probe::reset();
+    let mut ev = runtime_startup_context();
+    if pdump && !ev.tagged_heap.dump_partition_active() {
+        // Cold bootstrap cache: first call ran the live bootstrap and wrote
+        // the cache; reload so the measured config really has the partition.
+        alloc_probe::reset();
+        ev = runtime_startup_context();
+        assert!(ev.tagged_heap.dump_partition_active());
+    }
+    let startup_report = alloc_probe::report();
+    ev.set_lexical_binding(true);
+
+    // -- Phase 2: mixed churn (gc_drain_kinds_profile recipe) --
+    ev.eval_str(
+        "(progn \
+           (defvar drain-probe--keep (make-vector 256 nil)) \
+           (defvar drain-probe--i 0) \
+           (defun drain-probe--step (n) \
+             (let ((k 0)) \
+               (while (< k n) \
+                 (let* ((s (make-string 64 ?s)) \
+                        (l (make-list 32 k)) \
+                        (v (make-vector 24 s)) \
+                        (r (record 'drain-probe s l v)) \
+                        (h (make-hash-table :test 'eq :size 8)) \
+                        (c (lambda (q) (cons q s)))) \
+                   (puthash 0 r h) \
+                   (puthash 1 c h) \
+                   (when (= 0 (% k 8)) \
+                     (aset drain-probe--keep (% drain-probe--i 256) \
+                           (list s l v r h c)) \
+                     (setq drain-probe--i (1+ drain-probe--i)))) \
+                 (setq k (1+ k)))) \
+             nil) \
+           t)",
+    )
+    .expect("probe setup");
+    alloc_probe::reset();
+    let churn_t0 = std::time::Instant::now();
+    for _ in 0..100 {
+        ev.eval_str("(drain-probe--step 200)").expect("churn step");
+    }
+    let churn_secs = churn_t0.elapsed().as_secs_f64();
+    let churn_report = alloc_probe::report();
+
+    // -- Phase 3: byte-compile workload (vm_subr_mix_byte_compile recipe) --
+    let mut body = String::new();
+    for i in 0..30 {
+        body.push_str(&format!(
+            "(setq acc (cons (list {i} (format \"s%d\" n) (assq 'k tbl)) acc)) \
+             (when (> (length acc) 40) (setq acc (nthcdr 2 acc))) \
+             (setq s (concat s (substring (symbol-name 'sym{i}) 0 2))) ",
+        ));
+    }
+    let defun = format!(
+        "(progn (defun sm-work (n) \
+           (let ((acc nil) (s \"\") (tbl '((k . 1) (j . 2)))) {body} (list acc s))) t)"
+    );
+    ev.eval_str(&defun).expect("defun sm-work");
+    alloc_probe::reset();
+    let bc_t0 = std::time::Instant::now();
+    for _ in 0..3 {
+        ev.eval_str(&defun).expect("re-defun sm-work");
+        ev.eval_str("(progn (byte-compile 'sm-work) t)")
+            .expect("byte-compile sm-work");
+    }
+    let bc_secs = bc_t0.elapsed().as_secs_f64();
+    let bc_report = alloc_probe::report();
+
+    panic!(
+        "ALLOC CLASS PROFILE (profiling aid, not a failure) config={}\n\
+         === phase 1: startup (bootstrap load) ===\n{startup_report}\
+         === phase 2: mixed churn (drain-kinds recipe, 100x200 iters, {churn_secs:.2}s) ===\n{churn_report}\
+         === phase 3: byte-compile x3 ({bc_secs:.2}s) ===\n{bc_report}",
+        if pdump { "pdump(mapped-dump)" } else { "plain(dump-less)" },
+    );
+}
+
+/// Non-cons allocation-class profile, dump-partitioned config. Run:
+///   cargo nextest run -p neovm-core --release --run-ignored ignored-only \
+///     --no-capture -E 'test(alloc_class_profile_pdump)'
+#[test]
+#[ignore = "profiling aid; run explicitly in release with --no-capture"]
+fn alloc_class_profile_pdump() {
+    alloc_class_profile(true);
+}
+
+/// Non-cons allocation-class profile, dump-less config (the live bootstrap =
+/// full expanded-cache replay). Run:
+///   cargo nextest run -p neovm-core --release --run-ignored ignored-only \
+///     --no-capture -E 'test(alloc_class_profile_plain)'
+#[test]
+#[ignore = "profiling aid; run explicitly in release with --no-capture"]
+fn alloc_class_profile_plain() {
+    alloc_class_profile(false);
+}

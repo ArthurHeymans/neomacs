@@ -13105,3 +13105,43 @@ fn exec_path_dirs_split_on_semicolon_and_normalize_separators() {
 fn exec_path_dirs_empty_when_path_unset() {
     assert!(super::exec_path_dirs_from_os(None).is_empty());
 }
+
+/// PROFILING AID (not a pass/fail test): non-cons allocation-class profile of
+/// the expanded-cache replay workload — the exact
+/// `expanded_cache_replay_preserves_nadvice_eval_and_compile_helpers` recipe
+/// (partial bootstrap replaying the expanded-lisp cache up to `mouse`).
+/// Reports per-kind allocation counts, the total-bytes size-class histogram,
+/// and the peak `non_cons_object_addrs` population (size-class arena design
+/// input). Run:
+///   cargo nextest run -p neovm-core --release --run-ignored ignored-only \
+///     --no-capture -E 'test(alloc_class_profile_replay_nadvice)'
+#[test]
+#[ignore = "profiling aid; run explicitly in release with --no-capture"]
+fn alloc_class_profile_replay_nadvice() {
+    use crate::tagged::gc::alloc_probe;
+    crate::test_utils::init_test_tracing();
+    alloc_probe::reset();
+    let t0 = std::time::Instant::now();
+    let rendered = std::thread::Builder::new()
+        .name("nadvice-cache-replay".into())
+        .stack_size(64 * 1024 * 1024)
+        .spawn(|| {
+            let mut eval = partial_bootstrap_eval_until("mouse", false);
+            eval_rendered(
+                &mut eval,
+                r#"
+(list (fboundp 'advice--normalize-place)
+      (fboundp 'add-function))
+"#,
+            )
+        })
+        .expect("spawn nadvice bootstrap thread")
+        .join()
+        .expect("nadvice bootstrap thread should succeed");
+    let secs = t0.elapsed().as_secs_f64();
+    assert_eq!(rendered, "OK (t t)");
+    panic!(
+        "ALLOC CLASS PROFILE replay-nadvice (profiling aid, not a failure) {secs:.2}s\n{}",
+        alloc_probe::report()
+    );
+}

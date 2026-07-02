@@ -2727,6 +2727,8 @@ impl TaggedHeap {
         let inserted = self.non_cons_object_addrs.insert(ptr as usize);
         debug_assert!(inserted, "non-cons object linked twice");
         self.all_objects = ptr;
+        #[cfg(test)]
+        alloc_probe::record(ptr, self.non_cons_object_addrs.len());
     }
 
     /// Link a veclike object into the all_objects list.
@@ -2740,6 +2742,8 @@ impl TaggedHeap {
             let inserted = self.non_cons_object_addrs.insert(gc_header as usize);
             debug_assert!(inserted, "veclike object linked twice");
             self.all_objects = gc_header;
+            #[cfg(test)]
+            alloc_probe::record(gc_header, self.non_cons_object_addrs.len());
         }
     }
 
@@ -5287,6 +5291,232 @@ impl Drop for TaggedHeap {
             }
         }
         // ConsBlocks are dropped automatically (they implement Drop)
+    }
+}
+
+/// TEST-ONLY allocation-profiling counters for the non-cons allocator
+/// modernization probes (size-class arena design inputs): per-kind allocation
+/// counts, a size-class histogram over TOTAL object bytes (fixed struct +
+/// separately-allocated payload storage, via `object_bytes_from_header`),
+/// per-kind byte totals, and the peak `non_cons_object_addrs` population.
+/// Compiled ONLY under `cfg(test)` (the consuming probes are in-crate
+/// `#[ignore]`d tests), so production builds carry zero instrumentation.
+/// Global statics are correct here because nextest runs each probe in its own
+/// process, so the counters observe exactly one workload.
+#[cfg(test)]
+pub(crate) mod alloc_probe {
+    use super::{GcHeader, HeapObjectKind, TaggedHeap, VecLikeHeader, VecLikeType};
+    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+
+    const N_KINDS: usize = 28;
+    const N_BUCKETS: usize = 11;
+
+    /// Dense kind index: String, Float, then every `VecLikeType` variant.
+    pub(crate) const KIND_NAMES: [&str; N_KINDS] = [
+        "String",
+        "Float",
+        "Vector",
+        "Bignum",
+        "Marker",
+        "Overlay",
+        "Finalizer",
+        "SymbolWithPos",
+        "UserPtr",
+        "Process",
+        "Frame",
+        "Window",
+        "Buffer",
+        "HashTable",
+        "Obarray",
+        "WindowConfig",
+        "Subr",
+        "Xwidget",
+        "XwidgetView",
+        "ModuleFunction",
+        "Sqlite",
+        "Lambda",
+        "CharTable",
+        "SubCharTable",
+        "Record",
+        "Macro",
+        "ByteCode",
+        "Timer",
+    ];
+    /// Histogram bucket upper bounds (bytes).
+    pub(crate) const BUCKET_LABELS: [&str; N_BUCKETS] = [
+        "<=16", "<=32", "<=64", "<=128", "<=256", "<=512", "<=1K", "<=4K", "<=16K", "<=64K",
+        ">64K",
+    ];
+
+    #[allow(clippy::declare_interior_mutable_const)]
+    const ZERO: AtomicU64 = AtomicU64::new(0);
+    #[allow(clippy::declare_interior_mutable_const)]
+    const ROW: [AtomicU64; N_BUCKETS] = [ZERO; N_BUCKETS];
+    static COUNTS: [[AtomicU64; N_BUCKETS]; N_KINDS] = [ROW; N_KINDS];
+    static TOTAL_BYTES: [AtomicU64; N_KINDS] = [ZERO; N_KINDS];
+    static PEAK_ADDR_SET: AtomicUsize = AtomicUsize::new(0);
+
+    fn kind_index(header: *const GcHeader) -> usize {
+        match unsafe { (*header).kind } {
+            HeapObjectKind::String => 0,
+            HeapObjectKind::Float => 1,
+            HeapObjectKind::VecLike => {
+                2 + match unsafe { (*(header as *const VecLikeHeader)).type_tag } {
+                    VecLikeType::Vector => 0,
+                    VecLikeType::Bignum => 1,
+                    VecLikeType::Marker => 2,
+                    VecLikeType::Overlay => 3,
+                    VecLikeType::Finalizer => 4,
+                    VecLikeType::SymbolWithPos => 5,
+                    VecLikeType::UserPtr => 6,
+                    VecLikeType::Process => 7,
+                    VecLikeType::Frame => 8,
+                    VecLikeType::Window => 9,
+                    VecLikeType::Buffer => 10,
+                    VecLikeType::HashTable => 11,
+                    VecLikeType::Obarray => 12,
+                    VecLikeType::WindowConfiguration => 13,
+                    VecLikeType::Subr => 14,
+                    VecLikeType::Xwidget => 15,
+                    VecLikeType::XwidgetView => 16,
+                    VecLikeType::ModuleFunction => 17,
+                    VecLikeType::Sqlite => 18,
+                    VecLikeType::Lambda => 19,
+                    VecLikeType::CharTable => 20,
+                    VecLikeType::SubCharTable => 21,
+                    VecLikeType::Record => 22,
+                    VecLikeType::Macro => 23,
+                    VecLikeType::ByteCode => 24,
+                    VecLikeType::Timer => 25,
+                }
+            }
+        }
+    }
+
+    fn bucket(bytes: usize) -> usize {
+        match bytes {
+            0..=16 => 0,
+            17..=32 => 1,
+            33..=64 => 2,
+            65..=128 => 3,
+            129..=256 => 4,
+            257..=512 => 5,
+            513..=1024 => 6,
+            1025..=4096 => 7,
+            4097..=16384 => 8,
+            16385..=65536 => 9,
+            _ => 10,
+        }
+    }
+
+    /// Record one non-cons allocation at link time (`link_object` /
+    /// `link_veclike`). The object is fully constructed before it is linked,
+    /// so reading its payload sizes here is sound.
+    pub(crate) fn record(header: *const GcHeader, addr_set_len: usize) {
+        let bytes = TaggedHeap::object_bytes_from_header(header);
+        let k = kind_index(header);
+        COUNTS[k][bucket(bytes)].fetch_add(1, Ordering::Relaxed);
+        TOTAL_BYTES[k].fetch_add(bytes as u64, Ordering::Relaxed);
+        PEAK_ADDR_SET.fetch_max(addr_set_len, Ordering::Relaxed);
+    }
+
+    /// Zero every counter (start of a probe's measured phase).
+    pub(crate) fn reset() {
+        for row in &COUNTS {
+            for cell in row {
+                cell.store(0, Ordering::Relaxed);
+            }
+        }
+        for cell in &TOTAL_BYTES {
+            cell.store(0, Ordering::Relaxed);
+        }
+        PEAK_ADDR_SET.store(0, Ordering::Relaxed);
+    }
+
+    /// Peak `non_cons_object_addrs` population observed since reset.
+    pub(crate) fn peak_addr_set() -> usize {
+        PEAK_ADDR_SET.load(Ordering::Relaxed)
+    }
+
+    /// The fixed (arena-resident) struct size per kind index — what a
+    /// size-class arena page would actually hold. Payload storage (`Vec`
+    /// backings, string text, hash-table internals) stays on the system
+    /// allocator either way.
+    pub(crate) fn fixed_size(kind: usize) -> usize {
+        use std::mem::size_of;
+        match kind {
+            0 => size_of::<super::StringObj>(),
+            1 => size_of::<super::FloatObj>(),
+            2 => size_of::<super::VectorObj>(),
+            3 => size_of::<super::BignumObj>(),
+            4 => size_of::<super::MarkerObj>(),
+            5 => size_of::<super::OverlayObj>(),
+            6 => size_of::<super::FinalizerObj>(),
+            7 => size_of::<super::SymbolWithPosObj>(),
+            8 => size_of::<super::UserPtrObj>(),
+            9 => size_of::<super::ProcessObj>(),
+            10 => size_of::<super::FrameObj>(),
+            11 => size_of::<super::WindowObj>(),
+            12 => size_of::<super::BufferObj>(),
+            13 => size_of::<super::HashTableObj>(),
+            14 => size_of::<super::ObarrayObj>(),
+            15 => size_of::<super::RecordObj>(), // WindowConfiguration shares RecordObj
+            16 => size_of::<super::SubrObj>(),
+            17 => size_of::<super::XwidgetObj>(),
+            18 => size_of::<super::XwidgetViewObj>(),
+            19 => size_of::<super::ModuleFunctionObj>(),
+            20 => size_of::<super::SqliteObj>(),
+            21 => size_of::<super::LambdaObj>(),
+            22 => size_of::<super::CharTableObj>(),
+            23 => size_of::<super::SubCharTableObj>(),
+            24 => size_of::<super::RecordObj>(),
+            25 => size_of::<super::MacroObj>(),
+            26 => size_of::<super::ByteCodeObj>(),
+            27 => size_of::<super::TimerObj>(),
+            _ => 0,
+        }
+    }
+
+    /// Render the per-kind allocation table: count, total bytes, fixed
+    /// (arena-resident) struct size, and the total-bytes histogram row.
+    pub(crate) fn report() -> String {
+        let mut out = String::new();
+        out.push_str(&format!(
+            "{:<14} {:>10} {:>13} {:>6}  {}\n",
+            "kind",
+            "allocs",
+            "total_bytes",
+            "fixed",
+            BUCKET_LABELS.join(" ")
+        ));
+        let mut grand_allocs = 0u64;
+        let mut grand_bytes = 0u64;
+        for k in 0..N_KINDS {
+            let count: u64 = COUNTS[k].iter().map(|c| c.load(Ordering::Relaxed)).sum();
+            if count == 0 {
+                continue;
+            }
+            let bytes = TOTAL_BYTES[k].load(Ordering::Relaxed);
+            grand_allocs += count;
+            grand_bytes += bytes;
+            let histo: Vec<String> = COUNTS[k]
+                .iter()
+                .map(|c| c.load(Ordering::Relaxed).to_string())
+                .collect();
+            out.push_str(&format!(
+                "{:<14} {:>10} {:>13} {:>6}  {}\n",
+                KIND_NAMES[k],
+                count,
+                bytes,
+                fixed_size(k),
+                histo.join(" ")
+            ));
+        }
+        out.push_str(&format!(
+            "TOTAL allocs={grand_allocs} bytes={grand_bytes} peak_non_cons_object_addrs={}\n",
+            peak_addr_set()
+        ));
+        out
     }
 }
 
