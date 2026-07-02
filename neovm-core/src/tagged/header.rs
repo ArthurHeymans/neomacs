@@ -191,6 +191,8 @@ pub enum VecLikeType {
     Bignum = 2,
     Marker = 3,
     Overlay = 4,
+    /// Finalizer object (GNU `PVEC_FINALIZER`).
+    Finalizer = 5,
     /// Symbol with source position (GNU `PVEC_SYMBOL_WITH_POS`).
     SymbolWithPos = 6,
     /// User pointer for dynamic module API (GNU `PVEC_USER_PTR`).
@@ -237,6 +239,7 @@ impl VecLikeType {
             Self::Bignum => GnuPvecType::Bignum,
             Self::Marker => GnuPvecType::Marker,
             Self::Overlay => GnuPvecType::Overlay,
+            Self::Finalizer => GnuPvecType::Finalizer,
             Self::SymbolWithPos => GnuPvecType::SymbolWithPos,
             Self::UserPtr => GnuPvecType::UserPtr,
             Self::Process => GnuPvecType::Process,
@@ -1034,6 +1037,22 @@ pub struct SymbolWithPosObj {
     pub sym: TaggedValue,
     /// Source byte offset. Must always be a fixnum.
     pub pos: TaggedValue,
+}
+
+/// Heap-allocated finalizer object.
+///
+/// Mirrors GNU `struct Lisp_Finalizer` (`lisp.h`): one traced Lisp slot, the
+/// zero-argument `function` to run once the finalizer object itself becomes
+/// unreachable. GNU's intrusive prev/next registration list is replaced by
+/// the heap-side `finalizer_registry`; mark termination scans it, queues the
+/// functions of unmarked finalizers, and re-marks them so they survive the
+/// sweep until they have run (errors ignored).
+#[repr(C)]
+pub struct FinalizerObj {
+    pub header: VecLikeHeader,
+    /// Called with zero args after the GC cycle that finds this object
+    /// unreachable. Immutable after allocation.
+    pub function: TaggedValue,
 }
 
 /// Heap-allocated SQLite database or statement object.

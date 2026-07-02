@@ -1075,6 +1075,10 @@ fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState)
         ValueKind::Veclike(VecLikeType::SymbolWithPos) => {
             write_symbol_with_pos_stateful(value, out, state);
         }
+        ValueKind::Veclike(VecLikeType::Finalizer) => {
+            // GNU `print_vectorlike_unreadable` prints finalizers opaquely.
+            out.push_str("#<finalizer>");
+        }
         ValueKind::Veclike(VecLikeType::Sqlite) => {
             let obj = value.as_sqlite().unwrap();
             if obj.is_statement {
@@ -2098,6 +2102,9 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
         }
         ValueKind::Veclike(VecLikeType::SymbolWithPos) => {
             append_symbol_with_pos_bytes(value, out, options);
+        }
+        ValueKind::Veclike(VecLikeType::Finalizer) => {
+            out.extend_from_slice(b"#<finalizer>");
         }
         ValueKind::Veclike(VecLikeType::Sqlite) => {
             let obj = value.as_sqlite().unwrap();

@@ -5618,12 +5618,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         1,
         None,
     );
-    ctx.defsubr(
-        "make-finalizer",
-        |_ctx, args| builtin_make_finalizer(args),
-        1,
-        Some(1),
-    );
+    ctx.defsubr("make-finalizer", builtin_make_finalizer, 1, Some(1));
     ctx.defsubr(
         "marker-last-position",
         |_ctx, args| builtin_marker_last_position(args),

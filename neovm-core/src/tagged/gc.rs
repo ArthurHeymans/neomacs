@@ -1038,6 +1038,22 @@ pub struct TaggedHeap {
     /// weak_tables` so permanent weak tables are swept against the CURRENT cycle's
     /// marks exactly like young ones. Permanent, so its pointers never dangle.
     permanent_weak_hash_tables: Vec<*mut HashTableObj>,
+    /// Every live finalizer object, registered at allocation — the Rust-side
+    /// equivalent of GNU's intrusive `finalizers` list (alloc.c). Scanned at
+    /// mark termination by `mark_and_queue_doomed_finalizers`: unmarked
+    /// entries leave the registry (the object is swept normally) and their
+    /// `function` moves to `doomed_finalizer_functions`. Entries stay valid
+    /// because every sweep that could free an unmarked finalizer is preceded
+    /// by that scan, which removes it first.
+    finalizer_registry: Vec<*mut FinalizerObj>,
+    /// Functions of finalizer objects found unreachable, waiting to run —
+    /// GNU's `doomed_finalizers` list (we queue only the function; the
+    /// finalizer object itself is swept). Re-marked transitively when queued
+    /// so the imminent sweep keeps them, and seeded as runtime roots every
+    /// cycle so a batch that survives across cycles (e.g. queued during a
+    /// finalizer run) stays live. Drained by the evaluator's cycle-completed
+    /// block, which calls each with zero args, errors ignored.
+    doomed_finalizer_functions: Vec<TaggedValue>,
 
     /// Reclaimed cons cells threaded through the dead cells themselves,
     /// matching GNU alloc.c's `cons_free_list`.
@@ -1247,6 +1263,8 @@ impl TaggedHeap {
             gray_queue: Vec::new(),
             weak_hash_tables: Vec::new(),
             permanent_weak_hash_tables: Vec::new(),
+            finalizer_registry: Vec::new(),
+            doomed_finalizer_functions: Vec::new(),
             cons_free_list: std::ptr::null_mut(),
             mapped_cons_ranges: Vec::new(),
             mapped_float_ranges: Vec::new(),
@@ -1782,6 +1800,7 @@ impl TaggedHeap {
                         VecLikeType::Subr => size_of::<SubrObj>(),
                         VecLikeType::Bignum => size_of::<BignumObj>(),
                         VecLikeType::SymbolWithPos => size_of::<SymbolWithPosObj>(),
+                        VecLikeType::Finalizer => size_of::<FinalizerObj>(),
                         VecLikeType::Sqlite => size_of::<SqliteObj>(),
                         VecLikeType::UserPtr => size_of::<UserPtrObj>(),
                         VecLikeType::ModuleFunction => size_of::<ModuleFunctionObj>(),
@@ -2254,6 +2273,23 @@ impl TaggedHeap {
         self.link_veclike(ptr as *mut VecLikeHeader);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<SymbolWithPosObj>());
+        unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
+    }
+
+    /// Allocate a finalizer object (GNU `Fmake_finalizer`). Registered in
+    /// `finalizer_registry` so mark termination can detect when the object
+    /// becomes unreachable and queue `function` to run after that cycle.
+    /// GNU accepts any object as the function; callers do not validate it.
+    pub fn alloc_finalizer(&mut self, function: TaggedValue) -> TaggedValue {
+        let obj = Box::new(FinalizerObj {
+            header: VecLikeHeader::new(VecLikeType::Finalizer),
+            function,
+        });
+        let ptr = Box::into_raw(obj);
+        self.link_veclike(ptr as *mut VecLikeHeader);
+        self.finalizer_registry.push(ptr);
+        self.allocated_count += 1;
+        self.note_allocation_bytes(size_of::<FinalizerObj>());
         unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
     }
 
@@ -3237,6 +3273,9 @@ impl TaggedHeap {
                     let o = &*(ptr as *const SymbolWithPosObj);
                     out.extend([o.sym, o.pos]);
                 }
+                VecLikeType::Finalizer => {
+                    out.push((*(ptr as *const FinalizerObj)).function);
+                }
                 VecLikeType::ModuleFunction => {
                     let o = &*(ptr as *const ModuleFunctionObj);
                     out.extend([o.documentation, o.interactive_form]);
@@ -3314,6 +3353,14 @@ impl TaggedHeap {
                     .values()
                     .map(|value| (*value, "process-registry")),
             )
+            // Doomed finalizer functions not yet run must survive any cycle
+            // that starts before the evaluator drains them (e.g. one queued
+            // during a finalizer run, or an explicit GC before the drain).
+            .chain(
+                self.doomed_finalizer_functions
+                    .iter()
+                    .map(|value| (*value, "doomed-finalizer-function")),
+            )
             .collect();
 
         for (value, origin) in roots {
@@ -3333,6 +3380,12 @@ impl TaggedHeap {
         //    so heap access is exclusive (no concurrency hazard here). --
         let mark_t0 = std::time::Instant::now();
         self.mark_all_on_gc_thread();
+        // Queue doomed finalizers before the weak sweep (GNU
+        // `queue_doomed_finalizers` runs before
+        // `mark_and_sweep_weak_table_contents` in `garbage_collect`): their
+        // functions are re-marked so both the weak sweep and the object sweep
+        // see them as live.
+        self.mark_and_queue_doomed_finalizers();
         // Resolve weak hash tables now that the main mark has drained. Both the
         // sync and concurrent paths converge here with the mutator stopped, so
         // this is single-threaded and path-agnostic.
@@ -3340,6 +3393,52 @@ impl TaggedHeap {
         let mark_us = mark_t0.elapsed().as_micros() as u64;
 
         self.finalize_collection(mark_us, bytes_before, t0);
+    }
+
+    /// Queue the functions of finalizer objects this cycle found unreachable —
+    /// GNU `queue_doomed_finalizers` + `mark_finalizers` (alloc.c). Must run
+    /// at BOTH mark terminations (`complete_collection` and
+    /// `incremental_finish`), after the main mark drains and before the weak
+    /// sweep. A doomed finalizer leaves the registry and is swept normally;
+    /// only its `function` is queued, re-marked transitively (same marking
+    /// helpers as the weak-table fixpoint) so the imminent sweep keeps
+    /// everything it needs. Still-marked finalizers stay registered.
+    fn mark_and_queue_doomed_finalizers(&mut self) {
+        if self.finalizer_registry.is_empty() {
+            return;
+        }
+        let registry = std::mem::take(&mut self.finalizer_registry);
+        let mut doomed = Vec::new();
+        for ptr in registry {
+            // SAFETY: registered at allocation; every sweep that could free an
+            // unmarked finalizer is preceded by this scan, which removes it
+            // from the registry first, so `ptr` is live. The world is stopped
+            // and marking has drained, so the mark bit is final.
+            if unsafe { (*ptr).header.gc.is_marked() } {
+                self.finalizer_registry.push(ptr);
+            } else {
+                doomed.push(unsafe { (*ptr).function });
+            }
+        }
+        if doomed.is_empty() {
+            return;
+        }
+        for function in doomed.iter().copied() {
+            if function.is_heap_object() {
+                self.push_gray(function, "doomed-finalizer-function");
+            }
+        }
+        self.mark_all();
+        self.doomed_finalizer_functions.extend(doomed);
+    }
+
+    /// Take every function queued by the doomed-finalizer scans so far. The
+    /// evaluator's cycle-completed block calls each with zero args, errors
+    /// ignored (GNU `run_finalizers`). Taking the whole batch means a
+    /// finalizer created — and doomed — during a finalizer run lands in a
+    /// later batch, run after a later cycle.
+    pub fn take_doomed_finalizer_functions(&mut self) -> Vec<TaggedValue> {
+        std::mem::take(&mut self.doomed_finalizer_functions)
     }
 
     /// Resolve the weak hash tables discovered during this cycle's mark — GNU
@@ -3891,6 +3990,11 @@ impl TaggedHeap {
         bytes_before: usize,
         _pause_t0: std::time::Instant,
     ) {
+        // Queue doomed finalizers first (mirrors `complete_collection`; a miss
+        // here would mean finalizers silently never run under the concurrent
+        // collector). The main mark has drained — the termination handshake
+        // already traced the deferred veclikes — so marks are final.
+        self.mark_and_queue_doomed_finalizers();
         // Resolve weak hash tables (GNU mark_and_sweep_weak_table_contents): mark
         // entries that survive per their table's weakness, then drop the rest. This
         // mirrors `complete_collection` and MUST run on the concurrent/incremental
@@ -4463,6 +4567,16 @@ impl TaggedHeap {
                     self.push_gray(pos, "symbol-with-pos-position");
                 }
             }
+            VecLikeType::Finalizer => {
+                // A REACHABLE finalizer keeps its function alive (GNU
+                // `mark_vectorlike` on PVEC_FINALIZER). Unreachable ones are
+                // handled at mark termination by
+                // `mark_and_queue_doomed_finalizers`.
+                let function = unsafe { (*(ptr as *const FinalizerObj)).function };
+                if function.is_heap_object() {
+                    self.push_gray(function, "finalizer-function");
+                }
+            }
             VecLikeType::ModuleFunction => {
                 let obj = ptr as *const ModuleFunctionObj;
                 let doc = unsafe { (*obj).documentation };
@@ -4694,6 +4808,12 @@ impl TaggedHeap {
                     },
                     VecLikeType::SymbolWithPos => unsafe {
                         drop(Box::from_raw(ptr as *mut SymbolWithPosObj))
+                    },
+                    VecLikeType::Finalizer => unsafe {
+                        // The registry entry was already removed by the
+                        // mark-termination scan that doomed this object; the
+                        // function it queued survives independently.
+                        drop(Box::from_raw(ptr as *mut FinalizerObj))
                     },
                     VecLikeType::Sqlite => unsafe { drop(Box::from_raw(ptr as *mut SqliteObj)) },
                     VecLikeType::UserPtr => {
@@ -5287,6 +5407,197 @@ mod ownership_tests {
             };
             assert_eq!(car, expected, "table value {key:?} corrupted/swept");
         }
+    }
+
+    /// GNU-parity finalizers, STW path: a finalizer a full collection finds
+    /// unreachable leaves the registry, its function is queued + re-marked
+    /// (transitively) so the sweep keeps it, and the finalizer object itself
+    /// is swept. A queued-but-not-taken function survives later cycles via
+    /// the runtime-root seeding.
+    #[test]
+    fn finalizer_doomed_on_stw_collection_queues_and_keeps_function() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let payload = heap.alloc_cons(TaggedValue::fixnum(7), TaggedValue::fixnum(8));
+        let function = heap.alloc_cons(TaggedValue::fixnum(42), payload);
+        let finalizer = heap.alloc_finalizer(function);
+        let fin_ptr = finalizer.as_veclike_ptr().unwrap();
+        // The verifier enumeration must cover the function slot
+        // (`collect_veclike_children` stays a superset of `trace_veclike`).
+        let children = heap.collect_veclike_children(fin_ptr as *mut VecLikeHeader);
+        assert_eq!(children.len(), 1);
+        assert_eq!(children[0].0, function.0);
+
+        // Cycle 1: the finalizer is rooted — still registered, nothing queued,
+        // and the traced function survives.
+        heap.begin_collection();
+        heap.seed_root(finalizer);
+        heap.complete_collection();
+        assert!(heap.doomed_finalizer_functions.is_empty());
+        assert_eq!(heap.finalizer_registry.len(), 1);
+        assert_eq!(
+            unsafe { (*function.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(42).0,
+        );
+
+        // Cycle 2: nothing roots the finalizer — doomed. The function (and
+        // what it reaches) survives the sweep; the finalizer object does not.
+        heap.begin_collection();
+        heap.complete_collection();
+        assert!(heap.finalizer_registry.is_empty());
+        assert!(
+            !heap.owns_non_cons_object(fin_ptr as *const u8),
+            "doomed finalizer object must be swept",
+        );
+        assert_eq!(
+            unsafe { (*function.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(42).0,
+        );
+        assert_eq!(
+            unsafe { (*payload.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(7).0,
+            "everything the queued function reaches must survive",
+        );
+
+        // Cycle 3, queue still undrained: the queued function is a runtime
+        // root and must survive again.
+        heap.begin_collection();
+        heap.complete_collection();
+        assert_eq!(
+            unsafe { (*function.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(42).0,
+        );
+
+        let doomed = heap.take_doomed_finalizer_functions();
+        assert_eq!(doomed.len(), 1);
+        assert_eq!(doomed[0].0, function.0);
+        assert!(heap.take_doomed_finalizer_functions().is_empty());
+    }
+
+    /// GNU-parity finalizers, concurrent path: the doomed-finalizer scan must
+    /// run at `incremental_finish` too — a miss there means finalizers never
+    /// run under the concurrent collector. Also checks allocate-black: a
+    /// finalizer born during the mark survives that cycle and is doomable on
+    /// the next one.
+    #[test]
+    fn finalizer_doomed_on_concurrent_termination_queues_and_keeps_function() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // A long spine keeps the GC thread marking while the mutator runs.
+        const N: i64 = 100_000;
+        let mut list = TaggedValue::fixnum(0);
+        for i in 0..N {
+            list = heap.alloc_cons(TaggedValue::fixnum(i), list);
+        }
+        let function = heap.alloc_cons(TaggedValue::fixnum(43), TaggedValue::fixnum(0));
+        let doomed_fin = heap.alloc_finalizer(function);
+        let doomed_ptr = doomed_fin.as_veclike_ptr().unwrap();
+        let live_fin = heap.alloc_finalizer(function);
+
+        heap.concurrent_begin();
+        heap.seed_root(list);
+        heap.seed_root(live_fin); // doomed_fin is unreachable this cycle
+        heap.launch_concurrent_mark();
+
+        // Born during the mark: allocate-black, so it survives this cycle
+        // even though nothing references it.
+        let churn_function = heap.alloc_cons(TaggedValue::fixnum(44), TaggedValue::fixnum(0));
+        let churn_fin = heap.alloc_finalizer(churn_function);
+        let churn_ptr = churn_fin.as_veclike_ptr().unwrap();
+
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(list);
+        heap.seed_root(live_fin);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+
+        assert!(
+            !heap.owns_non_cons_object(doomed_ptr as *const u8),
+            "doomed finalizer object must be swept",
+        );
+        assert!(heap.owns_non_cons_object(live_fin.as_veclike_ptr().unwrap() as *const u8));
+        assert!(
+            heap.owns_non_cons_object(churn_ptr as *const u8),
+            "a finalizer born during the mark must survive that cycle",
+        );
+        assert_eq!(heap.finalizer_registry.len(), 2);
+        let doomed = heap.take_doomed_finalizer_functions();
+        assert_eq!(doomed.len(), 1);
+        assert_eq!(doomed[0].0, function.0);
+        assert_eq!(
+            unsafe { (*function.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(43).0,
+        );
+
+        // Next cycle: the born-black churn finalizer (still unreferenced) is
+        // doomed now; the rooted one stays registered.
+        heap.begin_collection();
+        heap.seed_root(live_fin);
+        heap.complete_collection();
+        assert!(!heap.owns_non_cons_object(churn_ptr as *const u8));
+        assert_eq!(heap.finalizer_registry.len(), 1);
+        let doomed = heap.take_doomed_finalizer_functions();
+        assert_eq!(doomed.len(), 1);
+        assert_eq!(doomed[0].0, churn_function.0);
+        assert_eq!(
+            unsafe { (*churn_function.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(44).0,
+        );
+    }
+
+    /// The dump-partition + tricolor verifiers must accept the finalizer
+    /// arms: a LIVE finalizer is enumerated through
+    /// `collect_veclike_children`, and a doomed one's re-marked function must
+    /// not present a black->white edge. The fake dump span only activates the
+    /// partition; it maps no objects.
+    #[test]
+    fn finalizer_cycle_passes_partition_verifier() {
+        crate::test_utils::init_test_tracing();
+        unsafe { std::env::set_var("NEOVM_GC_VERIFY_PARTITION", "1") };
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        heap.extend_dump_span(4096, 16);
+
+        // First partitioned cycle promotes survivors + blackens the (empty)
+        // dump; verification gates arm on the cycles after it.
+        heap.begin_collection();
+        heap.complete_collection();
+        assert!(heap.dump_blackened);
+
+        let payload = heap.alloc_cons(TaggedValue::fixnum(5), TaggedValue::fixnum(6));
+        let doomed_function = heap.alloc_cons(TaggedValue::fixnum(45), payload);
+        let _doomed_fin = heap.alloc_finalizer(doomed_function);
+        let live_function = heap.alloc_cons(TaggedValue::fixnum(46), TaggedValue::fixnum(0));
+        let live_fin = heap.alloc_finalizer(live_function);
+
+        // Verified cycle: `complete_collection` panics if the finalizer arms
+        // break the partition/tricolor invariants.
+        heap.begin_collection();
+        heap.seed_root(live_fin);
+        heap.complete_collection();
+
+        let doomed = heap.take_doomed_finalizer_functions();
+        assert_eq!(doomed.len(), 1);
+        assert_eq!(doomed[0].0, doomed_function.0);
+        assert_eq!(
+            unsafe { (*payload.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(5).0,
+        );
+        assert_eq!(heap.finalizer_registry.len(), 1);
+        assert_eq!(
+            unsafe { (*live_function.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(46).0,
+        );
     }
 }
 

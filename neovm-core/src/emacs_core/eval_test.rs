@@ -11874,6 +11874,144 @@ fn gc_collect_exact_retains_reachable() {
 }
 
 #[test]
+fn finalizer_runs_after_object_becomes_unreachable() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    ev.eval_str_each("(setq finalizer-ran nil)");
+    ev.eval_str_each("(progn (make-finalizer (lambda () (setq finalizer-ran t))) nil)");
+    let results = ev.eval_str_each("finalizer-ran");
+    assert_eq!(
+        format_eval_result(&results[0]),
+        "OK nil",
+        "finalizer must not run before a GC dooms it"
+    );
+
+    ev.gc_collect_exact();
+
+    let results = ev.eval_str_each("finalizer-ran");
+    assert_eq!(format_eval_result(&results[0]), "OK t");
+}
+
+#[test]
+fn finalizer_runs_exactly_once_across_multiple_gcs() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    ev.eval_str_each("(setq finalizer-count 0)");
+    ev.eval_str_each(
+        "(progn (make-finalizer (lambda () (setq finalizer-count (1+ finalizer-count)))) nil)",
+    );
+    ev.gc_collect_exact();
+    ev.gc_collect_exact();
+    ev.gc_collect_exact();
+
+    let results = ev.eval_str_each("finalizer-count");
+    assert_eq!(format_eval_result(&results[0]), "OK 1");
+}
+
+#[test]
+fn finalizer_does_not_run_while_object_reachable() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    ev.eval_str_each("(setq finalizer-ran nil)");
+    ev.eval_str_each("(setq finalizer-keeper (make-finalizer (lambda () (setq finalizer-ran t))))");
+    ev.gc_collect_exact();
+    ev.gc_collect_exact();
+    let results = ev.eval_str_each("finalizer-ran");
+    assert_eq!(
+        format_eval_result(&results[0]),
+        "OK nil",
+        "a reachable finalizer must never run"
+    );
+
+    ev.eval_str_each("(setq finalizer-keeper nil)");
+    ev.gc_collect_exact();
+    let results = ev.eval_str_each("finalizer-ran");
+    assert_eq!(format_eval_result(&results[0]), "OK t");
+}
+
+#[test]
+fn finalizer_function_closure_data_kept_alive_until_run() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.set_lexical_binding(true);
+
+    ev.eval_str_each("(setq finalizer-data nil)");
+    // Nothing but the doomed finalizer references the closure or the list it
+    // captured; both must survive until the function has run.
+    ev.eval_str_each(
+        "(progn (let ((cell (list 1 2 3))) \
+                   (make-finalizer (lambda () (setq finalizer-data cell)))) \
+                nil)",
+    );
+    ev.gc_collect_exact();
+
+    let results = ev.eval_str_each("finalizer-data");
+    assert_eq!(format_eval_result(&results[0]), "OK (1 2 3)");
+}
+
+#[test]
+fn finalizer_error_is_ignored_and_other_finalizers_run() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    ev.eval_str_each("(setq finalizer-log nil)");
+    ev.eval_str_each(
+        "(progn (make-finalizer (lambda () (setq finalizer-log (cons 'a finalizer-log)))) \
+                (make-finalizer (lambda () (error \"finalizer boom\"))) \
+                (make-finalizer (lambda () (setq finalizer-log (cons 'b finalizer-log)))) \
+                nil)",
+    );
+    ev.gc_collect_exact();
+
+    let results = ev.eval_str_each(
+        "(and (memq 'a finalizer-log) (memq 'b finalizer-log) (length finalizer-log))",
+    );
+    assert_eq!(format_eval_result(&results[0]), "OK 2");
+}
+
+#[test]
+fn finalizer_created_inside_finalizer_runs_on_later_gc() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    ev.eval_str_each("(setq finalizer-inner-ran nil)");
+    ev.eval_str_each(
+        "(progn (make-finalizer \
+                  (lambda () \
+                    (make-finalizer (lambda () (setq finalizer-inner-ran t))) \
+                    nil)) \
+                nil)",
+    );
+
+    // First GC dooms + runs the outer finalizer, which creates (and drops)
+    // the inner one; the inner must NOT run in the same batch.
+    ev.gc_collect_exact();
+    let results = ev.eval_str_each("finalizer-inner-ran");
+    assert_eq!(format_eval_result(&results[0]), "OK nil");
+
+    // A later GC dooms + runs the inner finalizer.
+    ev.gc_collect_exact();
+    let results = ev.eval_str_each("finalizer-inner-ran");
+    assert_eq!(format_eval_result(&results[0]), "OK t");
+}
+
+#[test]
+fn finalizer_type_of_and_prints_opaquely() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+
+    let results = ev.eval_str_each("(type-of (make-finalizer #'ignore))");
+    assert_eq!(format_eval_result(&results[0]), "OK finalizer");
+    let results = ev.eval_str_each("(cl-type-of (make-finalizer #'ignore))");
+    assert_eq!(format_eval_result(&results[0]), "OK finalizer");
+    let results = ev.eval_str_each("(prin1-to-string (make-finalizer #'ignore))");
+    assert_eq!(format_eval_result(&results[0]), "OK \"#<finalizer>\"");
+}
+
+#[test]
 fn gc_collect_exact_frees_stack_only_values() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

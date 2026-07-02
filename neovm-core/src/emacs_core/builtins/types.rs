@@ -426,6 +426,7 @@ pub(crate) fn builtin_cl_type_of(args: Vec<Value>) -> EvalResult {
         ValueKind::Veclike(VecLikeType::Bignum) => "bignum",
         // GNU `Fcl_type_of` reports symbol-with-pos as `symbol-with-pos`.
         ValueKind::Veclike(VecLikeType::SymbolWithPos) => "symbol-with-pos",
+        ValueKind::Veclike(VecLikeType::Finalizer) => "finalizer",
         ValueKind::Veclike(VecLikeType::Sqlite) => "sqlite",
         ValueKind::Veclike(VecLikeType::UserPtr) => "user-ptr",
         ValueKind::Veclike(VecLikeType::ModuleFunction) => "module-function",

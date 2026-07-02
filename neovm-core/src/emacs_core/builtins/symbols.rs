@@ -6407,9 +6407,14 @@ fn replace_env_alist_values(env: Value, closure_vars: &[Value]) -> Value {
     Value::list(result_entries)
 }
 
-pub(crate) fn builtin_make_finalizer(args: Vec<Value>) -> EvalResult {
+pub(crate) fn builtin_make_finalizer(
+    ctx: &mut super::super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
     expect_args("make-finalizer", &args, 1)?;
-    Ok(Value::NIL)
+    // GNU `Fmake_finalizer` accepts any object as FUNCTION; it is only
+    // funcall'd (errors ignored) once the finalizer becomes unreachable.
+    Ok(ctx.tagged_heap.alloc_finalizer(args[0]))
 }
 
 pub(crate) fn builtin_make_interpreted_closure(args: Vec<Value>) -> EvalResult {

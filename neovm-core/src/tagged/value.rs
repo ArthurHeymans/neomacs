@@ -902,6 +902,7 @@ impl TaggedValue {
                 // "integer" via `Ftype_of` / `Fcl_type_of`.
                 VecLikeType::Bignum => "integer",
                 VecLikeType::SymbolWithPos => "symbol-with-pos",
+                VecLikeType::Finalizer => "finalizer",
                 VecLikeType::Sqlite => "sqlite",
                 VecLikeType::UserPtr => "user-ptr",
                 VecLikeType::ModuleFunction => "module-function",

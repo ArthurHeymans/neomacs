@@ -1094,6 +1094,7 @@ mod tests {
             VecLikeType::XwidgetView,
             VecLikeType::Bignum,
             VecLikeType::SymbolWithPos,
+            VecLikeType::Finalizer,
             VecLikeType::Sqlite,
             VecLikeType::UserPtr,
             VecLikeType::ModuleFunction,

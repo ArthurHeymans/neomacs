@@ -7138,6 +7138,9 @@ impl Context {
         self.gc_count += 1;
         self.update_gc_runtime_stats(start.elapsed());
         self.sync_gc_threshold_from_runtime_settings();
+        // GNU `garbage_collect` runs the doomed finalizers before
+        // `post-gc-hook`.
+        self.run_doomed_finalizers();
         self.run_post_gc_hook();
         if self.gc_stress {
             // GNU resets `consing_until_gc` before running post-gc-hook and
@@ -7298,6 +7301,33 @@ impl Context {
         let _ = self.with_gc_inhibited(|eval| {
             crate::emacs_core::hook_runtime::safe_run_named_hook(eval, hook, &[])
         });
+    }
+
+    /// Run the functions queued for finalizer objects the just-finished cycle
+    /// found unreachable — GNU `run_finalizers` (alloc.c). The whole batch is
+    /// taken up front, so a finalizer created (and doomed) during one of these
+    /// calls lands in a later batch after a later cycle. Each function is
+    /// called with zero args; errors are ignored so one failing finalizer
+    /// cannot block the rest (GNU wraps each call in a catch-all
+    /// `internal_condition_case`).
+    fn run_doomed_finalizers(&mut self) {
+        let functions = self.tagged_heap.take_doomed_finalizer_functions();
+        if functions.is_empty() {
+            return;
+        }
+        // The taken batch left the heap-side queue root; keep it rooted for
+        // the duration — `with_gc_inhibited` blocks safe-point GCs, but an
+        // explicit `garbage-collect` inside a finalizer still collects.
+        let saved_roots = save_scratch_gc_roots();
+        for function in functions.iter().copied() {
+            push_scratch_gc_root(function);
+        }
+        self.with_gc_inhibited(|eval| {
+            for function in functions {
+                let _ = eval.funcall_general(function, Vec::<Value>::new());
+            }
+        });
+        restore_scratch_gc_roots(saved_roots);
     }
 
     /// GC safe point used at evaluator boundaries.

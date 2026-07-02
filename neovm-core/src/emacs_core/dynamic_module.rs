@@ -803,6 +803,7 @@ unsafe extern "C" fn module_type_of(env: *mut emacs_env, arg: emacs_value) -> em
             VecLikeType::Subr => "primitive-function",
             VecLikeType::Bignum => "bignum",
             VecLikeType::SymbolWithPos => "symbol-with-pos",
+            VecLikeType::Finalizer => "finalizer",
             VecLikeType::Sqlite => "sqlite",
             VecLikeType::UserPtr => "user-ptr",
             VecLikeType::ModuleFunction => "module-function",

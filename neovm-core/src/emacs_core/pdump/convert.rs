@@ -277,6 +277,12 @@ impl DumpEncoder {
                 // Signal an error so callers know this case is unimplemented.
                 panic!("pdump: symbol-with-pos is not yet supported in portable dumps")
             }
+            ValueKind::Veclike(VecLikeType::Finalizer) => {
+                // GNU's pdumper refuses too (`dump_vectorlike`: "cannot dump
+                // finalizers"); a live finalizer must never be silently
+                // dropped from — or inertly revived in — an image.
+                panic!("pdump: cannot dump finalizer objects")
+            }
             ValueKind::Veclike(VecLikeType::Sqlite) => {
                 panic!("pdump: sqlite objects are not portable")
             }
@@ -2573,6 +2579,11 @@ fn dump_heap_object_from_value(encoder: &mut DumpEncoder, value: Value) -> DumpH
         }
         ValueKind::Veclike(VecLikeType::Xwidget) | ValueKind::Veclike(VecLikeType::XwidgetView) => {
             panic!("pdump: xwidget objects are not portable")
+        }
+        // Explicit (not the `Free` fallback) so a live finalizer can never be
+        // silently dropped from an image — GNU's pdumper refuses as well.
+        ValueKind::Veclike(VecLikeType::Finalizer) => {
+            panic!("pdump: cannot dump finalizer objects")
         }
         ValueKind::Veclike(VecLikeType::Subr) => {
             let ptr = value.as_veclike_ptr().expect("subr") as *const SubrObj;
