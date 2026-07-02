@@ -34,11 +34,25 @@ use crate::window::{FrameId, FrameManager, Window};
 #[cfg(feature = "vm-profile")]
 pub(crate) mod vm_profile {
     use super::Op;
+    use crate::emacs_core::intern::SymId;
     use std::cell::RefCell;
     use std::collections::HashMap;
 
     thread_local! {
         static OP_COUNTS: RefCell<HashMap<String, u64>> = RefCell::new(HashMap::new());
+        static SUBR_COUNTS: RefCell<HashMap<SymId, u64>> = RefCell::new(HashMap::new());
+    }
+
+    /// Bump the per-builtin call histogram. Hooked at `subr_entry_from_value`
+    /// (eval.rs), the single resolver every subr dispatch path funnels through
+    /// (tree-walk eval, Op::Call funcall, and CallBuiltinSym via
+    /// funcall_general), so this ranks WHICH builtins a workload actually
+    /// calls — the input the JIT builtin-intrinsics work needs (the op
+    /// histogram above strips the callee).
+    pub(crate) fn bump_subr(id: SymId) {
+        SUBR_COUNTS.with(|c| {
+            *c.borrow_mut().entry(id).or_insert(0) += 1;
+        });
     }
 
     /// Bump the executed-op histogram (once per dispatched op while profiling).
@@ -56,9 +70,10 @@ pub(crate) mod vm_profile {
         });
     }
 
-    /// Clear the histogram (call before a measured workload).
+    /// Clear the histograms (call before a measured workload).
     pub(crate) fn reset() {
         OP_COUNTS.with(|c| c.borrow_mut().clear());
+        SUBR_COUNTS.with(|c| c.borrow_mut().clear());
     }
 
     /// Print the histogram, descending by count, with each op's execution share.
@@ -74,6 +89,19 @@ pub(crate) mod vm_profile {
         for (name, count) in &rows {
             let pct = 100.0 * *count as f64 / total.max(1) as f64;
             eprintln!("  {name:<16} {count:>12}  {pct:5.2}%");
+        }
+        let mut subr_rows: Vec<(SymId, u64)> =
+            SUBR_COUNTS.with(|c| c.borrow().iter().map(|(k, v)| (*k, *v)).collect());
+        subr_rows.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.0.cmp(&b.0.0)));
+        let subr_total: u64 = subr_rows.iter().map(|r| r.1).sum();
+        eprintln!(
+            "=== SUBR-MIX [{label}]: {subr_total} builtin calls, {} distinct ===",
+            subr_rows.len()
+        );
+        for (id, count) in subr_rows.iter().take(60) {
+            let name = crate::emacs_core::intern::resolve_sym(*id);
+            let pct = 100.0 * *count as f64 / subr_total.max(1) as f64;
+            eprintln!("  {name:<28} {count:>12}  {pct:5.2}%");
         }
     }
 }

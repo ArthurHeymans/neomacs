@@ -14194,6 +14194,47 @@ fn vm_op_mix_real_elisp() {
     panic!("OP-MIX dumped above (profiling aid, not a failure)");
 }
 
+/// Builtin-call profiling aid on the heaviest real elisp we can run in-process:
+/// the byte compiler itself (bytecomp/cconv/macroexp working over a nontrivial
+/// defun). Dumps the per-builtin call ranking (SUBR-MIX section) recorded at
+/// `subr_entry_from_value` — the evidence the JIT builtin-intrinsics work is
+/// gated on: WHICH builtins dominate real workloads. Re-defuns each round so
+/// byte-compile does full work every iteration. Run:
+///   cargo nextest run -p neovm-core --features vm-profile --release \
+///     --run-ignored ignored-only --no-capture vm_subr_mix_byte_compile
+#[cfg(feature = "vm-profile")]
+#[test]
+#[ignore = "profiling aid; run explicitly with --features vm-profile --no-capture"]
+fn vm_subr_mix_byte_compile() {
+    crate::test_utils::init_test_tracing();
+    // SAFETY: nextest runs each test in its own process; this write happens
+    // before the VM reads the JIT gate (keeps the workload interpreted so the
+    // recorded mix reflects call counts, not tiering artifacts).
+    unsafe { std::env::set_var("NEOVM_JIT", "0") };
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let mut body = String::new();
+    for i in 0..30 {
+        body.push_str(&format!(
+            "(setq acc (cons (list {i} (format \"s%d\" n) (assq 'k tbl)) acc)) \
+             (when (> (length acc) 40) (setq acc (nthcdr 2 acc))) \
+             (setq s (concat s (substring (symbol-name 'sym{i}) 0 2))) ",
+        ));
+    }
+    let defun = format!(
+        "(progn (defun sm-work (n) \
+           (let ((acc nil) (s \"\") (tbl '((k . 1) (j . 2)))) {body} (list acc s))) t)"
+    );
+    ev.eval_str(&defun).expect("defun sm-work");
+    crate::emacs_core::bytecode::vm::vm_profile::reset();
+    for _ in 0..3 {
+        ev.eval_str(&defun).expect("re-defun sm-work");
+        ev.eval_str("(progn (byte-compile 'sm-work) t)")
+            .expect("byte-compile sm-work");
+    }
+    crate::emacs_core::bytecode::vm::vm_profile::dump("byte-compile x3");
+    panic!("SUBR-MIX dumped above (profiling aid, not a failure)");
+}
+
 /// CallBuiltinSym-dominated benchmark: a loop calling the primitive `length`
 /// via `Op::CallBuiltinSym` each iteration (the byte-compiler's inlined-
 /// primitive call opcode, opcodes 0140-0177). Isolates the JIT's named-builtin

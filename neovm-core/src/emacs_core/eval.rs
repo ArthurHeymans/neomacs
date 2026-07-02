@@ -283,6 +283,8 @@ pub(crate) fn subr_entry_from_value(function: Value) -> Option<(SymId, SubrEntry
     if subr.function.is_none() && subr.dispatch_kind == SubrDispatchKind::Builtin {
         return None;
     }
+    #[cfg(feature = "vm-profile")]
+    crate::emacs_core::bytecode::vm::vm_profile::bump_subr(subr.sym_id);
     Some((
         subr.sym_id,
         SubrEntry {
