@@ -609,6 +609,11 @@ fn trace_face_debug_enabled() -> bool {
     *ENABLED.get_or_init(|| std::env::var_os("NEOMACS_TRACE_FACE_COLORS").is_some())
 }
 
+fn glyph_overlap_check_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| std::env::var_os("NEOMACS_CHECK_GLYPH_OVERLAP").is_some())
+}
+
 fn next_face_debug_call_id() -> u64 {
     static NEXT_ID: AtomicU64 = AtomicU64::new(1);
     NEXT_ID.fetch_add(1, Ordering::Relaxed)
@@ -1109,7 +1114,7 @@ impl WgpuRenderer {
         // Bar/hbar/hollow cursors are drawn on top of text in step 8.
 
         // Debug: scan for any FrameGlyph entries near y≈27 (the gray line area)
-        {
+        if tracing::enabled!(tracing::Level::TRACE) {
             let mut logged_count = 0;
             for (i, glyph) in frame_glyphs.glyphs.iter().enumerate() {
                 if logged_count > 20 {
@@ -2150,7 +2155,7 @@ impl WgpuRenderer {
                 let mut mask_data: Vec<(AnyAtlasEntry, [GlyphVertex; 6])> = Vec::new();
                 let mut subpixel_data: Vec<(AnyAtlasEntry, [SubpixelGlyphVertex; 6])> = Vec::new();
                 let mut color_data: Vec<(AnyAtlasEntry, [GlyphVertex; 6])> = Vec::new();
-                let mut rendered_char_bounds: Vec<RenderedCharBounds> = Vec::new();
+                let mut rendered_char_bounds = glyph_overlap_check_enabled().then(Vec::new);
                 let enable_subpixel = glyph_atlas.subpixel_enabled();
                 if trace_face_debug_enabled() {
                     tracing::info!(
@@ -2325,7 +2330,10 @@ impl WgpuRenderer {
                                     (glyph_y, glyph_h, tex_v_min_base, tex_v_max_base)
                                 };
 
-                            if glyph_w > CHAR_OVERLAP_MIN_AXIS && glyph_h > CHAR_OVERLAP_MIN_AXIS {
+                            if let Some(rendered_char_bounds) = rendered_char_bounds.as_mut()
+                                && glyph_w > CHAR_OVERLAP_MIN_AXIS
+                                && glyph_h > CHAR_OVERLAP_MIN_AXIS
+                            {
                                 let cell_right = *x + *width;
                                 let glyph_right = glyph_x + glyph_w;
                                 rendered_char_bounds.push(RenderedCharBounds {
@@ -2390,13 +2398,6 @@ impl WgpuRenderer {
                                     effective_fg.a * fade_alpha,
                                 ]
                             };
-                            let subpixel_fg = subpixel_foreground_color(
-                                effective_bg,
-                                effective_fg,
-                                effective_fg.a * fade_alpha,
-                            );
-                            let subpixel_bg = subpixel_background_color(effective_bg);
-
                             // Debug: log glyphs near y≈27 (where gray line appears in screenshot)
                             // and first few header glyphs (y < 5) to see row start
                             if !want_overlay && (glyph_y + glyph_h > 24.0 && glyph_y < 32.0) {
@@ -2522,23 +2523,20 @@ impl WgpuRenderer {
                                 None
                             };
 
-                            let subpixel_vertices = build_subpixel_vertices(
-                                glyph_x,
-                                glyph_y,
-                                glyph_w,
-                                glyph_h,
-                                tex_u_min,
-                                tex_u_max,
-                                tex_v_min,
-                                tex_v_max,
-                                subpixel_fg,
-                                subpixel_bg,
-                            );
-
-                            let overstrike_subpixel_vertices = if overstrike {
-                                let ox = 1.0 / self.scale_factor;
-                                Some(build_subpixel_vertices(
-                                    glyph_x + ox,
+                            if is_color {
+                                color_data.push((entry, vertices));
+                                if let Some(ov) = overstrike_vertices {
+                                    color_data.push((entry, ov));
+                                }
+                            } else if matches!(entry, AnyAtlasEntry::Subpixel(_)) {
+                                let subpixel_fg = subpixel_foreground_color(
+                                    effective_bg,
+                                    effective_fg,
+                                    effective_fg.a * fade_alpha,
+                                );
+                                let subpixel_bg = subpixel_background_color(effective_bg);
+                                let subpixel_vertices = build_subpixel_vertices(
+                                    glyph_x,
                                     glyph_y,
                                     glyph_w,
                                     glyph_h,
@@ -2548,20 +2546,25 @@ impl WgpuRenderer {
                                     tex_v_max,
                                     subpixel_fg,
                                     subpixel_bg,
-                                ))
-                            } else {
-                                None
-                            };
-
-                            if is_color {
-                                color_data.push((entry, vertices));
-                                if let Some(ov) = overstrike_vertices {
-                                    color_data.push((entry, ov));
-                                }
-                            } else if matches!(entry, AnyAtlasEntry::Subpixel(_)) {
+                                );
                                 subpixel_data.push((entry, subpixel_vertices));
-                                if let Some(ov) = overstrike_subpixel_vertices {
-                                    subpixel_data.push((entry, ov));
+                                if overstrike {
+                                    let ox = 1.0 / self.scale_factor;
+                                    subpixel_data.push((
+                                        entry,
+                                        build_subpixel_vertices(
+                                            glyph_x + ox,
+                                            glyph_y,
+                                            glyph_w,
+                                            glyph_h,
+                                            tex_u_min,
+                                            tex_u_max,
+                                            tex_v_min,
+                                            tex_v_max,
+                                            subpixel_fg,
+                                            subpixel_bg,
+                                        ),
+                                    ));
                                 }
                             } else {
                                 mask_data.push((entry, vertices));
@@ -2573,17 +2576,19 @@ impl WgpuRenderer {
                     }
                 }
 
-                log_rendered_char_overlaps(
-                    frame_glyphs.frame_id.get(),
-                    if want_overlay { "overlay" } else { "text" },
-                    &rendered_char_bounds,
-                );
-                log_cursor_glyph_alignment(
-                    frame_glyphs.frame_id.get(),
-                    if want_overlay { "overlay" } else { "text" },
-                    frame_glyphs,
-                    &rendered_char_bounds,
-                );
+                if let Some(rendered_char_bounds) = rendered_char_bounds.as_ref() {
+                    log_rendered_char_overlaps(
+                        frame_glyphs.frame_id.get(),
+                        if want_overlay { "overlay" } else { "text" },
+                        rendered_char_bounds,
+                    );
+                    log_cursor_glyph_alignment(
+                        frame_glyphs.frame_id.get(),
+                        if want_overlay { "overlay" } else { "text" },
+                        frame_glyphs,
+                        rendered_char_bounds,
+                    );
+                }
 
                 tracing::trace!(
                     "render_frame_glyphs: role={:?} {} mask glyphs, {} color glyphs",
@@ -2627,10 +2632,10 @@ impl WgpuRenderer {
                     render_pass.set_pipeline(&self.glyph_pipeline);
                     render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
-                    let all_vertices: Vec<GlyphVertex> = mask_data
-                        .iter()
-                        .flat_map(|(_, verts)| verts.iter().copied())
-                        .collect();
+                    let mut all_vertices = Vec::with_capacity(mask_data.len() * 6);
+                    for (_, verts) in &mask_data {
+                        all_vertices.extend_from_slice(verts);
+                    }
 
                     if trace_face_debug_enabled() {
                         for (idx, vertex) in all_vertices.iter().take(6).enumerate() {
@@ -2717,10 +2722,10 @@ impl WgpuRenderer {
                     render_pass.set_pipeline(&self.subpixel_glyph_pipeline);
                     render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
-                    let all_vertices: Vec<SubpixelGlyphVertex> = subpixel_data
-                        .iter()
-                        .flat_map(|(_, verts)| verts.iter().copied())
-                        .collect();
+                    let mut all_vertices = Vec::with_capacity(subpixel_data.len() * 6);
+                    for (_, verts) in &subpixel_data {
+                        all_vertices.extend_from_slice(verts);
+                    }
 
                     let subpixel_upload =
                         self.subpixel_vertex_arena
@@ -2763,10 +2768,10 @@ impl WgpuRenderer {
                     render_pass.set_pipeline(&self.image_pipeline);
                     render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
-                    let all_vertices: Vec<GlyphVertex> = color_data
-                        .iter()
-                        .flat_map(|(_, verts)| verts.iter().copied())
-                        .collect();
+                    let mut all_vertices = Vec::with_capacity(color_data.len() * 6);
+                    for (_, verts) in &color_data {
+                        all_vertices.extend_from_slice(verts);
+                    }
 
                     let color_upload =
                         self.glyph_vertex_arena

@@ -10,7 +10,7 @@ use std::io;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::thread_comm::{InputEvent, LifecycleCommand, RenderCommand, RenderComms};
 use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -299,19 +299,24 @@ fn read_tty_events(
 ) {
     let mut decoder = RawTtyDecoder::default();
     let mut last_size = crossterm::terminal::size().ok();
+    let mut next_size_check = Instant::now();
 
     while !stop.load(Ordering::Relaxed) {
-        if let Ok(size) = crossterm::terminal::size() {
-            if last_size != Some(size) {
-                last_size = Some(size);
-                let event = InputEvent::WindowResize {
-                    width: size.0 as u32,
-                    height: size.1 as u32,
-                    emacs_frame_id: 0,
-                };
-                if tx.send(event).is_err() {
-                    tracing::warn!("tty_input: channel closed");
-                    return;
+        let now = Instant::now();
+        if now >= next_size_check {
+            next_size_check = now + Duration::from_millis(250);
+            if let Ok(size) = crossterm::terminal::size() {
+                if last_size != Some(size) {
+                    last_size = Some(size);
+                    let event = InputEvent::WindowResize {
+                        width: size.0 as u32,
+                        height: size.1 as u32,
+                        emacs_frame_id: 0,
+                    };
+                    if tx.send(event).is_err() {
+                        tracing::warn!("tty_input: channel closed");
+                        return;
+                    }
                 }
             }
         }

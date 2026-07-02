@@ -7,7 +7,6 @@ use crate::core::frame_glyphs::FrameGlyphBuffer;
 
 #[test]
 fn channel_capacity_constants() {
-    assert_eq!(INPUT_CHANNEL_CAPACITY, 4096);
     assert_eq!(COMMAND_CHANNEL_CAPACITY, 64);
 }
 
@@ -261,11 +260,13 @@ fn thread_comms_cmd_channel_bounded_capacity() {
 }
 
 #[test]
-fn thread_comms_input_channel_bounded_capacity() {
+fn thread_comms_input_channel_is_unbounded() {
     let comms = ThreadComms::new().unwrap();
 
-    // Fill up the input channel to capacity
-    for _ in 0..INPUT_CHANNEL_CAPACITY {
+    // Render/winit callbacks must be able to enqueue durable input events
+    // without blocking on evaluator backpressure.
+    let event_count = 5000;
+    for _ in 0..event_count {
         let event = InputEvent::Key {
             keysym: 0,
             modifiers: 0,
@@ -275,18 +276,10 @@ fn thread_comms_input_channel_bounded_capacity() {
         comms.input_tx.try_send(event).unwrap();
     }
 
-    // Next try_send should fail (channel full)
-    let result = comms.input_tx.try_send(InputEvent::Key {
-        keysym: 0,
-        modifiers: 0,
-        pressed: false,
-        emacs_frame_id: 0,
-    });
-    assert!(
-        result.is_err(),
-        "input channel should be full after {} sends",
-        INPUT_CHANNEL_CAPACITY
-    );
+    for _ in 0..event_count {
+        comms.input_rx.try_recv().unwrap();
+    }
+    assert!(comms.input_rx.try_recv().is_err());
 }
 
 // ===================================================================

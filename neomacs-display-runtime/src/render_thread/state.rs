@@ -155,6 +155,7 @@ pub(super) struct TypingSpeedState {
 /// Idle dim overlay state for one native GUI frame window.
 pub(super) struct IdleDimState {
     pub(super) last_activity_time: Instant,
+    pub(super) last_tick_time: Instant,
     pub(super) current_alpha: f32,
     pub(super) active: bool,
 }
@@ -163,6 +164,7 @@ impl Default for IdleDimState {
     fn default() -> Self {
         Self {
             last_activity_time: Instant::now(),
+            last_tick_time: Instant::now(),
             current_alpha: 0.0,
             active: false,
         }
@@ -352,6 +354,7 @@ pub(super) struct RenderApp {
     pub(super) debug_first_frame_readback_pending: bool,
     pub(super) debug_surface_readback_frames_remaining: u32,
     pub(super) lifecycle_flags: RenderLifecycle,
+    pub(super) last_present_time: Option<Instant>,
 }
 
 pub(super) struct RenderLifecycle {
@@ -451,6 +454,7 @@ impl RenderApp {
                 }
             }),
             lifecycle_flags: RenderLifecycle::new(poll_when_idle),
+            last_present_time: None,
         }
     }
 }

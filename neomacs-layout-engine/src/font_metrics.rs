@@ -232,9 +232,9 @@ pub struct ShapedGlyph {
 /// Cache key for font metrics lookups.
 /// Groups: (family, weight, italic, font_size_centipx)
 /// font_size is stored as integer centipixels (size * 100) to avoid float key issues.
-#[derive(Hash, Eq, PartialEq, Clone)]
+#[derive(Hash, Eq, PartialEq, Clone, Copy)]
 struct MetricsCacheKey {
-    family: String,
+    family: &'static str,
     weight: u16,
     italic: bool,
     font_size_centipx: i32,
@@ -248,9 +248,9 @@ struct ResolvedCharFont {
 }
 
 impl MetricsCacheKey {
-    fn new(family: &str, weight: u16, italic: bool, font_size: f32) -> Self {
+    fn new(family: &'static str, weight: u16, italic: bool, font_size: f32) -> Self {
         Self {
-            family: family.to_string(),
+            family,
             weight,
             italic,
             font_size_centipx: (font_size * 100.0) as i32,
@@ -353,6 +353,17 @@ impl FontMetricsService {
         }
     }
 
+    fn metrics_key(
+        &mut self,
+        family: &str,
+        weight: u16,
+        italic: bool,
+        font_size: f32,
+    ) -> MetricsCacheKey {
+        let family = self.intern_family(family);
+        MetricsCacheKey::new(family, weight, italic, font_size)
+    }
+
     /// Build cosmic-text `Attrs` from face parameters.
     /// Mirrors the logic in `glyph_atlas.rs:face_to_attrs()`.
     fn build_attrs(&mut self, family: &str, weight: u16, slant: FontSlant) -> Attrs<'static> {
@@ -453,7 +464,7 @@ impl FontMetricsService {
             return Vec::new();
         }
         let key = (
-            MetricsCacheKey::new(family, weight, italic, font_size),
+            self.metrics_key(family, weight, italic, font_size),
             text.to_string(),
         );
         if let Some(cached) = self.shaped_run_cache.get(&key) {
@@ -696,7 +707,7 @@ impl FontMetricsService {
         italic: bool,
         font_size: f32,
     ) -> f32 {
-        let key = MetricsCacheKey::new(family, weight, italic, font_size);
+        let key = self.metrics_key(family, weight, italic, font_size);
 
         // For ASCII, check the ASCII cache first
         let cp = ch as u32;
@@ -717,7 +728,7 @@ impl FontMetricsService {
         // Unicode script cache is too coarse for Common/emoji symbols.
         let resolved = self.resolve_font_for_char(ch, family, weight, italic);
         let resolved_italic = resolved.slant.is_italic();
-        let resolved_key = MetricsCacheKey::new(
+        let resolved_key = self.metrics_key(
             &resolved.family,
             resolved.weight,
             resolved_italic,
@@ -749,7 +760,7 @@ impl FontMetricsService {
         italic: bool,
         font_size: f32,
     ) -> [f32; 128] {
-        let key = MetricsCacheKey::new(family, weight, italic, font_size);
+        let key = self.metrics_key(family, weight, italic, font_size);
         if let Some(widths) = self.ascii_cache.get(&key) {
             return *widths;
         }
@@ -846,7 +857,7 @@ impl FontMetricsService {
         italic: bool,
         font_size: f32,
     ) -> FontMetrics {
-        let key = MetricsCacheKey::new(family, weight, italic, font_size);
+        let key = self.metrics_key(family, weight, italic, font_size);
         if let Some(m) = self.metrics_cache.get(&key) {
             return *m;
         }

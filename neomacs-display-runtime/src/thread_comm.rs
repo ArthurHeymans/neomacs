@@ -780,11 +780,9 @@ unsafe impl Sync for WakeupPipe {}
 // The render thread drains all queued frames and keeps only the latest
 // (see poll_frame()), so memory stays bounded in practice.
 //
-// GNU Emacs' `kbd_buffer` holds 4096 input events and `tty_read_avail_input`
-// stops reading terminal bytes when the buffer is under pressure rather than
-// silently dropping command input.  Keep Neomacs' render-to-evaluator input
-// queue at the same scale and use backpressure for durable user input below.
-const INPUT_CHANNEL_CAPACITY: usize = 4096;
+// Render-to-evaluator input must not block the render/winit callback.  Durable
+// events are sent on an unbounded queue and lossy motion/progress events still
+// use try_send so this code continues to work if the queue policy changes.
 const COMMAND_CHANNEL_CAPACITY: usize = 64;
 
 /// Communication channels between threads
@@ -810,7 +808,7 @@ impl ThreadComms {
     pub fn new() -> std::io::Result<Self> {
         let (frame_tx, frame_rx) = unbounded();
         let (cmd_tx, cmd_rx) = bounded(COMMAND_CHANNEL_CAPACITY);
-        let (input_tx, input_rx) = bounded(INPUT_CHANNEL_CAPACITY);
+        let (input_tx, input_rx) = unbounded();
         let wakeup = WakeupPipe::new()?;
 
         Ok(Self {
@@ -1043,17 +1041,23 @@ impl RenderComms {
             return;
         }
 
-        match self.input_tx.send(event) {
+        match self.input_tx.try_send(event) {
             Ok(()) => {
                 if log_delivery {
                     tracing::debug!("send_input: queued {}", event_name);
                 }
                 self.wakeup.wake();
             }
-            Err(err) => {
+            Err(TrySendError::Full(event)) => {
+                tracing::warn!(
+                    "send_input: dropped durable {} because the input queue is full",
+                    Self::event_name(&event)
+                );
+            }
+            Err(TrySendError::Disconnected(event)) => {
                 tracing::warn!(
                     "send_input: dropped {} because the input queue is disconnected",
-                    Self::event_name(&err.0)
+                    Self::event_name(&event)
                 );
             }
         }

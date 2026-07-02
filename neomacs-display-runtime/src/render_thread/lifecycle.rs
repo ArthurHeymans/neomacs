@@ -310,8 +310,12 @@ impl RenderApp {
                 .frame_windows
                 .any_top_level_renderer_effects_need_redraw()
             || self.frame_windows.any_top_level_transitions_active();
+        let presentation_interval = std::time::Duration::from_millis(16);
         let next_wake = if top_level_active || has_active_content {
-            now + std::time::Duration::from_millis(4)
+            self.last_present_time
+                .map(|last_present| last_present + presentation_interval)
+                .filter(|deadline| *deadline > now)
+                .unwrap_or(now + presentation_interval)
         } else if let Some(next_blink) = self.next_cursor_blink_deadline() {
             next_blink
         } else if self.lifecycle_flags.poll_when_idle {

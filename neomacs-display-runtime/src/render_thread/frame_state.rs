@@ -1,6 +1,8 @@
 use super::{FpsCounter, RenderApp};
+use crate::core::face::Face;
+use crate::core::frame_glyphs::FrameGlyphBuffer;
 use crate::core::frame_glyphs::{DisplaySlotId, FrameGlyph, WindowCursor};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 impl RenderApp {
     pub(super) fn prepare_frame_state_for_render(&mut self) {
@@ -30,34 +32,51 @@ impl RenderApp {
     }
 
     fn refresh_faces_from_frames(&mut self) {
-        let old_face_ids: std::collections::HashSet<u32> = self.faces.keys().copied().collect();
-
-        let mut faces = std::collections::HashMap::new();
-        self.frame_windows
-            .for_each_top_level_window(|window_state| {
-                if let Some(frame) = window_state.render.compositor.current_frame.as_ref() {
-                    for (face_id, face) in &frame.faces {
-                        faces.entry(*face_id).or_insert_with(|| face.clone());
+        fn merge_frame_faces(
+            frame: &FrameGlyphBuffer,
+            faces: &mut HashMap<u32, Face>,
+            observed_face_ids: &mut HashSet<u32>,
+        ) -> bool {
+            let mut changed = false;
+            for (face_id, face) in &frame.faces {
+                observed_face_ids.insert(*face_id);
+                match faces.get_mut(face_id) {
+                    Some(cached) if cached == face => {}
+                    Some(cached) => {
+                        *cached = face.clone();
+                        changed = true;
+                    }
+                    None => {
+                        faces.insert(*face_id, face.clone());
+                        changed = true;
                     }
                 }
-                for entry in window_state.render.compositor.child_frames.frames.values() {
-                    for (face_id, face) in &entry.frame.faces {
-                        faces.entry(*face_id).or_insert_with(|| face.clone());
-                    }
-                }
-            });
+            }
+            changed
+        }
 
-        if let Some(frame) = self
-            .frame_windows
+        let old_face_count = self.faces.len();
+        let frame_windows = &self.frame_windows;
+        let faces = &mut self.faces;
+        let mut observed_face_ids = HashSet::with_capacity(faces.len());
+        let mut faces_changed = false;
+
+        frame_windows.for_each_top_level_window(|window_state| {
+            if let Some(frame) = window_state.render.compositor.current_frame.as_ref() {
+                faces_changed |= merge_frame_faces(frame, faces, &mut observed_face_ids);
+            }
+            for entry in window_state.render.compositor.child_frames.frames.values() {
+                faces_changed |= merge_frame_faces(&entry.frame, faces, &mut observed_face_ids);
+            }
+        });
+
+        if let Some(frame) = frame_windows
             .primary_window()
             .and_then(|ws| ws.render.compositor.current_frame.as_ref())
         {
-            for (face_id, face) in &frame.faces {
-                faces.entry(*face_id).or_insert_with(|| face.clone());
-            }
+            faces_changed |= merge_frame_faces(frame, faces, &mut observed_face_ids);
         }
-        for entry in self
-            .frame_windows
+        for entry in frame_windows
             .primary_window()
             .expect("primary child frames")
             .render
@@ -66,23 +85,20 @@ impl RenderApp {
             .frames
             .values()
         {
-            for (face_id, face) in &entry.frame.faces {
-                faces.entry(*face_id).or_insert_with(|| face.clone());
-            }
+            faces_changed |= merge_frame_faces(&entry.frame, faces, &mut observed_face_ids);
         }
 
-        self.faces = faces;
-        let has_new_faces = self.faces.keys().any(|id| !old_face_ids.contains(id));
-        if has_new_faces {
-            let face_count = self.faces.len();
+        faces.retain(|face_id, _| observed_face_ids.contains(face_id));
+        if faces_changed {
+            let face_count = faces.len();
             if let Some(primary_frame) = self
                 .frame_windows
                 .primary_window_mut()
                 .map(|ws| &mut ws.render)
             {
                 tracing::info!(
-                    "New face_ids detected (old={}, new={}), clearing primary glyph cache",
-                    old_face_ids.len(),
+                    "Face cache changed (old={}, new={}), clearing primary glyph cache",
+                    old_face_count,
                     face_count
                 );
                 if let Some(atlas) = primary_frame.compositor.glyph_atlas.as_mut() {

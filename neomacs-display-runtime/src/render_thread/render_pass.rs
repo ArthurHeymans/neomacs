@@ -393,17 +393,8 @@ impl RenderApp {
             _ => return None,
         };
         Self::update_fps_counter(&mut render.overlays.fps);
-        let Some(frame_for_decision) = render.current_frame_clone() else {
+        if render.compositor.current_frame.is_none() {
             return None;
-        };
-        let mut frame = frame_for_decision.clone();
-        if extra_line_spacing != 0.0 || extra_letter_spacing != 0.0 {
-            Self::apply_extra_spacing(
-                &mut frame.glyphs,
-                &mut frame.window_cursors,
-                extra_line_spacing,
-                extra_letter_spacing,
-            );
         }
         let animated_cursor = render.cursor.animated_cursor();
         let root_animated_cursor = animated_cursor
@@ -414,12 +405,18 @@ impl RenderApp {
         // so the materialized frame stays a pure function of the layout snapshot.
 
         let need_offscreen = render.compositor.transitions.policy.needs_offscreen()
-            || frame_for_decision.effect_hints.iter().any(|hint| {
-                matches!(
-                    hint,
-                    crate::core::frame_glyphs::WindowEffectHint::ThemeTransition { .. }
-                )
-            });
+            || render
+                .compositor
+                .current_frame
+                .as_ref()
+                .is_some_and(|frame| {
+                    frame.effect_hints.iter().any(|hint| {
+                        matches!(
+                            hint,
+                            crate::core::frame_glyphs::WindowEffectHint::ThemeTransition { .. }
+                        )
+                    })
+                });
 
         let output = if let Some(output) = output {
             output
@@ -447,10 +444,9 @@ impl RenderApp {
             }
         };
 
-        let Some(drained_frame) = render.take_current_frame_for_render() else {
+        let Some(mut frame) = render.take_current_frame_for_render() else {
             return None;
         };
-        frame = drained_frame;
         if extra_line_spacing != 0.0 || extra_letter_spacing != 0.0 {
             Self::apply_extra_spacing(
                 &mut frame.glyphs,
@@ -998,7 +994,9 @@ impl RenderApp {
             output.present();
             frame.perf_trace.present_call_ns =
                 perf_trace::duration_ns(present_started_at.elapsed());
-            frame.perf_trace.presented_at = Some(std::time::Instant::now());
+            let presented_at = std::time::Instant::now();
+            frame.perf_trace.presented_at = Some(presented_at);
+            self.last_present_time = Some(presented_at);
             perf_trace::log_frame_summary(
                 frame.frame_id.get(),
                 frame.glyphs.len(),

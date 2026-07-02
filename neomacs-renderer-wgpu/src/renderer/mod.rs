@@ -1722,6 +1722,9 @@ impl WgpuRenderer {
         if width == 0 || height == 0 {
             return;
         }
+        if self.width == width && self.height == height {
+            return;
+        }
 
         self.width = width;
         self.height = height;
@@ -1739,9 +1742,22 @@ impl WgpuRenderer {
         self.stencil_texture = stencil_texture;
         self.stencil_view = stencil_view;
 
-        // Update uniform buffer with logical size so vertex positions from Emacs map correctly
-        let logical_w = width as f32 / self.scale_factor;
-        let logical_h = height as f32 / self.scale_factor;
+        self.write_size_uniforms();
+    }
+
+    /// Update the display scale factor (for multi-monitor DPI changes)
+    pub fn set_scale_factor(&mut self, scale_factor: f32) {
+        if (self.scale_factor - scale_factor).abs() <= f32::EPSILON {
+            return;
+        }
+        self.scale_factor = scale_factor;
+        self.write_size_uniforms();
+    }
+
+    fn write_size_uniforms(&self) {
+        // Update uniform buffer with logical size so vertex positions from Emacs map correctly.
+        let logical_w = self.width as f32 / self.scale_factor;
+        let logical_h = self.height as f32 / self.scale_factor;
         let uniforms = Uniforms {
             screen_size: [logical_w, logical_h],
             time: 0.0,
@@ -1749,11 +1765,6 @@ impl WgpuRenderer {
         };
         self.queue
             .write_buffer(&self.uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
-    }
-
-    /// Update the display scale factor (for multi-monitor DPI changes)
-    pub fn set_scale_factor(&mut self, scale_factor: f32) {
-        self.scale_factor = scale_factor;
     }
 
     /// Get the glyph bind group layout for creating glyph bind groups

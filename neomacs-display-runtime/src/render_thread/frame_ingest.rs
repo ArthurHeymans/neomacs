@@ -1,5 +1,7 @@
 //! Frame ingestion and cursor target extraction.
 
+use std::collections::HashSet;
+
 use super::RenderApp;
 use super::frame_windows::{GuiFrameRenderState, GuiFrameWindowState};
 use crate::core::types::DisplayFrameId;
@@ -260,7 +262,20 @@ impl RenderApp {
     /// Get latest frame from Emacs (non-blocking).
     pub(super) fn poll_frame(&mut self) {
         self.frame_windows.tick_top_level_child_frames();
+        let mut pending_states = Vec::new();
         while let Ok(display_state) = self.comms.frame_rx.try_recv() {
+            pending_states.push(display_state);
+        }
+        let mut seen_frame_ids = HashSet::with_capacity(pending_states.len());
+        let mut latest_states = Vec::with_capacity(pending_states.len());
+        for display_state in pending_states.into_iter().rev() {
+            if seen_frame_ids.insert(display_state.frame_id) {
+                latest_states.push(display_state);
+            }
+        }
+        latest_states.reverse();
+
+        for display_state in latest_states {
             let frame_id = display_state.frame_id;
             let parent_id = display_state.parent_id;
             let gui_menu_bar = display_state.gui_menu_bar.clone();

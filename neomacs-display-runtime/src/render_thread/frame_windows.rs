@@ -381,10 +381,6 @@ impl GuiFrameRenderState {
         }
     }
 
-    pub(super) fn current_frame_clone(&self) -> Option<FrameGlyphBuffer> {
-        self.compositor.current_frame.clone()
-    }
-
     pub(super) fn font_metrics(&self) -> (f32, f32, f32) {
         self.compositor
             .glyph_atlas
@@ -507,6 +503,7 @@ impl GuiFrameRenderState {
 
     pub(super) fn record_idle_activity(&mut self, now: Instant) {
         self.overlays.idle_dim.last_activity_time = now;
+        self.overlays.idle_dim.last_tick_time = now;
         self.compositor.dirty = true;
     }
 
@@ -701,7 +698,10 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn tick_idle_dim(&mut self, config: &IdleDimConfig) -> bool {
-        let idle_time = self.overlays.idle_dim.last_activity_time.elapsed();
+        let now = Instant::now();
+        let idle_time = now.duration_since(self.overlays.idle_dim.last_activity_time);
+        let tick_dt = now.duration_since(self.overlays.idle_dim.last_tick_time);
+        self.overlays.idle_dim.last_tick_time = now;
         let target_alpha = if idle_time >= config.delay {
             config.opacity
         } else {
@@ -710,7 +710,7 @@ impl GuiFrameRenderState {
         let diff = target_alpha - self.overlays.idle_dim.current_alpha;
         if diff.abs() > 0.001 {
             let fade_speed = if config.fade_duration.as_secs_f32() > 0.0 {
-                1.0 / config.fade_duration.as_secs_f32() * 0.016
+                tick_dt.as_secs_f32() / config.fade_duration.as_secs_f32()
             } else {
                 1.0
             };
@@ -735,6 +735,7 @@ impl GuiFrameRenderState {
     }
 
     pub(super) fn clear_idle_dim(&mut self) {
+        self.overlays.idle_dim.last_tick_time = Instant::now();
         self.overlays.idle_dim.active = false;
         self.overlays.idle_dim.current_alpha = 0.0;
     }
@@ -994,6 +995,9 @@ impl GuiFrameWindowState {
         }
         match &mut self.lifecycle {
             FrameLifecycle::Active { native, .. } => {
+                if native.width == width && native.height == height {
+                    return;
+                }
                 native.width = width;
                 native.height = height;
                 native.surface_config.width = width;
