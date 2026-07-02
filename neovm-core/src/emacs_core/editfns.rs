@@ -389,7 +389,16 @@ pub(crate) fn signal_before_text_change(
     ctx: &mut crate::emacs_core::eval::Context,
     change: TextChange,
 ) -> Result<(), Flow> {
-    signal_before_change(ctx, change.before_byte_range())
+    signal_before_change(ctx, change.before_byte_range())?;
+    // GNU `prepare_to_modify_buffer_1` (insdel.c) unconditionally runs
+    // `Fset (Qdeactivate_mark, Qt)` after signaling before-change. Because
+    // `deactivate-mark` is buffer-local-when-set, this creates a buffer-local
+    // binding on the modified buffer (so it appears in buffer-local-variables).
+    ctx.set_runtime_binding_by_id(
+        crate::emacs_core::intern::intern("deactivate-mark"),
+        Value::T,
+    );
+    Ok(())
 }
 
 /// GNU `signal_after_change(beg, end, old_len)` — run `after-change-functions`
