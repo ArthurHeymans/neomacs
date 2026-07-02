@@ -700,7 +700,7 @@ impl super::eval::Context {
         &mut self,
         request: &WaitRequest,
     ) -> Result<WaitServiceOutcome, Flow> {
-        self.service_wait_request_processes(request, WaitProcessService::Poll)
+        self.service_wait_request_processes(request, WaitProcessService::Poll, true)
     }
 
     fn service_wait_request_once_has_target_process_activity(
@@ -720,6 +720,7 @@ impl super::eval::Context {
         self.service_wait_request_block_activity(
             request,
             WaitBlockActivity::from_source_events(events),
+            true,
         )
     }
 
@@ -754,18 +755,20 @@ impl super::eval::Context {
         &mut self,
         request: &WaitRequest,
         activity: WaitBlockActivity,
+        run_timers: bool,
     ) -> Result<WaitServiceOutcome, Flow> {
         if activity.has_input_wakeup() {
             self.clear_input_wakeup_fd();
             let _ = self.stage_next_host_input_event_if_available()?;
         }
-        self.service_wait_request_processes(request, activity.into_process_service())
+        self.service_wait_request_processes(request, activity.into_process_service(), run_timers)
     }
 
     fn service_wait_request_processes(
         &mut self,
         request: &WaitRequest,
         process_service: WaitProcessService,
+        run_timers: bool,
     ) -> Result<WaitServiceOutcome, Flow> {
         let mut outcome = WaitServiceOutcome::default();
         let special_input = if request.services_special_input() {
@@ -779,8 +782,13 @@ impl super::eval::Context {
         // `wait_reading_process_output` (src/process.c): it runs `timer_check`
         // near the top of the loop (before `pselect`) and only reads readable
         // process fds afterwards, so timer callbacks fire before process
-        // filters in the same service pass.
-        if request.runs_timers() {
+        // filters in the same service pass. `run_timers` is false when the
+        // wait's deadline has already elapsed at wake time: GNU's loop-top
+        // deadline check (process.c:5469-5478) precedes `timer_check`, so a
+        // timer becoming ripe exactly at the deadline does not fire inside
+        // this wait — while ready process fds from the final pselect are
+        // still read.
+        if run_timers && request.runs_timers() {
             // A non-local `throw` from a timer callback propagates out of the
             // wait to the matching outer `catch` (GNU `timer-event-handler`
             // catches `error` signals only).  `?` returns the throw up through
@@ -861,7 +869,17 @@ impl super::eval::Context {
 
             let wait_time = self.next_wait_request_timeout(&request, now);
             let activity = self.block_for_wait_request(&request, wait_time)?;
-            outcome = self.service_wait_request_block_activity(&request, activity)?;
+            // GNU services a wake in [read fds] → [loop-top deadline check] →
+            // [timer_check] order, so when the deadline elapses during the
+            // block, ready process output is still drained but ripe timers are
+            // NOT run — the deadline break precedes the next `timer_check`
+            // (process.c:5469-5478). Without this, a repeating timer whose
+            // next fire lands exactly on the wait deadline fires once more
+            // than GNU (e.g. 21 vs 20 fires for a 1ms timer in `(sit-for
+            // 0.02)`).
+            let deadline_elapsed = request.deadline_elapsed(Instant::now());
+            outcome =
+                self.service_wait_request_block_activity(&request, activity, !deadline_elapsed)?;
 
             if let Some(completion) = request.completion_for(outcome) {
                 return Ok(completion);
