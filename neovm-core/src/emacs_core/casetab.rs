@@ -616,6 +616,49 @@ impl CaseTableOverride {
         self.custom
     }
 
+    /// Read-only counterpart of [`Self::for_current_buffer`]: resolve the
+    /// override straight from a buffer's installed case table (subsidiary tables
+    /// already exist once `set-case-table` ran). Used where only an immutable
+    /// buffer is in scope (replace-match case analysis).
+    pub(crate) fn for_buffer_readonly(buf: &crate::buffer::Buffer) -> Self {
+        use crate::buffer::buffer::BUFFER_SLOT_CASE_TABLE;
+        let table = buf.slots[BUFFER_SLOT_CASE_TABLE.index()];
+        if !is_case_table(&table) {
+            return Self::none();
+        }
+        let standard = STANDARD_CASE_TABLE_OBJECT.with(|slot| *slot.borrow());
+        if standard.is_some_and(|s| s.bits() == table.bits()) {
+            return Self::none();
+        }
+        Self {
+            down: table,
+            up: case_table_extra(table, 0),
+            canon: case_table_extra(table, 1),
+            custom: true,
+        }
+    }
+
+    /// GNU `UPPERCASEP(c)`: downcasing through the case table changes the char.
+    /// Falls back to Unicode when the table has no explicit entry.
+    pub(crate) fn is_upper(&self, ch: char) -> bool {
+        match self.map(CaseMap::Down, ch as i64) {
+            Some(down) => down != ch as i64,
+            None => ch.is_uppercase(),
+        }
+    }
+
+    /// GNU `LOWERCASEP(c)`: not uppercase, and upcasing through the case table
+    /// changes the char. Falls back to Unicode when the table has no entry.
+    pub(crate) fn is_lower(&self, ch: char) -> bool {
+        if self.is_upper(ch) {
+            return false;
+        }
+        match self.map(CaseMap::Up, ch as i64) {
+            Some(up) => up != ch as i64,
+            None => ch.is_lowercase(),
+        }
+    }
+
     /// Look up `code` in the requested subsidiary table. Returns `Some(mapped)`
     /// only when the table holds an explicit fixnat entry (GNU's `downcase`
     /// returns the entry if `FIXNATP`, else the char unchanged); otherwise

@@ -1021,6 +1021,35 @@ where
     }
 }
 
+/// Like [`apply_replace_match_case_lisp_with`] but with caller-supplied
+/// uppercase/lowercase predicates and case table, so a buffer's case table +
+/// syntax table drive GNU's `Freplace_match` decisions (`UPPERCASEP` /
+/// `LOWERCASEP` + `SYNTAX`). Used by the buffer replace-match path, which has
+/// both tables in scope.
+pub(crate) fn apply_replace_match_case_lisp_cased<W, U, L>(
+    replacement: &LispString,
+    matched: &LispString,
+    is_word_char: W,
+    is_upper: U,
+    is_lower: L,
+    casetab: &CaseTableOverride,
+) -> LispString
+where
+    W: FnMut(char) -> bool,
+    U: FnMut(char) -> bool,
+    L: FnMut(char) -> bool,
+{
+    match replace_match_case_action_lisp_cased(matched, is_word_char, is_upper, is_lower) {
+        ReplaceMatchCaseAction::NoChange => replacement.clone(),
+        ReplaceMatchCaseAction::AllCaps => upcase_lisp_string_emacs_compat(replacement, casetab),
+        ReplaceMatchCaseAction::CapInitial => upcase_initials_lisp_string(
+            replacement,
+            |code| char::from_u32(code).is_some_and(char::is_alphanumeric),
+            casetab,
+        ),
+    }
+}
+
 /// Emacs-byte-aware counterpart of [`replace_match_case_action_with`]. Mirrors
 /// the same GNU `src/search.c` decision logic, but iterates the matched text's
 /// Emacs char codes; codes outside the Unicode scalar range (eight-bit raw
@@ -1028,10 +1057,34 @@ where
 /// where raw bytes have no case and are not `Sword`.
 pub(crate) fn replace_match_case_action_lisp<F>(
     matched: &LispString,
-    mut is_word_char: F,
+    is_word_char: F,
 ) -> ReplaceMatchCaseAction
 where
     F: FnMut(char) -> bool,
+{
+    // Default (no buffer case table) path: use Unicode case, matching GNU's
+    // standard case table over the ASCII/Unicode range.
+    replace_match_case_action_lisp_cased(
+        matched,
+        is_word_char,
+        char::is_uppercase,
+        char::is_lowercase,
+    )
+}
+
+/// Like [`replace_match_case_action_lisp`] but with caller-supplied uppercase /
+/// lowercase predicates, so a buffer's case table drives GNU's `UPPERCASEP` /
+/// `LOWERCASEP` decisions (`src/search.c` `Freplace_match`).
+pub(crate) fn replace_match_case_action_lisp_cased<W, U, L>(
+    matched: &LispString,
+    mut is_word_char: W,
+    mut is_upper: U,
+    mut is_lower: L,
+) -> ReplaceMatchCaseAction
+where
+    W: FnMut(char) -> bool,
+    U: FnMut(char) -> bool,
+    L: FnMut(char) -> bool,
 {
     let mut some_multiletter_word = false;
     let mut some_lowercase = false;
@@ -1045,14 +1098,14 @@ where
         let (code, len) = crate::emacs_core::emacs_char::string_char(&bytes[pos..]);
         pos += len.max(1);
         let ch = char::from_u32(code);
-        if ch.is_some_and(char::is_lowercase) {
+        if ch.is_some_and(&mut is_lower) {
             some_lowercase = true;
             if prev_is_word {
                 some_multiletter_word = true;
             } else {
                 some_nonuppercase_initial = true;
             }
-        } else if ch.is_some_and(char::is_uppercase) {
+        } else if ch.is_some_and(&mut is_upper) {
             some_uppercase = true;
             if prev_is_word {
                 some_multiletter_word = true;

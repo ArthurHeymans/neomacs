@@ -560,7 +560,7 @@ pub(crate) fn replace_match_lisp_string_with_syntax(
 ) -> Result<crate::heap_types::LispString, String> {
     // Replacing into a STRING: `\?' is tolerated as a literal (search.c:2567).
     replace_match_lisp_string_with_syntax_and_properties(
-        source, newtext, fixedcase, literal, subexp, match_data, true, true,
+        source, newtext, fixedcase, literal, subexp, match_data, true, true, None,
     )
 }
 
@@ -574,6 +574,10 @@ fn replace_match_lisp_string_with_syntax_and_properties(
     match_data: &Option<super::regex::MatchData>,
     preserve_substitution_properties: bool,
     string_replacement: bool,
+    buffer_case_context: Option<(
+        &crate::emacs_core::syntax::SyntaxTable,
+        &crate::emacs_core::casetab::CaseTableOverride,
+    )>,
 ) -> Result<crate::heap_types::LispString, String> {
     let md = match match_data {
         Some(md) => md,
@@ -611,8 +615,21 @@ fn replace_match_lisp_string_with_syntax_and_properties(
         // matched/replacement LispStrings instead of round-tripping through the
         // PUA-sentinel storage form, so eight-bit bytes and PUA glyphs are not
         // confused.
-        let mut cased =
-            crate::emacs_core::casefiddle::apply_replace_match_case_lisp(&replacement, &matched);
+        let mut cased = if let Some((syntax_table, casetab)) = buffer_case_context {
+            // GNU `Freplace_match` case analysis uses the buffer's case table
+            // (UPPERCASEP/LOWERCASEP) and syntax table (word boundaries), so a
+            // custom case table (set-case-syntax-pair) capitalizes accordingly.
+            crate::emacs_core::casefiddle::apply_replace_match_case_lisp_cased(
+                &replacement,
+                &matched,
+                |ch| syntax_table.char_syntax(ch) == crate::emacs_core::syntax::SyntaxClass::Word,
+                |ch| casetab.is_upper(ch),
+                |ch| casetab.is_lower(ch),
+                casetab,
+            )
+        } else {
+            crate::emacs_core::casefiddle::apply_replace_match_case_lisp(&replacement, &matched)
+        };
         if cased.schars() == replacement.schars() {
             *cased.intervals_mut() = replacement.intervals().clone();
         }
@@ -722,6 +739,11 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
     };
 
     let replacement_match_option = Some(replacement_match_data.clone());
+    // The buffer's case + syntax tables drive GNU's case analysis, so pass them
+    // down (e.g. set-case-syntax-pair makes a char an uppercase word constituent).
+    let buffer_syntax_table = crate::emacs_core::syntax::SyntaxTable::for_buffer(buf);
+    let buffer_case_override =
+        crate::emacs_core::casetab::CaseTableOverride::for_buffer_readonly(buf);
     // Replacing into a BUFFER: `\?' is an invalid escape (search.c:2694).
     let replacement = replace_match_lisp_string_with_syntax_and_properties(
         &source,
@@ -732,6 +754,7 @@ pub(crate) fn compute_buffer_replacement_lisp_string(
         &replacement_match_option,
         false,
         false,
+        Some((&buffer_syntax_table, &buffer_case_override)),
     )?;
     let replace_start = if replacement_match_data.is_string_match() {
         super::regex::char_pos_to_byte_lisp_string(
