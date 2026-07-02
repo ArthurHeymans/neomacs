@@ -3498,14 +3498,32 @@ fn accept_process_output_propagates_throw_from_timer_callback_to_outer_catch() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
 
-    // A lambda that throws to 'neo-throw-tag with value 'thrown-from-timer.
-    let callback = ev
-        .eval_str("(lambda () (throw 'neo-throw-tag 'thrown-from-timer))")
-        .expect("build throwing timer callback");
-
-    // Schedule it as a due (zero-delay) Rust timer so it fires from the wait
-    // loop's `service_pending_timers_with_wait_policy` pass.
-    ev.timers.add_timer(0.0, 0.0, callback, Vec::new(), false);
+    // A due GNU timer whose callback throws to 'neo-throw-tag, plus the
+    // timer.el-shaped `timer-event-handler` stub (a bare Context has no
+    // timer.el): the wait loop reads `timer-list` and dispatches due timers to
+    // `timer-event-handler`, whose `condition-case … (error …)` catches error
+    // *signals* only — a `throw` sails through it.
+    ev.eval_str(
+        r#"(fset 'timer-event-handler
+                 (lambda (timer)
+                   (setq timer-list (delq timer timer-list))
+                   (condition-case nil
+                       (apply (aref timer 5) (aref timer 6))
+                     (error nil))))
+"#,
+    )
+    .expect("install timer-event-handler stub");
+    ev.eval_str(
+        "(fset 'apio-throwing-timer (lambda () (throw 'neo-throw-tag 'thrown-from-timer)))",
+    )
+    .expect("build throwing timer callback");
+    ev.set_variable(
+        "timer-list",
+        Value::list(vec![gnu_timer_before(
+            Duration::from_millis(1),
+            "apio-throwing-timer",
+        )]),
+    );
 
     // The catch surrounds the wait.  The timer fires inside the wait and throws;
     // the throw must reach this catch, yielding 'thrown-from-timer (NOT the
@@ -3532,10 +3550,27 @@ fn accept_process_output_still_catches_error_signal_from_timer_callback() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
 
-    let callback = ev
-        .eval_str(r#"(lambda () (error "boom from timer"))"#)
-        .expect("build erroring timer callback");
-    ev.timers.add_timer(0.0, 0.0, callback, Vec::new(), false);
+    // timer.el's `timer-event-handler` wraps the callback in
+    // `condition-case-unless-debug err … (error …)`; the stub mirrors that, so
+    // the error is swallowed inside the handler exactly as with real timer.el.
+    ev.eval_str(
+        r#"(progn
+             (fset 'timer-event-handler
+                   (lambda (timer)
+                     (setq timer-list (delq timer timer-list))
+                     (condition-case nil
+                         (apply (aref timer 5) (aref timer 6))
+                       (error nil))))
+             (fset 'apio-erroring-timer (lambda () (error "boom from timer"))))"#,
+    )
+    .expect("build erroring timer callback");
+    ev.set_variable(
+        "timer-list",
+        Value::list(vec![gnu_timer_before(
+            Duration::from_millis(1),
+            "apio-erroring-timer",
+        )]),
+    );
 
     // No surrounding catch/condition-case: if the wrapper wrongly propagated the
     // error, this `accept-process-output` would return Err.  GNU's
@@ -3856,6 +3891,10 @@ fn accept_process_output_integer_just_this_one_suppresses_timers() {
     let mut ev = Context::new();
     ev.eval_str(
         r#"(progn
+             (fset 'timer-event-handler
+                   (lambda (timer)
+                     (setq timer-list (delq timer timer-list))
+                     (apply (aref timer 5) (aref timer 6))))
              (fset 'apio-wait-timer-callback
                    (lambda () (setq apio-wait-timer-fired t)))
              (setq apio-wait-timer-fired nil))"#,
@@ -3868,12 +3907,12 @@ fn accept_process_output_integer_just_this_one_suppresses_timers() {
     ev.processes
         .spawn_child(pid, false)
         .expect("spawn target child");
-    ev.timers.add_timer(
-        0.0,
-        0.0,
-        Value::symbol("apio-wait-timer-callback"),
-        vec![],
-        false,
+    ev.set_variable(
+        "timer-list",
+        Value::list(vec![gnu_timer_before(
+            Duration::from_millis(1),
+            "apio-wait-timer-callback",
+        )]),
     );
 
     let first = builtin_accept_process_output(
@@ -3907,17 +3946,21 @@ fn accept_process_output_timer_preserves_deactivate_mark_like_gnu() {
     let mut ev = Context::new();
     ev.eval_str(
         r#"(progn
+             (fset 'timer-event-handler
+                   (lambda (timer)
+                     (setq timer-list (delq timer timer-list))
+                     (apply (aref timer 5) (aref timer 6))))
              (fset 'apio-timer-deactivate
                    (lambda () (setq deactivate-mark nil)))
              (setq deactivate-mark 'keep))"#,
     )
     .expect("install timer deactivate setup");
-    ev.timers.add_timer(
-        0.0,
-        0.0,
-        Value::symbol("apio-timer-deactivate"),
-        vec![],
-        false,
+    ev.set_variable(
+        "timer-list",
+        Value::list(vec![gnu_timer_before(
+            Duration::from_millis(1),
+            "apio-timer-deactivate",
+        )]),
     );
 
     builtin_accept_process_output(&mut ev, vec![Value::NIL, Value::make_float(0.05)])
@@ -3954,8 +3997,20 @@ fn accept_process_output_runs_timer_before_filter_and_sentinel_like_gnu() {
                                    (list (list 'sentinel msg)))))))"#,
     )
     .expect("install timer/filter/sentinel order setup");
-    ev.timers
-        .add_timer(0.0, 0.0, Value::symbol("apio-order-timer"), vec![], false);
+    ev.eval_str(
+        r#"(fset 'timer-event-handler
+                 (lambda (timer)
+                   (setq timer-list (delq timer timer-list))
+                   (apply (aref timer 5) (aref timer 6))))"#,
+    )
+    .expect("install timer-event-handler stub");
+    ev.set_variable(
+        "timer-list",
+        Value::list(vec![gnu_timer_before(
+            Duration::from_millis(1),
+            "apio-order-timer",
+        )]),
+    );
 
     let pid =
         ev.processes
@@ -4043,19 +4098,16 @@ fn accept_process_output_runs_gnu_timer_then_internal_timer_before_process_callb
     )
     .expect("install mixed timer ordering setup");
 
+    // Two due GNU timers in sorted order (timer.el's `timer--activate` keeps
+    // `timer-list` sorted by trigger time, so the list head is the soonest);
+    // due timers fire in list order, so the 2ms-overdue callback runs before
+    // the 1ms-overdue one.
     ev.set_variable(
         "timer-list",
-        Value::list(vec![gnu_timer_before(
-            Duration::from_millis(1),
-            "apio-gnu-order-callback",
-        )]),
-    );
-    ev.timers.add_timer(
-        0.0,
-        0.0,
-        Value::symbol("apio-rust-order-callback"),
-        vec![],
-        false,
+        Value::list(vec![
+            gnu_timer_before(Duration::from_millis(2), "apio-gnu-order-callback"),
+            gnu_timer_before(Duration::from_millis(1), "apio-rust-order-callback"),
+        ]),
     );
 
     let pid = ev.processes.create_process(
@@ -4628,6 +4680,10 @@ fn sleep_for_uses_shared_wait_request_for_process_output_and_timers() {
                    (lambda (_proc string) (setq sleep-shared-output string)))
              (fset 'sleep-shared-timer
                    (lambda () (setq sleep-shared-timer-fired 'done)))
+             (fset 'timer-event-handler
+                   (lambda (timer)
+                     (setq timer-list (delq timer timer-list))
+                     (apply (aref timer 5) (aref timer 6))))
              (setq sleep-shared-output nil
                    sleep-shared-timer-fired nil))"#,
     )
@@ -4647,8 +4703,13 @@ fn sleep_for_uses_shared_wait_request_for_process_output_and_timers() {
         ],
     )
     .expect("install sleep-for process filter");
-    ev.timers
-        .add_timer(0.0, 0.0, Value::symbol("sleep-shared-timer"), vec![], false);
+    ev.set_variable(
+        "timer-list",
+        Value::list(vec![gnu_timer_before(
+            Duration::from_millis(1),
+            "sleep-shared-timer",
+        )]),
+    );
 
     crate::emacs_core::timer::builtin_sleep_for(&mut ev, vec![Value::make_float(0.05)])
         .expect("sleep-for should use the shared wait request");

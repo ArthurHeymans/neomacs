@@ -42,7 +42,6 @@ use super::regex::MatchData;
 use super::register::RegisterManager;
 use super::symbol::Obarray;
 use super::threads::ThreadManager;
-use super::timer::TimerManager;
 use super::value::*;
 use crate::buffer::{
     BufferId, BufferManager, CharLen, CharPos0, EmacsByteLen, EmacsBytePos, LispCharPos1,
@@ -1738,8 +1737,6 @@ pub struct Context {
     /// Process manager — owns all tracked processes.
     pub(crate) processes: ProcessManager,
     /// Network manager — owns network connections, filters, and sentinels.
-    /// Timer manager — owns all timers.
-    pub(crate) timers: TimerManager,
     /// Variable watcher list — callbacks on variable changes.
     pub(crate) watchers: VariableWatcherList,
     /// Symbols whose variable watchers are currently running.
@@ -2583,7 +2580,6 @@ impl Context {
         ev.interval_insert_in_front_hooks = Value::NIL;
         ev.match_data = None;
         ev.processes = ProcessManager::new();
-        ev.timers = TimerManager::new();
         ev.watchers = VariableWatcherList::new();
         ev.current_local_map = Value::NIL;
         ev.registers = RegisterManager::new();
@@ -4876,7 +4872,6 @@ impl Context {
             combine_after_change_list: Vec::new(),
             combine_after_change_buffer: None,
             processes: ProcessManager::new(),
-            timers: TimerManager::new(),
             watchers: VariableWatcherList::new(),
             active_variable_watchers: HashSet::new(),
             standard_syntax_table,
@@ -5058,7 +5053,6 @@ impl Context {
             combine_after_change_list: Vec::new(),
             combine_after_change_buffer: None,
             processes: ProcessManager::new(),
-            timers: TimerManager::new(),
             watchers,
             active_variable_watchers: HashSet::new(),
             standard_syntax_table,
@@ -5312,7 +5306,6 @@ impl Context {
         }
         self.obarray.trace_roots_with(visit);
         self.processes.trace_roots_with(visit);
-        self.timers.trace_roots_with(visit);
         self.watchers.trace_roots_with(visit);
         self.registers.trace_roots_with(visit);
         self.custom.trace_roots_with(visit);

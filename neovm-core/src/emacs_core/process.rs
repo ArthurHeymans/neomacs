@@ -4886,14 +4886,6 @@ impl super::eval::Context {
             )?;
         }
 
-        let now = Instant::now();
-        let idle_dur = self.current_idle_duration();
-        let fired = self.timers.fire_pending_timers(now, idle_dur);
-        for (callback, args) in fired {
-            fired_any = true;
-            self.run_timer_callback_preserving_state(callback, args, "Rust timer")?;
-        }
-
         if fired_any && redisplay {
             self.redisplay();
         }

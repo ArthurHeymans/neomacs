@@ -1349,17 +1349,21 @@ fn read_char_prefers_ready_keypress_over_due_timer_callback() {
     .expect("parse timer priority setup");
     ev.eval_str(
         r#"(progn
+             (fset 'timer-event-handler
+                   (lambda (timer)
+                     (setq timer-list (delq timer timer-list))
+                     (apply (aref timer 5) (aref timer 6))))
              (fset 'read-char-priority-timer
                    (lambda () (setq read-char-priority-timer-fired t)))
              (setq read-char-priority-timer-fired nil))"#,
     )
     .expect("install timer priority setup");
-    ev.timers.add_timer(
-        0.0,
-        0.0,
-        Value::symbol("read-char-priority-timer"),
-        vec![],
-        false,
+    ev.set_variable(
+        "timer-list",
+        Value::list(vec![gnu_timer_before(
+            Duration::from_millis(1),
+            "read-char-priority-timer",
+        )]),
     );
 
     let (tx, rx) = crossbeam_channel::unbounded();
@@ -4467,10 +4471,11 @@ fn next_input_wait_timeout_chooses_earliest_timer_source() {
     let mut ev = Context::new();
     ev.set_variable(
         "timer-list",
-        Value::list(vec![gnu_timer_after(Duration::from_millis(250), "ignore")]),
+        Value::list(vec![
+            gnu_timer_after(Duration::from_millis(50), "ignore"),
+            gnu_timer_after(Duration::from_millis(250), "ignore"),
+        ]),
     );
-    ev.timers
-        .add_timer(0.05, 0.0, Value::symbol("ignore-rust"), vec![], false);
 
     let timeout = ev
         .next_input_wait_timeout()

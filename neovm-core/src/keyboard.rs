@@ -5263,8 +5263,7 @@ impl crate::emacs_core::eval::Context {
     }
 
     pub(crate) fn next_input_wait_timeout(&self) -> Option<std::time::Duration> {
-        let idle_dur = self.current_idle_duration();
-        let mut timeout = self.timers.next_fire_time(idle_dur);
+        let mut timeout: Option<std::time::Duration> = None;
 
         if let Some(gnu_timeout) = self.next_ordinary_gnu_timer_timeout() {
             timeout = Some(timeout.map_or(gnu_timeout, |current| current.min(gnu_timeout)));

@@ -2364,16 +2364,30 @@ fn input_pending_p_check_timers_does_not_run_timer_when_input_is_already_pending
     ev.eval_str(
         r#"(progn
              (setq input-pending-timer-fired nil)
+             (fset 'timer-event-handler
+                   (lambda (timer)
+                     (setq timer-list (delq timer timer-list))
+                     (apply (aref timer 5) (aref timer 6))))
              (fset 'input-pending-timer-callback
                    (lambda () (setq input-pending-timer-fired 'done))))"#,
     )
     .expect("install input-pending-p timer setup");
-    ev.timers.add_timer(
-        0.0,
-        0.0,
-        Value::symbol("input-pending-timer-callback"),
-        vec![],
-        false,
+    // A due GNU timer vector on `timer-list` ([TRIGGERED HIGH LOW USECS
+    // REPEAT FN ARGS IDLE PSECS integral]) — time 0 = due since the epoch.
+    ev.set_variable(
+        "timer-list",
+        Value::list(vec![Value::vector(vec![
+            Value::NIL,
+            Value::fixnum(0),
+            Value::fixnum(0),
+            Value::fixnum(0),
+            Value::NIL,
+            Value::symbol("input-pending-timer-callback"),
+            Value::NIL,
+            Value::NIL,
+            Value::fixnum(0),
+            Value::NIL,
+        ])]),
     );
 
     let (tx, rx) = crossbeam_channel::unbounded();
