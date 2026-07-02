@@ -4,6 +4,18 @@
 
 This directory now has one audit file per major compatibility module.
 
+## Display Stack Performance & Architecture Audit (2026-07-02)
+
+A six-part audit of the Rust frontend (architecture, GPU pipeline, performance),
+with ranked findings and a modernization roadmap:
+
+- [00 — Overview, verdict, ranked findings](2026-07-02-display-audit-00-overview.md)
+- [01 — Runtime & Threading (neomacs-display-runtime)](2026-07-02-display-audit-01-runtime-threading.md)
+- [02 — GPU Renderer (neomacs-renderer-wgpu)](2026-07-02-display-audit-02-gpu-renderer.md)
+- [03 — Layout Engine (neomacs-layout-engine)](2026-07-02-display-audit-03-layout-engine.md)
+- [04 — Protocol & Integration (neomacs-display-protocol, neomacs-bin, neovm-core)](2026-07-02-display-audit-04-protocol-integration.md)
+- [05 — Modernization Roadmap (Phases 0–4)](2026-07-02-display-audit-05-modernization-roadmap.md)
+
 - [Phase 1: Lisp VM Core](phase-01-lisp-vm-core.md)
 - [Phase 2: Buffer & Text](phase-02-buffer-and-text.md)
 - [Phase 3: I18n / Character / Coding](phase-03-i18n-character-coding.md)
