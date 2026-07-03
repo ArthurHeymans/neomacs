@@ -8,20 +8,23 @@
 //!   derive a cons's owning block/index directly from the pointer, matching the
 //!   structure GNU Emacs uses in `alloc.c`.
 //!
-//! - **Floats**: FLOAT ARENA PAGES (the non-cons allocator modernization's
-//!   v1 increment) — 64KB-aligned pages of 32-byte slots with a per-page
-//!   allocation bitmap and free list. Page floats keep their `GcHeader` and
-//!   stay in the `non_cons_object_addrs` ownership index, but never join the
-//!   intrusive lists; a dedicated page sweep reclaims them.
+//! - **Floats, strings, vectors**: SIZE-CLASS OBJECT ARENA PAGES (the
+//!   non-cons allocator modernization, stage 3) — 64KB-aligned pages of
+//!   fixed-stride slots (Float 32B, String 64B, Vector 64B) with a per-page
+//!   allocation bitmap and free list. Page objects keep their `GcHeader`;
+//!   ownership is the PAGE-SPAN ORACLE (per-class page-base registry +
+//!   stride + alloc bit), NOT the addr-set, and they never join the
+//!   intrusive lists; dedicated page sweeps reclaim them.
 //!
-//! - **All other heap objects** (string, vectorlike): allocated
+//! - **All other heap objects** (non-Vector vectorlikes): allocated
 //!   via the system allocator, linked via intrusive `GcHeader.next` list
 //!   for sweeping, with an address index for O(1) ownership checks during
 //!   marking.
 //!
 //! - **Mark phase**: walk from roots, decode tags, follow heap pointers.
-//! - **Sweep phase**: walk cons blocks (bitmap), float pages (bitmap), and
-//!   the intrusive list (GcHeader chain), freeing unmarked objects.
+//! - **Sweep phase**: walk cons blocks (bitmap), object arena pages
+//!   (bitmap), and the intrusive list (GcHeader chain), freeing unmarked
+//!   objects.
 //!
 //! No ObjId. No generations. No stale references.
 
@@ -944,112 +947,221 @@ impl Drop for ConsBlock {
 }
 
 // ---------------------------------------------------------------------------
-// Float arena pages (non-cons allocator modernization, v1 increment)
+// Size-class object arena pages (non-cons allocator modernization, stage 3)
 // ---------------------------------------------------------------------------
 //
-// Floats are the proving ground for size-class arena PAGES: fixed 64KB-aligned
-// pages of 32-byte slots replace the per-object `Box` + intrusive-list storage.
-// Page floats keep their `GcHeader` (parity/tenured semantics untouched) and
-// STAY IN `non_cons_object_addrs` — the mark-time owned-vs-mapped oracle
-// (`mark_value`'s float arm, `is_value_marked`, `is_heap_young`) — but they are
-// NEVER linked onto `all_objects`/`tenured_objects`: those lists sweep with
-// `free_gc_object`, whose `Box::from_raw` would corrupt the heap on a page
-// pointer. The page sweep (`sweep_float_pages_range`) is their only reclaimer,
-// wired into both sweep entry points (eager `finalize_collection` and the
-// cooperative `incremental_sweep_slice`).
+// Floats (v1), strings and vectors (stage 3) live in size-class arena PAGES:
+// fixed 64KB-aligned pages of per-class fixed-stride slots replace the
+// per-object `Box` + intrusive-list storage. Page objects keep their
+// `GcHeader` (parity/tenured semantics untouched) but are NEVER in
+// `non_cons_object_addrs` and NEVER linked onto `all_objects`/
+// `tenured_objects`: the intrusive lists sweep with `free_gc_object`, whose
+// `Box::from_raw` would corrupt the heap on a page pointer. The OWNERSHIP
+// ORACLE for a page object is the page-span test (`ObjectArena::owns`):
+// page-base registry hit + stride alignment + ALLOC-BIT-SET. The page sweep
+// (`ObjectArena::sweep_range`) is their only reclaimer, wired into both sweep
+// entry points (eager `finalize_collection` and the cooperative
+// `incremental_sweep_slice`).
 //
-// GENERATIONAL NOTE — page floats are ALL-YOUNG, permanently. The only tenure
-// site (`promote_and_blacken`, one-time at the first partition cycle) walks
-// `all_objects`, which page floats never join, so no page float is ever
-// tenured; no page-level young/tenured flag exists, the per-object
-// `header.tenured` (always false here) stays the sole authority for the mark
-// paths. Correctness does not depend on promotion: a float alive at the first
-// partition cycle simply stays young, and any permanent (tenured/mapped) owner
-// pointing at it lands in the remembered set via
-// `scan_permanents_for_young_children` / the write barrier (`is_heap_young`
-// answers through `non_cons_object_addrs` + `tenured == false`), so the float
-// is re-seeded and re-marked every cycle like any young object. The page sweep
-// debug-asserts the all-young property on every visited slot.
+// GENERATIONAL NOTE — page objects tenure via the promotion PAGE WALK
+// (`promote_and_blacken` flips `header.tenured` on every allocated slot at
+// the one-time first partition cycle; the intrusive-list splice never sees
+// them). The per-object `header.tenured` remains the SOLE mark-path
+// authority; no page-level flag is consulted by any mark path. Pages that
+// are FULL of tenured slots at promotion are RETIRED: never swept, never
+// allocated into, freed only at heap teardown — but they STAY in the
+// ownership oracle, because `value_is_tenured` (and through it the
+// remembered-set write barrier) gates on ownership: a retired-page tenured
+// object that answered "not owned" would miss its first post-retirement
+// tenured→young edge and its child would be swept while live (UAF). Pages
+// left with a mix of tenured + free/young slots stay in rotation as MIXED
+// pages: every later sweep re-skips their tenured slots (a bounded cost —
+// the one-time loadup survivor set is the only tenured population).
 
-const FLOAT_PAGE_BYTES: usize = 64 * 1024;
+const OBJECT_PAGE_BYTES: usize = 64 * 1024;
 /// Pages are ALIGNED to their size so any slot pointer derives its page base
-/// with `addr & !(FLOAT_PAGE_BYTES - 1)` (the cons-block trick). The explicit
-/// `Layout` alignment in `FloatPage::layout` is what makes that mask valid.
-const FLOAT_PAGE_ALIGN: usize = FLOAT_PAGE_BYTES;
-/// Slot stride. `FloatObj` is exactly 24 bytes (GcHeader 16 + f64 8, proven
-/// below); the trailing 8 bytes of a slot hold the page-local free-list link
-/// while the slot is FREE, so the link never aliases header or value bytes —
-/// an adversarially scribbled dead header cannot corrupt the free list, and
-/// pushing a slot to the free list does not touch its (stale) header.
-const FLOAT_SLOT_BYTES: usize = 32;
-const FLOAT_PAGE_SLOTS: usize = FLOAT_PAGE_BYTES / FLOAT_SLOT_BYTES;
-const FLOAT_ALLOC_WORDS: usize = FLOAT_PAGE_SLOTS.div_ceil(usize::BITS as usize);
-/// Offset of the free-list link word inside a free slot (past the FloatObj).
-const FLOAT_FREE_LINK_OFFSET: usize = 24;
+/// with `addr & !(OBJECT_PAGE_BYTES - 1)` (the cons-block trick). The explicit
+/// `Layout` alignment in `ObjectPage::layout` is what makes that mask valid.
+const OBJECT_PAGE_ALIGN: usize = OBJECT_PAGE_BYTES;
+/// Bitmap capacity for the smallest stride (32B floats → 2048 slots → 32
+/// words). Classes with larger strides use a prefix of the array; the unused
+/// tail words stay zero forever.
+const OBJECT_PAGE_MAX_ALLOC_WORDS: usize =
+    (OBJECT_PAGE_BYTES / 32).div_ceil(usize::BITS as usize);
 /// Sentinel: "no slot" (free-list terminator) / "no page" (partial-chain
 /// terminator and empty-chain head).
-const FLOAT_NONE: usize = usize::MAX;
+const PAGE_NONE: usize = usize::MAX;
 
-// Layout proofs the slot scheme rests on.
+/// Per-class parameters for the size-class arena pages. Implemented by the
+/// paged object types (`FloatObj`, `StringObj`, `VectorObj`).
+///
+/// CONTRACT for implementors: `Self` is `#[repr(C)]` with a `GcHeader` at
+/// offset 0, and fits its slot with room for the trailing free-list link
+/// word (`size_of::<Self>() + 8 <= SLOT_BYTES`) — const-checked in
+/// `ObjectPage::<Self>::LAYOUT_OK`, evaluated at every page creation.
+trait PagedObject: Sized {
+    /// Slot stride in bytes; a page holds `OBJECT_PAGE_BYTES / SLOT_BYTES`
+    /// slots. The trailing 8 bytes of a slot hold the page-local free-list
+    /// link while the slot is FREE, so the link never aliases object bytes —
+    /// an adversarially scribbled dead header cannot corrupt the free list,
+    /// and pushing a slot to the free list does not touch its (stale) header.
+    const SLOT_BYTES: usize;
+    /// The `GcHeader.kind` every allocated slot of this class must carry
+    /// (debug-asserted by the sweep and verifiers).
+    const KIND: HeapObjectKind;
+    /// Class name for diagnostics.
+    const CLASS: &'static str;
+    /// TEST-ONLY live page counter (teardown-leak / double-free probe for the
+    /// Drop tests): `ObjectPage::new` increments, `ObjectPage::drop` decrements.
+    #[cfg(test)]
+    fn live_page_counter() -> &'static AtomicUsize;
+}
+
+// Slot strides. Float: `FloatObj` is exactly 24 bytes (GcHeader 16 + f64 8) →
+// 32B slots (24..32 = free link). String: `StringObj` is 56 bytes (GcHeader
+// 16 + LispString 40) → 64B slots with the link in bytes 56..64 — ZERO slack,
+// const-proven below. Vector: `VectorObj` is 48 bytes (VecLikeHeader 24 +
+// LispValueVec 24 — the 24 relies on the Owned(Vec)/Mapped niche packing; the
+// const assert below is the compile-time proof) → shares the 64B class, link
+// in bytes 56..64.
 const _: () = assert!(size_of::<FloatObj>() == 24, "FloatObj must stay 24 bytes");
-const _: () = assert!(FLOAT_FREE_LINK_OFFSET >= size_of::<FloatObj>());
-const _: () = assert!(FLOAT_FREE_LINK_OFFSET + size_of::<usize>() <= FLOAT_SLOT_BYTES);
-const _: () = assert!(FLOAT_SLOT_BYTES.is_multiple_of(std::mem::align_of::<FloatObj>()));
-const _: () = assert!(FLOAT_FREE_LINK_OFFSET.is_multiple_of(std::mem::align_of::<usize>()));
+const _: () = assert!(
+    size_of::<StringObj>() <= 56,
+    "StringObj must fit a 64-byte slot with its trailing free-list link \
+     (bytes 56..64 — zero slack)",
+);
+const _: () = assert!(
+    size_of::<VectorObj>() <= 48,
+    "VectorObj must stay <= 48 bytes (VecLikeHeader 24 + niche-packed \
+     LispValueVec 24); if this fails the niche packing broke — give Vector \
+     its own larger stride instead of silently overlapping the link word",
+);
 
-/// TEST-ONLY live float-page counter (teardown-leak / double-free probe for
-/// the Drop tests): `FloatPage::new` increments, `FloatPage::drop` decrements.
 #[cfg(test)]
 pub(crate) static LIVE_FLOAT_PAGES: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+pub(crate) static LIVE_STRING_PAGES: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+pub(crate) static LIVE_VECTOR_PAGES: AtomicUsize = AtomicUsize::new(0);
 
-/// One 64KB-aligned arena page of 32-byte float slots.
+impl PagedObject for FloatObj {
+    const SLOT_BYTES: usize = 32;
+    const KIND: HeapObjectKind = HeapObjectKind::Float;
+    const CLASS: &'static str = "float";
+    #[cfg(test)]
+    fn live_page_counter() -> &'static AtomicUsize {
+        &LIVE_FLOAT_PAGES
+    }
+}
+
+impl PagedObject for StringObj {
+    const SLOT_BYTES: usize = 64;
+    const KIND: HeapObjectKind = HeapObjectKind::String;
+    const CLASS: &'static str = "string";
+    #[cfg(test)]
+    fn live_page_counter() -> &'static AtomicUsize {
+        &LIVE_STRING_PAGES
+    }
+}
+
+impl PagedObject for VectorObj {
+    const SLOT_BYTES: usize = 64;
+    const KIND: HeapObjectKind = HeapObjectKind::VecLike;
+    const CLASS: &'static str = "vector";
+    #[cfg(test)]
+    fn live_page_counter() -> &'static AtomicUsize {
+        &LIVE_VECTOR_PAGES
+    }
+}
+
+/// Slot count of a float page (test scenarios size their populations off it).
+#[cfg(test)]
+const FLOAT_PAGE_SLOTS: usize = OBJECT_PAGE_BYTES / <FloatObj as PagedObject>::SLOT_BYTES;
+
+/// One 64KB-aligned arena page of fixed-stride `T` slots.
 ///
 /// The ALLOCATION BITMAP (`alloc_bits`) is the sole authority on which slots
-/// hold live `FloatObj`s: a clear bit means the slot bytes are GARBAGE (a
+/// hold live objects: a clear bit means the slot bytes are GARBAGE (a
 /// never-bumped slot is uninitialized; a freed slot's header is stale and may
 /// have been scribbled by reuse machinery), so every reader — sweep, verifier,
-/// teardown — must test the bit BEFORE any header access
-/// (ALLOCATED-BIT-FIRST; the INVERSE of the intrusive-list sweep, whose list
-/// membership itself implies a valid header).
-struct FloatPage {
-    /// 64KB of raw slot storage, aligned to 64KB (`FLOAT_PAGE_ALIGN`).
+/// teardown, and the page-span ownership oracle — must test the bit BEFORE
+/// any header access (ALLOCATED-BIT-FIRST; the INVERSE of the intrusive-list
+/// sweep, whose list membership itself implies a valid header). The alloc-bit
+/// test in `ObjectArena::owns` is also what makes the page-span oracle exact:
+/// a freed-but-unswept... rather, a freed slot answers NOT-owned the instant
+/// its bit clears, replacing float-v1's explicit addr-set evict-before-free.
+struct ObjectPage<T: PagedObject> {
+    /// 64KB of raw slot storage, aligned to 64KB (`OBJECT_PAGE_ALIGN`).
     storage: *mut u8,
     /// Bump cursor: index of the first never-allocated slot.
     next_index: usize,
-    /// Per-slot allocation bitmap (bit set ⇔ slot holds a live FloatObj).
-    alloc_bits: [usize; FLOAT_ALLOC_WORDS],
+    /// Per-slot allocation bitmap (bit set ⇔ slot holds a live `T`). Sized
+    /// for the smallest stride; this class uses the first `ALLOC_WORDS`.
+    alloc_bits: [usize; OBJECT_PAGE_MAX_ALLOC_WORDS],
     /// Occupancy: number of set bits in `alloc_bits`.
     allocated: usize,
     /// Page-local free list: head slot index, linked through each free slot's
-    /// trailing link word (`FLOAT_FREE_LINK_OFFSET`). `FLOAT_NONE` = empty.
+    /// trailing link word (`FREE_LINK_OFFSET`). `PAGE_NONE` = empty.
     free_head: usize,
     /// Class free list ("pages with free slots") chain: index of the next
-    /// such page in the arena, `FLOAT_NONE` at the tail.
+    /// such page in the arena, `PAGE_NONE` at the tail.
     next_partial: usize,
     /// Whether this page is currently linked on the arena's partial chain.
     on_partial: bool,
+    /// RETIRED (promotion, stage-3 commit 4): the page was full of tenured
+    /// slots at the one-time promotion. Never swept, never allocated into
+    /// (it has no free slots and never gains any), freed at heap teardown —
+    /// but it STAYS in the page-base registry so the ownership oracle keeps
+    /// answering "owned" for its slots (see the C1 note in the module doc).
+    retired: bool,
+    _class: std::marker::PhantomData<*mut T>,
 }
 
-impl FloatPage {
+impl<T: PagedObject> ObjectPage<T> {
+    /// Slots per page for this class.
+    const SLOTS: usize = OBJECT_PAGE_BYTES / T::SLOT_BYTES;
+    /// Bitmap words this class actually uses (prefix of `alloc_bits`).
+    const ALLOC_WORDS: usize = Self::SLOTS.div_ceil(usize::BITS as usize);
+    /// Offset of the free-list link word inside a FREE slot (past the object).
+    const FREE_LINK_OFFSET: usize = T::SLOT_BYTES - size_of::<usize>();
+    /// Layout proofs the slot scheme rests on, per class. Referenced in
+    /// `new()` so the asserts are evaluated at compile time for every
+    /// instantiated class.
+    const LAYOUT_OK: () = {
+        assert!(T::SLOT_BYTES.is_power_of_two());
+        assert!(OBJECT_PAGE_BYTES.is_multiple_of(T::SLOT_BYTES));
+        assert!(Self::ALLOC_WORDS <= OBJECT_PAGE_MAX_ALLOC_WORDS);
+        // The trailing link word never aliases object bytes.
+        assert!(Self::FREE_LINK_OFFSET >= size_of::<T>());
+        assert!(Self::FREE_LINK_OFFSET + size_of::<usize>() <= T::SLOT_BYTES);
+        assert!(T::SLOT_BYTES.is_multiple_of(std::mem::align_of::<T>()));
+        assert!(Self::FREE_LINK_OFFSET.is_multiple_of(std::mem::align_of::<usize>()));
+    };
+
     fn layout() -> Layout {
-        Layout::from_size_align(FLOAT_PAGE_BYTES, FLOAT_PAGE_ALIGN).expect("float page layout")
+        Layout::from_size_align(OBJECT_PAGE_BYTES, OBJECT_PAGE_ALIGN).expect("object page layout")
     }
 
     fn new() -> Self {
+        // Force the per-class layout proofs (compile-time).
+        #[allow(clippy::let_unit_value)]
+        let () = Self::LAYOUT_OK;
         let storage = unsafe { alloc::alloc(Self::layout()) };
         if storage.is_null() {
             alloc::handle_alloc_error(Self::layout());
         }
         #[cfg(test)]
-        LIVE_FLOAT_PAGES.fetch_add(1, Ordering::Relaxed);
+        T::live_page_counter().fetch_add(1, Ordering::Relaxed);
         Self {
             storage,
             next_index: 0,
-            alloc_bits: [0; FLOAT_ALLOC_WORDS],
+            alloc_bits: [0; OBJECT_PAGE_MAX_ALLOC_WORDS],
             allocated: 0,
-            free_head: FLOAT_NONE,
-            next_partial: FLOAT_NONE,
+            free_head: PAGE_NONE,
+            next_partial: PAGE_NONE,
             on_partial: false,
+            retired: false,
+            _class: std::marker::PhantomData,
         }
     }
 
@@ -1059,16 +1171,16 @@ impl FloatPage {
     }
 
     #[inline]
-    fn slot_ptr(&self, index: usize) -> *mut FloatObj {
-        debug_assert!(index < FLOAT_PAGE_SLOTS);
-        unsafe { self.storage.add(index * FLOAT_SLOT_BYTES).cast() }
+    fn slot_ptr(&self, index: usize) -> *mut T {
+        debug_assert!(index < Self::SLOTS);
+        unsafe { self.storage.add(index * T::SLOT_BYTES).cast() }
     }
 
     /// Page base for any pointer into a page — valid ONLY because pages are
-    /// size-aligned (see `FLOAT_PAGE_ALIGN`).
+    /// size-aligned (see `OBJECT_PAGE_ALIGN`).
     #[inline]
-    fn page_base_for_ptr(ptr: *const FloatObj) -> usize {
-        (ptr as usize) & !(FLOAT_PAGE_ALIGN - 1)
+    fn page_base_for_ptr(ptr: *const T) -> usize {
+        (ptr as usize) & !(OBJECT_PAGE_ALIGN - 1)
     }
 
     #[inline]
@@ -1081,7 +1193,7 @@ impl FloatPage {
     /// Set slot `index`'s alloc bit (it must be clear) and bump occupancy.
     #[inline]
     fn set_allocated(&mut self, index: usize) {
-        debug_assert!(!self.is_allocated(index), "float slot double-allocated");
+        debug_assert!(!self.is_allocated(index), "arena slot double-allocated");
         self.alloc_bits[index / usize::BITS as usize] |=
             1usize << (index % usize::BITS as usize);
         self.allocated += 1;
@@ -1090,10 +1202,10 @@ impl FloatPage {
     /// The free-list link word of slot `index` (meaningful only while free).
     #[inline]
     fn free_link_ptr(&self, index: usize) -> *mut usize {
-        debug_assert!(index < FLOAT_PAGE_SLOTS);
+        debug_assert!(index < Self::SLOTS);
         unsafe {
             self.storage
-                .add(index * FLOAT_SLOT_BYTES + FLOAT_FREE_LINK_OFFSET)
+                .add(index * T::SLOT_BYTES + Self::FREE_LINK_OFFSET)
                 .cast()
         }
     }
@@ -1102,25 +1214,30 @@ impl FloatPage {
     /// alloc bit and FULL-HEADER-WRITE the slot before publishing it.
     #[inline]
     fn pop_free(&mut self) -> Option<usize> {
-        if self.free_head == FLOAT_NONE {
+        if self.free_head == PAGE_NONE {
             return None;
         }
         let index = self.free_head;
         debug_assert!(
             !self.is_allocated(index),
-            "free-listed float slot has its alloc bit set",
+            "free-listed arena slot has its alloc bit set",
         );
         self.free_head = unsafe { self.free_link_ptr(index).read() };
         Some(index)
     }
 
     /// FREE one slot: clear its alloc bit and thread it onto the page-local
-    /// free list as ONE step (drop-and-clear; floats are POD, nothing to
-    /// drop). Only the trailing link word is written — the stale header bytes
-    /// are left in place and must never be read again (allocated-bit-first).
+    /// free list. For payload-bearing classes (strings own byte storage +
+    /// interval tables; vectors own their element `Vec`) the caller MUST
+    /// `drop_in_place` the slot BEFORE calling this — a bit-clear-only free
+    /// leaks every payload, and once the bit is clear the slot bytes are
+    /// garbage that no reader (this fn included) may interpret. Only the
+    /// trailing link word is written here — the stale object bytes are left
+    /// in place and must never be read again (allocated-bit-first).
     #[inline]
     fn free_slot(&mut self, index: usize) {
-        debug_assert!(self.is_allocated(index), "float slot double-freed");
+        debug_assert!(self.is_allocated(index), "arena slot double-freed");
+        debug_assert!(!self.retired, "freed a slot in a retired page");
         self.alloc_bits[index / usize::BITS as usize] &=
             !(1usize << (index % usize::BITS as usize));
         self.allocated -= 1;
@@ -1132,7 +1249,7 @@ impl FloatPage {
     /// set the alloc bit and FULL-HEADER-WRITE the slot.
     #[inline]
     fn bump(&mut self) -> Option<usize> {
-        if self.next_index >= FLOAT_PAGE_SLOTS {
+        if self.next_index >= Self::SLOTS {
             return None;
         }
         let index = self.next_index;
@@ -1141,17 +1258,256 @@ impl FloatPage {
     }
 }
 
-impl Drop for FloatPage {
+impl<T: PagedObject> Drop for ObjectPage<T> {
     fn drop(&mut self) {
-        // Slots hold POD floats — no per-object Drop is owed; freeing the raw
-        // page storage is the whole teardown. Reached only when the owning
-        // `TaggedHeap` drops (its `Drop` joins any in-flight concurrent mark
-        // BEFORE fields — this page vector included — are dropped), so the GC
-        // thread can no longer be reading these slots. NO page recycling to
-        // any shared pool in v1: this is the only place a page is freed.
+        // TEARDOWN OWNS THE PAYLOADS: walk the allocated slots (bit-first —
+        // clear-bit slot bytes are garbage) and `drop_in_place` each live
+        // object, so strings free their byte storage + interval tables and
+        // vectors free their element `Vec`. Float-v1's dealloc-only Drop does
+        // NOT generalize; `needs_drop` keeps the float walk compiled out.
+        // Reached only when the owning `TaggedHeap` drops (its `Drop` joins
+        // any in-flight concurrent mark BEFORE fields — the arena vectors
+        // included — are dropped), so the GC thread can no longer be reading
+        // these slots. NO page recycling to any shared pool: this is the only
+        // place a page is freed (retired pages included).
+        if std::mem::needs_drop::<T>() {
+            for word_index in 0..Self::ALLOC_WORDS {
+                let mut bits = self.alloc_bits[word_index];
+                while bits != 0 {
+                    let bit = bits.trailing_zeros() as usize;
+                    bits &= bits - 1;
+                    let index = word_index * usize::BITS as usize + bit;
+                    unsafe { std::ptr::drop_in_place(self.slot_ptr(index)) };
+                }
+            }
+        }
         #[cfg(test)]
-        LIVE_FLOAT_PAGES.fetch_sub(1, Ordering::Relaxed);
+        T::live_page_counter().fetch_sub(1, Ordering::Relaxed);
         unsafe { alloc::dealloc(self.storage, Self::layout()) };
+    }
+}
+
+/// One size class of the object arena: its pages, the page-base registry
+/// (page base → `pages` index; mirrors `cons_block_index_by_base` but is a
+/// DISTINCT per-class registry — the mark paths dispatch tag-first to the
+/// class registry, and the collision analysis for `owns` depends on each
+/// registry holding only its own class's pages — never merge them, with each
+/// other or with the cons registry), and the class free list.
+struct ObjectArena<T: PagedObject> {
+    /// Every page of this class, retired pages included. Freed only by this
+    /// vector's drop at heap teardown (`ObjectPage: Drop`).
+    pages: Vec<ObjectPage<T>>,
+    /// Page-base → `pages` index: O(1) page lookup from any slot pointer
+    /// (pages are size-aligned, so `ObjectPage::page_base_for_ptr` masks the
+    /// base out of the pointer). Retired pages STAY registered (C1).
+    page_index_by_base: FxHashMap<usize, usize>,
+    /// Class free list: index of the first page with free slots
+    /// (`PAGE_NONE` = none), chained through `ObjectPage::next_partial`.
+    /// Alloc order: partial-page free-slot pop → last-page bump → new page.
+    partial_head: usize,
+}
+
+impl<T: PagedObject> ObjectArena<T> {
+    fn new() -> Self {
+        Self {
+            pages: Vec::new(),
+            page_index_by_base: FxHashMap::default(),
+            partial_head: PAGE_NONE,
+        }
+    }
+
+    /// THE PAGE-SPAN OWNERSHIP ORACLE for this class: `ptr` is an owned, LIVE
+    /// object of class `T` iff its masked page base is a registered page of
+    /// this arena AND the offset is slot-aligned AND the slot's ALLOC BIT IS
+    /// SET. The alloc-bit test is load-bearing: bump-cursor/registry bounds
+    /// alone would answer "owned" for a freed slot, and every owner of an
+    /// owns()→header-read sequence (`is_heap_young`, `value_is_tenured`,
+    /// `is_value_marked`, `mark_value`'s owned arms) would then read garbage
+    /// bytes. A freed slot answers NOT-owned the instant its bit clears —
+    /// this replaces float-v1's explicit addr-set evict-before-free. Retired
+    /// pages answer normally (their bits are all set, permanently) — C1.
+    ///
+    /// Mutator-thread only (like every `&self` heap read); the GC thread's
+    /// ownership test is the start-handshake page-base SNAPSHOT, never this
+    /// live registry/bitmap.
+    #[inline]
+    fn owns(&self, ptr: *const u8) -> bool {
+        let addr = ptr as usize;
+        let base = addr & !(OBJECT_PAGE_ALIGN - 1);
+        let Some(&index) = self.page_index_by_base.get(&base) else {
+            return false;
+        };
+        let offset = addr - base;
+        if !offset.is_multiple_of(T::SLOT_BYTES) {
+            return false;
+        }
+        self.pages[index].is_allocated(offset / T::SLOT_BYTES)
+    }
+
+    /// Grab one raw slot: class free-list pop → current-page bump → new page.
+    /// Sets the slot's alloc bit; the caller MUST immediately
+    /// full-header-write the slot (its bytes are garbage until then, and the
+    /// sweep may legally visit it as soon as the mutator next yields —
+    /// allocated-bit ⇒ readable header is the sweep's contract).
+    fn alloc_slot(&mut self) -> *mut T {
+        // 1. Class free list: pop from the first page with freed slots.
+        //    Retired pages are never on this chain (they never gain free
+        //    slots: full at retirement and never swept).
+        if self.partial_head != PAGE_NONE {
+            let page_index = self.partial_head;
+            let page = &mut self.pages[page_index];
+            let index = page.pop_free().expect("partial page must have free slots");
+            page.set_allocated(index);
+            if page.free_head == PAGE_NONE {
+                // Drained: unlink from the partial chain (head pop — O(1)).
+                self.partial_head = page.next_partial;
+                page.next_partial = PAGE_NONE;
+                page.on_partial = false;
+            }
+            return page.slot_ptr(index);
+        }
+        // 2. Current-page bump: only the NEWEST page can have never-used
+        //    slots (older pages were bump-exhausted before it was created).
+        //    A retired last page is bump-exhausted by construction (retired
+        //    ⇒ full), so `bump` correctly falls through to a fresh page.
+        if let Some(page) = self.pages.last_mut()
+            && let Some(index) = page.bump()
+        {
+            page.set_allocated(index);
+            return page.slot_ptr(index);
+        }
+        // 3. Fresh 64KB-aligned page.
+        let mut page = ObjectPage::<T>::new();
+        let index = page.bump().expect("fresh arena page must have space");
+        page.set_allocated(index);
+        let ptr = page.slot_ptr(index);
+        let base = page.base_addr();
+        self.pages.push(page);
+        let prev = self.page_index_by_base.insert(base, self.pages.len() - 1);
+        debug_assert!(prev.is_none(), "arena page base registered twice");
+        ptr
+    }
+
+    /// Sweep pages `[start, end)` of this class — the page objects' only
+    /// reclaimer, wired into BOTH sweep entry points: the eager
+    /// `finalize_collection` (whole range in one call) and the cooperative
+    /// `incremental_sweep_slice` (page-at-a-time behind a per-class cursor).
+    /// Runs on the mutator thread only; the GC thread never sweeps.
+    ///
+    /// Visit order is ALLOCATED-BIT-FIRST: a clear bit means the slot bytes
+    /// are garbage (never-bumped = uninitialized; freed = stale, possibly
+    /// scribbled), so ANY header read through it is UB — the inverse of the
+    /// intrusive-list sweep, whose list membership implies a valid header.
+    /// RETIRED pages are skipped whole (never swept; their slots are all
+    /// tenured — permanently live). For allocated slots the order is:
+    ///
+    /// 1. TENURED-SKIP BEFORE THE PARITY TEST: a tenured slot's mark bit
+    ///    froze at promotion; interpreting it against the current parity
+    ///    would free a live tenured object on every alternate-parity cycle
+    ///    (the float-v1 template's bare `is_marked_at` is exactly that bug
+    ///    once page objects can tenure). Tenured slots are skipped (MIXED
+    ///    pages carry them forever — bounded by the one-time loadup survivor
+    ///    set) and, like tenured LIST objects — which the young-list sweep
+    ///    never counts — contribute nothing to the recomputed live bytes,
+    ///    keeping `live_bytes` (the adaptive pacer term) on the same
+    ///    definition it had before the migration.
+    /// 2. Marked-at-parity slots are survivors: their VARIABLE byte size
+    ///    (`object_bytes_from_header` — fixed struct + payload storage) is
+    ///    summed into the returned live bytes, which both recompute sites
+    ///    feed into `live_bytes`.
+    /// 3. Dead slots: `on_free(addr)` (registry eviction hook — the vector
+    ///    class evicts `vector_object_addrs` here), then
+    ///    `drop_in_place::<T>` (strings own byte storage + interval tables,
+    ///    vectors own their element `Vec` — a bit-clear-only free leaks them
+    ///    all; NEVER `Box::from_raw` on page memory), then the alloc bit
+    ///    clears and the slot threads onto the page-local free list.
+    ///
+    /// Pages that gained free slots join the arena's partial chain, so the
+    /// class free list can hand their slots out again — including to a
+    /// mutator running BETWEEN cooperative slices. That mid-sweep reuse is
+    /// why each visit RE-READS the live bitmap word instead of a sweep-start
+    /// snapshot. A slot reallocated mid-sweep re-enters allocated +
+    /// born-at-parity ⇒ reads as marked ⇒ survivor.
+    ///
+    /// Returns `(survivor bytes, slots freed)`.
+    fn sweep_range(
+        &mut self,
+        start: usize,
+        end: usize,
+        parity: bool,
+        mut on_free: impl FnMut(usize),
+    ) -> (usize, usize) {
+        let mut live_bytes = 0usize;
+        let mut freed = 0usize;
+        for page_index in start..end.min(self.pages.len()) {
+            let page = &mut self.pages[page_index];
+            if page.retired {
+                continue; // never swept; slots permanently tenured-live
+            }
+            let mut freed_any = false;
+            for word_index in 0..ObjectPage::<T>::ALLOC_WORDS {
+                // RE-READ the current bitmap word (see the doc above).
+                let mut bits = page.alloc_bits[word_index];
+                while bits != 0 {
+                    let bit = bits.trailing_zeros() as usize;
+                    bits &= bits - 1;
+                    let index = word_index * usize::BITS as usize + bit;
+                    let slot = page.slot_ptr(index);
+                    // Alloc bit set ⇒ the slot holds a fully written live
+                    // object — reading its header is sound.
+                    let header = unsafe { &*(slot as *const GcHeader) };
+                    debug_assert!(
+                        header.kind == T::KIND,
+                        "wrong-kind header in a {} arena slot",
+                        T::CLASS,
+                    );
+                    // (1) TENURED-SKIP before any parity interpretation.
+                    if header.tenured {
+                        continue;
+                    }
+                    if header.is_marked_at(parity) {
+                        // (2) Survivor: variable-size byte accounting.
+                        live_bytes = live_bytes.saturating_add(
+                            TaggedHeap::object_bytes_from_header(slot as *const GcHeader),
+                        );
+                    } else {
+                        // (3) Dead: evict from any class registry, drop the
+                        // payload IN PLACE, then clear the bit (the oracle
+                        // answers NOT-owned from here on).
+                        on_free(slot as usize);
+                        unsafe { std::ptr::drop_in_place(slot) };
+                        page.free_slot(index);
+                        freed += 1;
+                        freed_any = true;
+                    }
+                }
+            }
+            if freed_any && !page.on_partial {
+                page.on_partial = true;
+                page.next_partial = self.partial_head;
+                self.partial_head = page_index;
+            }
+        }
+        (live_bytes, freed)
+    }
+
+    /// Collect raw pointers to every ALLOCATED slot (allocated-bit-first;
+    /// retired pages INCLUDED — their slots are live tenured objects).
+    /// Snapshot semantics: callers walk the returned vector while calling
+    /// arbitrary `&self`/`&mut self` heap methods (verifiers, promotion).
+    fn collect_allocated_slots(&self) -> Vec<*mut T> {
+        let mut out = Vec::new();
+        for page in &self.pages {
+            for word_index in 0..ObjectPage::<T>::ALLOC_WORDS {
+                let mut bits = page.alloc_bits[word_index];
+                while bits != 0 {
+                    let bit = bits.trailing_zeros() as usize;
+                    bits &= bits - 1;
+                    out.push(page.slot_ptr(word_index * usize::BITS as usize + bit));
+                }
+            }
+        }
+        out
     }
 }
 
@@ -1774,23 +2130,18 @@ pub struct TaggedHeap {
     /// Reclaimed cons cells threaded through the dead cells themselves,
     /// matching GNU alloc.c's `cons_free_list`.
     cons_free_list: *mut ConsCell,
-    /// FLOAT ARENA PAGES (non-cons allocator modernization v1): every heap
-    /// float lives in a 64KB-aligned `FloatPage` slot instead of its own
-    /// `Box`. Page floats stay in `non_cons_object_addrs` (the mark-time
-    /// ownership oracle) but are NEVER on `all_objects`/`tenured_objects` —
-    /// the page sweep is their only reclaimer, and `free_gc_object` stays
-    /// Box-only. Empty pages are retained for reuse (bounded — floats are a
-    /// small byte fraction of the heap) and freed only at heap teardown via
-    /// this vector's drop (`FloatPage: Drop`).
-    float_pages: Vec<FloatPage>,
-    /// Page-base → `float_pages` index, mirroring `cons_block_index_by_base`:
-    /// O(1) page lookup from any slot pointer (pages are size-aligned, so
-    /// `FloatPage::page_base_for_ptr` masks the base out of the pointer).
-    float_page_index_by_base: FxHashMap<usize, usize>,
-    /// Class free list: index of the first page with free slots
-    /// (`FLOAT_NONE` = none), chained through `FloatPage::next_partial`.
-    /// Alloc order: partial-page free-slot pop → last-page bump → new page.
-    float_partial_head: usize,
+    /// SIZE-CLASS OBJECT ARENAS (non-cons allocator modernization stage 3):
+    /// every heap float/string/vector lives in a 64KB-aligned `ObjectPage`
+    /// slot instead of its own `Box`. Page objects are OWNED via the
+    /// page-span oracle (`ObjectArena::owns` — registry + stride + alloc
+    /// bit), NOT via `non_cons_object_addrs`, and are NEVER on
+    /// `all_objects`/`tenured_objects` — the page sweeps are their only
+    /// reclaimer, and `free_gc_object` stays Box-only. Empty pages are
+    /// retained for reuse; pages are freed only at heap teardown via these
+    /// vectors' drops (`ObjectPage: Drop` — drops live payloads in place).
+    float_arena: ObjectArena<FloatObj>,
+    string_arena: ObjectArena<StringObj>,
+    vector_arena: ObjectArena<VectorObj>,
     /// Cons cells loaded directly from a mapped pdump image.  GNU's pdumper
     /// uses external mark bits for dumped objects rather than writing mark
     /// state into malloc/GC allocation headers; mirror that for mapped conses.
@@ -2003,9 +2354,11 @@ pub struct TaggedHeap {
     sweep_in_progress: bool,
     /// Next heap cons-block index the deferred sweep will reclaim.
     sweep_cons_cursor: usize,
-    /// Next float arena page the deferred sweep will visit (mirrors
-    /// `sweep_cons_cursor`; reset when the sweep is armed).
+    /// Next float/string/vector arena page the deferred sweep will visit
+    /// (mirrors `sweep_cons_cursor`; reset when the sweep is armed).
     sweep_float_page_cursor: usize,
+    sweep_string_page_cursor: usize,
+    sweep_vector_page_cursor: usize,
     /// Non-cons objects detached from `all_objects` at sweep start, reclaimed
     /// incrementally. New non-cons allocations link onto a fresh `all_objects`
     /// and are not swept this cycle.
@@ -2070,9 +2423,9 @@ impl TaggedHeap {
             finalizer_registry: Vec::new(),
             doomed_finalizer_functions: Vec::new(),
             cons_free_list: std::ptr::null_mut(),
-            float_pages: Vec::new(),
-            float_page_index_by_base: FxHashMap::default(),
-            float_partial_head: FLOAT_NONE,
+            float_arena: ObjectArena::new(),
+            string_arena: ObjectArena::new(),
+            vector_arena: ObjectArena::new(),
             mapped_cons_ranges: Vec::new(),
             mapped_float_ranges: Vec::new(),
             mapped_veclike_objects: Vec::new(),
@@ -2125,6 +2478,8 @@ impl TaggedHeap {
             sweep_in_progress: false,
             sweep_cons_cursor: 0,
             sweep_float_page_cursor: 0,
+            sweep_string_page_cursor: 0,
+            sweep_vector_page_cursor: 0,
             sweep_noncons_pending: std::ptr::null_mut(),
             sweep_noncons_live_bytes: 0,
             sweep_mark_us: 0,
@@ -2752,14 +3107,15 @@ impl TaggedHeap {
     /// type-confused free, a stale tenured flag is a leak plus child-UAF
     /// (never traced, never swept).
     ///
-    /// Page floats register in `non_cons_object_addrs` exactly like list
-    /// objects (`mark_value`'s owned-vs-mapped routing and `is_heap_young`
-    /// depend on it) but are NOT `link_object`ed — the intrusive lists sweep
-    /// with `free_gc_object`/`Box::from_raw`, which would corrupt the heap on
-    /// a page pointer. The page sweep is the only float reclaimer.
+    /// Page floats are OWNED via the page-span oracle (stage-3 fold-in: they
+    /// no longer touch `non_cons_object_addrs` — `mark_value`'s
+    /// owned-vs-mapped routing and `is_heap_young` answer through
+    /// `float_arena.owns`) and are NOT `link_object`ed — the intrusive lists
+    /// sweep with `free_gc_object`/`Box::from_raw`, which would corrupt the
+    /// heap on a page pointer. The page sweep is the only float reclaimer.
     pub fn alloc_float(&mut self, value: f64) -> TaggedValue {
         self.add_memory_use_count(MemoryUseCountSlot::Floats, 1);
-        let ptr = self.alloc_float_slot();
+        let ptr = self.float_arena.alloc_slot();
         unsafe {
             // FULL-HEADER WRITE: never partially reuse prior slot bytes.
             std::ptr::write(
@@ -2774,55 +3130,11 @@ impl TaggedHeap {
             // white for the next `begin_collection` flip otherwise.
             (*ptr).header.set_marked(self.mark_parity);
         }
-        let inserted = self.non_cons_object_addrs.insert(ptr as usize);
-        debug_assert!(inserted, "float slot allocated twice (bitmap out of sync)");
         #[cfg(test)]
         alloc_probe::record(ptr as *const GcHeader, self.non_cons_object_addrs.len());
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<FloatObj>());
         unsafe { TaggedValue::from_float_ptr(ptr) }
-    }
-
-    /// Grab one raw 32-byte float slot: class free-list pop → current-page
-    /// bump → new page. Sets the slot's alloc bit; the caller MUST
-    /// immediately full-header-write the slot (its bytes are garbage until
-    /// then, and the sweep may legally visit it as soon as the mutator next
-    /// yields — allocated-bit ⇒ readable header is the sweep's contract).
-    fn alloc_float_slot(&mut self) -> *mut FloatObj {
-        // 1. Class free list: pop from the first page with freed slots.
-        if self.float_partial_head != FLOAT_NONE {
-            let page_index = self.float_partial_head;
-            let page = &mut self.float_pages[page_index];
-            let index = page.pop_free().expect("partial page must have free slots");
-            page.set_allocated(index);
-            if page.free_head == FLOAT_NONE {
-                // Drained: unlink from the partial chain (head pop — O(1)).
-                self.float_partial_head = page.next_partial;
-                page.next_partial = FLOAT_NONE;
-                page.on_partial = false;
-            }
-            return page.slot_ptr(index);
-        }
-        // 2. Current-page bump: only the NEWEST page can have never-used
-        //    slots (older pages were bump-exhausted before it was created).
-        if let Some(page) = self.float_pages.last_mut()
-            && let Some(index) = page.bump()
-        {
-            page.set_allocated(index);
-            return page.slot_ptr(index);
-        }
-        // 3. Fresh 64KB-aligned page.
-        let mut page = FloatPage::new();
-        let index = page.bump().expect("fresh float page must have space");
-        page.set_allocated(index);
-        let ptr = page.slot_ptr(index);
-        let base = page.base_addr();
-        self.float_pages.push(page);
-        let prev = self
-            .float_page_index_by_base
-            .insert(base, self.float_pages.len() - 1);
-        debug_assert!(prev.is_none(), "float page base registered twice");
-        ptr
     }
 
     /// Allocate a vector.
@@ -3735,7 +4047,7 @@ impl TaggedHeap {
         // objects (e.g. Subrs) are permanently live, never young.
         match Self::value_heap_addr(value) {
             Some(addr) => {
-                self.owns_non_cons_object(addr as *const u8)
+                self.owns_heap_value_object(value, addr)
                     && !unsafe { (*(addr as *const GcHeader)).tenured }
             }
             None => false,
@@ -3743,6 +4055,13 @@ impl TaggedHeap {
     }
 
     /// True if `value` is a tenured (old-gen) heap non-cons object.
+    ///
+    /// Gates on OWNERSHIP first, so the page-span oracle must keep answering
+    /// "owned" for RETIRED pages (C1): a retired-page tenured object that
+    /// answered not-owned here would read as neither mapped nor tenured, the
+    /// write barrier (`record_heap_write`) would skip its first
+    /// post-retirement tenured→young edge, the child would never be re-seeded
+    /// (`seed_mapped_remembered`) and would be swept while live.
     fn value_is_tenured(&self, value: TaggedValue) -> bool {
         if value.is_cons() {
             return false;
@@ -3750,7 +4069,7 @@ impl TaggedHeap {
         let Some(addr) = Self::value_heap_addr(value) else {
             return false;
         };
-        if !self.owns_non_cons_object(addr as *const u8) {
+        if !self.owns_heap_value_object(value, addr) {
             return false; // mapped, not a tenured heap object
         }
         unsafe { (*(addr as *const GcHeader)).tenured }
@@ -3918,7 +4237,7 @@ impl TaggedHeap {
         let Some(addr) = Self::value_heap_addr(value) else {
             return true;
         };
-        if self.owns_non_cons_object(addr as *const u8) {
+        if self.owns_heap_value_object(value, addr) {
             // Heap-owned non-cons: every such object starts with a `GcHeader`
             // (`StringObj`/`FloatObj` headers and `VecLikeHeader.gc` are all
             // at offset 0). TENURED SHORT-CIRCUIT before the bit read:
@@ -4054,21 +4373,22 @@ impl TaggedHeap {
         for header in tenured {
             let kind = unsafe { (*header).kind };
             let owner = format!("tenured:{kind:?}");
-            let children: Vec<TaggedValue> = match kind {
-                HeapObjectKind::VecLike => {
-                    self.collect_veclike_children(header as *mut VecLikeHeader)
-                }
-                HeapObjectKind::String => {
-                    let mut roots = Vec::new();
-                    let intervals = unsafe { (*(header as *const StringObj)).data.intervals() };
-                    if !intervals.is_empty() {
-                        intervals.for_each_root(|root| roots.push(root));
-                    }
-                    roots
-                }
-                HeapObjectKind::Float => Vec::new(),
-            };
+            let children: Vec<TaggedValue> = self.heap_object_children(header);
             for child in children {
+                if child.is_heap_object() && !self.is_value_marked(child) {
+                    record(&owner, child);
+                }
+            }
+        }
+        // TENURED PAGE SLOTS (stage 3): page-tenured strings/vectors are on
+        // NO intrusive list — without this walk they would be INVISIBLE to
+        // this detector and a missed tenured→young barrier edge on them
+        // would pass verification straight into a UAF. Allocated-bit-first;
+        // clear-bit slot bytes are garbage.
+        for header in self.collect_tenured_page_slot_headers() {
+            let kind = unsafe { (*header).kind };
+            let owner = format!("tenured-page:{kind:?}");
+            for child in self.heap_object_children(header) {
                 if child.is_heap_object() && !self.is_value_marked(child) {
                     record(&owner, child);
                 }
@@ -4122,22 +4442,26 @@ impl TaggedHeap {
         };
         for header in young {
             let kind = unsafe { (*header).kind };
-            let children: Vec<TaggedValue> = match kind {
-                HeapObjectKind::VecLike => {
-                    self.collect_veclike_children(header as *mut VecLikeHeader)
-                }
-                HeapObjectKind::String => {
-                    let mut roots = Vec::new();
-                    let intervals = unsafe { (*(header as *const StringObj)).data.intervals() };
-                    if !intervals.is_empty() {
-                        intervals.for_each_root(|root| roots.push(root));
-                    }
-                    roots
-                }
-                HeapObjectKind::Float => Vec::new(),
-            };
+            let children: Vec<TaggedValue> = self.heap_object_children(header);
             let owner = format!("young:{kind:?}");
             for child in children {
+                if child.is_heap_object() && !self.is_value_marked(child) {
+                    *violations.entry(owner.clone()).or_insert(0) += 1;
+                    sample.get_or_insert(child.0);
+                }
+            }
+        }
+
+        // -- YOUNG PAGE SLOTS that are marked (black), stage 3: page
+        //    strings/vectors/floats are on NO intrusive list — without this
+        //    walk a black page string/vector pointing at a white object would
+        //    be INVISIBLE to this detector (a live hole in the black→white
+        //    scan). Allocated-bit-first; tenured slots are covered by
+        //    `verify_dump_partition`'s tenured-page walk. --
+        for header in self.collect_young_marked_page_slot_headers() {
+            let kind = unsafe { (*header).kind };
+            let owner = format!("young-page:{kind:?}");
+            for child in self.heap_object_children(header) {
                 if child.is_heap_object() && !self.is_value_marked(child) {
                     *violations.entry(owner.clone()).or_insert(0) += 1;
                     sample.get_or_insert(child.0);
@@ -4179,6 +4503,67 @@ impl TaggedHeap {
                 sample.unwrap_or(0)
             );
         }
+    }
+
+    /// Direct heap children of any owned non-cons object by header, for the
+    /// verifiers and the promotion-time permanents scan: veclike slots,
+    /// string text-property interval roots, floats none.
+    fn heap_object_children(&self, header: *mut GcHeader) -> Vec<TaggedValue> {
+        match unsafe { (*header).kind } {
+            HeapObjectKind::VecLike => self.collect_veclike_children(header as *mut VecLikeHeader),
+            HeapObjectKind::String => {
+                let mut roots = Vec::new();
+                let intervals = unsafe { (*(header as *const StringObj)).data.intervals() };
+                if !intervals.is_empty() {
+                    intervals.for_each_root(|root| roots.push(root));
+                }
+                roots
+            }
+            HeapObjectKind::Float => Vec::new(),
+        }
+    }
+
+    /// Every allocated page slot (all three class arenas) whose header is
+    /// TENURED, as `GcHeader` pointers. Allocated-bit-first walk.
+    fn collect_tenured_page_slot_headers(&self) -> Vec<*mut GcHeader> {
+        let mut out: Vec<*mut GcHeader> = Vec::new();
+        let mut push = |header: *mut GcHeader| {
+            if unsafe { (*header).tenured } {
+                out.push(header);
+            }
+        };
+        for slot in self.float_arena.collect_allocated_slots() {
+            push(slot as *mut GcHeader);
+        }
+        for slot in self.string_arena.collect_allocated_slots() {
+            push(slot as *mut GcHeader);
+        }
+        for slot in self.vector_arena.collect_allocated_slots() {
+            push(slot as *mut GcHeader);
+        }
+        out
+    }
+
+    /// Every allocated page slot (all three class arenas) that is YOUNG and
+    /// MARKED at the current parity (black), as `GcHeader` pointers.
+    fn collect_young_marked_page_slot_headers(&self) -> Vec<*mut GcHeader> {
+        let parity = self.mark_parity;
+        let mut out: Vec<*mut GcHeader> = Vec::new();
+        let mut push = |header: *mut GcHeader| unsafe {
+            if !(*header).tenured && (*header).is_marked_at(parity) {
+                out.push(header);
+            }
+        };
+        for slot in self.float_arena.collect_allocated_slots() {
+            push(slot as *mut GcHeader);
+        }
+        for slot in self.string_arena.collect_allocated_slots() {
+            push(slot as *mut GcHeader);
+        }
+        for slot in self.vector_arena.collect_allocated_slots() {
+            push(slot as *mut GcHeader);
+        }
+        out
     }
 
     /// If `ptr` is a WEAK hash table, register it for this cycle's weak sweep
@@ -4652,14 +5037,22 @@ impl TaggedHeap {
         // -- Sweep phase --
         let cons_live_bytes = self.sweep_cons();
         let object_live_bytes = self.sweep_objects();
-        // Float arena pages: the intrusive-list sweep above never sees page
-        // floats; their page sweep is the second half of the eager sweep.
-        let float_pages_len = self.float_pages.len();
-        let (float_live_bytes, _float_freed) = self.sweep_float_pages_range(0, float_pages_len);
+        // Object arena pages: the intrusive-list sweep above never sees page
+        // floats/strings/vectors; their page sweeps are the second half of
+        // the eager sweep. Survivor bytes are VARIABLE-size
+        // (`object_bytes_from_header`) and feed this recompute site exactly
+        // like the list survivors' — `live_bytes` drives the adaptive pacer
+        // (`effective_gc_threshold_bytes`), so an undercount here means
+        // overtriggering.
+        let (page_live_bytes, _page_freed) = self.sweep_arena_pages_ranges(
+            (0, self.float_arena.pages.len()),
+            (0, self.string_arena.pages.len()),
+            (0, self.vector_arena.pages.len()),
+        );
         let mapped_object_live_bytes = self.mapped_non_cons_live_bytes();
         self.live_bytes = cons_live_bytes
             .saturating_add(object_live_bytes)
-            .saturating_add(float_live_bytes)
+            .saturating_add(page_live_bytes)
             .saturating_add(mapped_object_live_bytes);
         self.bytes_since_gc = 0;
 
@@ -5211,9 +5604,11 @@ impl TaggedHeap {
         self.all_objects = std::ptr::null_mut();
         self.cons_free_list = std::ptr::null_mut();
         self.sweep_cons_cursor = 0;
-        // Float arena pages are swept in place behind this cursor (no
+        // Object arena pages are swept in place behind these cursors (no
         // detached list exists for them; the bitmap is re-read per slice).
         self.sweep_float_page_cursor = 0;
+        self.sweep_string_page_cursor = 0;
+        self.sweep_vector_page_cursor = 0;
         self.sweep_noncons_live_bytes = 0;
         self.sweep_mark_us = self.incremental_mark_us;
         self.sweep_bytes_before = bytes_before;
@@ -5253,23 +5648,55 @@ impl TaggedHeap {
             self.sweep_cons_cursor += 1;
             swept_blocks += 1;
         }
-        // -- float arena pages: reclaim up to `budget` pages (64KB each, like
-        //    cons blocks), page-at-a-time behind `sweep_float_page_cursor`.
-        //    Each visit re-reads the live bitmap (the mutator can reallocate
-        //    freed slots between slices — see `sweep_float_pages_range`).
-        //    Pages created mid-sweep may or may not be visited by the moving
-        //    cursor/len race; either is correct — every slot in them is
-        //    born-at-parity (marked), so a visit counts survivors and a skip
-        //    frees nothing it shouldn't. --
+        // -- object arena pages: reclaim up to `budget` pages PER CLASS
+        //    (64KB each, like cons blocks), page-at-a-time behind the
+        //    per-class cursors. Each visit re-reads the live bitmap (the
+        //    mutator can reallocate freed slots between slices — see
+        //    `ObjectArena::sweep_range`). Pages created mid-sweep may or may
+        //    not be visited by the moving cursor/len race; either is correct
+        //    — every slot in them is born-at-parity (marked), so a visit
+        //    counts survivors and a skip frees nothing it shouldn't. Page
+        //    survivor bytes accumulate into `sweep_noncons_live_bytes`, the
+        //    incremental half of the live-bytes recompute
+        //    (`finish_incremental_sweep`). --
         let mut float_freed = 0usize;
-        let mut swept_float_pages = 0usize;
-        while swept_float_pages < budget && self.sweep_float_page_cursor < self.float_pages.len() {
-            let idx = self.sweep_float_page_cursor;
-            let (live, freed) = self.sweep_float_pages_range(idx, idx + 1);
-            self.sweep_noncons_live_bytes = self.sweep_noncons_live_bytes.saturating_add(live);
-            float_freed += freed;
-            self.sweep_float_page_cursor += 1;
-            swept_float_pages += 1;
+        {
+            let mut swept_pages = 0usize;
+            while swept_pages < budget
+                && self.sweep_float_page_cursor < self.float_arena.pages.len()
+            {
+                let idx = self.sweep_float_page_cursor;
+                let (live, freed) =
+                    self.sweep_arena_pages_ranges((idx, idx + 1), (0, 0), (0, 0));
+                self.sweep_noncons_live_bytes = self.sweep_noncons_live_bytes.saturating_add(live);
+                float_freed += freed;
+                self.sweep_float_page_cursor += 1;
+                swept_pages += 1;
+            }
+            let mut swept_pages = 0usize;
+            while swept_pages < budget
+                && self.sweep_string_page_cursor < self.string_arena.pages.len()
+            {
+                let idx = self.sweep_string_page_cursor;
+                let (live, freed) =
+                    self.sweep_arena_pages_ranges((0, 0), (idx, idx + 1), (0, 0));
+                self.sweep_noncons_live_bytes = self.sweep_noncons_live_bytes.saturating_add(live);
+                float_freed += freed;
+                self.sweep_string_page_cursor += 1;
+                swept_pages += 1;
+            }
+            let mut swept_pages = 0usize;
+            while swept_pages < budget
+                && self.sweep_vector_page_cursor < self.vector_arena.pages.len()
+            {
+                let idx = self.sweep_vector_page_cursor;
+                let (live, freed) =
+                    self.sweep_arena_pages_ranges((0, 0), (0, 0), (idx, idx + 1));
+                self.sweep_noncons_live_bytes = self.sweep_noncons_live_bytes.saturating_add(live);
+                float_freed += freed;
+                self.sweep_vector_page_cursor += 1;
+                swept_pages += 1;
+            }
         }
         // -- non-cons: reclaim more objects per slice than cons blocks, since a
         //    cons block holds thousands of cells while a non-cons node is one
@@ -5307,7 +5734,9 @@ impl TaggedHeap {
 
         let done = self.sweep_cons_cursor >= self.cons_blocks.len()
             && self.sweep_noncons_pending.is_null()
-            && self.sweep_float_page_cursor >= self.float_pages.len();
+            && self.sweep_float_page_cursor >= self.float_arena.pages.len()
+            && self.sweep_string_page_cursor >= self.string_arena.pages.len()
+            && self.sweep_vector_page_cursor >= self.vector_arena.pages.len();
         let slice_us = t0.elapsed().as_micros() as u64;
         self.sweep_slice_us_total += slice_us;
         self.sweep_slice_count += 1;
@@ -5466,7 +5895,7 @@ impl TaggedHeap {
             }
         } else if val.is_string() {
             let ptr = val.as_string_ptr().unwrap() as *mut StringObj;
-            if !self.owns_non_cons_object(ptr as *const u8) {
+            if !self.owns_string_object(ptr as *const u8) {
                 if self.mark_mapped_string(ptr) {
                     unsafe {
                         let intervals = (*ptr).data.intervals();
@@ -5508,7 +5937,7 @@ impl TaggedHeap {
             };
         } else if val.is_float() {
             let ptr = val.as_float_ptr().unwrap() as *mut FloatObj;
-            if !self.owns_non_cons_object(ptr as *const u8) {
+            if !self.owns_float_object(ptr as *const u8) {
                 let _ = self.mark_mapped_float(ptr);
                 return;
             }
@@ -5521,7 +5950,7 @@ impl TaggedHeap {
             };
         } else if val.is_veclike() {
             let ptr = val.as_veclike_ptr().unwrap() as *mut VecLikeHeader;
-            if !self.owns_non_cons_object(ptr as *const u8) {
+            if !self.owns_veclike_object(ptr as *const u8) {
                 if self.mark_mapped_veclike(ptr) {
                     unsafe {
                         self.trace_veclike(ptr);
@@ -5939,87 +6368,39 @@ impl TaggedHeap {
         live_bytes
     }
 
-    /// Sweep the float arena pages `[start, end)`. The floats' only
-    /// reclaimer, wired into BOTH sweep entry points: the eager
-    /// `finalize_collection` (whole range in one call) and the cooperative
-    /// `incremental_sweep_slice` (page-at-a-time behind
-    /// `sweep_float_page_cursor`). Runs on the mutator thread only; the GC
-    /// thread never sweeps.
+    /// Sweep every class arena's pages `[start, end)` (per-class ranges) —
+    /// the shared page reclaimer behind both sweep entry points. See
+    /// `ObjectArena::sweep_range` for the visit contract (allocated-bit-first,
+    /// tenured-skip, drop-in-place-before-bit-clear, retired-page skip).
+    /// Vector slots are evicted from the incremental vector registry at the
+    /// free hook — page vectors never pass `unregister_vector_object`.
     ///
-    /// Visit order is ALLOCATED-BIT-FIRST: a clear bit means the slot bytes
-    /// are garbage (never-bumped = uninitialized; freed = stale, possibly
-    /// scribbled), so ANY header read through it is UB — the inverse of the
-    /// intrusive-list sweep, whose list membership implies a valid header.
-    /// Only for slots whose CURRENT bit is set is the header read, then the
-    /// same parity mark test as the list sweep applies. Dead slots are freed
-    /// in one drop-and-clear step (floats are POD — nothing to drop): the
-    /// address leaves `non_cons_object_addrs` BEFORE the slot becomes
-    /// reusable (evict-before-free, mirroring `sweep_objects` /
-    /// `incremental_sweep_slice`), then the alloc bit clears and the slot
-    /// threads onto the page-local free list. Pages that gained free slots
-    /// join the arena's partial chain, so the class free list can hand their
-    /// slots out again — including to a mutator running BETWEEN cooperative
-    /// slices. That mid-sweep reuse is why each visit RE-READS the live
-    /// bitmap word instead of a sweep-start snapshot: the disjoint-list
-    /// property of the detached non-cons sweep does not exist here. A slot
-    /// reallocated mid-sweep re-enters allocated + born-at-parity ⇒ reads as
-    /// marked ⇒ survivor (and is counted in the returned live bytes, exactly
-    /// like allocate-black conses in the sweep-end popcount recount).
-    ///
-    /// Returns `(survivor bytes, slots freed)`.
-    fn sweep_float_pages_range(&mut self, start: usize, end: usize) -> (usize, usize) {
+    /// Returns `(survivor bytes, slots freed)` summed over the three classes.
+    fn sweep_arena_pages_ranges(
+        &mut self,
+        float_range: (usize, usize),
+        string_range: (usize, usize),
+        vector_range: (usize, usize),
+    ) -> (usize, usize) {
         let parity = self.mark_parity;
+        let (fl, ff) = self
+            .float_arena
+            .sweep_range(float_range.0, float_range.1, parity, |_| {});
+        let (sl, sf) = self
+            .string_arena
+            .sweep_range(string_range.0, string_range.1, parity, |_| {});
         let TaggedHeap {
-            float_pages,
-            float_partial_head,
-            non_cons_object_addrs,
-            allocated_count,
+            vector_arena,
+            vector_object_addrs,
             ..
         } = self;
-        let mut live_bytes = 0usize;
-        let mut freed = 0usize;
-        for page_index in start..end.min(float_pages.len()) {
-            let page = &mut float_pages[page_index];
-            let mut freed_any = false;
-            for word_index in 0..FLOAT_ALLOC_WORDS {
-                // RE-READ the current bitmap word (see the doc above).
-                let mut bits = page.alloc_bits[word_index];
-                while bits != 0 {
-                    let bit = bits.trailing_zeros() as usize;
-                    bits &= bits - 1;
-                    let index = word_index * usize::BITS as usize + bit;
-                    let slot = page.slot_ptr(index);
-                    // Alloc bit set ⇒ the slot holds a fully written live
-                    // FloatObj — reading its header is sound.
-                    let header = unsafe { &(*slot).header };
-                    debug_assert!(
-                        header.kind == HeapObjectKind::Float,
-                        "non-float header in a float arena slot",
-                    );
-                    // Page floats are ALL-YOUNG: the one-time promotion walks
-                    // `all_objects` only, which page floats never join.
-                    debug_assert!(!header.tenured, "tenured float in an arena page");
-                    if header.is_marked_at(parity) {
-                        live_bytes = live_bytes.saturating_add(size_of::<FloatObj>());
-                    } else {
-                        // Evict from the ownership oracle BEFORE the slot
-                        // becomes reusable (the list sweeps' order).
-                        let removed = non_cons_object_addrs.remove(&(slot as usize));
-                        debug_assert!(removed, "swept float missing from the non-cons set");
-                        page.free_slot(index);
-                        *allocated_count = allocated_count.saturating_sub(1);
-                        freed += 1;
-                        freed_any = true;
-                    }
-                }
-            }
-            if freed_any && !page.on_partial {
-                page.on_partial = true;
-                page.next_partial = *float_partial_head;
-                *float_partial_head = page_index;
-            }
-        }
-        (live_bytes, freed)
+        let (vl, vf) = vector_arena.sweep_range(vector_range.0, vector_range.1, parity, |addr| {
+            let removed = vector_object_addrs.remove(&addr);
+            debug_assert!(removed, "freed page vector was not in the registry");
+        });
+        let freed = ff + sf + vf;
+        self.allocated_count = self.allocated_count.saturating_sub(freed);
+        (fl + sl + vl, freed)
     }
 
     /// `(total mapped objects, mapped objects currently marked)`.
@@ -6160,8 +6541,61 @@ impl TaggedHeap {
         }
     }
 
+    /// Per-kind ownership oracles (tag-first dispatch): each consults ONLY
+    /// its class's page-span registry plus the residual `Box` addr-set, so a
+    /// page hit can never be a cross-class collision. Mapped (pdump) objects
+    /// answer false everywhere here — the not-owned fallback keeps routing
+    /// them to the mapped side-table arms, unchanged.
+    #[inline]
+    fn owns_float_object(&self, ptr: *const u8) -> bool {
+        !ptr.is_null()
+            && (self.float_arena.owns(ptr)
+                || self.non_cons_object_addrs.contains(&(ptr as usize)))
+    }
+
+    #[inline]
+    fn owns_string_object(&self, ptr: *const u8) -> bool {
+        !ptr.is_null()
+            && (self.string_arena.owns(ptr)
+                || self.non_cons_object_addrs.contains(&(ptr as usize)))
+    }
+
+    #[inline]
+    fn owns_veclike_object(&self, ptr: *const u8) -> bool {
+        // Only `VecLikeType::Vector` is paged; every other veclike is a
+        // residual `Box` in the addr-set.
+        !ptr.is_null()
+            && (self.vector_arena.owns(ptr)
+                || self.non_cons_object_addrs.contains(&(ptr as usize)))
+    }
+
+    /// Tag-dispatched ownership for a heap value whose raw object address is
+    /// `addr` (`value_heap_addr`). The per-class page registries are checked
+    /// per the value's TAG (never merged — see `ObjectArena`), with the
+    /// residual addr-set covering the unmigrated `Box` types.
+    #[inline]
+    fn owns_heap_value_object(&self, value: TaggedValue, addr: usize) -> bool {
+        let ptr = addr as *const u8;
+        if value.is_string() {
+            self.owns_string_object(ptr)
+        } else if value.is_float() {
+            self.owns_float_object(ptr)
+        } else if value.is_veclike() {
+            self.owns_veclike_object(ptr)
+        } else {
+            false
+        }
+    }
+
+    /// Tag-less union oracle: owned by ANY class arena or the residual
+    /// addr-set. For callers without a decoded tag (tests, generic probes);
+    /// the mark paths use the tag-first per-kind forms above.
     fn owns_non_cons_object(&self, ptr: *const u8) -> bool {
-        !ptr.is_null() && self.non_cons_object_addrs.contains(&(ptr as usize))
+        !ptr.is_null()
+            && (self.string_arena.owns(ptr)
+                || self.vector_arena.owns(ptr)
+                || self.float_arena.owns(ptr)
+                || self.non_cons_object_addrs.contains(&(ptr as usize)))
     }
 
     /// Debug verification: after marking, check that every marked non-cons
@@ -6217,89 +6651,141 @@ impl TaggedHeap {
                 }
             }
         }
-        // FLOAT ARENA PAGES: page floats live outside the intrusive lists —
-        // their ownership authority is the per-page allocation bitmap plus
-        // `non_cons_object_addrs`. Walk them ALLOCATED-BIT-FIRST (reading a
-        // clear-bit slot's header would itself be the class of bug this
-        // verifier hunts) and check each live slot's header coherence and
-        // ownership-set registration.
-        for page in &self.float_pages {
-            for word_index in 0..FLOAT_ALLOC_WORDS {
-                let mut bits = page.alloc_bits[word_index];
-                while bits != 0 {
-                    let bit = bits.trailing_zeros() as usize;
-                    bits &= bits - 1;
-                    let index = word_index * usize::BITS as usize + bit;
-                    let slot = page.slot_ptr(index);
-                    unsafe {
-                        if (*slot).header.kind != HeapObjectKind::Float {
-                            tracing::error!(
-                                "GC VERIFY: float arena slot at {:p} has a non-float kind",
-                                slot
-                            );
-                        }
-                        if (*slot).header.tenured {
-                            tracing::error!(
-                                "GC VERIFY: tenured float at {:p} (arena pages are all-young)",
-                                slot
-                            );
-                        }
-                        if (*slot).header.is_marked_at(parity) {
-                            total_marked += 1;
-                        }
-                    }
-                    if !self.non_cons_object_addrs.contains(&(slot as usize)) {
+        // OBJECT ARENA PAGES: page objects live outside the intrusive lists —
+        // their ownership authority is the page-span oracle (per-class
+        // registry + stride + allocation bitmap), NOT `non_cons_object_addrs`.
+        // Walk them ALLOCATED-BIT-FIRST (reading a clear-bit slot's header
+        // would itself be the class of bug this verifier hunts) and check each
+        // live slot's header coherence and that it is NOT in the residual
+        // addr-set (a page slot in the addr-set would be a double-ownership
+        // corruption: two reclaimers for one object). Tenured slots are legal
+        // (the promotion page walk) and count as marked, frozen-bit-first.
+        fn verify_arena_slots<T: PagedObject>(
+            arena: &ObjectArena<T>,
+            non_cons_object_addrs: &FxHashSet<usize>,
+            parity: bool,
+            total_marked: &mut usize,
+        ) {
+            for slot in arena.collect_allocated_slots() {
+                let header = slot as *const GcHeader;
+                unsafe {
+                    if (*header).kind != T::KIND {
                         tracing::error!(
-                            "GC VERIFY: allocated float slot {:p} missing from \
-                             non_cons_object_addrs",
+                            "GC VERIFY: {} arena slot at {:p} has a wrong-kind header",
+                            T::CLASS,
                             slot
                         );
                     }
+                    if (*header).tenured || (*header).is_marked_at(parity) {
+                        *total_marked += 1;
+                    }
+                }
+                if non_cons_object_addrs.contains(&(slot as usize)) {
+                    tracing::error!(
+                        "GC VERIFY: {} arena slot {:p} must NOT be in \
+                         non_cons_object_addrs (page-span oracle owns it)",
+                        T::CLASS,
+                        slot
+                    );
                 }
             }
         }
+        verify_arena_slots(
+            &self.float_arena,
+            &self.non_cons_object_addrs,
+            parity,
+            &mut total_marked,
+        );
+        verify_arena_slots(
+            &self.string_arena,
+            &self.non_cons_object_addrs,
+            parity,
+            &mut total_marked,
+        );
+        verify_arena_slots(
+            &self.vector_arena,
+            &self.non_cons_object_addrs,
+            parity,
+            &mut total_marked,
+        );
         tracing::trace!(
             "GC verify: {} marked non-cons objects, all owned",
             total_marked
         );
     }
 
-    /// TEST-ONLY float-arena coherence check: the allocation bitmaps,
-    /// occupancy counts, page-local free lists, partial-page chain, page-base
-    /// registry, and `non_cons_object_addrs` must all agree. Free lists are
-    /// walked via the trailing link words only — a freed slot's header bytes
-    /// are never read (allocated-bit-first applies to verifiers too).
+    /// TEST-ONLY object-arena coherence check over ALL THREE class arenas:
+    /// the allocation bitmaps, occupancy counts, page-local free lists,
+    /// partial-page chains, page-base registries, retirement invariants, the
+    /// page-span ownership oracle, and the residual addr-set must all agree.
+    /// Free lists are walked via the trailing link words only — a freed
+    /// slot's header bytes are never read (allocated-bit-first applies to
+    /// verifiers too). Page slots must NOT be in `non_cons_object_addrs`
+    /// (the page-span oracle is their sole ownership authority — the
+    /// INVERSE of the float-v1 assertion). For the vector arena, every
+    /// allocated slot must be in the incremental vector registry.
     #[cfg(test)]
-    pub(crate) fn assert_float_arena_coherent(&self) {
+    pub(crate) fn assert_object_arenas_coherent(&self) {
+        self.assert_one_arena_coherent(&self.float_arena);
+        self.assert_one_arena_coherent(&self.string_arena);
+        self.assert_one_arena_coherent(&self.vector_arena);
+        // Vector registry ⊇ page vector slots (page alloc inserts; page sweep
+        // removes). The registry may also hold residual Box vectors.
+        for slot in self.vector_arena.collect_allocated_slots() {
+            assert!(
+                self.vector_object_addrs.contains(&(slot as usize)),
+                "allocated page vector slot {slot:p} missing from the vector registry",
+            );
+        }
+    }
+
+    #[cfg(test)]
+    fn assert_one_arena_coherent<T: PagedObject>(&self, arena: &ObjectArena<T>) {
         use std::collections::HashSet;
-        // Partial chain: acyclic, flags consistent, members have free slots.
+        // Partial chain: acyclic, flags consistent, members have free slots,
+        // no retired page on the chain.
         let mut on_chain: HashSet<usize> = HashSet::new();
-        let mut cursor = self.float_partial_head;
-        while cursor != FLOAT_NONE {
+        let mut cursor = arena.partial_head;
+        while cursor != PAGE_NONE {
             assert!(on_chain.insert(cursor), "partial chain cycle at page {cursor}");
-            let page = &self.float_pages[cursor];
+            let page = &arena.pages[cursor];
             assert!(page.on_partial, "chained page {cursor} not flagged on_partial");
+            assert!(!page.retired, "retired page {cursor} on the partial chain");
             assert_ne!(
-                page.free_head, FLOAT_NONE,
+                page.free_head, PAGE_NONE,
                 "chained page {cursor} has an empty free list",
             );
             cursor = page.next_partial;
         }
-        for (page_index, page) in self.float_pages.iter().enumerate() {
+        for (page_index, page) in arena.pages.iter().enumerate() {
             assert_eq!(
-                self.float_page_index_by_base.get(&page.base_addr()),
+                arena.page_index_by_base.get(&page.base_addr()),
                 Some(&page_index),
-                "page-base registry mismatch for page {page_index}",
+                "page-base registry mismatch for {} page {page_index} (retired \
+                 pages must STAY registered)",
+                T::CLASS,
             );
             assert_eq!(
                 page.on_partial,
                 on_chain.contains(&page_index),
                 "page {page_index} on_partial flag disagrees with the chain",
             );
+            if page.retired {
+                // Retirement invariants: full, no free slots, off the chain.
+                assert_eq!(
+                    page.allocated,
+                    ObjectPage::<T>::SLOTS,
+                    "retired {} page {page_index} is not full",
+                    T::CLASS,
+                );
+                assert_eq!(page.free_head, PAGE_NONE, "retired page with free slots");
+                assert!(!page.on_partial, "retired page on the partial chain");
+            }
             // Occupancy == bitmap popcount; every allocated slot is
-            // bump-reached and registered in the ownership set.
+            // bump-reached, answers OWNED via the page-span oracle, and is
+            // NOT in the residual addr-set.
             let mut popcount = 0usize;
-            for word_index in 0..FLOAT_ALLOC_WORDS {
+            for word_index in 0..ObjectPage::<T>::ALLOC_WORDS {
                 let mut bits = page.alloc_bits[word_index];
                 popcount += bits.count_ones() as usize;
                 while bits != 0 {
@@ -6312,8 +6798,14 @@ impl TaggedHeap {
                     );
                     let addr = page.slot_ptr(index) as usize;
                     assert!(
-                        self.non_cons_object_addrs.contains(&addr),
-                        "allocated float slot {addr:#x} missing from non_cons_object_addrs",
+                        arena.owns(addr as *const u8),
+                        "allocated {} slot {addr:#x} not owned by the page-span oracle",
+                        T::CLASS,
+                    );
+                    assert!(
+                        !self.non_cons_object_addrs.contains(&addr),
+                        "{} arena slot {addr:#x} must NOT be in non_cons_object_addrs",
+                        T::CLASS,
                     );
                 }
             }
@@ -6321,15 +6813,20 @@ impl TaggedHeap {
                 page.allocated, popcount,
                 "page {page_index} occupancy != bitmap popcount",
             );
-            // Free list: entries bump-reached, bit-clear, duplicate-free, and
-            // together with the allocated slots exactly cover the bumped span.
+            // Free list: entries bump-reached, bit-clear, duplicate-free,
+            // NOT owned per the oracle, and together with the allocated
+            // slots exactly cover the bumped span.
             let mut free_seen: HashSet<usize> = HashSet::new();
             let mut fcursor = page.free_head;
-            while fcursor != FLOAT_NONE {
+            while fcursor != PAGE_NONE {
                 assert!(fcursor < page.next_index, "free slot beyond the bump cursor");
                 assert!(
                     !page.is_allocated(fcursor),
                     "free-listed slot {fcursor} has its alloc bit set",
+                );
+                assert!(
+                    !arena.owns(page.slot_ptr(fcursor) as *const u8),
+                    "freed slot must answer NOT-owned (alloc-bit oracle)",
                 );
                 assert!(
                     free_seen.insert(fcursor),
@@ -6342,7 +6839,7 @@ impl TaggedHeap {
                 page.next_index,
                 "page {page_index}: occupancy + free-list length != bump cursor",
             );
-            if page.free_head != FLOAT_NONE {
+            if page.free_head != PAGE_NONE {
                 assert!(
                     page.on_partial,
                     "page {page_index} has free slots but is off the partial chain",
@@ -6379,13 +6876,16 @@ impl Drop for TaggedHeap {
             }
         }
         // ConsBlocks are dropped automatically (they implement Drop).
-        // Float arena pages likewise: page floats are on NONE of the lists
-        // above (so the walk cannot hand a page pointer to `free_gc_object`'s
-        // `Box::from_raw`), and the `Vec<FloatPage>` field drop after this
-        // body frees every page wholesale via `FloatPage::drop` — slots are
-        // POD floats, no per-object Drop is owed. The concurrent-mark join at
-        // the top of this body has already reclaimed exclusive ownership, so
-        // the GC thread cannot still be reading a page.
+        // Object arena pages likewise: page floats/strings/vectors are on
+        // NONE of the lists above (so the walk cannot hand a page pointer to
+        // `free_gc_object`'s `Box::from_raw`), and the arena field drops
+        // after this body free every page via `ObjectPage::drop`, which walks
+        // the allocated slots and `drop_in_place`s each live object (strings
+        // free their byte storage + interval tables, vectors their element
+        // `Vec`; floats are POD and the walk compiles out) before releasing
+        // the page storage — retired pages included. The concurrent-mark
+        // join at the top of this body has already reclaimed exclusive
+        // ownership, so the GC thread cannot still be reading a page.
     }
 }
 
@@ -7906,15 +8406,23 @@ mod ownership_tests {
         let live_ptr = live.as_float_ptr().unwrap() as *const u8;
         let dead_ptr = dead.as_float_ptr().unwrap() as *const u8;
 
+        // Stage-3 fold-in: page floats are owned via the PAGE-SPAN oracle
+        // and never touch the residual `non_cons_object_addrs` set.
         assert!(heap.owns_non_cons_object(live_ptr));
         assert!(heap.owns_non_cons_object(dead_ptr));
-        assert_eq!(heap.non_cons_object_addrs.len(), 2);
+        assert!(heap.float_arena.owns(live_ptr));
+        assert!(heap.float_arena.owns(dead_ptr));
+        assert_eq!(heap.non_cons_object_addrs.len(), 0);
 
         heap.collect_exact(std::iter::once(live));
 
+        // The sweep's alloc-bit clear IS the ownership eviction: the freed
+        // slot answers NOT-owned with no addr-set bookkeeping involved.
         assert!(heap.owns_non_cons_object(live_ptr));
         assert!(!heap.owns_non_cons_object(dead_ptr));
-        assert_eq!(heap.non_cons_object_addrs.len(), 1);
+        assert!(heap.float_arena.owns(live_ptr));
+        assert!(!heap.float_arena.owns(dead_ptr));
+        assert_eq!(heap.non_cons_object_addrs.len(), 0);
         assert!((live.xfloat() - 1.0).abs() < f64::EPSILON);
     }
 
@@ -8554,8 +9062,8 @@ mod float_arena_tests {
         for i in 0..n {
             floats.push(heap.alloc_float(i as f64));
         }
-        assert_eq!(heap.float_pages.len(), 3, "3 * PAGE_SLOTS floats = 3 pages");
-        heap.assert_float_arena_coherent();
+        assert_eq!(heap.float_arena.pages.len(), 3, "3 * PAGE_SLOTS floats = 3 pages");
+        heap.assert_object_arenas_coherent();
 
         // Keep the even-indexed half; the odd half is garbage.
         let keep: Vec<TaggedValue> = floats.iter().copied().step_by(2).collect();
@@ -8565,7 +9073,7 @@ mod float_arena_tests {
             .filter(|(i, _)| i % 2 == 1)
             .map(|(_, v)| v.as_float_ptr().unwrap() as usize)
             .collect();
-        let page0_base = heap.float_pages[0].base_addr();
+        let page0_base = heap.float_arena.pages[0].base_addr();
 
         // Mark to a fixpoint and ARM the deferred sweep (the incremental
         // termination path), then drain it slice by slice.
@@ -8581,7 +9089,7 @@ mod float_arena_tests {
         // Slice 1 (budget 1): sweeps float page 0 only — the window is open.
         assert!(!heap.incremental_sweep_slice(1), "3 pages need >1 slice");
         assert!(heap.sweep_in_progress());
-        heap.assert_float_arena_coherent();
+        heap.assert_object_arenas_coherent();
 
         // BETWEEN cooperative slices the mutator reallocates: the class free
         // list must hand back the slots the slice just freed, in page 0.
@@ -8592,7 +9100,7 @@ mod float_arena_tests {
         for r in &reused {
             let ptr = r.as_float_ptr().unwrap();
             assert_eq!(
-                FloatPage::page_base_for_ptr(ptr),
+                ObjectPage::<FloatObj>::page_base_for_ptr(ptr),
                 page0_base,
                 "mid-sweep reuse must come from the just-swept page",
             );
@@ -8601,14 +9109,14 @@ mod float_arena_tests {
                 "reused slot must be one the sweep just freed",
             );
         }
-        heap.assert_float_arena_coherent();
+        heap.assert_object_arenas_coherent();
 
         // Drain the rest. The reallocated slots were re-read from the LIVE
         // bitmap and born at the cycle parity, so the remaining slices must
         // not free them (no premature free) nor re-free their slots.
         while !heap.incremental_sweep_slice(1) {}
         assert!(!heap.sweep_in_progress());
-        heap.assert_float_arena_coherent();
+        heap.assert_object_arenas_coherent();
 
         for (i, r) in reused.iter().enumerate() {
             assert!(
@@ -8689,14 +9197,14 @@ mod float_arena_tests {
             heap.owns_non_cons_object(f_ptr),
             "allocate-black float must survive the cycle it was born in",
         );
-        heap.assert_float_arena_coherent();
+        heap.assert_object_arenas_coherent();
 
         // Cycle 3 (opposite parity): rooted now — must be traced as unmarked
         // via the seed and survive with its payload intact.
         run_concurrent_cycle(&mut heap, &[spine, f]);
         assert!(heap.owns_non_cons_object(f_ptr));
         assert!((f.xfloat() - 2.5).abs() < f64::EPSILON);
-        heap.assert_float_arena_coherent();
+        heap.assert_object_arenas_coherent();
 
         // Reclaim: g1 idle-born (no allocate-black), g2 mark-born.
         let g1 = heap.alloc_float(9.0);
@@ -8728,7 +9236,7 @@ mod float_arena_tests {
             heap.owns_non_cons_object(g2_ptr),
             "mark-born garbage float floats through its birth cycle",
         );
-        heap.assert_float_arena_coherent();
+        heap.assert_object_arenas_coherent();
 
         run_concurrent_cycle(&mut heap, &[spine, f]);
         assert!(
@@ -8736,7 +9244,7 @@ mod float_arena_tests {
             "mark-born garbage float must be reclaimed by the SECOND cycle",
         );
         assert!((f.xfloat() - 2.5).abs() < f64::EPSILON);
-        heap.assert_float_arena_coherent();
+        heap.assert_object_arenas_coherent();
     }
 
     #[test]
@@ -8815,7 +9323,7 @@ mod float_arena_tests {
             !heap.owns_non_cons_object(garbage_ptr),
             "unrooted float must not be retained by the deferred machinery",
         );
-        heap.assert_float_arena_coherent();
+        heap.assert_object_arenas_coherent();
     }
 
     #[test]
@@ -8830,7 +9338,7 @@ mod float_arena_tests {
 
     /// (d) Teardown: dropping the heap frees every float page exactly once
     /// (page floats are on none of the intrusive lists, so this is the
-    /// explicit `Vec<FloatPage>` drop path). Counter deltas are deterministic
+    /// explicit `Vec<ObjectPage<FloatObj>>` drop path). Counter deltas are deterministic
     /// under nextest's process-per-test execution.
     fn pages_freed_at_heap_drop_body(verify: bool) {
         crate::test_utils::init_test_tracing();
@@ -8856,7 +9364,7 @@ mod float_arena_tests {
         // empty pages stay on the arena for reuse).
         heap.collect_exact(std::iter::empty());
         assert_eq!(LIVE_FLOAT_PAGES.load(Ordering::Relaxed), before + 3);
-        heap.assert_float_arena_coherent();
+        heap.assert_object_arenas_coherent();
         drop(heap);
         assert_eq!(
             LIVE_FLOAT_PAGES.load(Ordering::Relaxed),
@@ -8878,7 +9386,7 @@ mod float_arena_tests {
     /// (d, mid-mark variant) Dropping the heap while the GC thread is still
     /// concurrently marking must join the thread FIRST and then free the
     /// pages — the join runs in `TaggedHeap::drop`'s body, before the
-    /// `Vec<FloatPage>` field drop. Under TSAN/ASAN a page freed early would
+    /// `Vec<ObjectPage<FloatObj>>` field drop. Under TSAN/ASAN a page freed early would
     /// be a use-after-free on the GC thread; the counter catches leaks and
     /// double-frees.
     fn pages_freed_at_heap_drop_mid_concurrent_mark_body(verify: bool) {
@@ -8974,10 +9482,11 @@ mod float_arena_tests {
         // so the page registry cannot misroute mapped floats.
         assert!(
             !heap
-                .float_page_index_by_base
-                .contains_key(&FloatPage::page_base_for_ptr(m_ptr)),
+                .float_arena
+                .page_index_by_base
+                .contains_key(&ObjectPage::<FloatObj>::page_base_for_ptr(m_ptr)),
         );
-        heap.assert_float_arena_coherent();
+        heap.assert_object_arenas_coherent();
 
         // Partitioned cycle: the mapped float is permanent-black (skipped),
         // the page float re-marks via the root, fresh garbage is swept.
@@ -8988,7 +9497,7 @@ mod float_arena_tests {
         assert!(!heap.owns_non_cons_object(g2_ptr));
         assert!((h.xfloat() - 1.25).abs() < f64::EPSILON);
         assert!((m.xfloat() - 12.0).abs() < f64::EPSILON);
-        heap.assert_float_arena_coherent();
+        heap.assert_object_arenas_coherent();
     }
 
     #[test]
@@ -9039,7 +9548,7 @@ mod float_arena_tests {
             unsafe { std::ptr::write_bytes(p as *mut u8, 0xFF, size_of::<FloatObj>()) };
         }
         // The free list (trailing link words) survived the scribble.
-        heap.assert_float_arena_coherent();
+        heap.assert_object_arenas_coherent();
 
         // A full cycle re-sweeps the page: the scribbled slots' bits are
         // clear, so no header is Drop-dispatched, size-read, or parity-read
@@ -9048,7 +9557,7 @@ mod float_arena_tests {
         for (i, k) in keep.iter().enumerate() {
             assert!((k.xfloat() - (2 * i) as f64).abs() < f64::EPSILON);
         }
-        heap.assert_float_arena_coherent();
+        heap.assert_object_arenas_coherent();
 
         // Reallocate exactly the freed population: the class free list hands
         // the scribbled slots back; the FULL-HEADER WRITE must rebuild every
@@ -9072,7 +9581,7 @@ mod float_arena_tests {
             }
             assert!((r.xfloat() - (500.0 + i as f64)).abs() < f64::EPSILON);
         }
-        heap.assert_float_arena_coherent();
+        heap.assert_object_arenas_coherent();
 
         // The rebuilt headers survive a rooted cycle (the sweep now reads
         // them — the debug asserts prove they are coherent again), and a
@@ -9087,7 +9596,7 @@ mod float_arena_tests {
         for r in &reused {
             assert!(!heap.owns_non_cons_object(r.as_float_ptr().unwrap() as *const u8));
         }
-        heap.assert_float_arena_coherent();
+        heap.assert_object_arenas_coherent();
     }
 
     #[test]
@@ -9144,7 +9653,7 @@ mod float_arena_tests {
             );
             assert!((f.xfloat() - 42.5).abs() < f64::EPSILON);
         }
-        heap.assert_float_arena_coherent();
+        heap.assert_object_arenas_coherent();
     }
 
     #[test]
