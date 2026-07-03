@@ -4463,10 +4463,16 @@ impl TaggedHeap {
         // `non_cons_object_addrs` set — the filter walk was 11-32% of this
         // world-stopped start handshake. Vectors allocated mid-cycle are absent from
         // this capture and are covered by allocate-black.
-        if cfg!(test) || std::env::var("NEOVM_GC_VERIFY_PARTITION").as_deref() == Ok("1") {
+        if (cfg!(test) && cfg!(debug_assertions))
+            || std::env::var("NEOVM_GC_VERIFY_PARTITION").as_deref() == Ok("1")
+        {
             // Fix A INVARIANT: the registry equals the exact live owned Vector
             // subset of `non_cons_object_addrs` at every handshake. Cross-check
-            // against the full-set filter the registry replaced.
+            // against the full-set filter the registry replaced. Debug test
+            // builds only (or explicit VERIFY_PARTITION): the release drain
+            // profilers are themselves cfg(test) binaries, and this walk would
+            // re-add the exact cost Fix A removed inside the timed vecsnap
+            // region.
             let full_filter_count = self
                 .non_cons_object_addrs
                 .iter()

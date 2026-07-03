@@ -474,8 +474,11 @@ impl SymbolRegistry {
         // Task #7 stage 2a rider: walk only this heap's indexed entries (the
         // full-slot scan this replaced was 29-39us of both STW handshakes for
         // a handful of roots). Same SET as the old filter — `name_value` is
-        // immutable after `alloc_symbol`, the sole slot constructor.
-        #[cfg(test)]
+        // immutable after `alloc_symbol`, the sole slot constructor. The
+        // cross-check runs in debug test builds only: the release drain
+        // profilers are cfg(test) binaries, and the full-slot walk would
+        // re-add the exact cost this index removed.
+        #[cfg(all(test, debug_assertions))]
         {
             let full = self
                 .symbols
