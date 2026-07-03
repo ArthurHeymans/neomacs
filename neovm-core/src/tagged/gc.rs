@@ -200,6 +200,19 @@ struct ConcurrentMarkJob {
     /// read-only on the GC thread). A cons whose block base is here is markable
     /// via block arithmetic; others (mapped/dump, or new blocks) are deferred.
     owned_bases: std::sync::Arc<std::collections::HashSet<usize>>,
+    /// CONCURRENT STRING MARKING claim oracle (stage 3): the base address of
+    /// every STRING ARENA PAGE at the world-stopped start handshake
+    /// (immutable, read-only on the GC thread — the live registry/bitmaps
+    /// belong to the mutator). Snapshot-hit ⇒ an owned page string ⇒
+    /// claim-eligible; MISS ⇒ DEFER, which is fail-safe for everything else:
+    /// pages created mid-cycle (their strings are born-at-parity anyway),
+    /// mapped (pdump) strings (marked via the side-table bool — claiming
+    /// their `GcHeader` bit would skip the mapped mark + interval trace at
+    /// termination, a UAF of their interval children), and any residual
+    /// `Box` string (none are allocated anymore, but a miss merely defers).
+    /// A page base can never collide with non-page memory: a page owns its
+    /// whole 64KB span exclusively.
+    string_page_bases: std::sync::Arc<std::collections::HashSet<usize>>,
     /// Dump (pdump mmap) address span; conses inside are permanent-black and
     /// their young children come from the remembered set, so they are skipped.
     dump_lo: usize,
@@ -308,19 +321,24 @@ unsafe fn atomic_mark_owned_cons_ptr(ptr: *const ConsCell) -> bool {
 /// STW termination exactly as before. Called at all three discovery sinks
 /// (gray drain, obarray scan, vector-backing scan).
 ///
-/// OWNERSHIP — the same dump-span test the cons drain uses: every mapped
-/// (pdump) string is registered via `register_mapped_string_object`, whose
-/// only caller (pdump convert) passes `size_of::<StringObj>()` (never 0), so
-/// registration ALWAYS `extend_dump_span`s over the object — no
-/// "mapped-non-dump string" exists (verified; unlike conses, which have
-/// non-dump mapped ranges). `alloc_string` is the only other producer of
-/// TAG_STRING values, so outside the span ⇒ owned by this heap. Inside the
-/// span ⇒ possibly mapped ⇒ DEFER unchanged: mapped strings are marked via a
-/// SEPARATE plain-bool (`MappedStringObject::marked`) that sweep/verify
+/// OWNERSHIP — a START-HANDSHAKE IMMUTABLE PAGE-BASE SNAPSHOT (stage 3;
+/// replaces float-v1's dump-span test): all owned strings live in STRING
+/// ARENA PAGES, and `string_page_bases` captures every string page base at
+/// the world-stopped launch (same `Arc` publication as the cons
+/// `owned_bases`). Snapshot-hit ⇒ this is an owned page string (a 64KB page
+/// owns its whole span exclusively, so no mapped or foreign address can mask
+/// to a registered base) ⇒ claim-eligible. MISS ⇒ DEFER — fail-safe for
+/// every other population: pages created mid-cycle (their strings are
+/// born-at-parity and need no claim), mapped (pdump) strings (marked via the
+/// SEPARATE `MappedStringObject::marked` side bool that sweep/verify
 /// consult — claiming their `GcHeader` bit here would let the termination's
 /// `mark_value` skip the mapped mark and the interval trace, a use-after-free
-/// of their interval children. (An OWNED string that happens to sit inside
-/// the span is merely deferred — safe, identical to today's path.)
+/// of their interval children), and residual `Box` strings (none are
+/// allocated anymore; any root-reachable stragglers simply keep deferring —
+/// the bounded permanent drain tail measured at the cutover). No alloc-bit
+/// or registry read happens here: those live structures belong to the
+/// mutator (which allocates into snapshot pages mid-cycle); the snapshot is
+/// the GC thread's only ownership authority.
 ///
 /// INTERVALS — the hard boundary: the GC thread reads ONLY the interval
 /// pointer WORD (`intervals_ptr`), NEVER the table behind it. The mutator can
@@ -334,15 +352,21 @@ unsafe fn atomic_mark_owned_cons_ptr(ptr: *const ConsCell) -> bool {
 /// mark bit and return without tracing the intervals. Staleness is safe both
 /// ways: a stale non-null word only defers spuriously; a "stale null" can
 /// only follow a real `clear_intervals`, whose SATB barrier (enforced inside
-/// the `LispString` mutators) logged the dropped children first. A table
-/// installed AFTER we claim is also safe: its children are values the mutator
-/// obtained from snapshot-reachable places or allocated black — live this
-/// cycle under SATB's invariant — and the next cycle re-traces fresh marks.
+/// the `LispString` mutators) logged the dropped children first.
+///
+/// SATB ARGUMENT for a table installed AFTER the claim (equivalently: for a
+/// string ALLOCATED DURING this mark that gains intervals): claiming, then
+/// never re-visiting, is sound because every value the mutator can store
+/// into that table was obtained from a snapshot-reachable home (whose
+/// reachability the snapshot roots + the deletion barriers preserve: an
+/// overwrite of the child's original home logs the pre-image to the SATB
+/// buffer before the store) or was allocated black this cycle. Either way
+/// the child survives THIS cycle without the claimed string being traced,
+/// and the NEXT cycle re-traces the string's intervals against fresh marks.
 #[inline]
 fn concurrent_try_mark_string(
     val: TaggedValue,
-    dump_lo: usize,
-    dump_hi: usize,
+    string_page_bases: &std::collections::HashSet<usize>,
     parity: bool,
     str_claimed: &AtomicUsize,
 ) -> bool {
@@ -350,11 +374,11 @@ fn concurrent_try_mark_string(
     let Some(ptr) = val.as_string_ptr() else {
         return false; // malformed value — let the termination's mark_value decide
     };
-    let addr = ptr as usize;
-    if addr >= dump_lo && addr < dump_hi {
-        return false; // inside the dump span: possibly mapped — defer (unchanged path)
+    let base = (ptr as usize) & !(OBJECT_PAGE_ALIGN - 1);
+    if !string_page_bases.contains(&base) {
+        return false; // snapshot MISS: mid-cycle page / mapped / residual — defer
     }
-    // Owned string. Read the interval pointer WORD only (see doc above).
+    // Owned page string. Read the interval pointer WORD only (see doc above).
     if !unsafe { (*ptr).data.intervals_ptr() }.is_null() {
         return false; // interval-bearing: defer so mark_value traces the children
     }
@@ -449,8 +473,7 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
                 if val.is_string()
                     && concurrent_try_mark_string(
                         val,
-                        job.dump_lo,
-                        job.dump_hi,
+                        &job.string_page_bases,
                         job.parity,
                         &job.str_claimed,
                     )
@@ -481,8 +504,7 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
                         } else if !(child.is_string()
                             && concurrent_try_mark_string(
                                 child,
-                                job.dump_lo,
-                                job.dump_hi,
+                                &job.string_page_bases,
                                 job.parity,
                                 &job.str_claimed,
                             ))
@@ -518,8 +540,7 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
                         } else if !(child.is_string()
                             && concurrent_try_mark_string(
                                 child,
-                                job.dump_lo,
-                                job.dump_hi,
+                                &job.string_page_bases,
                                 job.parity,
                                 &job.str_claimed,
                             ))
@@ -3082,16 +3103,47 @@ impl TaggedHeap {
         unsafe { TaggedValue::from_cons_ptr(cell) }
     }
 
-    /// Allocate a string object.
+    /// Allocate a string object from the STRING ARENA PAGES.
+    ///
+    /// Every slot allocation/reuse performs a FULL-header `ptr::write` of the
+    /// whole 56-byte `StringObj` — a fresh `GcHeader` (kind=String,
+    /// tenured=false, next=null) plus the moved-in `LispString`, whose
+    /// `intervals` `AtomicPtr` word overwrites any STALE interval pointer
+    /// left by the slot's previous occupant BEFORE the value is published
+    /// (for a fresh `LispString` that word is null; a leaked stale non-null
+    /// word would be taken for a live table by the GC thread's null-check
+    /// and dereferenced by `mark_value`'s interval trace — a UAF). Writing
+    /// the atomic word non-atomically inside `ptr::write` is sound: the slot
+    /// is unreachable by any other thread until the tagged value escapes.
+    /// Then the same unconditional born-at-parity store `link_object`
+    /// applies.
+    ///
+    /// Page strings are OWNED via the page-span oracle: they NEVER touch
+    /// `all_objects`, `non_cons_object_addrs`, or `link_object` — the
+    /// intrusive lists sweep with `free_gc_object`/`Box::from_raw`, which
+    /// would corrupt the heap on a page pointer. The page sweep is the only
+    /// string reclaimer (it `drop_in_place`s dead slots, freeing the byte
+    /// storage and interval table the string owns).
     pub fn alloc_string(&mut self, s: crate::heap_types::LispString) -> TaggedValue {
         self.add_memory_use_count(MemoryUseCountSlot::Strings, 1);
         self.add_memory_use_count(MemoryUseCountSlot::StringChars, s.sbytes() as u64);
-        let obj = Box::new(StringObj {
-            header: GcHeader::new(HeapObjectKind::String),
-            data: s,
-        });
-        let ptr = Box::into_raw(obj);
-        self.link_object(unsafe { &mut (*ptr).header });
+        let ptr = self.string_arena.alloc_slot();
+        unsafe {
+            // FULL-HEADER WRITE: never partially reuse prior slot bytes.
+            std::ptr::write(
+                ptr,
+                StringObj {
+                    header: GcHeader::new(HeapObjectKind::String),
+                    data: s,
+                },
+            );
+            // BORN-AT-PARITY, unconditionally — the link seam's store (see
+            // `link_object`): allocate-black during a mark/sweep, pre-armed
+            // white for the next `begin_collection` flip otherwise.
+            (*ptr).header.set_marked(self.mark_parity);
+        }
+        #[cfg(test)]
+        alloc_probe::record(ptr as *const GcHeader, self.non_cons_object_addrs.len());
         self.allocated_count += 1;
         self.note_allocation_bytes(unsafe { Self::string_object_bytes(&*ptr) });
         unsafe { TaggedValue::from_string_ptr(ptr) }
@@ -3646,31 +3698,10 @@ impl TaggedHeap {
     // Internal helpers
     // -----------------------------------------------------------------------
 
-    /// Link a non-cons object into the all_objects intrusive list.
-    fn link_object(&mut self, header: &mut GcHeader) {
-        header.next = self.all_objects;
-        // BORN-AT-PARITY: a fresh young object's bit is ALWAYS written as the
-        // CURRENT parity, unconditionally.
-        //  - During a concurrent mark this is allocate-black: the GC thread
-        //    defers non-cons objects and never reaches one born mid-cycle, so
-        //    bit == parity keeps it alive through this cycle's sweep. (A
-        //    literal `true` here would be the cycle-2 UAF: on a parity==false
-        //    cycle the newborn would read unmarked and be swept while live.)
-        //  - Outside a mark nothing reads young bits until the next
-        //    `begin_collection` flips the parity, which turns bit == old
-        //    parity into unmarked — the correct white for a fresh object
-        //    entering its first traced cycle. (Storing `!parity` here instead
-        //    would read as MARKED after that flip: the object would never be
-        //    traced that cycle, and a young child reachable only through it
-        //    would be swept while referenced — a UAF.)
-        header.set_marked(self.mark_parity);
-        let ptr = header as *mut GcHeader;
-        let inserted = self.non_cons_object_addrs.insert(ptr as usize);
-        debug_assert!(inserted, "non-cons object linked twice");
-        self.all_objects = ptr;
-        #[cfg(test)]
-        alloc_probe::record(ptr, self.non_cons_object_addrs.len());
-    }
+    // NOTE: `link_object` (the bare-`GcHeader` intrusive-list link) is gone —
+    // both bare-header classes (Float, String) allocate from arena pages now.
+    // `link_veclike` below carries the canonical BORN-AT-PARITY comment; the
+    // page alloc paths apply the identical store inline.
 
     /// Task #7 stage 2a (Fix A): drop a dying non-cons object from the
     /// incremental vector registry. Called with the header still live,
@@ -5254,6 +5285,18 @@ impl TaggedHeap {
         for block in &self.cons_blocks {
             owned.insert(block.base_addr());
         }
+        // CONCURRENT STRING MARKING claim oracle (stage 3): capture the
+        // string arena's page bases at this same world-stopped instant
+        // (retired pages included — their tenured strings are claim-benign).
+        // Built alongside the cons `owned_bases` so both snapshots share the
+        // immutability argument: pages created after this point are absent
+        // and their strings DEFER (fail-safe). Timed within the conssnap
+        // handshake slot (same ownership-snapshot phase).
+        let mut string_bases =
+            std::collections::HashSet::with_capacity(self.string_arena.pages.len());
+        for page in &self.string_arena.pages {
+            string_bases.insert(page.base_addr());
+        }
         self.handshake.last_start_conssnap_us = conssnap_t0.elapsed().as_micros() as u64;
         self.handshake.probe_cons_blocks = self.cons_blocks.len();
         let vecsnap_t0 = std::time::Instant::now();
@@ -5334,6 +5377,7 @@ impl TaggedHeap {
             // Mandated carry: the GC thread claims strings at THIS cycle's parity.
             parity: self.mark_parity,
             owned_bases: std::sync::Arc::new(owned),
+            string_page_bases: std::sync::Arc::new(string_bases),
             dump_lo: self.dump_addr_lo,
             dump_hi: self.dump_addr_hi,
             satb: self.satb_shared.clone(),
@@ -7622,6 +7666,96 @@ mod ownership_tests {
         );
         assert!(heap.owns_non_cons_object(s.as_string_ptr().unwrap() as *const u8));
         assert!(heap.owns_non_cons_object(s2.as_string_ptr().unwrap() as *const u8));
+    }
+
+    /// MID-MARK-BORN STRING GAINS INTERVALS (the SATB argument at the claim
+    /// site, exercised end to end): a string S is allocated DURING a
+    /// concurrent mark (born-at-parity — the GC thread will never trace it
+    /// this cycle) and its freshly installed interval table becomes the ONLY
+    /// reference to young cons C, whose original home is overwritten
+    /// mid-mark. C must survive this cycle — not through S, but because the
+    /// overwrite of its snapshot-reachable home fired the SATB deletion
+    /// barrier (pre-image logged) — and the NEXT cycle must keep C alive
+    /// through S's interval trace (`mark_value` re-traces fresh marks).
+    #[test]
+    fn concurrent_mark_born_string_interval_child_survives() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // C: young cons, reachable at the snapshot ONLY via home H's car.
+        let c = heap.alloc_cons(TaggedValue::fixnum(71), TaggedValue::fixnum(72));
+        let home = heap.alloc_cons(c, TaggedValue::fixnum(0));
+        // Long spine so the GC thread is still marking during the mutation.
+        let mut list = heap.alloc_cons(home, TaggedValue::fixnum(0));
+        for i in 0..300_000 {
+            list = heap.alloc_cons(TaggedValue::fixnum(i), list);
+        }
+        let root = list;
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+
+        // Mid-mark: allocate S (page string, absent from this cycle's claim
+        // snapshot only if it opened a fresh page — either way born-at-parity
+        // keeps it alive), install a table carrying C, then sever C's
+        // original home. The home overwrite fires the SATB pre-image barrier
+        // (`set_cons_car` -> record_heap_write), which is what keeps C alive
+        // this cycle; S's table is never traced this cycle.
+        let s = heap.alloc_string(crate::heap_types::LispString::from_utf8("mid-mark"));
+        let installed = crate::tagged::mutate::with_string_text_props_mut(s, |t| {
+            *t = interval_table_carrying(c);
+        });
+        assert!(installed.is_some());
+        assert!(crate::tagged::mutate::set_cons_car(home, TaggedValue::NIL));
+
+        // Terminate with S re-seeded alongside the spine (S is a live value
+        // the mutator holds; the explicit-roots harness must name it).
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(root);
+        heap.seed_root(s);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+
+        // C survived its birth-cycle severing (SATB), S survived (born-at-
+        // parity), and C's payload is intact.
+        assert!(heap.owns_non_cons_object(s.as_string_ptr().unwrap() as *const u8));
+        assert_eq!(
+            unsafe { (*c.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(71).0,
+        );
+
+        // NEXT full cycle: C is now reachable ONLY through S's intervals —
+        // the termination's `mark_value` must trace them (S is white again
+        // at the new parity, so it cannot be skipped as already-marked, and
+        // its non-null interval word defers it to the STW trace).
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.seed_root(s);
+        heap.launch_concurrent_mark();
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(root);
+        heap.seed_root(s);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+        assert!(heap.owns_non_cons_object(s.as_string_ptr().unwrap() as *const u8));
+        assert_eq!(
+            unsafe { (*c.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(71).0,
+        );
     }
 
     /// Same as above, but the mid-mark clear BYPASSES the `mutate.rs` wrappers
