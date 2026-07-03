@@ -3189,15 +3189,44 @@ impl TaggedHeap {
         unsafe { TaggedValue::from_float_ptr(ptr) }
     }
 
-    /// Allocate a vector.
+    /// Allocate a vector from the VECTOR ARENA PAGES.
+    ///
+    /// This is the single `VecLikeType::Vector` allocation chokepoint (every
+    /// other veclike stays a `Box` through `link_veclike`). One FULL-header
+    /// `ptr::write` of the whole 48-byte `VectorObj` (fresh `VecLikeHeader`
+    /// + the `LispValueVec` built from `items` — a reused slot's stale bytes
+    /// never leak), then the unconditional born-at-parity store.
+    ///
+    /// INCREMENTAL VECTOR REGISTRY (Fix A) at the page chokepoint: page
+    /// vectors never pass `link_veclike`, so the registry insert lives HERE
+    /// and the matching remove lives in the page sweep's free hook
+    /// (`sweep_arena_pages_ranges`) — the Tier-B vecsnap keeps enumerating
+    /// every live vector. Page vectors never touch `all_objects` /
+    /// `non_cons_object_addrs`; the page sweep is their only reclaimer (its
+    /// `drop_in_place` frees the element `Vec` the vector owns).
     pub fn alloc_vector(&mut self, items: Vec<TaggedValue>) -> TaggedValue {
         self.add_memory_use_count(MemoryUseCountSlot::VectorCells, items.len() as u64);
-        let obj = Box::new(VectorObj {
-            header: VecLikeHeader::new(VecLikeType::Vector),
-            data: items.into(),
-        });
-        let ptr = Box::into_raw(obj);
-        self.link_veclike(ptr as *mut VecLikeHeader);
+        let ptr = self.vector_arena.alloc_slot();
+        unsafe {
+            // FULL-HEADER WRITE: never partially reuse prior slot bytes.
+            std::ptr::write(
+                ptr,
+                VectorObj {
+                    header: VecLikeHeader::new(VecLikeType::Vector),
+                    data: items.into(),
+                },
+            );
+            // BORN-AT-PARITY, unconditionally — the link seam's store (see
+            // `link_veclike`).
+            (*ptr).header.gc.set_marked(self.mark_parity);
+        }
+        let registered = self.vector_object_addrs.insert(ptr as usize);
+        debug_assert!(
+            registered,
+            "page vector allocated twice (bitmap/registry out of sync)"
+        );
+        #[cfg(test)]
+        alloc_probe::record(ptr as *const GcHeader, self.non_cons_object_addrs.len());
         self.allocated_count += 1;
         self.note_allocation_bytes(
             size_of::<VectorObj>()
@@ -3734,7 +3763,10 @@ impl TaggedHeap {
             let inserted = self.non_cons_object_addrs.insert(gc_header as usize);
             debug_assert!(inserted, "veclike object linked twice");
             // Task #7 stage 2a (Fix A): maintain the incremental vector
-            // registry at the single veclike link chokepoint.
+            // registry at the veclike link chokepoint. UNREACHABLE for
+            // Vector since stage 3 (alloc_vector allocates from pages and
+            // registers there); kept as the residual-Box seam so any future
+            // Box-vector producer stays registry-correct by construction.
             if (*header).type_tag == VecLikeType::Vector {
                 let registered = self.vector_object_addrs.insert(gc_header as usize);
                 debug_assert!(registered, "vector linked twice into the registry");
@@ -5314,14 +5346,20 @@ impl TaggedHeap {
         if (cfg!(test) && cfg!(debug_assertions))
             || std::env::var("NEOVM_GC_VERIFY_PARTITION").as_deref() == Ok("1")
         {
-            // Fix A INVARIANT: the registry equals the exact live owned Vector
-            // subset of `non_cons_object_addrs` at every handshake. Cross-check
-            // against the full-set filter the registry replaced. Debug test
-            // builds only (or explicit VERIFY_PARTITION): the release drain
-            // profilers are themselves cfg(test) binaries, and this walk would
-            // re-add the exact cost Fix A removed inside the timed vecsnap
-            // region.
-            let full_filter_count = self
+            // Fix A INVARIANT, stage-3 form: the registry equals the live
+            // owned Vector population = ALLOCATED VECTOR-ARENA PAGE SLOTS ∪
+            // the residual Box Vector subset of `non_cons_object_addrs`.
+            // (The pre-stage-3 form — registry == Vector∩addr-set — would
+            // fire on the first page vector; worse, if the registry were
+            // silently EMPTY the old 0==0 check would pass and the Tier-B
+            // vecsnap below would disable concurrent vector marking without
+            // any test noticing.) Cross-check both directions: counts match
+            // the union of the two disjoint sources, and every registry
+            // address is page-owned xor addr-set-resident. Debug test builds
+            // only (or explicit VERIFY_PARTITION): the release drain
+            // profilers are themselves cfg(test) binaries, and this walk
+            // would re-add cost inside the timed vecsnap region.
+            let box_filter_count = self
                 .non_cons_object_addrs
                 .iter()
                 .filter(|&&addr| unsafe {
@@ -5329,15 +5367,19 @@ impl TaggedHeap {
                         && (*(addr as *const VecLikeHeader)).type_tag == VecLikeType::Vector
                 })
                 .count();
+            let page_vector_count: usize =
+                self.vector_arena.pages.iter().map(|p| p.allocated).sum();
             assert_eq!(
                 self.vector_object_addrs.len(),
-                full_filter_count,
-                "vector registry diverged from the non-cons set's Vector subset",
+                box_filter_count + page_vector_count,
+                "vector registry diverged from page slots ∪ residual Box vectors",
             );
             for &addr in &self.vector_object_addrs {
+                let page_owned = self.vector_arena.owns(addr as *const u8);
+                let box_owned = self.non_cons_object_addrs.contains(&addr);
                 assert!(
-                    self.non_cons_object_addrs.contains(&addr),
-                    "vector registry holds an address absent from the non-cons set",
+                    page_owned ^ box_owned,
+                    "vector registry address must be page-owned xor Box-owned",
                 );
             }
         }
@@ -8329,12 +8371,14 @@ mod ownership_tests {
         set_tagged_heap(&mut heap);
         heap.extend_dump_span(4096, 16); // fake span: activates the partition
 
-        // T: vector that will be tenured by the first partition cycle. Y: a
-        // young cons reachable ONLY through T (conses never tenure), so its
-        // survival on later cycles proves the promotion-time remembered set,
-        // not accidental re-tracing of T.
+        // T: a Box RECORD that will be tenured by the first partition
+        // cycle's list promotion (page vectors tenure via the stage-3
+        // promotion page walk and carry their own coverage). Y: a young cons
+        // reachable ONLY through T (conses never tenure), so its survival on
+        // later cycles proves the promotion-time remembered set, not
+        // accidental re-tracing of T.
         let y = heap.alloc_cons(TaggedValue::fixnum(424_242), TaggedValue::fixnum(0));
-        let t = heap.alloc_vector(vec![y]);
+        let t = heap.alloc_record(vec![y]);
         let root = heap.alloc_cons(t, TaggedValue::fixnum(0));
 
         // First partition cycle: STW full trace + sweep, then promotion.
@@ -8343,7 +8387,7 @@ mod ownership_tests {
         let t_header = t.as_veclike_ptr().unwrap();
         assert!(
             unsafe { (*t_header).gc.tenured },
-            "the surviving vector must have been promoted to the old generation",
+            "the surviving record must have been promoted to the old generation",
         );
         let frozen_bit = unsafe { (*t_header).gc.is_marked() };
 
@@ -8353,7 +8397,7 @@ mod ownership_tests {
             run_concurrent_cycle(&mut heap, &[root]);
             assert!(
                 heap.owns_non_cons_object(t_header as *const u8),
-                "tenured vector swept on post-promotion cycle {cycle}",
+                "tenured record swept on post-promotion cycle {cycle}",
             );
             assert_eq!(
                 unsafe { (*t_header).gc.is_marked() },
@@ -8364,7 +8408,7 @@ mod ownership_tests {
             assert_eq!(
                 unsafe { (*y.xcons_ptr()).load_car() }.0,
                 TaggedValue::fixnum(424_242).0,
-                "young child of the tenured vector lost on cycle {cycle}",
+                "young child of the tenured record lost on cycle {cycle}",
             );
         }
     }
@@ -8578,8 +8622,10 @@ mod ownership_tests {
             let entry = obj.data.scan_entry();
             (entry.base as usize, entry.len, entry.is_mapped)
         }
-        // Old-method snapshot contents: filter the WHOLE non-cons set for
-        // Vector-tagged objects (exactly the loop Fix A replaced).
+        // Ground-truth snapshot contents, stage-3 form: allocated VECTOR
+        // ARENA PAGE SLOTS (walked allocated-bit-first) ∪ any residual
+        // Box Vector in the non-cons set (none are allocated anymore, but
+        // the union keeps the test honest about the invariant's shape).
         fn full_filter_entries(heap: &TaggedHeap) -> Vec<(usize, usize, bool)> {
             let mut entries: Vec<(usize, usize, bool)> = heap
                 .non_cons_object_addrs
@@ -8590,6 +8636,12 @@ mod ownership_tests {
                 })
                 .map(|&addr| entry_key(addr))
                 .collect();
+            entries.extend(
+                heap.vector_arena
+                    .collect_allocated_slots()
+                    .into_iter()
+                    .map(|slot| entry_key(slot as usize)),
+            );
             entries.sort_unstable();
             entries
         }
@@ -9743,11 +9795,12 @@ mod float_arena_tests {
         freed_slot_garbage_headers_are_never_read_body(true);
     }
 
-    /// Remembered-set safety for the ALL-YOUNG property (guardrail: page
-    /// floats are never promoted): a float alive at the first partition
-    /// cycle stays young, and when its only owner is TENURED at promotion,
-    /// the promotion-time permanents scan must record the owner so the float
-    /// is re-seeded and survives every later partitioned cycle.
+    /// Remembered-set safety across the young/tenured boundary: when a page
+    /// float's only owner is TENURED at promotion (a Box RECORD here — the
+    /// list-promotion path; page vectors get their own tenure coverage with
+    /// the stage-3 promotion page walk), the promotion-time permanents scan
+    /// must record the owner so the float is re-seeded and survives every
+    /// later partitioned cycle.
     fn tenured_owner_keeps_young_page_float_alive_body(verify: bool) {
         crate::test_utils::init_test_tracing();
         if verify {
@@ -9757,27 +9810,23 @@ mod float_arena_tests {
         set_tagged_heap(&mut heap);
         heap.extend_dump_span(4096, 16); // activates the partition
 
-        // F reachable ONLY through vector T (T will tenure; floats cannot).
+        // F reachable ONLY through record T (T is a Box veclike, so the
+        // list promotion tenures it).
         let f = heap.alloc_float(42.5);
         let f_ptr = f.as_float_ptr().unwrap() as *const u8;
-        let t = heap.alloc_vector(vec![f]);
+        let t = heap.alloc_record(vec![f]);
         let root = heap.alloc_cons(t, TaggedValue::fixnum(0));
 
-        // First partition cycle: T promotes to tenured; F must NOT (pages
-        // are all-young — the promotion splice never sees them).
+        // First partition cycle: T promotes to tenured.
         heap.collect_exact(std::iter::once(root));
         assert!(heap.dump_blackened);
         let t_header = t.as_veclike_ptr().unwrap();
-        assert!(unsafe { (*t_header).gc.tenured }, "vector must have tenured");
-        assert!(
-            !unsafe { &*(f_ptr as *const FloatObj) }.header.tenured,
-            "page float must stay young at promotion",
-        );
+        assert!(unsafe { (*t_header).gc.tenured }, "record must have tenured");
         assert!(heap.owns_non_cons_object(f_ptr));
 
         // Two partitioned cycles (one per parity): T is permanent-black and
         // never re-traced; F survives ONLY via the promotion-time remembered
-        // set — this is the all-young float's liveness path.
+        // set — the permanent owner's young-float edge.
         for cycle in 0..2 {
             heap.collect_exact(std::iter::once(root));
             assert!(
