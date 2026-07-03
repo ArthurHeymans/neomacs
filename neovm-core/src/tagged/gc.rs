@@ -1417,6 +1417,16 @@ pub struct TaggedHeap {
     /// the same fast-path split here: mark-time checks must not scan
     /// `all_objects`.
     non_cons_object_addrs: FxHashSet<usize>,
+    /// Task #7 stage 2a (Fix A) INCREMENTAL VECTOR REGISTRY: the exact
+    /// `VecLikeType::Vector` subset of `non_cons_object_addrs`, maintained
+    /// incrementally at the link chokepoint (`link_veclike`) and the sweep
+    /// free sites (`unregister_vector_object`), so `launch_concurrent_mark`
+    /// builds the Tier-B `VectorScanSnapshot` by iterating only the live
+    /// vectors instead of filtering the whole non-cons set (~94K entries)
+    /// inside the world-stopped start handshake. INVARIANT (asserted at every
+    /// launch under `cfg(test)` / `NEOVM_GC_VERIFY_PARTITION=1`): equals the
+    /// set of live owned Vector objects at every handshake.
+    vector_object_addrs: FxHashSet<usize>,
 
     /// Total number of allocated objects (cons + non-cons).
     pub allocated_count: usize,
@@ -1702,6 +1712,7 @@ impl TaggedHeap {
             all_objects: std::ptr::null_mut(),
             tenured_objects: std::ptr::null_mut(),
             non_cons_object_addrs: FxHashSet::default(),
+            vector_object_addrs: FxHashSet::default(),
             allocated_count: 0,
             memory_use_counts: [0; MEMORY_USE_COUNT_LEN],
             gc_threshold: 1_000_000 * size_of::<usize>(),
@@ -2910,6 +2921,25 @@ impl TaggedHeap {
         alloc_probe::record(ptr, self.non_cons_object_addrs.len());
     }
 
+    /// Task #7 stage 2a (Fix A): drop a dying non-cons object from the
+    /// incremental vector registry. Called with the header still live,
+    /// immediately before `free_gc_object`, so reading the kind/tag here is
+    /// valid and skips the hash probe for the (majority) non-vector kinds.
+    ///
+    /// # Safety
+    /// `header` must point at a still-allocated non-cons object header.
+    #[inline]
+    unsafe fn unregister_vector_object(&mut self, header: *mut GcHeader) {
+        unsafe {
+            if (*header).kind == HeapObjectKind::VecLike
+                && (*(header as *const VecLikeHeader)).type_tag == VecLikeType::Vector
+            {
+                let removed = self.vector_object_addrs.remove(&(header as usize));
+                debug_assert!(removed, "freed vector was not in the registry");
+            }
+        }
+    }
+
     /// Link a veclike object into the all_objects list.
     fn link_veclike(&mut self, header: *mut VecLikeHeader) {
         unsafe {
@@ -2920,6 +2950,12 @@ impl TaggedHeap {
             let gc_header = &mut (*header).gc as *mut GcHeader;
             let inserted = self.non_cons_object_addrs.insert(gc_header as usize);
             debug_assert!(inserted, "veclike object linked twice");
+            // Task #7 stage 2a (Fix A): maintain the incremental vector
+            // registry at the single veclike link chokepoint.
+            if (*header).type_tag == VecLikeType::Vector {
+                let registered = self.vector_object_addrs.insert(gc_header as usize);
+                debug_assert!(registered, "vector linked twice into the registry");
+            }
             self.all_objects = gc_header;
             #[cfg(test)]
             alloc_probe::record(gc_header, self.non_cons_object_addrs.len());
@@ -4341,28 +4377,47 @@ impl TaggedHeap {
         // cons `owned_bases` snapshot is taken and the roots are seeded), so the GC
         // thread can trace vectors concurrently instead of deferring them to the STW
         // termination. Vectors are heap-side, so capture directly here (no eval.rs
-        // seam, unlike the Context-side obarray). `non_cons_object_addrs` holds every
-        // owned non-cons object's `GcHeader` addr; pick out the ones tagged
-        // `VecLikeType::Vector`. Vectors allocated mid-cycle are absent from this set
-        // capture and are covered by allocate-black.
+        // seam, unlike the Context-side obarray). Task #7 stage 2a (Fix A): iterate
+        // the INCREMENTAL VECTOR REGISTRY (`vector_object_addrs`, maintained at
+        // `link_veclike` + the sweep free sites) instead of filtering the whole
+        // `non_cons_object_addrs` set — the filter walk was 11-32% of this
+        // world-stopped start handshake. Vectors allocated mid-cycle are absent from
+        // this capture and are covered by allocate-black.
+        if cfg!(test) || std::env::var("NEOVM_GC_VERIFY_PARTITION").as_deref() == Ok("1") {
+            // Fix A INVARIANT: the registry equals the exact live owned Vector
+            // subset of `non_cons_object_addrs` at every handshake. Cross-check
+            // against the full-set filter the registry replaced.
+            let full_filter_count = self
+                .non_cons_object_addrs
+                .iter()
+                .filter(|&&addr| unsafe {
+                    (*(addr as *const GcHeader)).kind == HeapObjectKind::VecLike
+                        && (*(addr as *const VecLikeHeader)).type_tag == VecLikeType::Vector
+                })
+                .count();
+            assert_eq!(
+                self.vector_object_addrs.len(),
+                full_filter_count,
+                "vector registry diverged from the non-cons set's Vector subset",
+            );
+            for &addr in &self.vector_object_addrs {
+                assert!(
+                    self.non_cons_object_addrs.contains(&addr),
+                    "vector registry holds an address absent from the non-cons set",
+                );
+            }
+        }
         let vectors = {
             let mut snap = crate::tagged::header::VectorScanSnapshot::with_capacity(
-                self.non_cons_object_addrs.len(),
+                self.vector_object_addrs.len(),
             );
-            for &addr in &self.non_cons_object_addrs {
-                // Safety: `addr` is an owned non-cons object's live `GcHeader` addr; a
-                // VecLike header begins with its `GcHeader`, so casting to
-                // `*const VecLikeHeader` and reading `type_tag` is valid. Only when the
-                // tag is `Vector` do we cast to `VectorObj` and read its backing.
-                let header = addr as *const VecLikeHeader;
-                let is_vector = unsafe {
-                    (*(addr as *const GcHeader)).kind == HeapObjectKind::VecLike
-                        && (*header).type_tag == VecLikeType::Vector
-                };
-                if is_vector {
-                    let obj = unsafe { &*(header as *const VectorObj) };
-                    snap.push(obj.data.scan_entry());
-                }
+            for &addr in &self.vector_object_addrs {
+                // Safety: `addr` is a live owned Vector's `GcHeader` addr (the
+                // registry invariant above); a VecLike header begins with its
+                // `GcHeader`, so casting to `*const VectorObj` and reading its
+                // backing is valid.
+                let obj = unsafe { &*(addr as *const VectorObj) };
+                snap.push(obj.data.scan_entry());
             }
             Some(snap)
         };
@@ -4704,6 +4759,7 @@ impl TaggedHeap {
                         .saturating_add(Self::object_bytes_from_header(current));
                 } else {
                     self.non_cons_object_addrs.remove(&(current as usize));
+                    self.unregister_vector_object(current);
                     self.free_gc_object(current);
                     self.allocated_count = self.allocated_count.saturating_sub(1);
                     noncons_freed += 1;
@@ -5312,6 +5368,7 @@ impl TaggedHeap {
                     // Free it — unlink from list
                     *prev = next;
                     self.non_cons_object_addrs.remove(&(current as usize));
+                    self.unregister_vector_object(current);
                     self.free_gc_object(current);
                     self.allocated_count = self.allocated_count.saturating_sub(1);
                     current = next;
@@ -6775,6 +6832,105 @@ mod ownership_tests {
         assert!(!heap.owns_non_cons_object(dead_ptr));
         assert_eq!(heap.non_cons_object_addrs.len(), 1);
         assert!((live.xfloat() - 1.0).abs() < f64::EPSILON);
+    }
+
+    /// Task #7 stage 2a (Fix A): the incremental vector registry must yield
+    /// exactly the Tier-B snapshot the old full-set filter produced, across
+    /// alloc/free cycles and both sweep paths. Computes BOTH methods — the
+    /// registry walk and the old `non_cons_object_addrs` filter — and compares
+    /// snapshot contents (backing base/len/kind), not just counts.
+    #[test]
+    fn vector_registry_matches_full_filter_across_cycles() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        fn entry_key(addr: usize) -> (usize, usize, bool) {
+            // Safety: `addr` is a live owned Vector's `GcHeader` address (both
+            // callers iterate live-object sets under a stopped world).
+            let obj = unsafe { &*(addr as *const VectorObj) };
+            let entry = obj.data.scan_entry();
+            (entry.base as usize, entry.len, entry.is_mapped)
+        }
+        // Old-method snapshot contents: filter the WHOLE non-cons set for
+        // Vector-tagged objects (exactly the loop Fix A replaced).
+        fn full_filter_entries(heap: &TaggedHeap) -> Vec<(usize, usize, bool)> {
+            let mut entries: Vec<(usize, usize, bool)> = heap
+                .non_cons_object_addrs
+                .iter()
+                .filter(|&&addr| unsafe {
+                    (*(addr as *const GcHeader)).kind == HeapObjectKind::VecLike
+                        && (*(addr as *const VecLikeHeader)).type_tag == VecLikeType::Vector
+                })
+                .map(|&addr| entry_key(addr))
+                .collect();
+            entries.sort_unstable();
+            entries
+        }
+        // New-method snapshot contents: iterate the incremental registry.
+        fn registry_entries(heap: &TaggedHeap) -> Vec<(usize, usize, bool)> {
+            let mut entries: Vec<(usize, usize, bool)> = heap
+                .vector_object_addrs
+                .iter()
+                .map(|&addr| entry_key(addr))
+                .collect();
+            entries.sort_unstable();
+            entries
+        }
+        fn assert_snapshots_match(heap: &TaggedHeap) {
+            assert_eq!(
+                registry_entries(heap),
+                full_filter_entries(heap),
+                "registry snapshot != full-filter snapshot",
+            );
+        }
+
+        // Mixed population: vectors + non-vector decoys, both non-veclike
+        // (float) and veclike-non-Vector (record) — the registry must exclude
+        // every decoy kind.
+        let keep_vec = heap.alloc_vector(vec![TaggedValue::fixnum(1); 8]);
+        let dead_vec = heap.alloc_vector(vec![TaggedValue::fixnum(2); 4]);
+        let keep_float = heap.alloc_float(1.5);
+        let _dead_record = heap.alloc_record(vec![TaggedValue::fixnum(3); 5]);
+        assert_snapshots_match(&heap);
+        assert_eq!(registry_entries(&heap).len(), 2);
+
+        // Cycle 1 (synchronous sweep_objects path): the unrooted vector and
+        // record are reclaimed; the registry follows.
+        let _ = dead_vec;
+        heap.collect_exact([keep_vec, keep_float].into_iter());
+        assert_snapshots_match(&heap);
+        assert_eq!(registry_entries(&heap).len(), 1);
+
+        // Cycle 2: fresh vectors on the reused address space, then free one.
+        let dead_vec2 = heap.alloc_vector(vec![keep_float; 3]);
+        let keep_vec2 = heap.alloc_vector(vec![TaggedValue::fixnum(4); 2]);
+        let _ = dead_vec2;
+        assert_snapshots_match(&heap);
+        assert_eq!(registry_entries(&heap).len(), 3);
+        heap.collect_exact([keep_vec, keep_vec2].into_iter());
+        assert_snapshots_match(&heap);
+        assert_eq!(registry_entries(&heap).len(), 2);
+
+        // A full CONCURRENT cycle exercises the launch-time invariant
+        // cross-check (`cfg(test)`) plus the deferred-sweep removal path
+        // (`incremental_sweep_slice`) end to end. Only `keep_vec` is rooted,
+        // so `keep_vec2` is reclaimed by the deferred sweep.
+        heap.concurrent_begin();
+        heap.seed_root(keep_vec);
+        heap.launch_concurrent_mark();
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(keep_vec);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+        assert_snapshots_match(&heap);
+        assert_eq!(registry_entries(&heap).len(), 1);
     }
 
     /// Characterization safety net for the path-collapse refactor: a forced full
