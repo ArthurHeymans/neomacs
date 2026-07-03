@@ -3659,6 +3659,7 @@ fn wait_scheduler_can_block_until_command_input_arrives() {
     let mut ev = Context::new();
     let (tx, rx) = crossbeam_channel::unbounded();
     ev.input_rx = Some(rx);
+    let notifier = ev.wait_notifier();
 
     std::thread::spawn(move || {
         std::thread::sleep(Duration::from_millis(20));
@@ -3666,6 +3667,9 @@ fn wait_scheduler_can_block_until_command_input_arrives() {
             crate::keyboard::KeyEvent::char('z'),
         ))
         .expect("send delayed keypress");
+        if let Some(notifier) = notifier {
+            notifier.notify();
+        }
     });
 
     let completion: CommandInputWaitOutcome = ev

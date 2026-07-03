@@ -1554,6 +1554,7 @@ fn read_char_respects_inhibit_redisplay_during_input_wait() {
 
     let (tx, rx) = crossbeam_channel::unbounded();
     ev.input_rx = Some(rx);
+    let notifier = ev.wait_notifier();
     // Keep one sender alive: dropping the last tx disconnects the channel,
     // which the input machinery treats as terminal-gone -> quit (timing flake;
     // see the sit-for soak fix).
@@ -1564,6 +1565,9 @@ fn read_char_respects_inhibit_redisplay_during_input_wait() {
             crate::keyboard::KeyEvent::char('a'),
         ))
         .expect("send keypress");
+        if let Some(notifier) = notifier {
+            notifier.notify();
+        }
     });
 
     let event = ev.read_char().expect("read_char should return keypress");
