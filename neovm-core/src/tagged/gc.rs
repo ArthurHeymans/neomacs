@@ -190,29 +190,15 @@ unsafe impl Send for HeapPtr {}
 struct ConcurrentMarkJob {
     /// Root snapshot, moved out of the heap's gray queue at the start handshake.
     gray: Vec<TaggedValue>,
-    /// THIS cycle's young non-cons mark parity, captured at launch. The GC
-    /// thread's string claim must mark to the CURRENT parity ("marked" ≡ bit
-    /// == parity); the heap cannot flip mid-cycle (`begin_collection` is the
-    /// only flip point and the next one cannot run before this mark joins),
-    /// so the captured value is valid for the job's whole lifetime.
-    parity: bool,
     /// Base addresses of every owned cons block at the snapshot (immutable,
     /// read-only on the GC thread). A cons whose block base is here is markable
     /// via block arithmetic; others (mapped/dump, or new blocks) are deferred.
     owned_bases: std::sync::Arc<std::collections::HashSet<usize>>,
-    /// CONCURRENT STRING MARKING claim oracle (stage 3): the base address of
-    /// every STRING ARENA PAGE at the world-stopped start handshake
-    /// (immutable, read-only on the GC thread — the live registry/bitmaps
-    /// belong to the mutator). Snapshot-hit ⇒ an owned page string ⇒
-    /// claim-eligible; MISS ⇒ DEFER, which is fail-safe for everything else:
-    /// pages created mid-cycle (their strings are born-at-parity anyway),
-    /// mapped (pdump) strings (marked via the side-table bool — claiming
-    /// their `GcHeader` bit would skip the mapped mark + interval trace at
-    /// termination, a UAF of their interval children), and any residual
-    /// `Box` string (none are allocated anymore, but a miss merely defers).
-    /// A page base can never collide with non-page memory: a page owns its
-    /// whole 64KB span exclusively.
-    string_page_bases: std::sync::Arc<std::collections::HashSet<usize>>,
+    /// CONCURRENT CLAIM DISPATCHER state (per-kind page-base snapshots,
+    /// cycle parity, claim counters) for `concurrent_try_mark_owned`.
+    /// Grouped in a sub-struct so the scan closures below — which mutably
+    /// borrow `gray` — can borrow it disjointly.
+    claims: ConcurrentClaimJob,
     /// Dump (pdump mmap) address span; conses inside are permanent-black and
     /// their young children come from the remembered set, so they are skipped.
     dump_lo: usize,
@@ -244,6 +230,32 @@ struct ConcurrentMarkJob {
     /// vectors are marked concurrently instead of deferred to the STW termination.
     /// Always `Some` for a concurrent mark — the start handshake captures it.
     vectors: Option<crate::tagged::header::VectorScanSnapshot>,
+}
+
+/// CONCURRENT CLAIM DISPATCHER (task 01) per-cycle state: everything
+/// `concurrent_try_mark_owned` needs to classify + claim a discovered value
+/// on the GC thread. All snapshots are captured at the world-stopped start
+/// handshake (immutable, read-only on the GC thread — the live registries /
+/// bitmaps belong to the mutator) and published through the same
+/// `Arc`/channel happens-before as the cons `owned_bases`.
+struct ConcurrentClaimJob {
+    /// THIS cycle's young non-cons mark parity, captured at launch. The GC
+    /// thread's claims must mark to the CURRENT parity ("marked" ≡ bit
+    /// == parity); the heap cannot flip mid-cycle (`begin_collection` is the
+    /// only flip point and the next one cannot run before this mark joins),
+    /// so the captured value is valid for the job's whole lifetime.
+    parity: bool,
+    /// CONCURRENT STRING MARKING claim oracle (stage 3): the base address of
+    /// every STRING ARENA PAGE at the world-stopped start handshake.
+    /// Snapshot-hit ⇒ an owned page string ⇒ claim-eligible; MISS ⇒ DEFER,
+    /// which is fail-safe for everything else: pages created mid-cycle
+    /// (their strings are born-at-parity anyway), mapped (pdump) strings
+    /// (marked via the side-table bool — claiming their `GcHeader` bit would
+    /// skip the mapped mark + interval trace at termination, a UAF of their
+    /// interval children), and any residual `Box` string (none are allocated
+    /// anymore, but a miss merely defers). A page base can never collide
+    /// with non-page memory: a page owns its whole 64KB span exclusively.
+    string_page_bases: std::sync::Arc<std::collections::HashSet<usize>>,
     /// CONCURRENT STRING MARKING: count of owned interval-free strings this
     /// cycle's GC thread claimed via `concurrent_try_mark_string` (one per
     /// successful `mark_claim_at`, Relaxed — single writer). Read by
@@ -399,10 +411,38 @@ fn concurrent_try_mark_string(
     true
 }
 
+/// CONCURRENT CLAIM DISPATCHER (task 01): try to fully handle one discovered
+/// non-cons heap value on the GC thread. Returns `true` when handled here
+/// (claimed now, or already marked — nothing further owed this cycle);
+/// `false` means the caller must park the value in `deferred` for the STW
+/// termination exactly as before. Called at all three GC-thread discovery
+/// sinks (gray drain, obarray scan, vector-backing scan).
+///
+/// Per-kind arms are added one commit at a time. Every arm carries its own
+/// snapshot-classify + claim step and REFUSES (→ defer, fail-safe) anything
+/// not provably its case — a classification MISS must always defer, never
+/// "miss ⇒ mapped" (a mid-cycle heap object misclassified as mapped would be
+/// a dropped mark = UAF). Arms wired so far:
+///
+/// - strings: `concurrent_try_mark_string` (owned interval-free pages).
+#[inline]
+fn concurrent_try_mark_owned(val: TaggedValue, job: &ConcurrentClaimJob) -> bool {
+    if val.is_string() {
+        return concurrent_try_mark_string(
+            val,
+            &job.string_page_bases,
+            job.parity,
+            &job.str_claimed,
+        );
+    }
+    false
+}
+
 /// The background concurrent-mark loop (Phase 5). Runs on the "neovm-gc" thread
 /// with no `&mut TaggedHeap`: it marks conses via atomic block-bitmap ops +
-/// atomic car/cdr loads, claims owned INTERVAL-FREE strings via their atomic
-/// header mark bit (`concurrent_try_mark_string` — mark-only, zero children),
+/// atomic car/cdr loads, claims the kinds the claim dispatcher recognizes
+/// (`concurrent_try_mark_owned` — e.g. owned interval-free strings, mark-only,
+/// zero children) via their atomic header mark bit,
 /// and defers every other non-cons (and non-owned conses) to the mutator's
 /// stop-the-world termination. Loops draining its local gray queue and the
 /// shared SATB buffer until both are empty and the mutator asks it to stop.
@@ -465,19 +505,14 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
                     }
                 }
             } else if val.is_heap_object() {
-                // Strings first: an owned, interval-free string is claimed right
-                // here (mark-only — it has zero Lisp children). Everything else
-                // — floats/veclikes whose backing the mutator may reallocate,
-                // and interval-bearing or mapped strings, which need the
-                // mutator's `mark_value` — is deferred to the STW termination.
-                if val.is_string()
-                    && concurrent_try_mark_string(
-                        val,
-                        &job.string_page_bases,
-                        job.parity,
-                        &job.str_claimed,
-                    )
-                {
+                // Claim dispatcher first: the kinds it recognizes (e.g. an
+                // owned, interval-free string — mark-only, zero Lisp
+                // children) are fully handled right here. Everything it
+                // refuses — veclikes whose backing the mutator may
+                // reallocate, and interval-bearing or mapped strings, which
+                // need the mutator's `mark_value` — is deferred to the STW
+                // termination.
+                if concurrent_try_mark_owned(val, &job.claims) {
                     continue;
                 }
                 job.deferred.lock().unwrap().push(val);
@@ -501,14 +536,7 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
                     snap.scan(|child| {
                         if child.is_cons() {
                             job.gray.push(child);
-                        } else if !(child.is_string()
-                            && concurrent_try_mark_string(
-                                child,
-                                &job.string_page_bases,
-                                job.parity,
-                                &job.str_claimed,
-                            ))
-                        {
+                        } else if !concurrent_try_mark_owned(child, &job.claims) {
                             job.deferred.lock().unwrap().push(child);
                         }
                     });
@@ -537,14 +565,7 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
                     snap.scan(|child| {
                         if child.is_cons() {
                             job.gray.push(child);
-                        } else if !(child.is_string()
-                            && concurrent_try_mark_string(
-                                child,
-                                &job.string_page_bases,
-                                job.parity,
-                                &job.str_claimed,
-                            ))
-                        {
+                        } else if !concurrent_try_mark_owned(child, &job.claims) {
                             job.deferred.lock().unwrap().push(child);
                         }
                     });
@@ -2362,7 +2383,7 @@ pub struct TaggedHeap {
     /// polls it (Acquire) at safe points to decide when to terminate.
     gc_done: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// CONCURRENT STRING MARKING: shared claim counter for the in-flight cycle
-    /// (see `ConcurrentMarkJob::str_claimed`). Reset at `launch_concurrent_mark`,
+    /// (see `ConcurrentClaimJob::str_claimed`). Reset at `launch_concurrent_mark`,
     /// folded into `last_concurrent_str_claimed` at `join_concurrent_mark`.
     concurrent_str_claimed: std::sync::Arc<AtomicUsize>,
     /// Strings the GC thread claimed concurrently in the last completed cycle
@@ -5581,10 +5602,13 @@ impl TaggedHeap {
         TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.set(true));
         let job = ConcurrentMarkJob {
             gray,
-            // Mandated carry: the GC thread claims strings at THIS cycle's parity.
-            parity: self.mark_parity,
             owned_bases: std::sync::Arc::new(owned),
-            string_page_bases: std::sync::Arc::new(string_bases),
+            claims: ConcurrentClaimJob {
+                // Mandated carry: the GC thread claims at THIS cycle's parity.
+                parity: self.mark_parity,
+                string_page_bases: std::sync::Arc::new(string_bases),
+                str_claimed: self.concurrent_str_claimed.clone(),
+            },
             dump_lo: self.dump_addr_lo,
             dump_hi: self.dump_addr_hi,
             satb: self.satb_shared.clone(),
@@ -5598,7 +5622,6 @@ impl TaggedHeap {
             obarray: self.pending_obarray_scan.take(),
             // Stage 2 Tier B: the vector-backing snapshot captured just above.
             vectors,
-            str_claimed: self.concurrent_str_claimed.clone(),
         };
         gc_thread()
             .send(GcRequest::ConcurrentMark(job))
