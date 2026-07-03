@@ -4349,15 +4349,18 @@ fn accept_process_output_runs_pty_status_notification_after_output() {
                                            :buffer buf
                                            :command (list "{echo}" "process-output"))))
                    (accept-process-output proc 1)
-                   (list (process-status proc)
-                         (buffer-string)
-                         (kill-buffer buf))))"#
+                   (let ((first-status (process-status proc)))
+                     (accept-process-output proc 1)
+                     (list (not (null (memq first-status '(run exit signal))))
+                           (process-status proc)
+                           (buffer-string)
+                           (kill-buffer buf)))))"#
         ),
     );
 
     assert_eq!(
         result,
-        "OK (exit \"preexistingprocess-output\n\nProcess apio-pty-finish finished\n\" t)"
+        "OK (t exit \"preexistingprocess-output\n\nProcess apio-pty-finish finished\n\" t)"
     );
 }
 
@@ -5071,6 +5074,45 @@ fn process_mark_type_thread_send_and_running_child_runtime_surface() {
     assert_eq!(results[8], "OK (wrong-type-argument processp x)");
     assert_eq!(results[9], "OK wrong-number-of-arguments");
     assert_eq!(results[10], "OK wrong-number-of-arguments");
+}
+
+#[test]
+fn pipe_process_send_after_eof_discards_input_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let cat = find_bin("cat");
+    let buffers = crate::buffer::BufferManager::new();
+    let mut pm = ProcessManager::new();
+    let id = pm.create_process_with_kind_lisp(
+        LispString::from_utf8("send-after-eof-pipe"),
+        Value::NIL,
+        LispString::from_utf8(&cat),
+        vec![],
+        ProcessKind::Real,
+    );
+    pm.spawn_child(id, false).expect("spawn pipe child");
+
+    assert_eq!(
+        builtin_process_send_eof_impl(&mut pm, &buffers, vec![Value::make_process(id)])
+            .expect("process-send-eof"),
+        Value::make_process(id)
+    );
+    assert!(
+        pm.get(id).is_some_and(|proc| proc.child_stdin_eof_sink),
+        "pipe EOF should install the GNU-style discard sink"
+    );
+    assert!(
+        pm.get(id).is_some_and(|proc| proc.eof_sent_to_process),
+        "explicit EOF should be recorded for GNU-style same-wait status delivery"
+    );
+    builtin_process_send_string_impl(
+        &mut pm,
+        &buffers,
+        vec![Value::make_process(id), Value::string("after-eof")],
+    )
+    .expect("post-EOF process-send-string should succeed");
+    assert_eq!(pm.get(id).map(|proc| proc.write_queue), Some(Value::NIL));
+
+    pm.delete_process(id);
 }
 
 #[test]

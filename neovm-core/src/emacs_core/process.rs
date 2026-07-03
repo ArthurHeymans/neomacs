@@ -910,6 +910,15 @@ pub struct Process {
     /// The actual OS child process, if spawned (pipe mode).
     #[allow(dead_code)]
     pub child: Option<Child>,
+    /// GNU `process-send-eof' replaces a pipe subprocess's write fd with the
+    /// null device, so later `process-send-string' calls succeed and discard.
+    pub child_stdin_eof_sink: bool,
+    /// True after Lisp explicitly called `process-send-eof' on this process.
+    /// GNU can publish the ensuing pipe status in the same wait that reads
+    /// output from that explicit EOF, while naturally exiting pipe children can
+    /// remain `run' until a later wait.  PTY subprocesses have their own
+    /// same-wait status rule.
+    pub eof_sent_to_process: bool,
     /// OS-level stdout pipe for non-blocking reads (pipe mode).
     pub child_stdout: Option<std::process::ChildStdout>,
     /// OS-level stderr pipe for non-blocking reads (pipe mode).
@@ -2490,6 +2499,10 @@ fn process_defers_pty_status_after_explicit_coding(proc: &Process) -> bool {
     proc.coding_explicitly_set && (proc.pty_child.is_some() || proc.pty_reader.is_some())
 }
 
+fn process_publishes_status_after_ready_output(proc: &Process) -> bool {
+    proc.eof_sent_to_process || process_output_source(proc) == Some(ProcessOutputSource::Pty)
+}
+
 fn process_should_defer_explicit_coding_status_after_output(
     proc: &Process,
     saw_output: bool,
@@ -3917,6 +3930,8 @@ impl ProcessManager {
             tty_stderr,
             os_pid: None,
             child: None,
+            child_stdin_eof_sink: false,
+            eof_sent_to_process: false,
             child_stdout: None,
             child_stderr: None,
             pty_master: None,
@@ -5097,6 +5112,9 @@ impl ProcessManager {
             pty_writer.write(bytes)
         } else if let Some(ref mut child) = proc.child {
             let Some(ref mut stdin) = child.stdin else {
+                if proc.child_stdin_eof_sink {
+                    return Ok(ProcessWriteAttempt::Written(bytes.len()));
+                }
                 return Ok(ProcessWriteAttempt::NoSource);
             };
             #[cfg(unix)]
@@ -6191,7 +6209,7 @@ impl super::eval::Context {
     ) -> Result<ProcessOutputServiceOutcome, Flow> {
         let target_process = request.target_process();
         let proc_ids = request.live_processes(self.processes.live_process_ids());
-        self.poll_process_output_for_ids(proc_ids, target_process)
+        self.poll_process_output_for_ids(proc_ids, target_process, true)
     }
 
     pub(crate) fn poll_ready_process_output_for_service_request(
@@ -6236,7 +6254,7 @@ impl super::eval::Context {
         }
 
         let proc_ids = request.ready_processes(events.ready_processes_ref().to_vec());
-        outcome.absorb(self.poll_process_output_for_ids(proc_ids, target_process)?);
+        outcome.absorb(self.poll_process_output_for_ids(proc_ids, target_process, false)?);
 
         Ok(outcome)
     }
@@ -6245,6 +6263,7 @@ impl super::eval::Context {
         &mut self,
         proc_ids: Vec<ProcessId>,
         target_process: Option<ProcessId>,
+        publish_status_before_readable_output: bool,
     ) -> Result<ProcessOutputServiceOutcome, Flow> {
         let mut proc_ids = dedupe_process_ids(proc_ids);
 
@@ -6327,12 +6346,16 @@ impl super::eval::Context {
                 continue;
             }
             // A child status transition (exit, signal, stop, continued) is
-            // independent of pipe readability.  GNU observes these via
-            // waitpid/WUNTRACED from the wait loop; check before the readable
-            // I/O guard so SIGSTOP/SIGCONT sent to a quiet child still reaches
-            // the process sentinel.
-            let status_changed = self.processes.check_child_exit(pid);
-            if status_changed {
+            // independent of pipe readability.  Initial poll passes check it
+            // before reading output, matching GNU's already-delivered
+            // `raw_status_new`; readiness-wake passes let output win first.
+            let has_readable_process_io = self
+                .processes
+                .get(pid)
+                .is_some_and(process_has_readable_process_io);
+            if (publish_status_before_readable_output || !has_readable_process_io)
+                && self.processes.check_child_exit(pid)
+            {
                 if self
                     .processes
                     .get(pid)
@@ -6589,20 +6612,19 @@ impl super::eval::Context {
                     outcome.absorb(stderr_outcome);
                 }
 
-                // When the read side reported EOF in this same pass AND the
-                // child's exit is reaped, GNU's wait publishes the terminal
-                // status and runs the default sentinel before returning: the
-                // pselect round that saw the pipe close also has SIGCHLD
-                // pending, so `status_notify` runs in the same
-                // `wait_reading_process_output` iteration (pipe and pty
-                // alike). Deferring the notification to a later wait breaks
-                // the classic `(while (process-live-p p)
-                // (accept-process-output p))` idiom -- `process-live-p`
-                // observes the reaped status between waits and the loop exits
-                // before any wait delivers the sentinel. (Verified against
-                // GNU: `cat` + process-send-eof delivers "Process NAME
-                // finished" within the first wait.)
-                let exited = self.processes.check_child_exit(pid);
+                // Initial poll passes already checked child status before
+                // reading.  A readiness-wake pass got here because output won
+                // the poll; GNU leaves a plain pipe child's concurrently
+                // arriving status for a later wait.  PTY-backed subprocesses
+                // and explicit `process-send-eof` pipe shutdowns can publish
+                // the terminal status in the same wait.
+                let publish_same_pass_after_output = self
+                    .processes
+                    .get(pid)
+                    .is_some_and(process_publishes_status_after_ready_output);
+                let exited = !publish_status_before_readable_output
+                    && publish_same_pass_after_output
+                    && self.processes.check_child_exit(pid);
                 if exited && saw_eof_after_output {
                     let defer_status_after_output = self
                         .processes
@@ -6617,8 +6639,35 @@ impl super::eval::Context {
                 continue;
             }
 
-            // No process bytes were read in this pass.  Raw child status was
-            // already checked above, before the readable-I/O guard.
+            // No process bytes were read in this pass.  If the status was not
+            // already published before a poll-phase read attempt, check it now.
+            if (!publish_status_before_readable_output || has_readable_process_io)
+                && self.processes.check_child_exit(pid)
+            {
+                if self
+                    .processes
+                    .get(pid)
+                    .is_some_and(process_defers_pty_status_after_explicit_coding)
+                {
+                    let (pending_outcome, disposition) = self
+                        .poll_process_stdout_output_without_status_detailed(pid, target_process)?;
+                    match disposition {
+                        ProcessOutputDrainDisposition::Output => {
+                            outcome.absorb(pending_outcome);
+                            continue;
+                        }
+                        ProcessOutputDrainDisposition::Blocked => continue,
+                        ProcessOutputDrainDisposition::Terminal => {}
+                    }
+                }
+                let (drained_output, notified) = self.run_process_status_notification(pid)?;
+                if drained_output {
+                    outcome.record_activity(is_target);
+                }
+                if notified {
+                    outcome.record_serviced();
+                }
+            }
         }
 
         Ok(outcome)
@@ -14977,6 +15026,8 @@ pub(crate) fn builtin_process_send_eof(
 }
 
 fn send_eof_to_process(proc: &mut Process) -> EvalResult {
+    proc.eof_sent_to_process = true;
+
     if let Some(tls) = proc.tls_stream.as_mut() {
         tls.send_close_notify(false)
             .map(|_| ())
@@ -14993,6 +15044,7 @@ fn send_eof_to_process(proc: &mut Process) -> EvalResult {
 
     if let Some(ref mut child) = proc.child {
         drop(child.stdin.take());
+        proc.child_stdin_eof_sink = true;
     }
     Ok(Value::NIL)
 }
