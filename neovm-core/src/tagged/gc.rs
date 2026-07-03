@@ -181,6 +181,12 @@ unsafe impl Send for HeapPtr {}
 struct ConcurrentMarkJob {
     /// Root snapshot, moved out of the heap's gray queue at the start handshake.
     gray: Vec<TaggedValue>,
+    /// THIS cycle's young non-cons mark parity, captured at launch. The GC
+    /// thread's string claim must mark to the CURRENT parity ("marked" ≡ bit
+    /// == parity); the heap cannot flip mid-cycle (`begin_collection` is the
+    /// only flip point and the next one cannot run before this mark joins),
+    /// so the captured value is valid for the job's whole lifetime.
+    parity: bool,
     /// Base addresses of every owned cons block at the snapshot (immutable,
     /// read-only on the GC thread). A cons whose block base is here is markable
     /// via block arithmetic; others (mapped/dump, or new blocks) are deferred.
@@ -218,7 +224,7 @@ struct ConcurrentMarkJob {
     vectors: Option<crate::tagged::header::VectorScanSnapshot>,
     /// CONCURRENT STRING MARKING: count of owned interval-free strings this
     /// cycle's GC thread claimed via `concurrent_try_mark_string` (one per
-    /// successful `mark_claim`, Relaxed — single writer). Read by
+    /// successful `mark_claim_at`, Relaxed — single writer). Read by
     /// `join_concurrent_mark` (after the exit handshake's happens-before) into
     /// the cycle stats; sizes how much string work left the STW drain.
     str_claimed: std::sync::Arc<AtomicUsize>,
@@ -328,6 +334,7 @@ fn concurrent_try_mark_string(
     val: TaggedValue,
     dump_lo: usize,
     dump_hi: usize,
+    parity: bool,
     str_claimed: &AtomicUsize,
 ) -> bool {
     debug_assert!(val.is_string());
@@ -343,9 +350,17 @@ fn concurrent_try_mark_string(
         return false; // interval-bearing: defer so mark_value traces the children
     }
     // Interval-free owned string: zero Lisp children, so claiming the mark bit
-    // IS the complete trace. A failed claim means someone already marked it
-    // (allocate-black, or an earlier edge this cycle) — equally done.
-    if unsafe { (*ptr).header.mark_claim() } {
+    // IS the complete trace. The claim swaps in the CYCLE parity (carried into
+    // the job at launch): a string marked LAST cycle holds the old parity and
+    // is correctly claimable again this cycle. A failed claim means someone
+    // already marked it at this parity (allocate-black, or an earlier edge
+    // this cycle) — equally done, and a lost race leaves bit == parity either
+    // way. A TENURED string can arrive here too (e.g. via an obarray symbol
+    // cell or root edge): the swap scribbles its frozen bit, which is benign —
+    // every tenured reader short-circuits on the `tenured` flag before
+    // interpreting the bit, and "handled, no children" is exactly the tenured
+    // (permanent-black) semantics for an interval-free string.
+    if unsafe { (*ptr).header.mark_claim_at(parity) } {
         str_claimed.fetch_add(1, Ordering::Relaxed);
     }
     true
@@ -423,7 +438,13 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
                 // and interval-bearing or mapped strings, which need the
                 // mutator's `mark_value` — is deferred to the STW termination.
                 if val.is_string()
-                    && concurrent_try_mark_string(val, job.dump_lo, job.dump_hi, &job.str_claimed)
+                    && concurrent_try_mark_string(
+                        val,
+                        job.dump_lo,
+                        job.dump_hi,
+                        job.parity,
+                        &job.str_claimed,
+                    )
                 {
                     continue;
                 }
@@ -453,6 +474,7 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
                                 child,
                                 job.dump_lo,
                                 job.dump_hi,
+                                job.parity,
                                 &job.str_claimed,
                             ))
                         {
@@ -489,6 +511,7 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
                                 child,
                                 job.dump_lo,
                                 job.dump_hi,
+                                job.parity,
                                 &job.str_claimed,
                             ))
                         {
@@ -1578,11 +1601,12 @@ pub struct TaggedHeap {
     /// dump-partition opportunity (the clear pass and the dump re-mark are the
     /// non-fundamental costs a "dump as permanent tenured region" would remove).
     last_clear_us: u64,
-    /// Three-way split of `last_clear_us` (task #7 stage 2a diagnostics rider,
-    /// deciding the epoch/parity mark-bit design): the cons-block bitmap
-    /// memset, the young non-cons `all_objects` pointer-chase walk (the only
-    /// component an epoch/parity scheme would remove), and the mapped (pdump)
-    /// mark-state resets (zero once partitioned).
+    /// Three-way split of `last_clear_us` (task #7 stage 2a diagnostics rider;
+    /// it decided — and now gauges — the parity mark-bit design): the
+    /// cons-block bitmap memset, the young non-cons segment (formerly the
+    /// `all_objects` pointer-chase walk at ~98% of the clear; now the O(1)
+    /// parity flip, expected ~0), and the mapped (pdump) mark-state resets
+    /// (zero once partitioned).
     last_clear_cons_us: u64,
     last_clear_noncons_us: u64,
     last_clear_mapped_us: u64,
@@ -1620,6 +1644,24 @@ pub struct TaggedHeap {
     /// from its second cycle on — the same one-STW-bootstrap-then-concurrent
     /// shape as the dump path; see `should_run_concurrent`.
     bootstrap_collected: bool,
+
+    // --- Young non-cons PARITY MARK BITS (task #7 stage 2b). "Marked this
+    // cycle" for a YOUNG non-cons `GcHeader` ≡ (raw bit == `mark_parity`).
+    // `begin_collection` flips the parity instead of pointer-chasing
+    // `all_objects` to clear bits (the walk measured ~98% of the clear phase).
+    // Cons block bitmaps keep their memset clear (their `fetch_or` marking is
+    // set-only and `count_marked` popcounts 1-bits, so parity is structurally
+    // impossible there); mapped (pdump) side-table mark state is untouched;
+    // tenured objects freeze their bit at promotion, and every reader that can
+    // see a tenured object short-circuits on `tenured` BEFORE interpreting the
+    // bit (mark_value owned arms, is_value_marked, unchain_dead_markers,
+    // doomed-finalizer scan).
+    /// Current cycle's mark parity. INIT `false` so the FIRST
+    /// `begin_collection` flip yields `true` — opposite the zeroed/`false`
+    /// bits of freshly created and pdump-loaded headers (`GcHeader::new`) —
+    /// otherwise the bootstrap cycle would read everything as marked and
+    /// trace nothing.
+    mark_parity: bool,
 
     // --- Incremental marking state (step 7). Active on every partitioned cycle
     // (after the first-cycle promotion); the first cycle and no-dump heaps stay
@@ -1817,6 +1859,9 @@ impl TaggedHeap {
             dump_blackened: false,
             bootstrap_collected: false,
             mapped_remembered: FxHashSet::default(),
+            // Parity invariant: must start `false` (see the field doc) so the
+            // first flip reads pre-existing `false` bits as unmarked.
+            mark_parity: false,
             mark_in_progress: false,
             incremental_mark_us: 0,
             concurrent_mark_running: false,
@@ -2948,12 +2993,17 @@ impl TaggedHeap {
     fn unchain_dead_markers(&mut self) {
         // Take the slot list out so we don't alias self while iterating.
         let slots = std::mem::take(&mut self.marker_chain_head_slots);
+        let parity = self.mark_parity;
         for slot in slots {
             unsafe {
                 let mut prev_slot: *mut *mut MarkerObj = slot;
                 while !(*prev_slot).is_null() {
                     let curr = *prev_slot;
-                    if (*curr).header.gc.is_marked() {
+                    // Buffer marker chains can hold TENURED markers (promoted
+                    // at the first partition cycle): their bit froze at
+                    // promotion and must not be interpreted against the
+                    // current parity — tenured ≡ permanently live.
+                    if (*curr).header.gc.tenured || (*curr).header.gc.is_marked_at(parity) {
                         // Live — advance prev
                         prev_slot = &mut (*curr).data.next_marker;
                     } else {
@@ -2974,12 +3024,21 @@ impl TaggedHeap {
     /// Link a non-cons object into the all_objects intrusive list.
     fn link_object(&mut self, header: &mut GcHeader) {
         header.next = self.all_objects;
-        // Allocate-black during a concurrent mark: the GC thread defers non-cons
-        // objects and never reaches one born mid-cycle, so mark it live now to
-        // survive this cycle's sweep (cleared at the next mark's begin).
-        if self.concurrent_mark_running {
-            header.set_marked(true);
-        }
+        // BORN-AT-PARITY: a fresh young object's bit is ALWAYS written as the
+        // CURRENT parity, unconditionally.
+        //  - During a concurrent mark this is allocate-black: the GC thread
+        //    defers non-cons objects and never reaches one born mid-cycle, so
+        //    bit == parity keeps it alive through this cycle's sweep. (A
+        //    literal `true` here would be the cycle-2 UAF: on a parity==false
+        //    cycle the newborn would read unmarked and be swept while live.)
+        //  - Outside a mark nothing reads young bits until the next
+        //    `begin_collection` flips the parity, which turns bit == old
+        //    parity into unmarked — the correct white for a fresh object
+        //    entering its first traced cycle. (Storing `!parity` here instead
+        //    would read as MARKED after that flip: the object would never be
+        //    traced that cycle, and a young child reachable only through it
+        //    would be swept while referenced — a UAF.)
+        header.set_marked(self.mark_parity);
         let ptr = header as *mut GcHeader;
         let inserted = self.non_cons_object_addrs.insert(ptr as usize);
         debug_assert!(inserted, "non-cons object linked twice");
@@ -3011,9 +3070,10 @@ impl TaggedHeap {
     fn link_veclike(&mut self, header: *mut VecLikeHeader) {
         unsafe {
             (*header).gc.next = self.all_objects;
-            if self.concurrent_mark_running {
-                (*header).gc.set_marked(true); // allocate-black (see `link_object`)
-            }
+            // BORN-AT-PARITY, unconditionally (see `link_object`): during a
+            // concurrent mark this is allocate-black; otherwise it pre-arms
+            // the bit so the next begin_collection flip reads it as white.
+            (*header).gc.set_marked(self.mark_parity);
             let gc_header = &mut (*header).gc as *mut GcHeader;
             let inserted = self.non_cons_object_addrs.insert(gc_header as usize);
             debug_assert!(inserted, "veclike object linked twice");
@@ -3054,12 +3114,26 @@ impl TaggedHeap {
         //  that will be swept. Only post-mark verification is meaningful.)
 
         // A mark must never start while a deferred sweep is still draining: the
-        // sweep reads the mark bits this would clear. The driver finishes any
-        // in-flight sweep before getting here.
-        debug_assert!(
+        // sweep reads the mark bits the parity flip below would re-interpret.
+        // The driver finishes any in-flight sweep before getting here
+        // (`gc_collect_from_current_roots` checks `sweep_in_progress` on every
+        // path). HARD assert (not debug): under parity marks, flipping while
+        // the detached sweep list is still draining would make every dead
+        // object read as marked — the remainder of the sweep would relink
+        // garbage as survivors (a leak), and a later cycle could trace through
+        // their stale children (worse).
+        assert!(
             !self.sweep_in_progress,
             "begin_collection while a deferred sweep is in progress"
         );
+        // YOUNG NON-CONS PARITY FLIP (task #7 stage 2b): this single store
+        // un-marks the entire young non-cons generation — everything the last
+        // cycle marked has bit == old parity, which the new parity reads as
+        // unmarked. It replaces the O(objects) `all_objects` pointer-chase
+        // clear walk that measured ~98% of the clear phase. The flip lives in
+        // `begin_collection` ONLY (`concurrent_begin` delegates here; no other
+        // entry point may flip).
+        self.mark_parity = !self.mark_parity;
 
         let clear_t0 = std::time::Instant::now();
         // The first partition cycle runs a NORMAL full collection (so it traces
@@ -3089,23 +3163,20 @@ impl TaggedHeap {
             }
         }
         let clear_mapped_done = std::time::Instant::now();
-        // -- Clear marks on YOUNG non-cons (heap) objects. The tenured old
-        //    generation lives on a separate list (`tenured_objects`) that is
-        //    never walked here, so it stays permanently black. Before the
-        //    first-cycle promotion every object is still on `all_objects`, so
-        //    the full preloaded world is cleared and traced that one cycle. --
-        let mut obj = self.all_objects;
-        while !obj.is_null() {
-            unsafe {
-                (*obj).set_marked(false);
-                obj = (*obj).next;
-            }
-        }
+        // -- YOUNG non-cons (heap) marks: NO WALK. The parity flip at the top
+        //    of this fn already un-marked the whole young `all_objects` list
+        //    in O(1). The tenured old generation lives on a separate list
+        //    (`tenured_objects`) whose frozen bits are never interpreted —
+        //    tenured readers short-circuit on the `tenured` flag, so it stays
+        //    permanently black. Before the first-cycle promotion every object
+        //    is still on `all_objects` with bit == false, and the first flip
+        //    (parity false -> true) reads the full preloaded world as
+        //    unmarked, so that one cycle traces everything. --
 
-        // Task #7 stage 2a diagnostics rider: the clear split (cons bitmap
-        // memset / mapped resets / young non-cons pointer-chase walk) decides
-        // whether an epoch/parity mark-bit design — which removes ONLY the
-        // non-cons walk — is worth building.
+        // Task #7 stage 2a/2b: the clear split (cons bitmap memset / mapped
+        // resets / young non-cons segment) sized the parity mark-bit design;
+        // the non-cons segment is now the flip (~0), kept as the regression
+        // gauge for the removed pointer-chase walk.
         let clear_end = std::time::Instant::now();
         self.last_clear_cons_us = (clear_cons_done - clear_t0).as_micros() as u64;
         self.last_clear_mapped_us = (clear_mapped_done - clear_cons_done).as_micros() as u64;
@@ -3150,7 +3221,11 @@ impl TaggedHeap {
         // 1. Promote every surviving heap object to tenured (old generation).
         //    The first partition cycle ran a full trace+sweep, so everything
         //    still in `all_objects` is alive = a permanent (the preloaded world
-        //    plus whatever the session has retained). They are already marked.
+        //    plus whatever the session has retained). They are already marked;
+        //    setting `tenured` FREEZES that bit — no later parity flip may be
+        //    interpreted against it (every tenured reader short-circuits on
+        //    the flag), so these objects are permanently black without ever
+        //    being re-touched.
         //    Move the whole young list onto the tenured list and flag each
         //    node so the nursery (`all_objects`) starts empty; from now on only
         //    post-loadup allocations land there and get cleared/swept.
@@ -3526,16 +3601,27 @@ impl TaggedHeap {
         let Some(addr) = Self::value_heap_addr(value) else {
             return true;
         };
-        let owned = self.owns_non_cons_object(addr as *const u8);
+        if self.owns_non_cons_object(addr as *const u8) {
+            // Heap-owned non-cons: every such object starts with a `GcHeader`
+            // (`StringObj`/`FloatObj` headers and `VecLikeHeader.gc` are all
+            // at offset 0). TENURED SHORT-CIRCUIT before the bit read:
+            // `promote_and_blacken` never removes tenured objects from
+            // `non_cons_object_addrs`, and a tenured bit froze at promotion,
+            // so interpreting it against the current parity would read
+            // "unmarked" on every other cycle — spurious partition/tricolor
+            // verifier panics and needless old-gen concern. Tenured ≡ marked.
+            let header = addr as *const GcHeader;
+            if unsafe { (*header).tenured } {
+                return true;
+            }
+            return unsafe { (*header).is_marked_at(self.mark_parity) };
+        }
         // A non-cons object that is neither heap-owned nor mapped is a static,
         // never-swept runtime object (e.g. a `Subr`) — permanently live, so
         // treat it as marked (`unwrap_or(true)`). This relies on the dump
         // partition keeping every dump-referenced heap object live, so a
         // not-owned/not-mapped pointer is never a dangling reference.
         if value.is_string() {
-            if owned {
-                return unsafe { (*(addr as *const StringObj)).header.is_marked() };
-            }
             return self
                 .mapped_string_index_by_addr
                 .get(&addr)
@@ -3543,9 +3629,6 @@ impl TaggedHeap {
                 .unwrap_or(true);
         }
         if value.is_float() {
-            if owned {
-                return unsafe { (*(addr as *const FloatObj)).header.is_marked() };
-            }
             let ptr = addr as *const FloatObj;
             return self
                 .mapped_float_ranges
@@ -3555,9 +3638,6 @@ impl TaggedHeap {
                 .unwrap_or(true);
         }
         if value.is_veclike() {
-            if owned {
-                return unsafe { (*(addr as *const VecLikeHeader)).gc.is_marked() };
-            }
             return self
                 .mapped_veclike_index_by_addr
                 .get(&addr)
@@ -3706,13 +3786,16 @@ impl TaggedHeap {
             std::collections::BTreeMap::new();
         let mut sample: Option<usize> = None;
 
-        // -- Young non-cons objects that are marked (black). --
+        // -- Young non-cons objects that are marked (black). `all_objects` is
+        //    young-only (tenured objects live on `tenured_objects`), so the
+        //    parity interpretation applies to every node. --
         let young: Vec<*mut GcHeader> = {
             let mut out = Vec::new();
+            let parity = self.mark_parity;
             let mut obj = self.all_objects;
             while !obj.is_null() {
                 unsafe {
-                    if (*obj).is_marked() {
+                    if (*obj).is_marked_at(parity) {
                         out.push(obj);
                     }
                     obj = (*obj).next;
@@ -4036,7 +4119,14 @@ impl TaggedHeap {
             // unmarked finalizer is preceded by this scan, which removes it
             // from the registry first, so `ptr` is live. The world is stopped
             // and marking has drained, so the mark bit is final.
-            if unsafe { (*ptr).header.gc.is_marked() } {
+            //
+            // The registry can hold TENURED finalizers (promoted at the first
+            // partition cycle, never swept): their frozen bit must not be
+            // interpreted against the current parity — a tenured finalizer is
+            // permanently live, never doomed.
+            if unsafe {
+                (*ptr).header.gc.tenured || (*ptr).header.gc.is_marked_at(self.mark_parity)
+            } {
                 self.finalizer_registry.push(ptr);
             } else {
                 doomed.push(unsafe { (*ptr).function });
@@ -4526,6 +4616,8 @@ impl TaggedHeap {
         TAGGED_HEAP_CONCURRENT_ACTIVE.with(|c| c.set(true));
         let job = ConcurrentMarkJob {
             gray,
+            // Mandated carry: the GC thread claims strings at THIS cycle's parity.
+            parity: self.mark_parity,
             owned_bases: std::sync::Arc::new(owned),
             dump_lo: self.dump_addr_lo,
             dump_hi: self.dump_addr_hi,
@@ -4842,11 +4934,17 @@ impl TaggedHeap {
         let noncons_budget = budget.saturating_mul(256);
         let mut processed = 0usize;
         let mut noncons_freed = 0usize;
+        // The detached sweep list is young-only (`all_objects` never holds
+        // tenured objects), and `begin_collection` hard-asserts no flip can
+        // happen while this sweep drains, so the bits are interpreted at the
+        // parity of the cycle that just marked them.
+        let parity = self.mark_parity;
         while processed < noncons_budget && !self.sweep_noncons_pending.is_null() {
             let current = self.sweep_noncons_pending;
             unsafe {
                 self.sweep_noncons_pending = (*current).next;
-                if (*current).is_marked() {
+                debug_assert!(!(*current).tenured, "tenured object on the young sweep list");
+                if (*current).is_marked_at(parity) {
                     // Survivor: relink onto the (fresh) young list.
                     (*current).next = self.all_objects;
                     self.all_objects = current;
@@ -5040,10 +5138,21 @@ impl TaggedHeap {
                 return;
             }
             unsafe {
-                if (*ptr).header.is_marked() {
+                // TENURED SHORT-CIRCUIT before the bit read: tenured objects
+                // stay in `non_cons_object_addrs`, so this owned arm sees them
+                // too. Their bit froze at promotion; interpreting it against
+                // the current parity would read "unmarked" every other cycle
+                // and re-trace the old generation (and trip the partition/
+                // tricolor verifiers). Tenured ≡ permanently marked, never
+                // re-traced — identical to the frozen-`true` behavior the
+                // parity scheme replaced.
+                if (*ptr).header.tenured {
                     return;
                 }
-                (*ptr).header.set_marked(true);
+                if (*ptr).header.is_marked_at(self.mark_parity) {
+                    return;
+                }
+                (*ptr).header.set_marked(self.mark_parity);
                 let intervals = (*ptr).data.intervals();
                 if !intervals.is_empty() {
                     intervals.for_each_root(|root| {
@@ -5060,10 +5169,11 @@ impl TaggedHeap {
                 return;
             }
             unsafe {
-                if (*ptr).header.is_marked() {
+                // Tenured short-circuit before the bit read (see string arm).
+                if (*ptr).header.tenured || (*ptr).header.is_marked_at(self.mark_parity) {
                     return;
                 }
-                (*ptr).header.set_marked(true);
+                (*ptr).header.set_marked(self.mark_parity);
             };
         } else if val.is_veclike() {
             let ptr = val.as_veclike_ptr().unwrap() as *mut VecLikeHeader;
@@ -5076,10 +5186,15 @@ impl TaggedHeap {
                 return;
             }
             unsafe {
-                if (*ptr).gc.is_marked() {
+                // Tenured short-circuit before the bit read (see string arm):
+                // permanent-black, never re-traced.
+                if (*ptr).gc.tenured {
                     return;
                 }
-                (*ptr).gc.set_marked(true);
+                if (*ptr).gc.is_marked_at(self.mark_parity) {
+                    return;
+                }
+                (*ptr).gc.set_marked(self.mark_parity);
                 self.trace_veclike(ptr);
             }
         }
@@ -5449,13 +5564,18 @@ impl TaggedHeap {
         // out of every live buffer's intrusive chain, so freeing them
         // here leaves no dangling chain pointers. Mirrors GNU
         // `sweep_buffer → unchain_dead_markers` (alloc.c).
+        // `all_objects` is young-only; interpret bits at the parity of the
+        // cycle that just marked them (this eager sweep runs inside the same
+        // collection, before any next flip).
+        let parity = self.mark_parity;
         let mut prev: *mut *mut GcHeader = &mut self.all_objects;
         let mut current = self.all_objects;
         let mut live_bytes = 0usize;
         while !current.is_null() {
             unsafe {
                 let next = (*current).next;
-                if (*current).is_marked() {
+                debug_assert!(!(*current).tenured, "tenured object on the young list");
+                if (*current).is_marked_at(parity) {
                     // Keep it — advance prev
                     live_bytes = live_bytes.saturating_add(Self::object_bytes_from_header(current));
                     prev = &mut (*current).next;
@@ -5636,13 +5756,16 @@ impl TaggedHeap {
             }
         }
 
-        // Now walk both lists again and check marked objects
+        // Now walk both lists again and check marked objects. Tenured objects
+        // are permanently marked (frozen bit, exempt from parity); young ones
+        // are interpreted at the current parity.
+        let parity = self.mark_parity;
         let mut total_marked = 0usize;
         for head in [self.all_objects, self.tenured_objects] {
             let mut current = head;
             while !current.is_null() {
                 unsafe {
-                    if (*current).is_marked() {
+                    if (*current).tenured || (*current).is_marked_at(parity) {
                         total_marked += 1;
                         // Verify the object's internal data is sane
                         match (*current).kind {
@@ -6568,10 +6691,19 @@ mod ownership_tests {
             stats.last_concurrent_str_claimed, 0,
             "nothing here is claim-eligible",
         );
+        // Parity-aware form + raw pinning: a wrongful claim would swap in the
+        // CURRENT parity (true here — exactly one begin_collection flip has
+        // run), so assert both that the bit reads unmarked at this cycle's
+        // parity and that the raw bit is still the untouched `false` it was
+        // born with.
         assert!(
-            unsafe { !(*mapped).header.is_marked() },
+            unsafe { !(*mapped).header.is_marked_at(heap.mark_parity) },
             "a mapped string's GcHeader bit must never be claimed by the GC \
              thread (mapped marks live in the side table)",
+        );
+        assert!(
+            unsafe { !(*mapped).header.is_marked() },
+            "the mapped string's raw GcHeader bit must be untouched",
         );
 
         heap.reseed_runtime_and_remembered_roots();
@@ -6742,8 +6874,13 @@ mod ownership_tests {
              (claimed={})",
             stats.last_concurrent_str_claimed,
         );
-        // The claimed string is black.
-        assert!(unsafe { (*(s.as_string_ptr().unwrap())).header.is_marked() });
+        // The claimed string is black — at THIS cycle's parity (the raw bit
+        // value alone is meaningless under parity marks).
+        assert!(unsafe {
+            (*(s.as_string_ptr().unwrap()))
+                .header
+                .is_marked_at(ev.tagged_heap.mark_parity)
+        });
         // No sweep here: this bare-heap driver does not re-seed the Context
         // roots at termination, so sweeping would free live Context objects.
         // Claim + mark are the assertions under test (survival-under-sweep is
@@ -6825,6 +6962,295 @@ mod ownership_tests {
             count += 1;
         }
         assert_eq!(count, N, "the whole rooted list survived the concurrent cycle");
+    }
+
+    /// Drive one full concurrent cycle re-seeding SEVERAL roots at the
+    /// termination (the single-root `finish_concurrent_cycle` generalized).
+    /// Parity tests use this because single-cycle tests are structurally
+    /// blind: cycle 1 behaves like the pre-parity collector by construction,
+    /// so every parity property is asserted across at least TWO cycles.
+    fn run_concurrent_cycle(heap: &mut TaggedHeap, roots: &[TaggedValue]) {
+        heap.concurrent_begin();
+        for &root in roots {
+            heap.seed_root(root);
+        }
+        heap.launch_concurrent_mark();
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        for &root in roots {
+            heap.seed_root(root);
+        }
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+        assert!(!heap.sweep_in_progress());
+    }
+
+    /// PARITY MARK BITS (a): two-cycle survival, allocate-black variant. A
+    /// non-cons object allocated DURING a concurrent mark is born at the
+    /// cycle parity (allocate-black) and must survive THAT cycle's sweep
+    /// unrooted; re-seeded the next cycle (opposite parity) it must be traced
+    /// as unmarked and survive again. The cycle-2 (parity=false) allocation
+    /// is the regression for the literal `set_marked(true)` allocate-black,
+    /// which would read as WHITE on a false-parity cycle and be swept while
+    /// live (UAF).
+    #[test]
+    fn parity_allocate_black_object_survives_two_cycles() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // STW bootstrap (flip #1: parity false -> true) enables concurrent.
+        let mut spine = TaggedValue::fixnum(0);
+        for i in 0..100_000 {
+            spine = heap.alloc_cons(TaggedValue::fixnum(i), spine);
+        }
+        heap.collect_exact(std::iter::once(spine));
+        assert!(heap.should_run_concurrent());
+        assert!(heap.mark_parity, "bootstrap flip must yield parity=true");
+
+        // Cycle 2 (flip #2: parity true -> false): allocate non-cons objects
+        // MID-MARK. They are reachable only from Rust locals (not seeded), so
+        // surviving this cycle's sweep proves allocate-black at parity=false.
+        heap.concurrent_begin();
+        heap.seed_root(spine);
+        heap.launch_concurrent_mark();
+        assert!(!heap.mark_parity, "second flip must yield parity=false");
+        let v = heap.alloc_vector(vec![TaggedValue::fixnum(77)]);
+        let s = heap.alloc_string(crate::heap_types::LispString::from_utf8("mid-mark"));
+        let v_ptr = v.as_veclike_ptr().unwrap() as *const u8;
+        let s_ptr = s.as_string_ptr().unwrap() as *const u8;
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(spine); // v/s deliberately NOT seeded this cycle
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+        assert!(
+            heap.owns_non_cons_object(v_ptr),
+            "allocate-black vector must survive the cycle it was born in",
+        );
+        assert!(
+            heap.owns_non_cons_object(s_ptr),
+            "allocate-black string must survive the cycle it was born in",
+        );
+
+        // Cycle 3 (flip #3: parity false -> true): the survivors' bits hold
+        // the OLD parity, so they must read unmarked, be traced via their
+        // seeds, and survive this cycle's sweep too.
+        run_concurrent_cycle(&mut heap, &[spine, v, s]);
+        assert!(heap.owns_non_cons_object(v_ptr));
+        assert!(heap.owns_non_cons_object(s_ptr));
+        let slot = unsafe { (*(v_ptr as *const VectorObj)).data.load_atomic(0) };
+        assert_eq!(slot.0, TaggedValue::fixnum(77).0, "vector payload intact");
+        assert_eq!(
+            unsafe { (*(s_ptr as *const StringObj)).data.as_bytes() },
+            b"mid-mark",
+            "string payload intact",
+        );
+    }
+
+    /// PARITY MARK BITS (b): two-cycle reclaim. Garbage born between cycles
+    /// is freed by the very next cycle; garbage born DURING a mark
+    /// (allocate-black) floats through that cycle and is freed by the one
+    /// after — "freed by cycle 2 at the latest", with the deferred sweep
+    /// completing between cycles (a parity flip mid-sweep is forbidden).
+    #[test]
+    fn parity_reclaims_garbage_within_two_cycles() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let mut spine = TaggedValue::fixnum(0);
+        for i in 0..100_000 {
+            spine = heap.alloc_cons(TaggedValue::fixnum(i), spine);
+        }
+        heap.collect_exact(std::iter::once(spine));
+        assert!(heap.should_run_concurrent());
+
+        // G1: born BETWEEN cycles (idle) — never seeded, no allocate-black.
+        let g1 = heap.alloc_vector(vec![TaggedValue::fixnum(1)]);
+        let g1_ptr = g1.as_veclike_ptr().unwrap() as *const u8;
+
+        // Cycle 2: G2 born MID-MARK (allocate-black at this cycle's parity).
+        heap.concurrent_begin();
+        heap.seed_root(spine);
+        heap.launch_concurrent_mark();
+        let g2 = heap.alloc_vector(vec![TaggedValue::fixnum(2)]);
+        let g2_ptr = g2.as_veclike_ptr().unwrap() as *const u8;
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(spine);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+        assert!(
+            !heap.owns_non_cons_object(g1_ptr),
+            "idle-born garbage must be reclaimed by the first cycle after its birth",
+        );
+        assert!(
+            heap.owns_non_cons_object(g2_ptr),
+            "mark-born garbage floats through its birth cycle (allocate-black)",
+        );
+
+        // Cycle 3: G2's bit now holds the old parity — unmarked, unseeded,
+        // reclaimed. (No allocations happened since the cycle-2 sweep, so the
+        // ownership-set probes cannot be confused by address reuse.)
+        run_concurrent_cycle(&mut heap, &[spine]);
+        assert!(
+            !heap.owns_non_cons_object(g2_ptr),
+            "mark-born garbage must be reclaimed by the NEXT cycle",
+        );
+    }
+
+    /// PARITY MARK BITS (c): tenured stability. After `promote_and_blacken`,
+    /// a tenured object's frozen mark bit must never be re-interpreted or
+    /// re-written: across two subsequent concurrent cycles (one at each
+    /// parity) the raw bit stays exactly as frozen (a re-trace would have
+    /// stored the flipped cycle's parity into it), the object stays owned,
+    /// its young child stays live via the remembered set, and the armed
+    /// partition + tricolor verifiers stay green (without the tenured
+    /// short-circuit, `is_value_marked` would read the frozen bit as WHITE on
+    /// the flipped cycle and panic the tricolor verifier on the black root ->
+    /// tenured edge).
+    #[test]
+    fn parity_tenured_objects_stay_frozen_across_cycles_under_verifier() {
+        crate::test_utils::init_test_tracing();
+        unsafe { std::env::set_var("NEOVM_GC_VERIFY_PARTITION", "1") };
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        heap.extend_dump_span(4096, 16); // fake span: activates the partition
+
+        // T: vector that will be tenured by the first partition cycle. Y: a
+        // young cons reachable ONLY through T (conses never tenure), so its
+        // survival on later cycles proves the promotion-time remembered set,
+        // not accidental re-tracing of T.
+        let y = heap.alloc_cons(TaggedValue::fixnum(424_242), TaggedValue::fixnum(0));
+        let t = heap.alloc_vector(vec![y]);
+        let root = heap.alloc_cons(t, TaggedValue::fixnum(0));
+
+        // First partition cycle: STW full trace + sweep, then promotion.
+        heap.collect_exact(std::iter::once(root));
+        assert!(heap.dump_blackened);
+        let t_header = t.as_veclike_ptr().unwrap();
+        assert!(
+            unsafe { (*t_header).gc.tenured },
+            "the surviving vector must have been promoted to the old generation",
+        );
+        let frozen_bit = unsafe { (*t_header).gc.is_marked() };
+
+        // Two concurrent cycles — parities false then true — with the
+        // verifiers armed at each termination.
+        for cycle in 0..2 {
+            run_concurrent_cycle(&mut heap, &[root]);
+            assert!(
+                heap.owns_non_cons_object(t_header as *const u8),
+                "tenured vector swept on post-promotion cycle {cycle}",
+            );
+            assert_eq!(
+                unsafe { (*t_header).gc.is_marked() },
+                frozen_bit,
+                "tenured mark bit re-written on post-promotion cycle {cycle} \
+                 (a parity-blind re-trace stored into the frozen bit)",
+            );
+            assert_eq!(
+                unsafe { (*y.xcons_ptr()).load_car() }.0,
+                TaggedValue::fixnum(424_242).0,
+                "young child of the tenured vector lost on cycle {cycle}",
+            );
+        }
+    }
+
+    /// PARITY MARK BITS (d): the concurrent string claim works at BOTH
+    /// parities. The same rooted interval-free string is claimed by the GC
+    /// thread on two consecutive cycles: on the second one its bit holds the
+    /// previous cycle's parity, which a parity-blind `swap(true)` claim would
+    /// misread as "already marked" — the string would never be marked that
+    /// cycle and the sweep would free it while rooted.
+    #[test]
+    fn parity_string_claim_works_across_two_cycles() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let s = heap.alloc_string(crate::heap_types::LispString::from_utf8("still-here"));
+        let s_ptr = s.as_string_ptr().unwrap() as *const u8;
+        let mut spine = heap.alloc_cons(s, TaggedValue::fixnum(0));
+        for i in 0..100_000 {
+            spine = heap.alloc_cons(TaggedValue::fixnum(i), spine);
+        }
+        heap.collect_exact(std::iter::once(spine)); // bootstrap
+
+        for cycle in 0..2 {
+            run_concurrent_cycle(&mut heap, &[spine]);
+            assert!(
+                heap.sweep_stats().last_concurrent_str_claimed >= 1,
+                "cycle {cycle}: the interval-free string must be claimed on \
+                 the GC thread at this cycle's parity",
+            );
+            assert!(
+                heap.owns_non_cons_object(s_ptr),
+                "cycle {cycle}: claimed string swept while rooted",
+            );
+            assert!(
+                unsafe { (*(s_ptr as *const StringObj)).header.is_marked_at(heap.mark_parity) },
+                "cycle {cycle}: claimed string must be black at the cycle parity",
+            );
+        }
+        assert_eq!(
+            unsafe { (*(s_ptr as *const StringObj)).data.as_bytes() },
+            b"still-here",
+        );
+    }
+
+    /// PARITY MARK BITS (born-at-parity, idle window): an object allocated
+    /// BETWEEN cycles is born with bit == current parity, so the next flip
+    /// reads it as white and traces it. Born at `!parity` instead (the naive
+    /// "born white NOW" store), the next flip would read it as BLACK: never
+    /// traced, its sole-reference child swept while referenced — this test's
+    /// X->Y chain is exactly that UAF, asserted across two full cycles.
+    #[test]
+    fn parity_idle_born_object_is_traced_on_the_next_cycle() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let mut spine = TaggedValue::fixnum(0);
+        for i in 0..10_000 {
+            spine = heap.alloc_cons(TaggedValue::fixnum(i), spine);
+        }
+        heap.collect_exact(std::iter::once(spine)); // bootstrap (parity -> true)
+
+        // Idle window: no mark, no sweep. Y is reachable ONLY through X.
+        let y = heap.alloc_cons(TaggedValue::fixnum(31_337), TaggedValue::fixnum(0));
+        let x = heap.alloc_vector(vec![y]);
+        let x_ptr = x.as_veclike_ptr().unwrap() as *const u8;
+
+        for cycle in 0..2 {
+            run_concurrent_cycle(&mut heap, &[spine, x]);
+            assert!(
+                heap.owns_non_cons_object(x_ptr),
+                "cycle {cycle}: idle-born rooted vector swept",
+            );
+            assert_eq!(
+                unsafe { (*y.xcons_ptr()).load_car() }.0,
+                TaggedValue::fixnum(31_337).0,
+                "cycle {cycle}: child reachable only through the idle-born \
+                 vector was swept (the vector was falsely black and never traced)",
+            );
+        }
     }
 
     /// Gap 3 drop safety: dropping a heap while the GC thread is still

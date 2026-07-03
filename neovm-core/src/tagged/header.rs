@@ -103,10 +103,17 @@ pub enum HeapObjectKind {
 
 #[repr(C)]
 pub struct GcHeader {
-    /// Mark bit: set during mark phase, cleared before each GC cycle. Accessed
-    /// via relaxed atomics (`is_marked`/`set_marked`) so a future concurrent GC
-    /// thread can set it while the mutator allocate-blacks / reads it without a
-    /// data race; `AtomicBool` has the same size/layout as `bool`.
+    /// RAW mark-parity bit. For YOUNG (non-tenured, heap-owned) non-cons
+    /// objects, "marked this cycle" ≡ `bit == TaggedHeap::mark_parity`; the
+    /// heap flips its parity at `begin_collection` instead of walking
+    /// `all_objects` to clear bits, so the raw value alone is meaningless —
+    /// interpret it via `is_marked_at`/`mark_claim_at` with the owning heap's
+    /// parity. Tenured objects freeze this bit at promotion and every reader
+    /// short-circuits on `tenured` first; mapped (pdump) objects mark via the
+    /// heap's side tables and never interpret this bit at all. Accessed via
+    /// relaxed atomics so the concurrent GC thread can claim it while the
+    /// mutator allocate-blacks / reads it without a data race; `AtomicBool`
+    /// has the same size/layout as `bool`.
     pub marked: AtomicBool,
     /// Exact object category for typed sweep/deallocation.
     pub kind: HeapObjectKind,
@@ -124,6 +131,12 @@ pub struct GcHeader {
 impl GcHeader {
     pub fn new(kind: HeapObjectKind) -> Self {
         Self {
+            // `false` pairs with `TaggedHeap::mark_parity` starting `false`:
+            // objects created before the first collection read as unmarked
+            // once the first `begin_collection` flips the parity to `true`
+            // (see the parity invariant comment on `TaggedHeap::mark_parity`).
+            // Heap allocation paths overwrite this at the link seams
+            // (born-at-parity); this default is what mapped/static headers keep.
             marked: AtomicBool::new(false),
             kind,
             tenured: false,
@@ -131,26 +144,38 @@ impl GcHeader {
         }
     }
 
-    /// Read the mark bit (relaxed).
+    /// Read the RAW mark-parity bit (relaxed). Only meaningful compared
+    /// against the owning heap's parity — use `is_marked_at` unless you are
+    /// asserting the raw bit itself (e.g. "never touched").
     #[inline]
     pub fn is_marked(&self) -> bool {
         self.marked.load(Ordering::Relaxed)
     }
 
-    /// Set the mark bit (relaxed).
+    /// Store the RAW mark-parity bit (relaxed). Call sites pass the owning
+    /// heap's current parity to mark ("this cycle" black), which is also the
+    /// correct born-at-parity value at the allocation link seams.
     #[inline]
     pub fn set_marked(&self, value: bool) {
         self.marked.store(value, Ordering::Relaxed);
     }
 
-    /// Atomically CLAIM the mark bit: set it and return `true` iff this call is the
-    /// one that flipped it from unmarked → marked. Used by the concurrent GC thread
-    /// (Workstream D) to mark a heap veclike exactly once with no `&mut TaggedHeap`,
-    /// the non-cons analogue of `atomic_mark_owned_cons_ptr`. `swap` is atomic, so
-    /// two threads racing to claim the same object cannot both observe `true`.
+    /// Is this young object marked for the cycle whose parity is `parity`?
     #[inline]
-    pub fn mark_claim(&self) -> bool {
-        !self.marked.swap(true, Ordering::Relaxed)
+    pub fn is_marked_at(&self, parity: bool) -> bool {
+        self.marked.load(Ordering::Relaxed) == parity
+    }
+
+    /// Atomically CLAIM the mark bit for the cycle whose parity is `parity`:
+    /// set it and return `true` iff this call is the one that flipped it from
+    /// unmarked (`!= parity`) → marked (`== parity`). Used by the concurrent GC
+    /// thread to mark a heap object exactly once with no `&mut TaggedHeap`, the
+    /// non-cons analogue of `atomic_mark_owned_cons_ptr`. `swap` is atomic, so
+    /// two threads racing to claim the same object cannot both observe `true`;
+    /// a lost race is benign (the object ends up `== parity` either way).
+    #[inline]
+    pub fn mark_claim_at(&self, parity: bool) -> bool {
+        self.marked.swap(parity, Ordering::Relaxed) != parity
     }
 }
 
