@@ -272,6 +272,21 @@ struct ConcurrentClaimJob {
     /// created mid-cycle. See the claim arm for why page-hit vectors may be
     /// claimed without deferring their CURRENT backing to the termination.
     vector_page_bases: std::sync::Arc<std::collections::HashSet<usize>>,
+    /// CONCURRENT BYTECODE CLAIMS (task 01, finishing arm): the base address
+    /// of every BYTECODE ARENA PAGE at the world-stopped start handshake
+    /// (retired pages included — their tenured bytecode short-circuits to
+    /// drop at the arm). Same discipline as `vector_page_bases`: a page is
+    /// homogeneous (384-byte `ByteCodeObj` slots only), so a HIT both proves
+    /// ownership AND classifies the veclike as ByteCode without reading its
+    /// header. MISS ⇒ DEFER (fail-safe): mapped/dump-span bytecode (marks
+    /// live in mutator-only side tables; termination `trace_veclike`), any
+    /// residual `Box` bytecode (none are constructible — `alloc_bytecode` is
+    /// the single ByteCode chokepoint — but a miss merely defers), and
+    /// bytecode in pages created mid-cycle. Unlike vectors (children covered
+    /// by the Tier-B backing scan), a claimed bytecode's children are
+    /// GRAY-PUSHED by the claim arm itself — see the load-bearing
+    /// immutability comment there.
+    bytecode_page_bases: std::sync::Arc<std::collections::HashSet<usize>>,
     /// Dump (pdump mmap) address span. The cons arm skips conses inside
     /// (permanent-black; young children come from the remembered set); the
     /// subr arm defers span-inside veclikes (every MAPPED veclike
@@ -292,6 +307,9 @@ struct ConcurrentClaimJob {
     /// CONCURRENT VECTOR-HEADER CLAIMS: same pattern — owned young page
     /// vectors whose header this cycle's GC thread claimed.
     vec_claimed: std::sync::Arc<AtomicUsize>,
+    /// CONCURRENT BYTECODE CLAIMS: same pattern — owned young page bytecode
+    /// this cycle's GC thread claimed (and gray-pushed the children of).
+    bc_claimed: std::sync::Arc<AtomicUsize>,
     /// SUBR RECOGNIZE-AND-DROP: how many times the GC thread dropped a
     /// leaked-static subr from the defer path this cycle. Counts drop
     /// EVENTS, not unique subrs (dropping is stateless, so a subr
@@ -457,7 +475,10 @@ fn concurrent_try_mark_string(
 /// (claimed now, or already marked — nothing further owed this cycle);
 /// `false` means the caller must park the value in `deferred` for the STW
 /// termination exactly as before. Called at all three GC-thread discovery
-/// sinks (gray drain, obarray scan, vector-backing scan).
+/// sinks (gray drain, obarray scan, vector-backing scan). `gray` is the GC
+/// thread's local worklist: the bytecode arm pushes a newly-claimed
+/// object's children there, so the drain traces them to the fixpoint (a
+/// mid-drain stop hands residual gray to the termination like `deferred`).
 ///
 /// Per-kind arms are added one commit at a time. Every arm carries its own
 /// snapshot-classify + claim step and REFUSES (→ defer, fail-safe) anything
@@ -470,7 +491,10 @@ fn concurrent_try_mark_string(
 ///   arm is mark-only);
 /// - subrs: recognize-and-drop (leaked statics — not a claim at all);
 /// - vectors: page-snapshot header claim (children covered by the Tier-B
-///   backing scan + SATB — see the load-bearing comment at the arm).
+///   backing scan + SATB — see the load-bearing comment at the arm);
+/// - bytecode: page-snapshot header claim + GC-thread gray-push of the
+///   children (sound only because published bytecode is immutable — see the
+///   load-bearing comment at the arm).
 ///
 /// Arm-internal ordering is mandated (H4/H5): any inspection that can still
 /// send the value to `deferred` runs BEFORE the claim (a claimed-then-
@@ -479,7 +503,11 @@ fn concurrent_try_mark_string(
 /// claim (tenured ≡ permanently black; the flag froze at promotion, which
 /// only runs world-stopped, so the read is stable on this thread).
 #[inline]
-fn concurrent_try_mark_owned(val: TaggedValue, job: &ConcurrentClaimJob) -> bool {
+fn concurrent_try_mark_owned(
+    val: TaggedValue,
+    job: &ConcurrentClaimJob,
+    gray: &mut Vec<TaggedValue>,
+) -> bool {
     if val.is_string() {
         return concurrent_try_mark_string(
             val,
@@ -590,6 +618,114 @@ fn concurrent_try_mark_owned(val: TaggedValue, job: &ConcurrentClaimJob) -> bool
             }
             return true;
         }
+        // CONCURRENT BYTECODE CLAIMS (task 01, finishing arm). Page-base hit
+        // FIRST, before any dereference: bytecode-arena pages are
+        // homogeneous 384-byte `ByteCodeObj` slots, so a hit is
+        // simultaneously the ownership proof and the type classification
+        // (and rules out mapped: a page owns its 64KB span exclusively).
+        // MISS ⇒ DEFER, fail-safe: mapped/dump bytecode (side-table marks +
+        // termination `trace_veclike`), mid-cycle pages (their bytecode is
+        // born-at-parity anyway), and any residual Box bytecode keep the STW
+        // path unchanged.
+        //
+        // THE LOAD-BEARING IMMUTABILITY ARGUMENT: on a fresh claim this arm
+        // reads the object's `ByteCodeFunction` fields — `constants:
+        // Vec<Value>` / `extra_slots` through plain non-atomic loads on the
+        // GC thread. That is sound ONLY because post-publish bytecode
+        // immutability is COMPILE-TIME ENFORCED (task 03/3a): the one
+        // mutation seam is `#[cfg(test)] with_bytecode_data_mut_for_test`
+        // (`mutate.rs` — gated out of production builds, with the
+        // hard-invariant doc), `aset` has no ByteCode arm, and the pdump
+        // restore (`install_restored_bytecode_data`) initializes a fresh
+        // placeholder PRE-PUBLISH, like `alloc_bytecode`'s own constructor
+        // write. Pre-publish writes happen-before the world-stopped start
+        // handshake that snapshotted the page, which happens-before this
+        // job's Arc/channel publication — so every claimable (= unmarked at
+        // this parity, i.e. pre-cycle) bytecode's fields are stable and
+        // race-free here. Any new mutation path must first add vector-style
+        // clone-on-write (see `with_vector_data_mut`) — do NOT just read.
+        //
+        // COVERAGE ARGUMENT (why a claimed bytecode never being re-traced at
+        // the termination drain — `mark_value` early-returns on the mark
+        // bit — drops no children):
+        //  (a) fresh claim: THIS arm gray-pushes exactly the fields
+        //      `trace_veclike`'s ByteCode arm traces (arglist, constants,
+        //      env, doc_form, interactive, extra_slots; `params` carries
+        //      only SymIds — untraced by design), and the drain traces them
+        //      to the fixpoint (a mid-drain stop hands residual gray to the
+        //      termination).
+        //  (b) mid-cycle-ALLOCATED bytecode in a NEW page: not in the
+        //      snapshot ⇒ deferred ⇒ the termination marks it and traces
+        //      its current children in full.
+        //  (c) mid-cycle bytecode in a REUSED SLOT of a snapshotted page
+        //      (page-hit, born-at-parity ⇒ `mark_claim_at` fails ⇒ handled
+        //      WITHOUT a children push — and without reading its fields,
+        //      which its constructor may still be racing): its children
+        //      were installed PRE-PUBLISH during construction from values
+        //      live/reachable at that moment — each child is
+        //      snapshot-reachable at its source home (deletions of that
+        //      source are SATB-barriered) or born-black this cycle;
+        //      register-moved insertions into OTHER owners are covered by
+        //      the termination's dirty-owner re-gray
+        //      (`satb_snapshotted_owners`). The NEXT cycle re-traces the
+        //      bytecode against fresh marks. This is the vector arm's
+        //      reused-slot argument verbatim, minus post-publish insertions
+        //      into the bytecode itself — immutability rules those out.
+        if job.bytecode_page_bases.contains(&base) {
+            // Page bytecode is 384-byte slots; a page-hit veclike value
+            // must decode to a slot boundary (page-homogeneity argument).
+            debug_assert_eq!(
+                (addr - base) % <ByteCodeObj as PagedObject>::SLOT_BYTES,
+                0,
+                "page-hit veclike value does not address a bytecode slot",
+            );
+            // TENURED short-circuit BEFORE the claim (H5): permanently
+            // black, never re-traced/re-swept; frozen bit untouched. Its
+            // young children are the promotion-time page-tenured
+            // remembered-set scan's job, exactly as on the defer path.
+            if unsafe { (*ptr).gc.tenured } {
+                return true;
+            }
+            if unsafe { (*ptr).gc.mark_claim_at(job.parity) } {
+                job.bc_claimed.fetch_add(1, Ordering::Relaxed);
+                // Fresh claim: gray-push the children (coverage leg (a)).
+                // Field reads are race-free per the immutability argument
+                // above (a fresh claim proves the object pre-dates the
+                // cycle, so construction completed before the snapshot).
+                let data = unsafe { &(*(ptr as *const ByteCodeObj)).data };
+                if data.arglist.is_heap_object() {
+                    gray.push(data.arglist);
+                }
+                for &c in &data.constants {
+                    if c.is_heap_object() {
+                        gray.push(c);
+                    }
+                }
+                if let Some(env) = data.env
+                    && env.is_heap_object()
+                {
+                    gray.push(env);
+                }
+                if let Some(doc_form) = data.doc_form
+                    && doc_form.is_heap_object()
+                {
+                    gray.push(doc_form);
+                }
+                if let Some(interactive) = data.interactive
+                    && interactive.is_heap_object()
+                {
+                    gray.push(interactive);
+                }
+                for &s in &data.extra_slots {
+                    if s.is_heap_object() {
+                        gray.push(s);
+                    }
+                }
+            }
+            // Already marked (lost race, earlier edge, or born-at-parity —
+            // coverage leg (c)): equally handled, nothing further owed.
+            return true;
+        }
         // MAPPED (pdump) veclikes mark via the heap's side table
         // (`mapped_veclike_objects[..].marked`), which only the mutator may
         // touch → always DEFER. The range check runs before any header
@@ -670,7 +806,7 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
             snap.scan(|child| {
                 if child.is_cons() {
                     job.gray.push(child);
-                } else if !concurrent_try_mark_owned(child, &job.claims) {
+                } else if !concurrent_try_mark_owned(child, &job.claims, &mut job.gray) {
                     job.deferred.lock().unwrap().push(child);
                 }
             });
@@ -687,7 +823,7 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
             snap.scan(|child| {
                 if child.is_cons() {
                     job.gray.push(child);
-                } else if !concurrent_try_mark_owned(child, &job.claims) {
+                } else if !concurrent_try_mark_owned(child, &job.claims, &mut job.gray) {
                     job.deferred.lock().unwrap().push(child);
                 }
             });
@@ -743,12 +879,13 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
             } else if val.is_heap_object() {
                 // Claim dispatcher first: the kinds it recognizes (e.g. an
                 // owned, interval-free string — mark-only, zero Lisp
-                // children) are fully handled right here. Everything it
-                // refuses — veclikes whose backing the mutator may
-                // reallocate, and interval-bearing or mapped strings, which
-                // need the mutator's `mark_value` — is deferred to the STW
-                // termination.
-                if concurrent_try_mark_owned(val, &job.claims) {
+                // children; a page bytecode — claim + children gray-pushed
+                // right back onto this worklist) are fully handled right
+                // here. Everything it refuses — veclikes whose backing the
+                // mutator may reallocate, and interval-bearing or mapped
+                // strings, which need the mutator's `mark_value` — is
+                // deferred to the STW termination.
+                if concurrent_try_mark_owned(val, &job.claims, &mut job.gray) {
                     continue;
                 }
                 job.deferred.lock().unwrap().push(val);
@@ -1985,6 +2122,10 @@ pub(crate) struct DrainKinds {
     pub record: usize,
     /// Lambda + Macro (interpreted closures).
     pub closure: usize,
+    /// Since task 01's bytecode arm the GC thread CLAIMS owned page
+    /// bytecode (children gray-pushed at claim time) — this bucket counts
+    /// only the still-parked residue (mapped/dump-span bytecode and
+    /// mid-cycle-page snapshot misses).
     pub bytecode: usize,
     pub hash_table: usize,
     /// CharTable + SubCharTable.
@@ -2130,6 +2271,11 @@ pub(crate) struct SweepStats {
     /// whose header the GC thread claimed last cycle (the `kinds.vector`
     /// bucket keeps counting the still-parked ones: mapped/Box-residual).
     pub last_concurrent_vec_claimed: usize,
+    /// CONCURRENT BYTECODE CLAIMS (task 01): owned young page bytecode the
+    /// GC thread claimed (children gray-pushed) last cycle (the
+    /// `kinds.bytecode` bucket keeps counting the still-parked residue:
+    /// mapped/dump-span and mid-cycle-page bytecode).
+    pub last_concurrent_bc_claimed: usize,
     /// Cost of the `join_concurrent_mark` fold itself (taking the SATB +
     /// deferred buffers, classifying, pushing to gray) — the cheap half of the
     /// termination; the mark fixpoint that follows is the trace line's `drain`.
@@ -2236,6 +2382,9 @@ pub(crate) struct HandshakeStats {
     /// CONCURRENT VECTOR-HEADER CLAIMS (task 01): vector-arena page-BASE
     /// snapshot capture (distinct from the Tier-B backing `vecsnap`).
     pub last_start_vecbasesnap_us: u64,
+    /// CONCURRENT BYTECODE CLAIMS (task 01): bytecode-arena page-base
+    /// snapshot capture — O(pages) only, mirrors `last_start_vecbasesnap_us`.
+    pub last_start_bcsnap_us: u64,
     pub last_start_jobasm_us: u64,
 
     // --- TERMINATION handshake (once per concurrent cycle) ---
@@ -2609,6 +2758,10 @@ pub struct TaggedHeap {
     /// the in-flight cycle (see `ConcurrentClaimJob::vec_claimed`) + fold.
     concurrent_vec_claimed: std::sync::Arc<AtomicUsize>,
     last_concurrent_vec_claimed: usize,
+    /// CONCURRENT BYTECODE CLAIMS (task 01): shared claim counter for the
+    /// in-flight cycle (see `ConcurrentClaimJob::bc_claimed`) + fold.
+    concurrent_bc_claimed: std::sync::Arc<AtomicUsize>,
+    last_concurrent_bc_claimed: usize,
     /// CONCURRENT STRING MARKING: per-cycle dedup for the ENFORCED in-mutator
     /// string interval SATB barrier (`note_string_interval_preimage`), keyed by
     /// `LispString` address — stable for the whole cycle because nothing is
@@ -2783,6 +2936,8 @@ impl TaggedHeap {
             last_concurrent_subr_dropped: 0,
             concurrent_vec_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
             last_concurrent_vec_claimed: 0,
+            concurrent_bc_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
+            last_concurrent_bc_claimed: 0,
             satb_string_preimage_addrs: FxHashSet::default(),
             gc_stop: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             gc_wake: std::sync::Arc::new((std::sync::Mutex::new(()), std::sync::Condvar::new())),
@@ -2904,6 +3059,7 @@ impl TaggedHeap {
             last_concurrent_float_claimed: self.last_concurrent_float_claimed,
             last_concurrent_subr_dropped: self.last_concurrent_subr_dropped,
             last_concurrent_vec_claimed: self.last_concurrent_vec_claimed,
+            last_concurrent_bc_claimed: self.last_concurrent_bc_claimed,
             last_termination_fold_us: self.last_termination_fold_us,
             termination_count: self.termination_count,
             mark_us: self.sweep_mark_us,
@@ -3806,10 +3962,14 @@ impl TaggedHeap {
     /// bytecode reclaimer (its `drop_in_place` frees the ops/constants
     /// vectors, params, GNU byte maps, and docstring the function owns).
     ///
-    /// MARKING IS UNCHANGED by the page migration: the GC thread still
-    /// defers every bytecode object to the STW termination drain (the
-    /// concurrent claim is task 01's move), where `mark_value`'s owned
-    /// veclike arm traces it exactly as before.
+    /// MARKING (task 01 bytecode arm): the GC thread CLAIMS page bytecode
+    /// discovered during a concurrent mark (page-base snapshot hit +
+    /// `mark_claim_at`) and gray-pushes its children right there — sound
+    /// because published bytecode is immutable (compile-time enforced; see
+    /// the claim arm in `concurrent_try_mark_owned`). Snapshot misses
+    /// (mid-cycle pages, mapped/dump residue) still defer to the STW
+    /// termination drain, where `mark_value`'s owned veclike arm traces
+    /// them exactly as before.
     pub fn alloc_bytecode(
         &mut self,
         data: crate::emacs_core::bytecode::ByteCodeFunction,
@@ -5773,6 +5933,18 @@ impl TaggedHeap {
         }
         self.handshake.last_start_vecbasesnap_us =
             vecbasesnap_t0.elapsed().as_micros() as u64;
+        // CONCURRENT BYTECODE CLAIMS (task 01) claim oracle: capture the
+        // bytecode arena's page bases at this same world-stopped instant
+        // (retired pages included — tenured bytecode recognize-and-drops at
+        // the claim arm). Same discipline as the float/vector snapshots.
+        // O(pages); own handshake timer.
+        let bcsnap_t0 = std::time::Instant::now();
+        let mut bytecode_bases =
+            std::collections::HashSet::with_capacity(self.bytecode_arena.pages.len());
+        for page in &self.bytecode_arena.pages {
+            bytecode_bases.insert(page.base_addr());
+        }
+        self.handshake.last_start_bcsnap_us = bcsnap_t0.elapsed().as_micros() as u64;
         let vecsnap_t0 = std::time::Instant::now();
         // Stage 2 Tier B CONCURRENT VECTOR SCAN: snapshot every
         // OWNED/Mapped vector backing AT THIS world-stopped point (same instant the
@@ -5869,6 +6041,7 @@ impl TaggedHeap {
         self.concurrent_float_claimed.store(0, Ordering::Relaxed);
         self.concurrent_subr_dropped.store(0, Ordering::Relaxed);
         self.concurrent_vec_claimed.store(0, Ordering::Relaxed);
+        self.concurrent_bc_claimed.store(0, Ordering::Relaxed);
         self.gc_stop
             .store(false, std::sync::atomic::Ordering::Release);
         self.gc_exited = Some(exited_rx);
@@ -5885,12 +6058,14 @@ impl TaggedHeap {
                 string_page_bases: std::sync::Arc::new(string_bases),
                 float_page_bases: std::sync::Arc::new(float_bases),
                 vector_page_bases: std::sync::Arc::new(vector_bases),
+                bytecode_page_bases: std::sync::Arc::new(bytecode_bases),
                 dump_lo: self.dump_addr_lo,
                 dump_hi: self.dump_addr_hi,
                 str_claimed: self.concurrent_str_claimed.clone(),
                 float_claimed: self.concurrent_float_claimed.clone(),
                 subr_dropped: self.concurrent_subr_dropped.clone(),
                 vec_claimed: self.concurrent_vec_claimed.clone(),
+                bc_claimed: self.concurrent_bc_claimed.clone(),
             },
             satb: self.satb_shared.clone(),
             deferred: self.deferred_veclikes.clone(),
@@ -5953,6 +6128,7 @@ impl TaggedHeap {
         self.last_concurrent_subr_dropped =
             self.concurrent_subr_dropped.load(Ordering::Relaxed);
         self.last_concurrent_vec_claimed = self.concurrent_vec_claimed.load(Ordering::Relaxed);
+        self.last_concurrent_bc_claimed = self.concurrent_bc_claimed.load(Ordering::Relaxed);
         // Task 01 INSERTION-COVERAGE RE-TRACE (the load-bearing companion of
         // the vector-header claims): re-gray the CURRENT children of every
         // multi-child owner mutated this cycle (`satb_snapshotted_owners` —
@@ -10708,25 +10884,29 @@ mod float_arena_tests {
             string_page_bases: std::sync::Arc::new(std::collections::HashSet::new()),
             float_page_bases: std::sync::Arc::new(snap),
             vector_page_bases: std::sync::Arc::new(std::collections::HashSet::new()),
+            bytecode_page_bases: std::sync::Arc::new(std::collections::HashSet::new()),
             dump_lo: usize::MAX,
             dump_hi: 0,
             str_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
             float_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
             subr_dropped: std::sync::Arc::new(AtomicUsize::new(0)),
             vec_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
+            bc_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
         };
+        let mut gray = Vec::new();
         assert!(
-            concurrent_try_mark_owned(f_old, &job),
+            concurrent_try_mark_owned(f_old, &job, &mut gray),
             "snapshot-page float must be handled (claimed)",
         );
         assert_eq!(job.float_claimed.load(Ordering::Relaxed), 1);
+        assert!(gray.is_empty(), "floats have no children to gray-push");
         assert!(unsafe {
             (*f_old.as_float_ptr().unwrap())
                 .header
                 .is_marked_at(!heap.mark_parity)
         });
         assert!(
-            !concurrent_try_mark_owned(f_new, &job),
+            !concurrent_try_mark_owned(f_new, &job, &mut gray),
             "post-snapshot-page float must DEFER",
         );
         assert_eq!(
@@ -11881,12 +12061,16 @@ mod bytecode_arena_tests {
         parity_two_cycle_bytecode_survival_and_reclaim_body(true);
     }
 
-    /// (TRAP A) Bytecode parked in `deferred` by the GC thread resolves at
-    /// the STW termination through `mark_value`'s OWNED veclike arm — which
-    /// since this commit routes page bytecode through the page-span oracle
-    /// (`owns_veclike_object`). A dropped route here reads as "mapped" and
-    /// silently drops the mark (the UAF TRAP A names). Constants (heap
-    /// children) must be traced; garbage must not be retained.
+    /// (TRAP A, updated for the task 01 bytecode arm) Rooted page bytecode
+    /// discovered during a concurrent mark is CLAIMED on the GC thread
+    /// (page-snapshot hit + `mark_claim_at` + children gray-push) — the
+    /// deferred bytecode bucket collapses to zero and the claim counter
+    /// carries the count. Every field `trace_veclike`'s ByteCode arm traces
+    /// (arglist, constants, env, doc_form, interactive, extra_slots) holds a
+    /// child reachable ONLY through the bytecode; all must survive via the
+    /// GC-thread gray-push (the claimed header suppresses the termination
+    /// re-trace, so nothing else covers them). Garbage bytecode + its
+    /// otherwise-unreachable children must be collected within two cycles.
     fn deferred_bytecode_resolves_at_termination_body(verify: bool) {
         crate::test_utils::init_test_tracing();
         let mut heap = TaggedHeap::new();
@@ -11918,7 +12102,29 @@ mod bytecode_arena_tests {
             bytecodes.push(b);
             list = heap.alloc_cons(b, list);
         }
-        let garbage = heap.alloc_bytecode(bytecode_fn(vec![TaggedValue::fixnum(-1)], 4, 16));
+        // One bytecode exercising EVERY traced field: each child cons is
+        // reachable only through that field.
+        let c_arg = heap.alloc_cons(TaggedValue::fixnum(1_001), TaggedValue::fixnum(0));
+        let c_env = heap.alloc_cons(TaggedValue::fixnum(1_002), TaggedValue::fixnum(0));
+        let c_doc = heap.alloc_cons(TaggedValue::fixnum(1_003), TaggedValue::fixnum(0));
+        let c_int = heap.alloc_cons(TaggedValue::fixnum(1_004), TaggedValue::fixnum(0));
+        let c_extra = heap.alloc_cons(TaggedValue::fixnum(1_005), TaggedValue::fixnum(0));
+        let full = {
+            let mut f = bytecode_fn(vec![TaggedValue::fixnum(0)], 4, 16);
+            f.arglist = c_arg;
+            f.env = Some(c_env);
+            f.doc_form = Some(c_doc);
+            f.interactive = Some(c_int);
+            f.extra_slots = vec![c_extra];
+            heap.alloc_bytecode(f)
+        };
+        list = heap.alloc_cons(full, list);
+        // Garbage bytecode whose constants hold an otherwise-unreachable
+        // string child (ownership-probe-able, unlike a cons): both must go.
+        let g_child =
+            heap.alloc_string(crate::heap_types::LispString::from_utf8("bc-garbage-kid"));
+        let g_child_ptr = g_child.as_string_ptr().unwrap() as *const u8;
+        let garbage = heap.alloc_bytecode(bytecode_fn(vec![g_child], 4, 16));
         let garbage_ptr = bc_ptr(garbage);
 
         heap.concurrent_begin();
@@ -11931,12 +12137,22 @@ mod bytecode_arena_tests {
         heap.join_concurrent_mark();
         let stats = heap.sweep_stats();
         assert!(
-            stats.last_termination_kinds.bytecode >= 300,
-            "every rooted bytecode must reach the termination via `deferred` \
-             (got {}) — marking stays deferred in this commit (task 01 owns \
-             the concurrent claim)",
+            stats.last_concurrent_bc_claimed >= 301,
+            "every rooted page bytecode must be claimed on the GC thread \
+             (claimed={})",
+            stats.last_concurrent_bc_claimed,
+        );
+        assert_eq!(
+            stats.last_termination_kinds.bytecode, 0,
+            "no bytecode may park on a bare page-only heap (bc={})",
             stats.last_termination_kinds.bytecode,
         );
+        // Claimed ≡ black at THIS cycle's parity (spot-check one header).
+        assert!(unsafe {
+            (*bytecodes[0].as_veclike_ptr().unwrap())
+                .gc
+                .is_marked_at(heap.mark_parity)
+        });
         heap.reseed_runtime_and_remembered_roots();
         heap.seed_root(spine);
         heap.seed_root(list);
@@ -11948,20 +12164,41 @@ mod bytecode_arena_tests {
         for (i, b) in bytecodes.iter().enumerate() {
             assert!(
                 heap.owns_non_cons_object(bc_ptr(*b)),
-                "deferred-then-resolved bytecode {i} was swept while rooted",
+                "claimed bytecode {i} was swept while rooted",
             );
             assert_eq!(bc_constant(*b, 0).as_fixnum(), Some(i as i64));
-            // The constants child (reachable only through the bytecode)
-            // was traced by the termination drain.
+            // The constants child (reachable only through the bytecode) was
+            // traced via the claim arm's gray-push.
             assert_eq!(
                 unsafe { (*children[i].xcons_ptr()).load_car() }.as_fixnum(),
                 Some(10_000 + i as i64),
                 "bytecode {i}'s constants child was swept while live",
             );
         }
+        for (child, expect, field) in [
+            (c_arg, 1_001, "arglist"),
+            (c_env, 1_002, "env"),
+            (c_doc, 1_003, "doc_form"),
+            (c_int, 1_004, "interactive"),
+            (c_extra, 1_005, "extra_slots"),
+        ] {
+            assert_eq!(
+                unsafe { (*child.xcons_ptr()).load_car() }.as_fixnum(),
+                Some(expect),
+                "claimed bytecode's {field} child was swept while live \
+                 (the claim arm must gray-push every trace_veclike field)",
+            );
+        }
         assert!(
             !heap.owns_non_cons_object(garbage_ptr),
-            "unrooted bytecode must not be retained by the deferred machinery",
+            "unrooted bytecode must not be retained by the claim machinery",
+        );
+        // Second cycle: the garbage child must be gone too (the garbage
+        // bytecode was never discovered, so nothing pushed its children).
+        run_concurrent_cycle(&mut heap, &[spine, list]);
+        assert!(
+            !heap.owns_non_cons_object(g_child_ptr),
+            "the garbage bytecode's only child must be collected by cycle 2",
         );
         heap.assert_object_arenas_coherent();
     }
@@ -11974,6 +12211,281 @@ mod bytecode_arena_tests {
     #[test]
     fn deferred_bytecode_resolves_at_termination_verified() {
         deferred_bytecode_resolves_at_termination_body(true);
+    }
+
+    /// Task 01 H2 (snapshot-miss direction, deterministic unit test of the
+    /// bytecode arm): bytecode living in a page created AFTER the
+    /// start-handshake snapshot must DEFER (miss ⇒ defer, never "miss ⇒
+    /// mapped"), without a counter bump or a header write; a snapshot-page
+    /// bytecode claims at the job parity AND gray-pushes exactly its heap
+    /// children; a re-discovered (already-marked) one is handled WITHOUT a
+    /// second push. Drives `concurrent_try_mark_owned` directly with a
+    /// hand-built `ConcurrentClaimJob` so the page-boundary race is not
+    /// left to timing.
+    #[test]
+    fn concurrent_claim_arm_defers_mid_cycle_bytecode_pages() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // B_OLD lives in a page that exists at the "snapshot" instant; its
+        // constants carry one heap child (plus a fixnum that must NOT be
+        // pushed).
+        let child = heap.alloc_cons(TaggedValue::fixnum(51), TaggedValue::fixnum(52));
+        let b_old = heap.alloc_bytecode(bytecode_fn(
+            vec![TaggedValue::fixnum(7), child],
+            2,
+            0,
+        ));
+        let snap: std::collections::HashSet<usize> = heap
+            .bytecode_arena
+            .pages
+            .iter()
+            .map(|p| p.base_addr())
+            .collect();
+        // Allocate until the arena opens a NEW page; the last allocation
+        // lives in the post-snapshot page.
+        let pages_before = heap.bytecode_arena.pages.len();
+        let mut b_new = b_old;
+        while heap.bytecode_arena.pages.len() == pages_before {
+            b_new = heap.alloc_bytecode(bytecode_fn(vec![TaggedValue::fixnum(2)], 2, 0));
+        }
+        let new_base = (bc_ptr(b_new) as usize) & !(OBJECT_PAGE_ALIGN - 1);
+        assert!(
+            !snap.contains(&new_base),
+            "the defer probe must live in a post-snapshot page",
+        );
+
+        // Hand-built claim job (both bytecodes were born at the CURRENT
+        // heap parity; a real cycle flips parity at `begin_collection`
+        // before launching, so claim at the flipped value).
+        let job = ConcurrentClaimJob {
+            parity: !heap.mark_parity,
+            string_page_bases: std::sync::Arc::new(std::collections::HashSet::new()),
+            float_page_bases: std::sync::Arc::new(std::collections::HashSet::new()),
+            vector_page_bases: std::sync::Arc::new(std::collections::HashSet::new()),
+            bytecode_page_bases: std::sync::Arc::new(snap),
+            dump_lo: usize::MAX,
+            dump_hi: 0,
+            str_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
+            float_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
+            subr_dropped: std::sync::Arc::new(AtomicUsize::new(0)),
+            vec_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
+            bc_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
+        };
+        let mut gray = Vec::new();
+        assert!(
+            concurrent_try_mark_owned(b_old, &job, &mut gray),
+            "snapshot-page bytecode must be handled (claimed)",
+        );
+        assert_eq!(job.bc_claimed.load(Ordering::Relaxed), 1);
+        assert!(unsafe {
+            (*b_old.as_veclike_ptr().unwrap())
+                .gc
+                .is_marked_at(!heap.mark_parity)
+        });
+        // The fresh claim gray-pushed exactly the HEAP children: the one
+        // constants cons (the fixnum constant and the NIL arglist are not
+        // heap objects).
+        assert_eq!(
+            gray.iter().map(|v| v.0).collect::<Vec<_>>(),
+            vec![child.0],
+            "a fresh bytecode claim must gray-push exactly its heap children",
+        );
+        // Re-discovery through another edge: already marked ⇒ handled, no
+        // counter bump, no duplicate children push.
+        gray.clear();
+        assert!(
+            concurrent_try_mark_owned(b_old, &job, &mut gray),
+            "an already-claimed bytecode is handled (nothing further owed)",
+        );
+        assert_eq!(job.bc_claimed.load(Ordering::Relaxed), 1);
+        assert!(
+            gray.is_empty(),
+            "an already-marked bytecode must not re-push its children",
+        );
+        // Post-snapshot-page bytecode DEFERS: no claim, no counter, no push,
+        // header untouched (still unmarked at the job parity).
+        assert!(
+            !concurrent_try_mark_owned(b_new, &job, &mut gray),
+            "post-snapshot-page bytecode must DEFER",
+        );
+        assert_eq!(
+            job.bc_claimed.load(Ordering::Relaxed),
+            1,
+            "a deferred bytecode must not bump the claim counter",
+        );
+        assert!(gray.is_empty(), "a deferred bytecode must not push children");
+        assert!(unsafe {
+            !(*b_new.as_veclike_ptr().unwrap())
+                .gc
+                .is_marked_at(!heap.mark_parity)
+        });
+    }
+
+    /// Task 01 H5 (tenured short-circuit): a TENURED page bytecode
+    /// discovered by the GC thread is recognize-and-DROPPED — handled
+    /// without a parity claim (counter stays zero), never parked (bytecode
+    /// bucket zero), its FROZEN mark bit is not scribbled, and its young
+    /// constants child is not orphaned (the promotion-time page-tenured
+    /// remembered-set scan keeps covering it, exactly as on the old defer
+    /// path). Partition + tricolor verifiers armed.
+    #[test]
+    fn concurrent_tenured_bytecode_dropped_not_claimed() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        arm_partition(&mut heap, true);
+
+        // B survives the FIRST partitioned cycle, so the promotion page
+        // walk tenures it; its young cons child stays young (conses never
+        // tenure) and is reachable ONLY through B's constants.
+        let young = heap.alloc_cons(TaggedValue::fixnum(4_321), TaggedValue::fixnum(0));
+        let b = heap.alloc_bytecode(bytecode_fn(vec![TaggedValue::fixnum(6), young], 4, 16));
+        let root = heap.alloc_cons(b, TaggedValue::fixnum(0));
+        heap.collect_exact(std::iter::once(root));
+        let b_hdr = b.as_veclike_ptr().unwrap();
+        assert!(
+            unsafe { (*b_hdr).gc.tenured },
+            "the first partitioned cycle must promote the surviving bytecode",
+        );
+        let frozen_bit = unsafe { (*b_hdr).gc.is_marked() };
+
+        // One full concurrent cycle with B reachable via the rooted cons:
+        // the GC thread discovers B, page-hits, sees `tenured`, and drops.
+        run_concurrent_cycle(&mut heap, &[root]);
+        let stats = heap.sweep_stats();
+        assert_eq!(
+            stats.last_concurrent_bc_claimed, 0,
+            "tenured bytecode is dropped, not claimed",
+        );
+        assert_eq!(
+            stats.last_termination_kinds.bytecode, 0,
+            "tenured bytecode is dropped, not parked",
+        );
+        assert_eq!(
+            unsafe { (*b_hdr).gc.is_marked() },
+            frozen_bit,
+            "the frozen tenured mark bit must not be scribbled",
+        );
+        assert!(unsafe { (*b_hdr).gc.tenured });
+        assert_eq!(bc_constant(b, 0).as_fixnum(), Some(6));
+        assert_eq!(
+            unsafe { (*young.xcons_ptr()).load_car() }.as_fixnum(),
+            Some(4_321),
+            "the tenured bytecode's young constants child must survive the \
+             drop (page-tenured remembered-set coverage)",
+        );
+        heap.assert_object_arenas_coherent();
+    }
+
+    /// Task 01 bytecode-claim coverage leg (c), THE ADVERSARIAL ONE:
+    /// bytecode constructed MID-CYCLE into a REUSED SLOT of an
+    /// already-snapshotted page (page-base HIT — it does NOT defer) holds,
+    /// in its constants, the only surviving reference to child C after C's
+    /// snapshot home is severed. C must survive its birth cycle: not
+    /// through the bytecode (born-at-parity ⇒ the claim arm treats it as
+    /// already-marked ⇒ handled WITHOUT a children push) but through the
+    /// SATB deletion barrier on the home overwrite. The NEXT cycle then
+    /// re-traces: C is reachable ONLY through the bytecode's constants, so
+    /// the fresh claim's GC-thread gray-push is the ONLY thing carrying it
+    /// (bytecode has no Tier-B backing snapshot — this is where the arm's
+    /// children push is load-bearing). Runs with the partition + tricolor
+    /// verifiers armed (`verify_incremental_tricolor` is the oracle for
+    /// the removed termination re-trace backstop).
+    #[test]
+    fn concurrent_mid_cycle_bytecode_in_reused_slot_keeps_child_alive() {
+        crate::test_utils::init_test_tracing();
+        unsafe { std::env::set_var("NEOVM_GC_VERIFY_PARTITION", "1") };
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        heap.extend_dump_span(4096, 16); // activates the partition
+
+        // Page setup: keeper pins the page; b_dead's slot becomes the free
+        // slot the mid-cycle allocation will reuse.
+        let b_keep = heap.alloc_bytecode(bytecode_fn(vec![TaggedValue::fixnum(1)], 2, 0));
+        let b_dead = heap.alloc_bytecode(bytecode_fn(vec![TaggedValue::fixnum(2)], 2, 0));
+        let dead_ptr = bc_ptr(b_dead) as usize;
+        // C: young cons, reachable at the snapshot ONLY via home H's car.
+        let c = heap.alloc_cons(TaggedValue::fixnum(81), TaggedValue::fixnum(82));
+        let home = heap.alloc_cons(c, TaggedValue::fixnum(0));
+        // Long rooted spine (home at the bottom) so the GC thread is still
+        // walking when the mutator severs; both race outcomes are asserted
+        // identically (if the GC got to H first, C is simply already black).
+        let mut list = heap.alloc_cons(home, TaggedValue::fixnum(0));
+        list = heap.alloc_cons(b_keep, list);
+        for i in 0..300_000 {
+            list = heap.alloc_cons(TaggedValue::fixnum(i), list);
+        }
+        let root = list;
+        // Bootstrap STW cycle: blackens the fake dump (arming the
+        // verifiers), promotes survivors, and frees b_dead's slot.
+        heap.collect_exact(std::iter::once(root));
+        let pre_launch_bases: std::collections::HashSet<usize> = heap
+            .bytecode_arena
+            .pages
+            .iter()
+            .map(|p| p.base_addr())
+            .collect();
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+
+        // MID-CYCLE: construct B_NEW carrying C in its constants — the
+        // arena's class free list hands back b_dead's slot (page-base in
+        // this cycle's snapshot) — then sever C's original home (fires the
+        // SATB pre-image barrier).
+        let b_new = heap.alloc_bytecode(bytecode_fn(vec![c], 2, 0));
+        let new_ptr = bc_ptr(b_new) as usize;
+        assert_eq!(
+            new_ptr, dead_ptr,
+            "the mid-cycle bytecode must land in the freed slot of a \
+             snapshotted page (allocator changed? fix the test setup)",
+        );
+        assert!(
+            pre_launch_bases.contains(&(new_ptr & !(OBJECT_PAGE_ALIGN - 1))),
+            "the reused slot's page must be in this cycle's snapshot",
+        );
+        assert!(crate::tagged::mutate::set_cons_car(home, TaggedValue::NIL));
+
+        // Terminate with b_new re-seeded alongside the spine (it is a live
+        // value the mutator holds; the explicit-roots harness must name it).
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(root);
+        heap.seed_root(b_new);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        // Runs verify_dump_partition + verify_incremental_tricolor (armed
+        // above): a black b_new with a white C would panic here.
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+
+        // C survived its birth-cycle severing (SATB), with payload intact.
+        assert_eq!(
+            unsafe { (*c.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(81).0,
+        );
+        assert!(heap.owns_non_cons_object(bc_ptr(b_new)));
+        assert_eq!(bc_constant(b_new, 0).0, c.0);
+
+        // NEXT full cycle: C is now reachable ONLY through B_NEW's
+        // constants — the fresh claim's children gray-push must carry it.
+        run_concurrent_cycle(&mut heap, &[root, b_new]);
+        assert!(
+            heap.sweep_stats().last_concurrent_bc_claimed >= 1,
+            "the second cycle must claim the (now pre-existing) bytecode",
+        );
+        assert_eq!(
+            unsafe { (*c.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(81).0,
+        );
+        assert_eq!(bc_constant(b_new, 0).0, c.0);
+        heap.assert_object_arenas_coherent();
     }
 
     /// ALLOCATED-BIT-FIRST under adversarial staleness, payload-class form:

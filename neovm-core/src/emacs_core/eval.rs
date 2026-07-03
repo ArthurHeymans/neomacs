@@ -7523,7 +7523,7 @@ impl Context {
             eprintln!(
                 "NEOVM_GC concurrent_termination {}us [roots={roots_us}us drain={drain_us}us \
                  fold={}us deferred={} satb={} str_claimed={} f_claimed={} sub_dropped={} \
-                 v_claimed={} kinds[{}] join={}us \
+                 v_claimed={} bc_claimed={} kinds[{}] join={}us \
                  runtime={}us({}) remembered={}us({}) ctxroots={}us newsyms={newsyms_us}us({}) \
                  finalizer={}us weak={}us unchain={}us groups[{}] probes[{}]]",
                 term_t0.elapsed().as_micros(),
@@ -7534,6 +7534,7 @@ impl Context {
                 stats.last_concurrent_float_claimed,
                 stats.last_concurrent_subr_dropped,
                 stats.last_concurrent_vec_claimed,
+                stats.last_concurrent_bc_claimed,
                 stats.last_termination_kinds,
                 hs.last_term_join_us,
                 hs.last_term_runtime_us,
