@@ -167,6 +167,14 @@ struct SymbolRegistry {
     names: StringInterner,
     symbols: Vec<SymbolSlot>,
     canonical_by_name: FxHashMap<NameId, SymId>,
+    /// Task #7 stage 2a rider: per-heap index of the symbols carrying a
+    /// `name_value`, so the GC root walk (`collect_name_value_roots`) touches
+    /// only the requesting heap's entries instead of scanning every symbol
+    /// slot (~450K) to find a handful. Maintained at the single `SymbolSlot`
+    /// construction chokepoint (`alloc_symbol`); `name_value` is immutable
+    /// after construction, so entries are never removed (a torn-down heap's
+    /// id is simply never queried again).
+    name_value_syms_by_heap: FxHashMap<usize, Vec<SymId>>,
 }
 
 impl Default for SymbolRegistry {
@@ -181,6 +189,7 @@ impl SymbolRegistry {
             names: StringInterner::new(),
             symbols: Vec::new(),
             canonical_by_name: FxHashMap::default(),
+            name_value_syms_by_heap: FxHashMap::default(),
         };
         let nil_name = registry.names.intern("nil");
         let nil_id = registry.alloc_symbol(nil_name, true, None);
@@ -209,6 +218,12 @@ impl SymbolRegistry {
             canonical,
             name_value,
         });
+        if let Some(name_value) = name_value {
+            self.name_value_syms_by_heap
+                .entry(name_value.heap_id)
+                .or_default()
+                .push(id);
+        }
         if canonical {
             self.canonical_by_name.insert(name, id);
         }
@@ -456,13 +471,33 @@ impl SymbolRegistry {
     }
 
     fn collect_name_value_roots(&self, roots: &mut Vec<TaggedValue>, heap_id: usize) {
-        roots.extend(
-            self.symbols
+        // Task #7 stage 2a rider: walk only this heap's indexed entries (the
+        // full-slot scan this replaced was 29-39us of both STW handshakes for
+        // a handful of roots). Same SET as the old filter — `name_value` is
+        // immutable after `alloc_symbol`, the sole slot constructor.
+        #[cfg(test)]
+        {
+            let full = self
+                .symbols
                 .iter()
-                .filter_map(|slot| slot.name_value)
+                .flat_map(|slot| slot.name_value)
                 .filter(|name_value| name_value.heap_id == heap_id)
-                .map(|name_value| name_value.value),
-        );
+                .count();
+            let indexed = self
+                .name_value_syms_by_heap
+                .get(&heap_id)
+                .map_or(0, Vec::len);
+            assert_eq!(indexed, full, "per-heap name_value index diverged");
+        }
+        let Some(ids) = self.name_value_syms_by_heap.get(&heap_id) else {
+            return;
+        };
+        roots.extend(ids.iter().map(|&id| {
+            self.symbols[id.0 as usize]
+                .name_value
+                .expect("indexed symbol lost its name_value")
+                .value
+        }));
     }
 }
 
