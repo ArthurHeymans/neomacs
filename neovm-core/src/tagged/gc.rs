@@ -1333,6 +1333,13 @@ pub(crate) struct HandshakeStats {
     pub max_start_total_us: u64,
     /// `begin_collection` mark-bit clearing (young non-cons + cons blocks).
     pub last_start_clear_us: u64,
+    /// The clear's three-way split (task #7 stage 2a diagnostics rider):
+    /// cons-block bitmap memset / young non-cons `all_objects` walk (the only
+    /// component an epoch/parity mark-bit design would remove) / mapped
+    /// (pdump) mark-state resets.
+    pub last_start_clear_cons_us: u64,
+    pub last_start_clear_noncons_us: u64,
+    pub last_start_clear_mapped_us: u64,
     /// `seed_internal_runtime_roots` at start (registries + doomed queue).
     pub last_start_runtime_us: u64,
     pub last_start_runtime_roots: usize,
@@ -1571,6 +1578,14 @@ pub struct TaggedHeap {
     /// dump-partition opportunity (the clear pass and the dump re-mark are the
     /// non-fundamental costs a "dump as permanent tenured region" would remove).
     last_clear_us: u64,
+    /// Three-way split of `last_clear_us` (task #7 stage 2a diagnostics rider,
+    /// deciding the epoch/parity mark-bit design): the cons-block bitmap
+    /// memset, the young non-cons `all_objects` pointer-chase walk (the only
+    /// component an epoch/parity scheme would remove), and the mapped (pdump)
+    /// mark-state resets (zero once partitioned).
+    last_clear_cons_us: u64,
+    last_clear_noncons_us: u64,
+    last_clear_mapped_us: u64,
 
     /// Owners mutated since the last full collection.
     ///
@@ -1793,6 +1808,9 @@ impl TaggedHeap {
             gc_collections: 0,
             gc_total_elapsed_us: 0,
             last_clear_us: 0,
+            last_clear_cons_us: 0,
+            last_clear_noncons_us: 0,
+            last_clear_mapped_us: 0,
             // Activated automatically when a pdump is registered
             // (`extend_dump_span`); a bare/no-dump heap stays on full mark-sweep.
             partition_dump: false,
@@ -3054,6 +3072,7 @@ impl TaggedHeap {
         for block in &mut self.cons_blocks {
             block.clear_marks();
         }
+        let clear_cons_done = std::time::Instant::now();
         // -- Mapped (pdump) marks: permanent black region when partitioned --
         if !partitioned {
             for range in &mut self.mapped_cons_ranges {
@@ -3069,6 +3088,7 @@ impl TaggedHeap {
                 object.marked = false;
             }
         }
+        let clear_mapped_done = std::time::Instant::now();
         // -- Clear marks on YOUNG non-cons (heap) objects. The tenured old
         //    generation lives on a separate list (`tenured_objects`) that is
         //    never walked here, so it stays permanently black. Before the
@@ -3082,7 +3102,15 @@ impl TaggedHeap {
             }
         }
 
-        self.last_clear_us = clear_t0.elapsed().as_micros() as u64;
+        // Task #7 stage 2a diagnostics rider: the clear split (cons bitmap
+        // memset / mapped resets / young non-cons pointer-chase walk) decides
+        // whether an epoch/parity mark-bit design — which removes ONLY the
+        // non-cons walk — is worth building.
+        let clear_end = std::time::Instant::now();
+        self.last_clear_cons_us = (clear_cons_done - clear_t0).as_micros() as u64;
+        self.last_clear_mapped_us = (clear_mapped_done - clear_cons_done).as_micros() as u64;
+        self.last_clear_noncons_us = (clear_end - clear_mapped_done).as_micros() as u64;
+        self.last_clear_us = (clear_end - clear_t0).as_micros() as u64;
 
         // -- Seed gray queue from roots --
         self.gray_queue.clear();
@@ -4376,6 +4404,9 @@ impl TaggedHeap {
         // slots (this entry point is exclusively the concurrent start).
         self.handshake.start_count += 1;
         self.handshake.last_start_clear_us = self.last_clear_us;
+        self.handshake.last_start_clear_cons_us = self.last_clear_cons_us;
+        self.handshake.last_start_clear_noncons_us = self.last_clear_noncons_us;
+        self.handshake.last_start_clear_mapped_us = self.last_clear_mapped_us;
         self.handshake.last_start_runtime_us = self.last_runtime_seed_us;
         self.handshake.last_start_runtime_roots = self.last_runtime_seed_roots;
         self.handshake.last_start_remembered_us = self.last_remembered_seed_us;

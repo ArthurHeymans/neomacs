@@ -7400,10 +7400,14 @@ impl Context {
             .unwrap_or(0);
         if std::env::var("NEOVM_GC_TRACE").as_deref() == Ok("1") {
             eprintln!(
-                "NEOVM_GC concurrent_start {total_us}us [clear={}us runtime={}us({}) \
+                "NEOVM_GC concurrent_start {total_us}us [clear={}us[cons={} noncons={} \
+                 mapped={}] runtime={}us({}) \
                  remembered={}us({}) obsnap={obsnap_us}us roots={}us conssnap={}us \
                  vecsnap={}us jobasm={}us groups[{}] probes[{}]]",
                 hs.last_start_clear_us,
+                hs.last_start_clear_cons_us,
+                hs.last_start_clear_noncons_us,
+                hs.last_start_clear_mapped_us,
                 hs.last_start_runtime_us,
                 hs.last_start_runtime_roots,
                 hs.last_start_remembered_us,

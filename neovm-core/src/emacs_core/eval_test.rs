@@ -17514,7 +17514,8 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
         out
     };
     let handshake_summary = format!(
-        "HANDSHAKE start: total med={}us max={} | clear med={} runtime med={}({}) \
+        "HANDSHAKE start: total med={}us max={} | clear med={}[cons={} noncons={} \
+         mapped={}] runtime med={}({}) \
          remembered med={}({}) obsnap med={} ctxroots med={} conssnap med={} \
          vecsnap med={} jobasm med={}\n\
          start groups (med us / max us / med count):\n{}\
@@ -17527,6 +17528,9 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
         hmed(&|h| h.last_start_total_us),
         hmax(&|h| h.last_start_total_us),
         hmed(&|h| h.last_start_clear_us),
+        hmed(&|h| h.last_start_clear_cons_us),
+        hmed(&|h| h.last_start_clear_noncons_us),
+        hmed(&|h| h.last_start_clear_mapped_us),
         hmed(&|h| h.last_start_runtime_us),
         hmed(&|h| h.last_start_runtime_roots as u64),
         hmed(&|h| h.last_start_remembered_us),
