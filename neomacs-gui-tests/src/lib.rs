@@ -125,12 +125,21 @@ pub struct GuiArtifactSet {
     pub json: PathBuf,
     pub png: PathBuf,
     pub stderr: PathBuf,
+    pub stdout: PathBuf,
     pub gui_state: PathBuf,
     /// Full-fidelity display oracle: serde JSON of the real
     /// `FrameDisplayState`s, written by `neomacs--write-frame-snapshot`.
     pub frame_snapshot_json: PathBuf,
     /// Greppable text (text-faces) rendering of the same snapshot.
     pub frame_snapshot_txt: PathBuf,
+    /// Raw `prin1` result of the font-selection oracle form in GNU Emacs.
+    pub gnu_font_result: PathBuf,
+    /// Raw `prin1` result of the same font-selection oracle form in Neomacs.
+    pub neomacs_font_result: PathBuf,
+    /// Text diff between `gnu_font_result` and `neomacs_font_result`.
+    pub font_oracle_diff: PathBuf,
+    /// Neomacs diagnostic log for the scenario.
+    pub neomacs_log: PathBuf,
 }
 
 impl GuiArtifactSet {
@@ -140,9 +149,14 @@ impl GuiArtifactSet {
             json: dir.join(format!("{scenario_name}.json")),
             png: dir.join(format!("{scenario_name}.png")),
             stderr: dir.join(format!("{scenario_name}.stderr.log")),
+            stdout: dir.join(format!("{scenario_name}.stdout.log")),
             gui_state: dir.join(format!("{scenario_name}.gui-state.json")),
             frame_snapshot_json: dir.join(format!("{scenario_name}.frame-snapshot.json")),
             frame_snapshot_txt: dir.join(format!("{scenario_name}.frame-snapshot.txt")),
+            gnu_font_result: dir.join(format!("{scenario_name}.gnu-result.el")),
+            neomacs_font_result: dir.join(format!("{scenario_name}.neomacs-result.el")),
+            font_oracle_diff: dir.join(format!("{scenario_name}.font-oracle.diff")),
+            neomacs_log: dir.join(format!("{scenario_name}.neomacs.log")),
         }
     }
 }
@@ -240,6 +254,10 @@ impl GuiTestPlan {
                     "NEOMACS_GUI_FRAME_SNAPSHOT_TXT".to_string(),
                     path_to_string(&artifacts.frame_snapshot_txt),
                 ),
+                (
+                    "NEOMACS_GUI_FONT_SELECTION_RESULT".to_string(),
+                    path_to_string(&artifacts.neomacs_font_result),
+                ),
             ],
         };
 
@@ -277,6 +295,7 @@ impl GuiTestPlan {
             fs::create_dir_all(parent)?;
         }
         fs::write(&artifacts.stderr, &output.stderr)?;
+        fs::write(&artifacts.stdout, &output.stdout)?;
 
         let png_bytes = fs::metadata(&artifacts.png)
             .ok()
@@ -304,6 +323,14 @@ impl GuiTestPlan {
             .ok()
             .map(|metadata| metadata.len())
             .filter(|len| *len > 0);
+        let neomacs_font_result_bytes = fs::metadata(&artifacts.neomacs_font_result)
+            .ok()
+            .map(|metadata| metadata.len())
+            .filter(|len| *len > 0);
+        let neomacs_log_bytes = fs::metadata(&artifacts.neomacs_log)
+            .ok()
+            .map(|metadata| metadata.len())
+            .filter(|len| *len > 0);
         let readback_diagnostics = readback_diagnostics(&output.stderr);
         let failure_reason = failure_reason(status, output.exit_code, png_bytes);
         let result = GuiRunResult {
@@ -315,6 +342,8 @@ impl GuiTestPlan {
             gui_state_bytes,
             frame_snapshot_json_bytes,
             frame_snapshot_txt_bytes,
+            neomacs_font_result_bytes,
+            neomacs_log_bytes,
             stderr_bytes,
             stdout_bytes,
             gui_state,
@@ -626,6 +655,8 @@ pub struct GuiRunResult {
     pub gui_state_bytes: Option<u64>,
     pub frame_snapshot_json_bytes: Option<u64>,
     pub frame_snapshot_txt_bytes: Option<u64>,
+    pub neomacs_font_result_bytes: Option<u64>,
+    pub neomacs_log_bytes: Option<u64>,
     pub stderr_bytes: u64,
     pub stdout_bytes: u64,
     pub gui_state: Option<serde_json::Value>,
@@ -676,6 +707,10 @@ fn result_manifest(
             "frame_snapshot_json_bytes": result.frame_snapshot_json_bytes,
             "frame_snapshot_txt_exists": result.frame_snapshot_txt_bytes.is_some(),
             "frame_snapshot_txt_bytes": result.frame_snapshot_txt_bytes,
+            "neomacs_font_result_exists": result.neomacs_font_result_bytes.is_some(),
+            "neomacs_font_result_bytes": result.neomacs_font_result_bytes,
+            "neomacs_log_exists": result.neomacs_log_bytes.is_some(),
+            "neomacs_log_bytes": result.neomacs_log_bytes,
             "stderr_bytes": result.stderr_bytes,
             "stdout_bytes": result.stdout_bytes,
         },
@@ -703,9 +738,14 @@ fn artifacts_json(artifacts: &GuiArtifactSet) -> serde_json::Value {
         "json": path_to_string(&artifacts.json),
         "png": path_to_string(&artifacts.png),
         "stderr": path_to_string(&artifacts.stderr),
+        "stdout": path_to_string(&artifacts.stdout),
         "gui_state": path_to_string(&artifacts.gui_state),
         "frame_snapshot_json": path_to_string(&artifacts.frame_snapshot_json),
         "frame_snapshot_txt": path_to_string(&artifacts.frame_snapshot_txt),
+        "gnu_font_result": path_to_string(&artifacts.gnu_font_result),
+        "neomacs_font_result": path_to_string(&artifacts.neomacs_font_result),
+        "font_oracle_diff": path_to_string(&artifacts.font_oracle_diff),
+        "neomacs_log": path_to_string(&artifacts.neomacs_log),
     })
 }
 

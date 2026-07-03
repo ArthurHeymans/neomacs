@@ -2420,8 +2420,27 @@ fn build_font_entity_for_spec_match(matched: &super::eval::ResolvedFontSpecMatch
             Value::heap_string(postscript_name.clone()),
         );
     }
+    if let Some(file) = &matched.file {
+        push_field("file", Value::heap_string(file.clone()));
+    }
 
     Value::vector(elems)
+}
+
+fn font_vector_with_file(font: Value, file: &Option<LispString>) -> Value {
+    let Some(file) = file else {
+        return font;
+    };
+    if font.is_vector() {
+        let mut items = font
+            .as_vector_data()
+            .map(|items| items.to_vec())
+            .unwrap_or_default();
+        items.push(Value::keyword("file"));
+        items.push(Value::heap_string(file.clone()));
+        let _ = font.replace_vector_data(items);
+    }
+    font
 }
 
 fn build_font_object_for_match(
@@ -2440,7 +2459,7 @@ fn build_font_object_for_match(
     selected.weight = Some(matched.weight);
     selected.slant = Some(matched.slant);
     selected.width = Some(matched.width);
-    build_font_object(&selected)
+    font_vector_with_file(build_font_object(&selected), &matched.file)
 }
 
 fn font_name_value(font_like: &Value) -> Option<Value> {
@@ -2563,6 +2582,14 @@ fn live_frame_font_attribute_fallback(
 fn font_info_vector_for_runtime_font(font_like: &Value, frame: &crate::window::Frame) -> Value {
     let opened_name = font_name_value(font_like).unwrap_or_else(|| Value::string(""));
     let full_name = opened_name;
+    let file = match font_like.kind() {
+        ValueKind::Veclike(VecLikeType::Vector) if is_font(font_like) => font_like
+            .as_vector_data()
+            .and_then(|elems| font_vector_get_flexible(elems, "file"))
+            .filter(|value| value.is_string())
+            .unwrap_or(Value::NIL),
+        _ => Value::NIL,
+    };
     let size = frame.font_pixel_size.max(1.0).round() as i64;
     let height = frame.char_height.max(1.0).round() as i64;
     let average_width = frame.char_width.max(1.0).round() as i64;
@@ -2585,7 +2612,7 @@ fn font_info_vector_for_runtime_font(font_like: &Value, frame: &crate::window::F
         Value::fixnum(descent),
         Value::fixnum(space_width),
         Value::fixnum(average_width),
-        Value::NIL,
+        file,
         Value::NIL,
     ])
 }

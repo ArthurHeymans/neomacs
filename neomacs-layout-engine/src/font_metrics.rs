@@ -185,9 +185,19 @@ fn valid_advance(width: f32) -> bool {
     width.is_finite() && width > 0.0
 }
 
+fn fontdb_face_file(face: &fontdb::FaceInfo) -> Option<String> {
+    match &face.source {
+        fontdb::Source::Binary(_) => None,
+        fontdb::Source::File(path) | fontdb::Source::SharedFile(path, _) => {
+            Some(path.display().to_string())
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SelectedFontInfo {
     pub family: String,
+    pub file: Option<String>,
     pub postscript_name: Option<String>,
     pub weight: FontWeight,
     pub slant: FontSlant,
@@ -582,6 +592,7 @@ impl FontMetricsService {
             // the selector's family so `font-at` mirrors GNU Emacs' realized
             // face semantics.
             family: resolved.family.clone(),
+            file: fontdb_face_file(face),
             postscript_name: Some(face.post_script_name.clone()).filter(|name| !name.is_empty()),
             // Variable fonts often report the container face's metadata weight
             // here even when shaping used a different requested instance.

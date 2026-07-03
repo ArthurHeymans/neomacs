@@ -41,6 +41,10 @@ fn artifact_paths_are_backend_and_scenario_qualified() {
         PathBuf::from("target/neomacs-gui-tests/linux-wayland/startup-smoke.stderr.log")
     );
     assert_eq!(
+        artifacts.stdout,
+        PathBuf::from("target/neomacs-gui-tests/linux-wayland/startup-smoke.stdout.log")
+    );
+    assert_eq!(
         artifacts.gui_state,
         PathBuf::from("target/neomacs-gui-tests/linux-wayland/startup-smoke.gui-state.json")
     );
@@ -52,6 +56,48 @@ fn artifact_paths_are_backend_and_scenario_qualified() {
         artifacts.frame_snapshot_txt,
         PathBuf::from("target/neomacs-gui-tests/linux-wayland/startup-smoke.frame-snapshot.txt")
     );
+}
+
+#[test]
+fn artifact_paths_include_font_oracle_artifacts() {
+    let artifacts = GuiArtifactSet::new(
+        PathBuf::from("target/neomacs-gui-tests"),
+        GuiBackend::LinuxX11,
+        "font-selection-noto-bold",
+    );
+
+    assert_eq!(
+        artifacts.gnu_font_result,
+        PathBuf::from("target/neomacs-gui-tests/linux-x11/font-selection-noto-bold.gnu-result.el")
+    );
+    assert_eq!(
+        artifacts.neomacs_font_result,
+        PathBuf::from(
+            "target/neomacs-gui-tests/linux-x11/font-selection-noto-bold.neomacs-result.el"
+        )
+    );
+    assert_eq!(
+        artifacts.font_oracle_diff,
+        PathBuf::from(
+            "target/neomacs-gui-tests/linux-x11/font-selection-noto-bold.font-oracle.diff"
+        )
+    );
+    assert_eq!(
+        artifacts.neomacs_log,
+        PathBuf::from("target/neomacs-gui-tests/linux-x11/font-selection-noto-bold.neomacs.log")
+    );
+}
+
+#[test]
+fn font_selection_fixture_exists_and_requests_noto_bold() {
+    let fixture = workspace_root().join("neomacs-gui-tests/fixtures/font-selection-noto-bold.el");
+    let contents = std::fs::read_to_string(&fixture).expect("font selection fixture should exist");
+
+    assert!(contents.contains("\"Noto Sans\""));
+    assert!(contents.contains(":weight bold"));
+    assert!(contents.contains("font-at"));
+    assert!(contents.contains("font-info"));
+    assert!(contents.contains("NEOMACS_GUI_FONT_SELECTION_RESULT"));
 }
 
 #[test]
@@ -96,6 +142,10 @@ fn linux_x11_plan_sets_backend_and_readback_environment() {
     assert_eq!(
         command.env_value("NEOMACS_GUI_FRAME_SNAPSHOT_TXT"),
         Some("/repo/target/neomacs-gui-tests/linux-x11/startup-smoke.frame-snapshot.txt")
+    );
+    assert_eq!(
+        command.env_value("NEOMACS_GUI_FONT_SELECTION_RESULT"),
+        Some("/repo/target/neomacs-gui-tests/linux-x11/startup-smoke.neomacs-result.el")
     );
 }
 
@@ -194,6 +244,7 @@ fn run_with_runner_writes_ai_readable_result_artifacts() {
     let _ = std::fs::remove_file(&artifacts.json);
     let _ = std::fs::remove_file(&artifacts.png);
     let _ = std::fs::remove_file(&artifacts.stderr);
+    let _ = std::fs::remove_file(&artifacts.stdout);
 
     let plan = GuiTestPlan::new(
         GuiBackend::LinuxWayland,
@@ -221,10 +272,12 @@ fn run_with_runner_writes_ai_readable_result_artifacts() {
         .expect("runner result should be written");
     let manifest = std::fs::read_to_string(&artifacts.json).expect("result json should exist");
     let stderr = std::fs::read_to_string(&artifacts.stderr).expect("stderr log should exist");
+    let stdout = std::fs::read_to_string(&artifacts.stdout).expect("stdout log should exist");
 
     assert_eq!(result.status, GuiRunStatus::Passed);
     assert_eq!(result.png_bytes, Some(7));
     assert_eq!(result.stderr_bytes, stderr.len() as u64);
+    assert_eq!(result.stdout_bytes, stdout.len() as u64);
     assert!(manifest.contains(r##""status":"passed""##));
     assert!(manifest.contains(r##""png_exists":true"##));
     assert!(manifest.contains(r##""readback_diagnostics":["Debug surface readback:"##));

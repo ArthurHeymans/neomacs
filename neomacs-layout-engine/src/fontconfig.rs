@@ -88,6 +88,7 @@ impl FontMatch {
 pub struct SpecFontMatch {
     pub family: String,
     pub registry: Option<String>,
+    pub file: Option<String>,
     pub weight: Option<u16>,
     pub slant: FontSlant,
     pub width: Option<FontWidth>,
@@ -445,6 +446,7 @@ pub fn find_font_for_spec(
         .map(|candidate| SpecFontMatch {
             family: candidate.matched.family,
             registry: Some("iso10646-1".to_string()),
+            file: candidate.matched.file,
             weight: candidate
                 .weight_css
                 .or_else(|| style_weight(&candidate.style)),

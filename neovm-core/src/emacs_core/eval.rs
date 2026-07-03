@@ -1315,6 +1315,7 @@ pub struct FontSpecResolveRequest {
 pub struct ResolvedFontMatch {
     pub family: crate::heap_types::LispString,
     pub foundry: Option<crate::heap_types::LispString>,
+    pub file: Option<crate::heap_types::LispString>,
     pub weight: FontWeight,
     pub slant: FontSlant,
     pub width: FontWidth,
@@ -1345,6 +1346,7 @@ pub struct ResolvedFrameFont {
 pub struct ResolvedFontSpecMatch {
     pub family: crate::heap_types::LispString,
     pub registry: Option<crate::heap_types::LispString>,
+    pub file: Option<crate::heap_types::LispString>,
     pub weight: Option<FontWeight>,
     pub slant: Option<FontSlant>,
     pub width: Option<FontWidth>,

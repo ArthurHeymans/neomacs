@@ -45,6 +45,7 @@ fn realized_face_info(
         .face(glyph.physical((0.0, 0.0), 1.0).cache_key.font_id)?;
     Some(SelectedFontInfo {
         family: resolved.family.clone(),
+        file: fontdb_face_file(face),
         postscript_name: Some(face.post_script_name.clone()).filter(|name| !name.is_empty()),
         weight: FontWeight::from_css_weight(face.weight.0),
         slant: font_slant_from_fontdb(face.style),

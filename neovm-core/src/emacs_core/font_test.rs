@@ -345,12 +345,13 @@ fn find_font_eval_requests_exact_registry_match_from_display_host() {
     crate::test_utils::init_test_tracing();
     let last_request = Rc::new(RefCell::new(None));
     let mut eval = crate::emacs_core::Context::new();
-    crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    ensure_selected_gui_frame(&mut eval);
     eval.set_display_host(Box::new(CapturingFindFontDisplayHost {
         last_request: Rc::clone(&last_request),
         matched: Some(ResolvedFontSpecMatch {
             family: LispString::from_utf8("Noto Sans Mono CJK SC"),
             registry: Some(LispString::from_utf8("iso10646-1")),
+            file: Some(LispString::from_utf8("/tmp/NotoSansMonoCJKsc-Regular.otf")),
             weight: Some(FontWeight::NORMAL),
             slant: Some(FontSlant::Normal),
             width: Some(crate::face::FontWidth::Normal),
@@ -380,10 +381,22 @@ fn find_font_eval_requests_exact_registry_match_from_display_host() {
             .as_symbol_name(),
         Some("iso10646-1")
     );
+    assert_eq!(
+        builtin_font_get(vec![font, Value::keyword("file")])
+            .unwrap()
+            .as_utf8_str(),
+        Some("/tmp/NotoSansMonoCJKsc-Regular.otf")
+    );
     assert!(
         builtin_fontp(vec![font, Value::symbol("font-entity")])
             .unwrap()
             .is_truthy()
+    );
+    let info = builtin_font_info(&mut eval, vec![font]).unwrap();
+    let values = info.as_vector_data().expect("font info vector");
+    assert_eq!(
+        values[12].as_utf8_str(),
+        Some("/tmp/NotoSansMonoCJKsc-Regular.otf")
     );
 
     let request = last_request
@@ -409,6 +422,7 @@ fn find_font_eval_returns_gnu_canonical_ultra_light_weight_symbol() {
         matched: Some(ResolvedFontSpecMatch {
             family: LispString::from_utf8("JetBrains Mono"),
             registry: Some(LispString::from_utf8("iso10646-1")),
+            file: None,
             weight: Some(FontWeight::ULTRA_LIGHT),
             slant: Some(FontSlant::Normal),
             width: Some(crate::face::FontWidth::Normal),
@@ -1131,6 +1145,7 @@ fn font_at_eval_prefers_backend_selected_font_match_when_available() {
         matched: Some(ResolvedFontMatch {
             family: LispString::from_utf8("Noto Sans Mono CJK SC"),
             foundry: None,
+            file: Some(LispString::from_utf8("/tmp/NotoSansMonoCJKsc-Regular.otf")),
             weight: FontWeight::NORMAL,
             slant: FontSlant::Normal,
             width: FontWidth::Normal,
@@ -1163,6 +1178,18 @@ fn font_at_eval_prefers_backend_selected_font_match_when_available() {
             .unwrap()
             .as_symbol_name(),
         Some("Noto Sans Mono CJK SC")
+    );
+    assert_eq!(
+        builtin_font_get(vec![font, Value::keyword("file")])
+            .unwrap()
+            .as_utf8_str(),
+        Some("/tmp/NotoSansMonoCJKsc-Regular.otf")
+    );
+    let info = builtin_font_info(&mut eval, vec![font]).unwrap();
+    let values = info.as_vector_data().expect("font info vector");
+    assert_eq!(
+        values[12].as_utf8_str(),
+        Some("/tmp/NotoSansMonoCJKsc-Regular.otf")
     );
 }
 
@@ -2162,6 +2189,36 @@ fn font_info_eval_accepts_font_object_on_live_gui_frame() {
     assert_eq!(values[3].as_int(), Some(18));
     assert_eq!(values[10].as_int(), Some(9));
     assert_eq!(values[11].as_int(), Some(9));
+}
+
+#[test]
+fn font_info_eval_reports_font_vector_file_slot_on_live_gui_frame() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+    let frame_id = crate::emacs_core::window_cmds::ensure_selected_frame_id(&mut eval);
+    {
+        let frame = eval
+            .frame_manager_mut()
+            .get_mut(frame_id)
+            .expect("selected frame");
+        frame.window_system = Some(Value::symbol("neo"));
+        frame.font_pixel_size = 18.0;
+        frame.char_width = 9.0;
+        frame.char_height = 18.0;
+    }
+
+    let font = Value::vector(vec![
+        Value::keyword(FONT_OBJECT_TAG),
+        Value::keyword("family"),
+        Value::symbol("Noto Sans"),
+        Value::keyword("file"),
+        Value::string("/tmp/NotoSans.ttf"),
+    ]);
+    let info = builtin_font_info(&mut eval, vec![font]).unwrap();
+    let values = info.as_vector_data().expect("font info vector");
+
+    assert_eq!(values.len(), 14);
+    assert_eq!(values[12].as_utf8_str(), Some("/tmp/NotoSans.ttf"));
 }
 
 #[test]
