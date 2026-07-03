@@ -41,6 +41,75 @@ fn test_pdump_round_trip_basic() {
 }
 
 #[test]
+fn test_pdump_bytecode_round_trips_through_the_arena_pages() {
+    crate::test_utils::init_test_tracing();
+    // task 03/3a: BOTH bytecode construction paths — the `#[...]` reader
+    // literal (`closure_from_reader_literal_slots` -> `Value::make_bytecode`)
+    // pre-dump and the pdump restore placeholder (`DumpHeapObject::ByteCode`
+    // -> `alloc_bytecode` -> `install_restored_bytecode_data`) — allocate
+    // from the BYTECODE ARENA PAGES. A restored function must be page-owned,
+    // still callable, and survive a full GC.
+    let mut eval = Context::new();
+    // Classic constant-returning GNU bytecode: constants[0]=42, Breturn.
+    eval.eval_str("(defvar bcarena-pdump-fn #[0 \"\\300\\207\" [42] 1])")
+        .expect("defvar should evaluate");
+    let pre = *eval
+        .obarray
+        .symbol_value("bcarena-pdump-fn")
+        .expect("pre-dump value");
+    assert_eq!(
+        pre.veclike_type(),
+        Some(crate::tagged::header::VecLikeType::ByteCode)
+    );
+    assert!(
+        eval.tagged_heap
+            .bytecode_arena_owns_for_test(pre.as_veclike_ptr().unwrap() as *const u8),
+        "reader-constructed bytecode must live on the arena pages",
+    );
+
+    let dir = tempfile::tempdir().unwrap();
+    let dump_path = dir.path().join("bcarena.pdump");
+    dump_to_file(&eval, &dump_path).expect("dump should succeed");
+    let mut restored = load_from_dump(&dump_path).expect("load should succeed");
+
+    let post = *restored
+        .obarray
+        .symbol_value("bcarena-pdump-fn")
+        .expect("restored value");
+    assert_eq!(
+        post.veclike_type(),
+        Some(crate::tagged::header::VecLikeType::ByteCode)
+    );
+    assert!(
+        restored
+            .tagged_heap
+            .bytecode_arena_owns_for_test(post.as_veclike_ptr().unwrap() as *const u8),
+        "pdump-restored bytecode must be constructed through the page allocator",
+    );
+
+    // The restored function executes (payload round-tripped intact), and
+    // still does after a full GC in the restored evaluator.
+    let out = restored
+        .eval_str("(funcall bcarena-pdump-fn)")
+        .expect("restored bytecode runs");
+    assert_eq!(out, Value::fixnum(42));
+    restored.gc_collect();
+    let out2 = restored
+        .eval_str("(funcall bcarena-pdump-fn)")
+        .expect("bytecode runs after GC");
+    assert_eq!(out2, Value::fixnum(42));
+    let after_gc = *restored
+        .obarray
+        .symbol_value("bcarena-pdump-fn")
+        .expect("value after GC");
+    assert!(
+        restored
+            .tagged_heap
+            .bytecode_arena_owns_for_test(after_gc.as_veclike_ptr().unwrap() as *const u8),
+    );
+}
+
+#[test]
 fn pdump_round_trip_preserves_buffer_text_backend_kind() {
     crate::test_utils::init_test_tracing();
     for backend_kind in crate::buffer::BufferTextBackendKind::non_gap_implemented_variants() {

@@ -2133,12 +2133,16 @@ impl TaggedValue {
         Some(f(unsafe { &mut *ptr }))
     }
 
-    /// Mutate bytecode data through the centralized tagged-runtime write path.
-    pub fn with_bytecode_data_mut<R>(
+    /// TEST-ONLY: mutate bytecode data through the centralized
+    /// tagged-runtime write path. Post-publish bytecode is IMMUTABLE in
+    /// production — see `mutate::with_bytecode_data_mut_for_test` for the
+    /// invariant this gate enforces.
+    #[cfg(test)]
+    pub fn with_bytecode_data_mut_for_test<R>(
         self,
         f: impl FnOnce(&mut super::bytecode::ByteCodeFunction) -> R,
     ) -> Option<R> {
-        mutate::with_bytecode_data_mut(self, f)
+        mutate::with_bytecode_data_mut_for_test(self, f)
     }
 
     /// Mutate string data through the centralized tagged-runtime write path.

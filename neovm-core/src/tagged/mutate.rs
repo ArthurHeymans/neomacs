@@ -4,14 +4,17 @@
 //! incremental write barriers into the tagged runtime.
 
 use crate::buffer::text_props::TextPropertyTable;
+#[cfg(test)]
 use crate::emacs_core::bytecode::ByteCodeFunction;
 use crate::emacs_core::value::LispHashTable;
 use crate::heap_types::{LispMarker, LispString, OverlayData};
 
 use super::gc::{HeapWriteKind, note_heap_slot_write, note_heap_write};
+#[cfg(test)]
+use super::header::ByteCodeObj;
 use super::header::{
-    ByteCodeObj, ConsCell, HashTableObj, LambdaObj, MacroObj, MarkerObj, OverlayObj, RecordObj,
-    StringObj, VecLikeType, VectorObj, XwidgetObj, XwidgetViewObj,
+    ConsCell, HashTableObj, LambdaObj, MacroObj, MarkerObj, OverlayObj, RecordObj, StringObj,
+    VecLikeType, VectorObj, XwidgetObj, XwidgetViewObj,
 };
 use super::value::TaggedValue;
 
@@ -214,8 +217,26 @@ pub fn with_hash_table_mut<R>(
     Some(f(unsafe { &mut (*ptr).table }))
 }
 
+/// TEST-ONLY mutation seam for a live bytecode object's `ByteCodeFunction`.
+///
+/// CONSTANTS-IMMUTABILITY IS A HARD INVARIANT (task 03/3a, load-bearing for
+/// task 01's concurrent bytecode claiming): once a bytecode value has been
+/// PUBLISHED (escaped `alloc_bytecode`), no production code may mutate its
+/// `data` — in particular `constants`, whose backing a future GC-thread arm
+/// will read without synchronization. The production surface upholds this by
+/// construction: this seam is `#[cfg(test)]`, `aset` has no ByteCode arm, and
+/// the only other `&mut` into a `ByteCodeObj`
+/// (`pdump::convert::install_restored_bytecode_data`) is restore-time
+/// initialization of a fresh placeholder BEFORE the value is user-observable
+/// (pre-publish, like `alloc_bytecode`'s own header write). Any new mutation
+/// path must first add vector-style clone-on-write (see
+/// `with_vector_data_mut`) — do NOT simply un-gate this function.
+///
+/// The seam still fires the SATB pre-write barrier so tests that mutate
+/// mid-cycle (e.g. self-referential print tests) keep snapshot marking sound.
+#[cfg(test)]
 #[inline]
-pub fn with_bytecode_data_mut<R>(
+pub fn with_bytecode_data_mut_for_test<R>(
     value: TaggedValue,
     f: impl FnOnce(&mut ByteCodeFunction) -> R,
 ) -> Option<R> {
