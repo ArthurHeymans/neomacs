@@ -89,12 +89,24 @@ fn artifact_paths_include_font_oracle_artifacts() {
 }
 
 #[test]
-fn font_selection_fixture_exists_and_requests_noto_bold() {
+fn font_selection_fixture_uses_matrix_cases_with_labels_and_probe_text() {
     let fixture = workspace_root().join("neomacs-gui-tests/fixtures/font-selection-noto-bold.el");
     let contents = std::fs::read_to_string(&fixture).expect("font selection fixture should exist");
 
+    assert!(contents.contains("neomacs-font-selection-cases"));
+    assert!(contents.contains("neomacs-font-selection-label"));
+    assert!(contents.contains(":id noto-sans-normal-normal-h150-s12"));
+    assert!(contents.contains(":id noto-sans-bold-normal-h150-s12"));
+    assert!(contents.contains(":id noto-sans-normal-italic-h150-s12"));
+    assert!(contents.contains(":id noto-sans-bold-normal-h220-s18"));
     assert!(contents.contains("\"Noto Sans\""));
+    assert!(contents.contains(":weight normal"));
     assert!(contents.contains(":weight bold"));
+    assert!(contents.contains(":slant italic"));
+    assert!(contents.contains(":height 220"));
+    assert!(contents.contains(":size 18"));
+    assert!(contents.contains(":text \"neomacs\""));
+    assert!(contents.contains(":label"));
     assert!(contents.contains("font-at"));
     assert!(contents.contains("font-info"));
     assert!(contents.contains("NEOMACS_GUI_FONT_SELECTION_RESULT"));
@@ -117,11 +129,9 @@ fn linux_x11_plan_sets_backend_and_readback_environment() {
     );
     assert!(command.args.contains(&"-Q".into()));
     assert!(command.args.contains(&"-l".into()));
-    assert!(
-        command
-            .args
-            .contains(&"test/neomacs/neomacs-face-test.el".into())
-    );
+    assert!(command
+        .args
+        .contains(&"test/neomacs/neomacs-face-test.el".into()));
     assert_eq!(command.env_value("WINIT_UNIX_BACKEND"), Some("x11"));
     assert_eq!(
         command.env_value("NEOMACS_DEBUG_FIRST_FRAME_READBACK"),

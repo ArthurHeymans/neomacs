@@ -155,10 +155,10 @@ fn real_gui_font_selection_oracle_matches_gnu_emacs_result_structure() {
 
     if neomacs_result != gnu_result {
         panic!(
-            "font selection oracle result diverged; diff at {}\n\n--- GNU Emacs result ---\n{}\n--- NEO Emacs result ---\n{}",
+            "font selection oracle result diverged\nGNU Emacs result: {}\nNEO Emacs result: {}\ndiff: {}",
+            artifacts.gnu_font_result.display(),
+            artifacts.neomacs_font_result.display(),
             artifacts.font_oracle_diff.display(),
-            gnu_result,
-            neomacs_result
         );
     }
 }
