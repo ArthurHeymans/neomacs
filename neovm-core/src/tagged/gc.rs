@@ -261,6 +261,17 @@ struct ConcurrentClaimJob {
     /// (pdump) floats — which mark via the heap's `mapped_float_ranges` side
     /// bitmaps only the mutator may touch — and any residual `Box` float).
     float_page_bases: std::sync::Arc<std::collections::HashSet<usize>>,
+    /// CONCURRENT VECTOR-HEADER CLAIMS (task 01): the base address of every
+    /// VECTOR ARENA PAGE at the world-stopped start handshake (retired pages
+    /// included). A page is homogeneous (`VectorObj` slots only), so a HIT
+    /// both proves ownership AND classifies the veclike as a plain Vector
+    /// without reading its header. MISS ⇒ DEFER: mapped (pdump) vectors
+    /// (side-table marks + termination `trace_veclike`), any residual `Box`
+    /// vector (none are constructible today — `alloc_vector` is the single
+    /// Vector chokepoint — but a miss merely defers), and vectors in pages
+    /// created mid-cycle. See the claim arm for why page-hit vectors may be
+    /// claimed without deferring their CURRENT backing to the termination.
+    vector_page_bases: std::sync::Arc<std::collections::HashSet<usize>>,
     /// Dump (pdump mmap) address span. The cons arm skips conses inside
     /// (permanent-black; young children come from the remembered set); the
     /// subr arm defers span-inside veclikes (every MAPPED veclike
@@ -278,6 +289,9 @@ struct ConcurrentClaimJob {
     /// CONCURRENT FLOAT CLAIMS: same pattern as `str_claimed` — owned young
     /// page floats claimed this cycle (one per successful `mark_claim_at`).
     float_claimed: std::sync::Arc<AtomicUsize>,
+    /// CONCURRENT VECTOR-HEADER CLAIMS: same pattern — owned young page
+    /// vectors whose header this cycle's GC thread claimed.
+    vec_claimed: std::sync::Arc<AtomicUsize>,
     /// SUBR RECOGNIZE-AND-DROP: how many times the GC thread dropped a
     /// leaked-static subr from the defer path this cycle. Counts drop
     /// EVENTS, not unique subrs (dropping is stateless, so a subr
@@ -288,6 +302,11 @@ struct ConcurrentClaimJob {
 
 /// A unit of work handed to the GC thread, plus a oneshot done-channel the GC
 /// thread signals when finished so the mutator can resume.
+///
+/// The variant sizes differ (the mark job carries the per-cycle claim
+/// snapshots), but exactly one request is in flight per GC cycle, so boxing
+/// the large variant would buy nothing.
+#[allow(clippy::large_enum_variant)]
 enum GcRequest {
     /// Drain the gray queue (mark to a fixpoint) on the GC thread.
     MarkAll(HeapPtr, std::sync::mpsc::Sender<()>),
@@ -449,7 +468,9 @@ fn concurrent_try_mark_string(
 /// - strings: `concurrent_try_mark_string` (owned interval-free pages);
 /// - floats: page-snapshot claim (zero Lisp children — `mark_value`'s float
 ///   arm is mark-only);
-/// - subrs: recognize-and-drop (leaked statics — not a claim at all).
+/// - subrs: recognize-and-drop (leaked statics — not a claim at all);
+/// - vectors: page-snapshot header claim (children covered by the Tier-B
+///   backing scan + SATB — see the load-bearing comment at the arm).
 ///
 /// Arm-internal ordering is mandated (H4/H5): any inspection that can still
 /// send the value to `deferred` runs BEFORE the claim (a claimed-then-
@@ -502,15 +523,84 @@ fn concurrent_try_mark_owned(val: TaggedValue, job: &ConcurrentClaimJob) -> bool
             return false; // malformed value — let the termination decide
         };
         let addr = ptr as usize;
+        // CONCURRENT VECTOR-HEADER CLAIMS (task 01). Page-base hit FIRST,
+        // before any dereference: vector-arena pages are homogeneous
+        // `VectorObj` slots, so a hit is simultaneously the ownership proof
+        // and the type classification. CLAIM ONLY ON PAGE-HIT: page-resident
+        // vectors are exactly the Tier-B-registered population
+        // ({page vectors} ⊆ `vector_object_addrs` — the launch-time debug
+        // cross-check asserts this inclusion from this arm's perspective),
+        // so a claimed vector's backing is in this cycle's Tier-B snapshot
+        // and its children trace concurrently. Box-residual/mapped vectors
+        // MISS and keep the STW defer path (termination `mark_value` marks
+        // them and runs `trace_veclike` on their CURRENT backing).
+        //
+        // THE LOAD-BEARING SUBTLETY: claiming the header removes the
+        // termination's CURRENT-BACKING re-trace backstop — `mark_value`
+        // early-returns on the mark bit (`is_marked_at`), so
+        // `trace_veclike` never runs for a claimed vector. Its
+        // current-backing children are then covered ONLY by
+        //   {Tier-B start-snapshot scan of the (possibly retired-on-write)
+        //    start backing} + {SATB deletion barrier on every slot/bulk
+        //    overwrite} + {allocate-black for mid-cycle values} + {the
+        //    termination root reseed} + {the termination INSERTION-COVERAGE
+        //    re-trace of every owner mutated this cycle —
+        //    `satb_snapshotted_owners` at `join_concurrent_mark`}.
+        // The last leg is NOT optional: the SATB deletion barrier preserves
+        // only SNAPSHOT-time children, so a pre-existing value INSERTED
+        // mid-cycle from a mutator register (root→heap motion; e.g.
+        // `set_vector_slot` after the Tier-B scan already ran) has no other
+        // covered home once its register/root copies are gone. Before the
+        // claims, the STW termination re-traced every deferred vector's
+        // CURRENT backing, which silently covered such insertions; the
+        // dirty-owner re-trace restores exactly that, scoped to mutated
+        // owners. Every write path into a VectorObj backing MUST therefore
+        // fire the `mutate.rs` barriers (`set_vector_slot`'s pre-image log +
+        // atomic store; `with_vector_data_mut`'s bulk pre-image log +
+        // clone-on-write retire) — an unbarriered vector-slot writer would
+        // now be a dropped mark (UAF), not just a duplicated trace.
+        //
+        // Mid-cycle vectors in REUSED SLOTS of snapshotted pages do NOT
+        // defer (their page base IS in the snapshot): they are born-at-
+        // parity, so `mark_claim_at` returns "already marked" ⇒ handled ⇒
+        // their constructor contents are covered by the born-black/SATB
+        // argument — they came from snapshot-reachable homes (whose
+        // overwrites the deletion barrier logs), are themselves born-black,
+        // or were in the world-stopped start root snapshot; post-
+        // construction insertions are covered by the dirty-owner re-trace
+        // like any other write. The NEXT cycle re-traces against fresh
+        // marks. Their backing is absent from this cycle's Tier-B snapshot,
+        // which is exactly the allocate-black story vectors already had.
+        let base = addr & !(OBJECT_PAGE_ALIGN - 1);
+        if job.vector_page_bases.contains(&base) {
+            // Page vectors are 64-byte slots; a page-hit veclike value must
+            // decode to a slot boundary (page-homogeneity argument above).
+            debug_assert_eq!(
+                (addr - base) % <VectorObj as PagedObject>::SLOT_BYTES,
+                0,
+                "page-hit veclike value does not address a vector slot",
+            );
+            // TENURED short-circuit BEFORE the claim (H5): permanently
+            // black, never re-traced; frozen at the world-stopped promotion.
+            if unsafe { (*ptr).gc.tenured } {
+                return true;
+            }
+            if unsafe { (*ptr).gc.mark_claim_at(job.parity) } {
+                job.vec_claimed.fetch_add(1, Ordering::Relaxed);
+            }
+            return true;
+        }
         // MAPPED (pdump) veclikes mark via the heap's side table
         // (`mapped_veclike_objects[..].marked`), which only the mutator may
-        // touch → always DEFER. The range check runs FIRST — before any
-        // header read: every mapped-veclike registration extends the dump
-        // span (`register_mapped_veclike_object`), so span-inside covers
-        // the entire mapped population. Recognizing a mapped subr as
-        // "leaked" (or claiming its header) would leave its side-table mark
-        // unset and panic the tricolor/partition verifiers — the mis-claim
-        // UAF shape.
+        // touch → always DEFER. The range check runs before any header
+        // read (the vector page-hit above cannot be a mapped object: a
+        // page owns its 64KB span exclusively): every mapped-veclike
+        // registration extends the dump span
+        // (`register_mapped_veclike_object`), so span-inside covers the
+        // entire mapped population. Recognizing a mapped subr as "leaked"
+        // (or claiming its header) would leave its side-table mark unset
+        // and panic the tricolor/partition verifiers — the mis-claim UAF
+        // shape.
         if addr >= job.dump_lo && addr < job.dump_hi {
             return false;
         }
@@ -549,15 +639,60 @@ fn concurrent_try_mark_owned(val: TaggedValue, job: &ConcurrentClaimJob) -> bool
 /// shared SATB buffer until both are empty and the mutator asks it to stop.
 fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
     use std::sync::atomic::Ordering;
-    // Stage 1b CONCURRENT OBARRAY SCAN: when an obarray snapshot was handed over,
-    // scan the symbol cells ONCE per cycle. Guarded by this local so it runs a
-    // single time regardless of how many gray/SATB drain rounds happen. The scan
-    // feeds children into `gray` (conses) / `deferred` (non-cons) exactly like the
-    // cons-drain branch below, then the outer loop re-drains to a fixpoint.
-    let mut obarray_scanned = false;
-    // Stage 2 Tier B CONCURRENT VECTOR SCAN: same single-execution guard for the
-    // vector-backing scan below.
-    let mut vectors_scanned = false;
+    // LOAD-BEARING ORDER (task 01, vector-header claims): both start-snapshot
+    // scans run TO COMPLETION *before* the stop-interruptible gray drain.
+    //
+    // The claim arm handles a page vector entirely on this thread, so the
+    // termination's `mark_value` never re-traces its CURRENT backing — a
+    // claimed vector's children are covered ONLY IF the Tier-B backing scan
+    // actually enumerated the snapshot backings this cycle. Under the old
+    // defer-everything design the scans could be skipped on an early stop
+    // (aggressive pacing joins the mark after a few drain quanta — e.g.
+    // gc_threshold=1) because every discovered veclike was re-traced at the
+    // STW termination anyway; with claims that safety net is gone, and a
+    // skipped scan is a swept-while-live child (the vm_mapatoms SIGSEGV:
+    // the compat ObarrayObj living only in a claimed obarray-vector's slot).
+    // Scanning first guarantees the enumeration for every cycle that can
+    // claim; the added stop latency is the O(entries) scan itself (tens of
+    // µs at profiled sizes), comparable to a few drain quanta. The obarray
+    // scan is hoisted with it for the same reason: symbol cells can hold
+    // claimable values whose children only the scan would surface.
+    //
+    // Stage 1b CONCURRENT OBARRAY SCAN: scan the start-captured symbol
+    // cells ONCE per cycle, feeding each heap child into `gray` (conses) /
+    // the claim dispatcher / `deferred`, exactly like the cons-drain branch
+    // below; the drain then walks the transitive children to a fixpoint.
+    if let Some(snap) = job.obarray.take() {
+        // Safety: `snap` was captured at this cycle's world-stopped start
+        // handshake; its chunk + seq pointers address the live, non-moving
+        // obarray storage, and we are on the GC thread.
+        unsafe {
+            snap.scan(|child| {
+                if child.is_cons() {
+                    job.gray.push(child);
+                } else if !concurrent_try_mark_owned(child, &job.claims) {
+                    job.deferred.lock().unwrap().push(child);
+                }
+            });
+        }
+    }
+    // Stage 2 Tier B CONCURRENT VECTOR SCAN: trace the snapshotted vector
+    // backings ONCE per cycle, routing children exactly as above.
+    if let Some(snap) = job.vectors.take() {
+        // Safety: `snap` was captured at this cycle's world-stopped start
+        // handshake; each entry's base/len addresses a live, immutable backing
+        // (Mapped dump or retired-on-write Owned buffer), and we are on the GC
+        // thread.
+        unsafe {
+            snap.scan(|child| {
+                if child.is_cons() {
+                    job.gray.push(child);
+                } else if !concurrent_try_mark_owned(child, &job.claims) {
+                    job.deferred.lock().unwrap().push(child);
+                }
+            });
+        }
+    }
     // Task #7 stage 2a (Fix B): how many gray items are processed between
     // `stop` polls. Small enough that a stop request interrupts a long drain
     // within ~tens of µs; large enough that the Acquire load is amortized to
@@ -617,63 +752,6 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
                     continue;
                 }
                 job.deferred.lock().unwrap().push(val);
-            }
-        }
-        // Stage 1b CONCURRENT OBARRAY SCAN (once per cycle): after the initial
-        // gray-drain, scan the snapshotted symbol cells, routing each heap child to
-        // gray (conses) / deferred (non-cons) just like the cons-drain branch. We
-        // move the snapshot out of `job` (`take`) so the scan closure can borrow the
-        // other `job` fields (`gray`, `deferred`) without a borrow conflict; once
-        // scanned it stays `None`, so the `obarray_scanned` guard + the empty
-        // `job.obarray` both ensure single execution. Pushing into `gray` means the
-        // outer loop re-drains the symbol cells' transitive children to a fixpoint.
-        if !obarray_scanned {
-            obarray_scanned = true;
-            if let Some(snap) = job.obarray.take() {
-                // Safety: `snap` was captured at this cycle's world-stopped start
-                // handshake; its chunk + seq pointers address the live, non-moving
-                // obarray storage, and we are on the GC thread.
-                unsafe {
-                    snap.scan(|child| {
-                        if child.is_cons() {
-                            job.gray.push(child);
-                        } else if !concurrent_try_mark_owned(child, &job.claims) {
-                            job.deferred.lock().unwrap().push(child);
-                        }
-                    });
-                }
-                // New children were pushed; loop back to drain them before deciding
-                // we are done.
-                continue;
-            }
-        }
-        // Stage 2 Tier B CONCURRENT VECTOR SCAN (once per cycle): after the obarray
-        // scan, trace the snapshotted vector backings, routing each heap child to gray
-        // (conses) / deferred (non-cons) just like the cons-drain branch. We move the
-        // snapshot out of `job` (`take`) so the scan closure can borrow the other
-        // `job` fields without a borrow conflict; once scanned it stays `None`, so the
-        // `vectors_scanned` guard + the empty `job.vectors` both ensure single
-        // execution. Pushing into `gray` means the outer loop re-drains the backings'
-        // transitive children to a fixpoint. Mirrors the obarray block above.
-        if !vectors_scanned {
-            vectors_scanned = true;
-            if let Some(snap) = job.vectors.take() {
-                // Safety: `snap` was captured at this cycle's world-stopped start
-                // handshake; each entry's base/len addresses a live, immutable backing
-                // (Mapped dump or retired-on-write Owned buffer), and we are on the GC
-                // thread.
-                unsafe {
-                    snap.scan(|child| {
-                        if child.is_cons() {
-                            job.gray.push(child);
-                        } else if !concurrent_try_mark_owned(child, &job.claims) {
-                            job.deferred.lock().unwrap().push(child);
-                        }
-                    });
-                }
-                // New children were pushed; loop back to drain them before deciding
-                // we are done.
-                continue;
             }
         }
         // Fold the mutator's SATB log (overwritten children) into gray.
@@ -1899,9 +1977,10 @@ impl MappedStringObject {
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct DrainKinds {
     pub string: usize,
-    /// Vectors trace concurrently (Stage 2 Tier B scans their BACKINGS), but
-    /// the vector VALUE is still parked so the termination sets its header
-    /// mark — so this bucket counts header-mark-only work, not child traces.
+    /// Vectors trace concurrently (Stage 2 Tier B scans their BACKINGS), and
+    /// since task 01 the GC thread also CLAIMS owned page vectors' header
+    /// marks — so this bucket counts only the still-parked residue
+    /// (mapped/Box-residual vectors, and snapshot-missed edge cases).
     pub vector: usize,
     pub record: usize,
     /// Lambda + Macro (interpreted closures).
@@ -2047,6 +2126,10 @@ pub(crate) struct SweepStats {
     /// subrs; the `kinds.subr` bucket keeps counting mapped subrs, which
     /// still park).
     pub last_concurrent_subr_dropped: usize,
+    /// CONCURRENT VECTOR-HEADER CLAIMS (task 01): owned young page vectors
+    /// whose header the GC thread claimed last cycle (the `kinds.vector`
+    /// bucket keeps counting the still-parked ones: mapped/Box-residual).
+    pub last_concurrent_vec_claimed: usize,
     /// Cost of the `join_concurrent_mark` fold itself (taking the SATB +
     /// deferred buffers, classifying, pushing to gray) — the cheap half of the
     /// termination; the mark fixpoint that follows is the trace line's `drain`.
@@ -2150,6 +2233,9 @@ pub(crate) struct HandshakeStats {
     /// CONCURRENT FLOAT CLAIMS (task 01): float-arena page-base snapshot
     /// capture — O(pages) only, mirrors `last_start_vecsnap_us`.
     pub last_start_floatsnap_us: u64,
+    /// CONCURRENT VECTOR-HEADER CLAIMS (task 01): vector-arena page-BASE
+    /// snapshot capture (distinct from the Tier-B backing `vecsnap`).
+    pub last_start_vecbasesnap_us: u64,
     pub last_start_jobasm_us: u64,
 
     // --- TERMINATION handshake (once per concurrent cycle) ---
@@ -2486,6 +2572,14 @@ pub struct TaggedHeap {
     /// here and skip the re-enumeration. Cleared at every mark start
     /// (`concurrent_begin`/`begin_collection`). Conses (2 children, O(1) barrier)
     /// bypass it; only multi-child veclike/string owners are deduped.
+    ///
+    /// SECOND ROLE (task 01, load-bearing): this set is exactly "every
+    /// multi-child owner MUTATED this cycle", and `join_concurrent_mark`
+    /// drains it to re-gray each such owner's CURRENT children at the STW
+    /// termination — the INSERTION-COVERAGE re-trace that keeps mid-cycle
+    /// insertions (root→heap motion) live now that concurrently-CLAIMED
+    /// owners (page vectors; interval-free strings that gained a table) are
+    /// no longer re-traced by the termination's `mark_value`.
     satb_snapshotted_owners: FxHashSet<usize>,
     /// Veclikes/strings the GC thread reached but did NOT trace (their backing
     /// can be reallocated by the mutator, so reading it concurrently would be a
@@ -2511,6 +2605,10 @@ pub struct TaggedHeap {
     /// in-flight cycle (see `ConcurrentClaimJob::subr_dropped`) + its fold.
     concurrent_subr_dropped: std::sync::Arc<AtomicUsize>,
     last_concurrent_subr_dropped: usize,
+    /// CONCURRENT VECTOR-HEADER CLAIMS (task 01): shared claim counter for
+    /// the in-flight cycle (see `ConcurrentClaimJob::vec_claimed`) + fold.
+    concurrent_vec_claimed: std::sync::Arc<AtomicUsize>,
+    last_concurrent_vec_claimed: usize,
     /// CONCURRENT STRING MARKING: per-cycle dedup for the ENFORCED in-mutator
     /// string interval SATB barrier (`note_string_interval_preimage`), keyed by
     /// `LispString` address — stable for the whole cycle because nothing is
@@ -2683,6 +2781,8 @@ impl TaggedHeap {
             last_concurrent_float_claimed: 0,
             concurrent_subr_dropped: std::sync::Arc::new(AtomicUsize::new(0)),
             last_concurrent_subr_dropped: 0,
+            concurrent_vec_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
+            last_concurrent_vec_claimed: 0,
             satb_string_preimage_addrs: FxHashSet::default(),
             gc_stop: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             gc_wake: std::sync::Arc::new((std::sync::Mutex::new(()), std::sync::Condvar::new())),
@@ -2803,6 +2903,7 @@ impl TaggedHeap {
             last_concurrent_str_claimed: self.last_concurrent_str_claimed,
             last_concurrent_float_claimed: self.last_concurrent_float_claimed,
             last_concurrent_subr_dropped: self.last_concurrent_subr_dropped,
+            last_concurrent_vec_claimed: self.last_concurrent_vec_claimed,
             last_termination_fold_us: self.last_termination_fold_us,
             termination_count: self.termination_count,
             mark_us: self.sweep_mark_us,
@@ -5658,6 +5759,20 @@ impl TaggedHeap {
             float_bases.insert(page.base_addr());
         }
         self.handshake.last_start_floatsnap_us = floatsnap_t0.elapsed().as_micros() as u64;
+        // CONCURRENT VECTOR-HEADER CLAIMS (task 01) claim oracle: capture
+        // the vector arena's page bases at this same world-stopped instant
+        // (retired pages included — tenured vectors recognize-and-drop at
+        // the claim arm). Same discipline as the float/string snapshots.
+        // O(pages); own handshake timer, distinct from the Tier-B backing
+        // `vecsnap` below.
+        let vecbasesnap_t0 = std::time::Instant::now();
+        let mut vector_bases =
+            std::collections::HashSet::with_capacity(self.vector_arena.pages.len());
+        for page in &self.vector_arena.pages {
+            vector_bases.insert(page.base_addr());
+        }
+        self.handshake.last_start_vecbasesnap_us =
+            vecbasesnap_t0.elapsed().as_micros() as u64;
         let vecsnap_t0 = std::time::Instant::now();
         // Stage 2 Tier B CONCURRENT VECTOR SCAN: snapshot every
         // OWNED/Mapped vector backing AT THIS world-stopped point (same instant the
@@ -5709,6 +5824,23 @@ impl TaggedHeap {
                     "vector registry address must be page-owned xor Box-owned",
                 );
             }
+            // Task 01 vector-claim inclusion, asserted from the CLAIM ARM's
+            // perspective: every ALLOCATED vector-arena page slot must be
+            // Tier-B-registered ({page vectors} ⊆ `vector_object_addrs`), so
+            // a `vector_page_bases` HIT at `concurrent_try_mark_owned`
+            // implies the claimed vector's backing is in the Tier-B snapshot
+            // built below — its children trace concurrently, which is what
+            // makes the header claim (and the removed termination re-trace)
+            // sound. Retired pages included: their tenured slots drop at the
+            // arm before any children question arises, but keeping them
+            // registered is the standing registry invariant.
+            for slot in self.vector_arena.collect_allocated_slots() {
+                assert!(
+                    self.vector_object_addrs.contains(&(slot as usize)),
+                    "allocated vector page slot missing from the Tier-B \
+                     registry — the claim arm would orphan its children",
+                );
+            }
         }
         let vectors = {
             let mut snap = crate::tagged::header::VectorScanSnapshot::with_capacity(
@@ -5736,6 +5868,7 @@ impl TaggedHeap {
         self.concurrent_str_claimed.store(0, Ordering::Relaxed);
         self.concurrent_float_claimed.store(0, Ordering::Relaxed);
         self.concurrent_subr_dropped.store(0, Ordering::Relaxed);
+        self.concurrent_vec_claimed.store(0, Ordering::Relaxed);
         self.gc_stop
             .store(false, std::sync::atomic::Ordering::Release);
         self.gc_exited = Some(exited_rx);
@@ -5751,11 +5884,13 @@ impl TaggedHeap {
                 parity: self.mark_parity,
                 string_page_bases: std::sync::Arc::new(string_bases),
                 float_page_bases: std::sync::Arc::new(float_bases),
+                vector_page_bases: std::sync::Arc::new(vector_bases),
                 dump_lo: self.dump_addr_lo,
                 dump_hi: self.dump_addr_hi,
                 str_claimed: self.concurrent_str_claimed.clone(),
                 float_claimed: self.concurrent_float_claimed.clone(),
                 subr_dropped: self.concurrent_subr_dropped.clone(),
+                vec_claimed: self.concurrent_vec_claimed.clone(),
             },
             satb: self.satb_shared.clone(),
             deferred: self.deferred_veclikes.clone(),
@@ -5817,6 +5952,26 @@ impl TaggedHeap {
             self.concurrent_float_claimed.load(Ordering::Relaxed);
         self.last_concurrent_subr_dropped =
             self.concurrent_subr_dropped.load(Ordering::Relaxed);
+        self.last_concurrent_vec_claimed = self.concurrent_vec_claimed.load(Ordering::Relaxed);
+        // Task 01 INSERTION-COVERAGE RE-TRACE (the load-bearing companion of
+        // the vector-header claims): re-gray the CURRENT children of every
+        // multi-child owner mutated this cycle (`satb_snapshotted_owners` —
+        // populated by the write barrier's first-mutation dedup, so it is
+        // exactly the mutated-owner set). The SATB deletion barrier preserves
+        // only SNAPSHOT-time children; a value INSERTED mid-cycle (stored
+        // from a mutator register — root→heap motion) into an
+        // already-CLAIMED owner is otherwise invisible: the claimed mark bit
+        // makes the termination's `mark_value` early-return, so the old
+        // "every deferred veclike is re-traced on its CURRENT backing"
+        // backstop no longer covers it. Bounded by mutation volume (each
+        // owner once), not by the live vector population — which is the
+        // whole point of claiming. Also covers claimed STRINGS that gained
+        // interval tables mid-cycle (their wrapper barriers land the owner
+        // in the same set).
+        let written = std::mem::take(&mut self.satb_snapshotted_owners);
+        for bits in written {
+            self.push_value_children_to_gray(TaggedValue(bits), "satb-written-retrace");
+        }
         // Classify what the drain is about to trace, per kind — the measurement
         // that decides which kinds a concurrent-tracing extension should take
         // on. Pure counting (marking behavior is unchanged), but the header
@@ -8010,10 +8165,18 @@ mod ownership_tests {
             "hash tables parked (ht={})",
             kinds.hash_table,
         );
+        // Task 01: owned page vectors' headers are claimed on the GC thread
+        // (their backings already traced concurrently via Tier B), so the
+        // vector bucket collapses and the claim counter carries the count.
         assert!(
-            kinds.vector >= N_VEC,
-            "vector VALUES are parked for their header mark even though their \
-             backings trace concurrently (vec={})",
+            stats.last_concurrent_vec_claimed >= N_VEC,
+            "page vectors' headers are claimed concurrently, not parked \
+             (claimed={})",
+            stats.last_concurrent_vec_claimed,
+        );
+        assert_eq!(
+            kinds.vector, 0,
+            "no vector may remain parked on a bare page-only heap (vec={})",
             kinds.vector,
         );
         assert_eq!(
@@ -8518,6 +8681,410 @@ mod ownership_tests {
         // The termination marked it via the mapped side table.
         let idx = heap.mapped_veclike_index_by_addr[&(mapped as usize)];
         assert!(heap.mapped_veclike_objects[idx].marked);
+
+        // Free the fake image object after the heap is gone.
+        drop(heap);
+        let _ = unsafe { Box::from_raw(mapped) };
+    }
+
+    /// Task 01 CONCURRENT VECTOR-HEADER CLAIMS (a): a page vector reachable
+    /// only via a rooted cons is claimed on the GC thread (header black at
+    /// parity, vec bucket empty, claim counter hot), its children survive
+    /// through the Tier-B backing scan, and a garbage vector plus its
+    /// otherwise-unreachable child are collected by the cycle's sweep.
+    #[test]
+    fn concurrent_vector_header_claimed_children_survive_garbage_freed() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // Live: root cons -> V[c, s]; c and s are reachable ONLY through V.
+        let c = heap.alloc_cons(TaggedValue::fixnum(11), TaggedValue::fixnum(12));
+        let s = heap.alloc_string(crate::heap_types::LispString::from_utf8("vec-kid"));
+        let v = heap.alloc_vector(vec![c, s]);
+        let root = heap.alloc_cons(v, TaggedValue::fixnum(0));
+        // Garbage: G[cg] with no inbound edge.
+        let cg = heap.alloc_cons(TaggedValue::fixnum(13), TaggedValue::fixnum(14));
+        let g = heap.alloc_vector(vec![cg]);
+        let g_ptr = g.as_veclike_ptr().unwrap();
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+
+        let stats = heap.sweep_stats();
+        assert!(
+            stats.last_concurrent_vec_claimed >= 1,
+            "the rooted page vector's header must be claimed on the GC \
+             thread (claimed={})",
+            stats.last_concurrent_vec_claimed,
+        );
+        assert_eq!(
+            stats.last_termination_kinds.vector, 0,
+            "no vector may park on a bare page-only heap (vec={})",
+            stats.last_termination_kinds.vector,
+        );
+        // Claimed ≡ black at THIS cycle's parity.
+        assert!(unsafe {
+            (*v.as_veclike_ptr().unwrap())
+                .gc
+                .is_marked_at(heap.mark_parity)
+        });
+
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(root);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+
+        // Children survived via the Tier-B backing scan (the claimed header
+        // was never re-traced at termination).
+        assert_eq!(
+            unsafe { (*c.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(11).0,
+        );
+        assert!(heap.owns_non_cons_object(s.as_string_ptr().unwrap() as *const u8));
+        assert!(heap.owns_non_cons_object(v.as_veclike_ptr().unwrap() as *const u8));
+        // The garbage vector (and with it its only reference to cg) is gone.
+        assert!(
+            !heap.owns_non_cons_object(g_ptr as *const u8),
+            "the unrooted vector must be reclaimed",
+        );
+        heap.assert_object_arenas_coherent();
+    }
+
+    /// Task 01 CONCURRENT VECTOR-HEADER CLAIMS (b), THE ADVERSARIAL ONE: a
+    /// vector allocated MID-CYCLE into a REUSED SLOT of an
+    /// already-snapshotted page (page-base HIT — it does NOT defer) holds
+    /// the only surviving reference to child C after C's snapshot home is
+    /// severed. C must survive: not through the vector (born-at-parity ⇒
+    /// the claim arm treats it as already-marked ⇒ never traced this cycle;
+    /// its backing is absent from the Tier-B snapshot) but through the SATB
+    /// deletion barrier on the home overwrite. Runs with the partition +
+    /// tricolor verifiers armed — `verify_incremental_tricolor` is the
+    /// oracle for the removed termination re-trace backstop.
+    #[test]
+    fn concurrent_mid_cycle_vector_in_reused_slot_keeps_child_alive() {
+        crate::test_utils::init_test_tracing();
+        unsafe { std::env::set_var("NEOVM_GC_VERIFY_PARTITION", "1") };
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        heap.extend_dump_span(4096, 16); // activates the partition
+
+        // Page setup: keeper pins the page; v_dead's slot becomes the free
+        // slot the mid-cycle allocation will reuse.
+        let v_keep = heap.alloc_vector(vec![TaggedValue::fixnum(1)]);
+        let v_dead = heap.alloc_vector(vec![TaggedValue::fixnum(2)]);
+        let dead_ptr = v_dead.as_veclike_ptr().unwrap() as usize;
+        // C: young cons, reachable at the snapshot ONLY via home H's car.
+        let c = heap.alloc_cons(TaggedValue::fixnum(81), TaggedValue::fixnum(82));
+        let home = heap.alloc_cons(c, TaggedValue::fixnum(0));
+        // Long rooted spine (home at the bottom) so the GC thread is still
+        // walking when the mutator severs; both race outcomes are asserted
+        // identically (if the GC got to H first, C is simply already black).
+        let mut list = heap.alloc_cons(home, TaggedValue::fixnum(0));
+        list = heap.alloc_cons(v_keep, list);
+        for i in 0..300_000 {
+            list = heap.alloc_cons(TaggedValue::fixnum(i), list);
+        }
+        let root = list;
+        // Bootstrap STW cycle: blackens the fake dump (arming the
+        // verifiers), promotes survivors, and frees v_dead's slot.
+        heap.collect_exact(std::iter::once(root));
+        let pre_launch_bases: std::collections::HashSet<usize> = heap
+            .vector_arena
+            .pages
+            .iter()
+            .map(|p| p.base_addr())
+            .collect();
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+
+        // MID-CYCLE: allocate V_NEW carrying C — the arena's class free list
+        // hands back v_dead's slot (page-base in this cycle's snapshot) —
+        // then sever C's original home (fires the SATB pre-image barrier).
+        let v_new = heap.alloc_vector(vec![c]);
+        let new_ptr = v_new.as_veclike_ptr().unwrap() as usize;
+        assert_eq!(
+            new_ptr, dead_ptr,
+            "the mid-cycle vector must land in the freed slot of a \
+             snapshotted page (allocator changed? fix the test setup)",
+        );
+        assert!(
+            pre_launch_bases
+                .contains(&(new_ptr & !(OBJECT_PAGE_ALIGN - 1))),
+            "the reused slot's page must be in this cycle's snapshot",
+        );
+        assert!(crate::tagged::mutate::set_cons_car(home, TaggedValue::NIL));
+
+        // Terminate with v_new re-seeded alongside the spine (it is a live
+        // value the mutator holds; the explicit-roots harness must name it).
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(root);
+        heap.seed_root(v_new);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        // Runs verify_dump_partition + verify_incremental_tricolor (armed
+        // above): a black v_new with a white C would panic here.
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+
+        // C survived its birth-cycle severing (SATB), with payload intact.
+        assert_eq!(
+            unsafe { (*c.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(81).0,
+        );
+        assert!(heap.owns_non_cons_object(v_new.as_veclike_ptr().unwrap() as *const u8));
+
+        // NEXT full cycle: C is now reachable ONLY through V_NEW's backing —
+        // the fresh Tier-B snapshot must carry it.
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.seed_root(v_new);
+        heap.launch_concurrent_mark();
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(root);
+        heap.seed_root(v_new);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+        assert_eq!(
+            unsafe { (*c.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(81).0,
+        );
+    }
+
+    /// Task 01 CONCURRENT VECTOR-HEADER CLAIMS (c): a vector whose backing
+    /// is BULK-MUTATED mid-mark (`with_vector_data_mut` clone-on-write)
+    /// while its header was claimed. Old-backing children survive via the
+    /// retire (the Tier-B snapshot keeps reading the retired original);
+    /// the new contents survive via SATB/born-black. Both race directions
+    /// (claim before/after the mutation) assert identically.
+    #[test]
+    fn concurrent_vector_bulk_cow_while_header_claimed() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // C_OLD is reachable ONLY through V's start-of-cycle backing.
+        let c_old = heap.alloc_cons(TaggedValue::fixnum(91), TaggedValue::fixnum(92));
+        let v = heap.alloc_vector(vec![c_old]);
+        let mut list = heap.alloc_cons(v, TaggedValue::fixnum(0));
+        for i in 0..300_000 {
+            list = heap.alloc_cons(TaggedValue::fixnum(i), list);
+        }
+        let root = list;
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+
+        // MID-MARK bulk mutation through the production wrapper: replaces
+        // the whole backing (clone-on-write retires the original the GC's
+        // snapshot points at) and grows it (realloc — the historical TOCTOU
+        // shape). C_OLD's only reference is now the retired buffer.
+        let c_new = heap.alloc_cons(TaggedValue::fixnum(93), TaggedValue::fixnum(94));
+        let mutated = crate::tagged::mutate::with_vector_data_mut(v, |d| {
+            d.clear();
+            d.push(c_new);
+            for i in 0..64 {
+                d.push(TaggedValue::fixnum(i));
+            }
+        });
+        assert!(mutated.is_some());
+
+        finish_concurrent_cycle(&mut heap, root);
+
+        let stats = heap.sweep_stats();
+        assert!(
+            stats.last_concurrent_vec_claimed >= 1,
+            "V's header claim races the mutation but must land either way \
+             (claimed={})",
+            stats.last_concurrent_vec_claimed,
+        );
+        // Old-backing child survived via the retired buffer's Tier-B scan
+        // (+ the VectorBulk SATB pre-image log).
+        assert_eq!(
+            unsafe { (*c_old.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(91).0,
+        );
+        // New content survived (allocate-black + live backing).
+        assert_eq!(
+            unsafe { (*c_new.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(93).0,
+        );
+        assert!(heap.owns_non_cons_object(v.as_veclike_ptr().unwrap() as *const u8));
+    }
+
+    /// Task 01 INSERTION-COVERAGE (the regression the vm_mapatoms SIGSEGV
+    /// exposed): a pre-existing value held only "in a register" (a Rust
+    /// local the explicit-roots harness does not seed — root→heap motion)
+    /// is stored mid-cycle into an already-CLAIMED vector's slot. The SATB
+    /// deletion barrier only logs pre-images and the claimed header
+    /// suppresses the termination re-trace, so ONLY the dirty-owner
+    /// insertion re-trace at `join_concurrent_mark` keeps the value alive.
+    #[test]
+    fn concurrent_vector_slot_insertion_of_inflight_value_survives() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // X: allocated BEFORE the cycle, never seeded as a root this cycle —
+        // an in-flight register value.
+        let x = heap.alloc_float(6.5);
+        let v = heap.alloc_vector(vec![TaggedValue::fixnum(0)]);
+        let mut list = heap.alloc_cons(v, TaggedValue::fixnum(0));
+        for i in 0..300_000 {
+            list = heap.alloc_cons(TaggedValue::fixnum(i), list);
+        }
+        let root = list;
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+
+        // MID-CYCLE: root→heap motion into the (likely already claimed)
+        // vector through the production barrier path.
+        assert!(crate::tagged::mutate::set_vector_slot(v, 0, x));
+
+        finish_concurrent_cycle(&mut heap, root);
+
+        assert!(
+            heap.owns_non_cons_object(x.as_float_ptr().unwrap() as *const u8),
+            "the inserted in-flight value must survive via the dirty-owner \
+             insertion re-trace",
+        );
+        assert!((x.xfloat() - 6.5).abs() < f64::EPSILON);
+        // V's slot still reads X (no dangling slot).
+        let slot0 = unsafe {
+            (*(v.as_veclike_ptr().unwrap() as *const VectorObj))
+                .data
+                .load_atomic(0)
+        };
+        assert_eq!(slot0.0, x.0);
+    }
+
+    /// Same insertion-coverage regression through the BULK path: the value
+    /// is pushed into the claimed vector via `with_vector_data_mut`
+    /// (clone-on-write) — the post-mutation backing is only reachable
+    /// through the dirty-owner re-trace.
+    #[test]
+    fn concurrent_vector_bulk_insertion_of_inflight_value_survives() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let x = heap.alloc_float(7.5);
+        let v = heap.alloc_vector(vec![TaggedValue::fixnum(0)]);
+        let mut list = heap.alloc_cons(v, TaggedValue::fixnum(0));
+        for i in 0..300_000 {
+            list = heap.alloc_cons(TaggedValue::fixnum(i), list);
+        }
+        let root = list;
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+
+        let mutated = crate::tagged::mutate::with_vector_data_mut(v, |d| {
+            d.push(x);
+        });
+        assert!(mutated.is_some());
+
+        finish_concurrent_cycle(&mut heap, root);
+
+        assert!(
+            heap.owns_non_cons_object(x.as_float_ptr().unwrap() as *const u8),
+            "the bulk-inserted in-flight value must survive via the \
+             dirty-owner insertion re-trace",
+        );
+        assert!((x.xfloat() - 7.5).abs() < f64::EPSILON);
+    }
+
+    /// Task 01 MAPPED-VECTOR CLASSIFICATION (d): a registered mapped vector
+    /// page-MISSES the claim arm and keeps the STW defer path — the
+    /// termination marks it via the mapped side table AND re-traces its
+    /// CURRENT backing (`trace_veclike`), keeping its child alive; its
+    /// `GcHeader` bit is never written by the GC thread. (Box-residual
+    /// vectors are NOT constructible today — `alloc_vector` is the single
+    /// Vector chokepoint and the pdump restore writes into mapped storage —
+    /// so the Box population has no test; a miss would merely defer.)
+    #[test]
+    fn concurrent_mapped_vector_still_deferred_and_traced() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // C: heap value reachable ONLY via the mapped vector's slot.
+        let c = heap.alloc_cons(TaggedValue::fixnum(21), TaggedValue::fixnum(22));
+        let mapped = Box::into_raw(Box::new(VectorObj {
+            header: VecLikeHeader::new(VecLikeType::Vector),
+            data: vec![c].into(),
+        }));
+        unsafe {
+            heap.register_mapped_veclike_object(
+                mapped as *mut VecLikeHeader,
+                std::mem::size_of::<VectorObj>(),
+            )
+        };
+        let mapped_val =
+            unsafe { TaggedValue::from_veclike_ptr(mapped as *const VecLikeHeader) };
+        let root = heap.alloc_cons(mapped_val, TaggedValue::fixnum(0));
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+
+        let stats = heap.sweep_stats();
+        assert!(
+            stats.last_termination_kinds.vector >= 1,
+            "the mapped vector must be parked, not claimed (vec={})",
+            stats.last_termination_kinds.vector,
+        );
+        assert_eq!(
+            stats.last_concurrent_vec_claimed, 0,
+            "nothing here is a page vector",
+        );
+        assert!(
+            unsafe { !(*mapped).header.gc.is_marked() },
+            "a mapped vector's GcHeader bit must never be written by the GC \
+             thread (mapped marks live in the side table)",
+        );
+
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(root);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+
+        // Termination marked it on the mapped path and traced its child.
+        let idx = heap.mapped_veclike_index_by_addr[&(mapped as usize)];
+        assert!(heap.mapped_veclike_objects[idx].marked);
+        assert_eq!(
+            unsafe { (*c.xcons_ptr()).load_car() }.0,
+            TaggedValue::fixnum(21).0,
+        );
 
         // Free the fake image object after the heap is gone.
         drop(heap);
@@ -10140,11 +10707,13 @@ mod float_arena_tests {
             parity: !heap.mark_parity,
             string_page_bases: std::sync::Arc::new(std::collections::HashSet::new()),
             float_page_bases: std::sync::Arc::new(snap),
+            vector_page_bases: std::sync::Arc::new(std::collections::HashSet::new()),
             dump_lo: usize::MAX,
             dump_hi: 0,
             str_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
             float_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
             subr_dropped: std::sync::Arc::new(AtomicUsize::new(0)),
+            vec_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
         };
         assert!(
             concurrent_try_mark_owned(f_old, &job),

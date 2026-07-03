@@ -17428,7 +17428,7 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
     for (i, s) in captures.iter().enumerate() {
         lines.push_str(&format!(
             "cycle#{i} deferred={} satb={} fold={}us drain={}us str_claimed={} \
-             f_claimed={} sub_dropped={} kinds[{}]\n",
+             f_claimed={} sub_dropped={} v_claimed={} kinds[{}]\n",
             s.last_termination_deferred,
             s.last_termination_satb,
             s.last_termination_fold_us,
@@ -17436,6 +17436,7 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
             s.last_concurrent_str_claimed,
             s.last_concurrent_float_claimed,
             s.last_concurrent_subr_dropped,
+            s.last_concurrent_vec_claimed,
             s.last_termination_kinds,
         ));
     }
@@ -17447,7 +17448,7 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
         "config={} cycles_captured={} missed={} gc_collections={} \
          churn_chunks={chunks} live={}B\n\
          medians: deferred={} satb={} fold_us={} drain_us={} str_claimed={} \
-         f_claimed={} sub_dropped={}\n\
+         f_claimed={} sub_dropped={} v_claimed={}\n\
          kind medians: str={} vec={} rec={} clo={} bc={} ht={} ct={} f={} cons={} sub={} other={}\n\
          kind maxima (lifetime): {}\n",
         if pdump { "pdump(mapped-dump)" } else { "plain(dump-less)" },
@@ -17462,6 +17463,7 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
         med(|s| s.last_concurrent_str_claimed as u64),
         med(|s| s.last_concurrent_float_claimed as u64),
         med(|s| s.last_concurrent_subr_dropped as u64),
+        med(|s| s.last_concurrent_vec_claimed as u64),
         med(|s| s.last_termination_kinds.string as u64),
         med(|s| s.last_termination_kinds.vector as u64),
         med(|s| s.last_termination_kinds.record as u64),
@@ -17523,7 +17525,7 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
         "HANDSHAKE start: total med={}us max={} | clear med={}[cons={} noncons={} \
          mapped={}] runtime med={}({}) \
          remembered med={}({}) obsnap med={} ctxroots med={} conssnap med={} \
-         vecsnap med={} floatsnap med={} jobasm med={}\n\
+         vecsnap med={} floatsnap med={} vecbasesnap med={} jobasm med={}\n\
          start groups (med us / max us / med count):\n{}\
          HANDSHAKE termination: roots-lump med={}us max={} | join med={} fold med={} \
          runtime med={}({}) remembered med={}({}) ctxroots med={} newsyms med={}({}) \
@@ -17546,6 +17548,7 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
         hmed(&|h| h.last_start_conssnap_us),
         hmed(&|h| h.last_start_vecsnap_us),
         hmed(&|h| h.last_start_floatsnap_us),
+        hmed(&|h| h.last_start_vecbasesnap_us),
         hmed(&|h| h.last_start_jobasm_us),
         group_table(&|h| &h.last_start_roots),
         hmed(&|h| h.last_term_roots_total_us),
