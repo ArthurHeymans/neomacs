@@ -1,73 +1,91 @@
 ;;; font-selection-noto-bold.el --- Font selection oracle fixture -*- lexical-binding: t -*-
 
+(defconst neomacs-font-selection-family "Noto Sans")
+(defconst neomacs-font-selection-text "neomacs")
+(defconst neomacs-font-selection-default-weight 'bold)
+(defconst neomacs-font-selection-default-slant 'normal)
+(defconst neomacs-font-selection-default-height 150)
+(defconst neomacs-font-selection-default-size 12)
+
+(defconst neomacs-font-selection-weight-candidates
+  '((:weight thin)
+    (:weight ultra-light)
+    (:weight light)
+    (:weight semi-light)
+    (:weight regular)
+    (:weight medium)
+    (:weight semi-bold)
+    (:weight bold)
+    (:weight extra-bold)
+    (:weight black)
+    (:weight ultra-heavy))
+  "GNU font.c weight table rows, using one representative per row.")
+
+(defconst neomacs-font-selection-slant-candidates
+  '((:slant reverse-oblique)
+    (:slant reverse-italic)
+    (:slant normal)
+    (:slant italic)
+    (:slant oblique))
+  "GNU font.c slant table rows, using one representative per row.")
+
+(defconst neomacs-font-selection-size-candidates
+  '((:height 100 :size 10)
+    (:height 150 :size 12)
+    (:height 220 :size 18))
+  "Representative face :height and font-spec :size pairs.")
+
+(defun neomacs-font-selection-make-case (axis id &rest overrides)
+  (let ((case (list :id id
+                    :axis axis
+                    :family neomacs-font-selection-family
+                    :weight neomacs-font-selection-default-weight
+                    :slant neomacs-font-selection-default-slant
+                    :height neomacs-font-selection-default-height
+                    :size neomacs-font-selection-default-size
+                    :text neomacs-font-selection-text)))
+    (while overrides
+      (let ((key (pop overrides))
+            (value (pop overrides)))
+        (setq case (plist-put case key value))))
+    case))
+
+(defun neomacs-font-selection-weight-case (candidate)
+  (let ((weight (plist-get candidate :weight)))
+    (neomacs-font-selection-make-case
+     'weight
+     (intern (format "noto-sans-weight-%s-h150-s12" weight))
+     :weight weight)))
+
+(defun neomacs-font-selection-slant-case (candidate)
+  (let ((slant (plist-get candidate :slant)))
+    (neomacs-font-selection-make-case
+     'slant
+     (intern (format "noto-sans-slant-%s-h150-s12" slant))
+     :slant slant)))
+
+(defun neomacs-font-selection-size-case (candidate)
+  (let ((height (plist-get candidate :height))
+        (size (plist-get candidate :size)))
+    (neomacs-font-selection-make-case
+     'size
+     (intern (format "noto-sans-size-bold-normal-h%s-s%s" height size))
+     :height height
+     :size size)))
+
 (defconst neomacs-font-selection-cases
-  '((:id noto-sans-normal-normal-h150-s12
-     :family "Noto Sans"
-     :weight normal
-     :slant normal
-     :height 150
-     :size 12
-     :text "neomacs")
-    (:id noto-sans-bold-normal-h150-s12
-     :family "Noto Sans"
-     :weight bold
-     :slant normal
-     :height 150
-     :size 12
-     :text "neomacs")
-    (:id noto-sans-normal-italic-h150-s12
-     :family "Noto Sans"
-     :weight normal
-     :slant italic
-     :height 150
-     :size 12
-     :text "neomacs")
-    (:id noto-sans-bold-italic-h150-s12
-     :family "Noto Sans"
-     :weight bold
-     :slant italic
-     :height 150
-     :size 12
-     :text "neomacs")
-    (:id noto-sans-light-normal-h150-s12
-     :family "Noto Sans"
-     :weight light
-     :slant normal
-     :height 150
-     :size 12
-     :text "neomacs")
-    (:id noto-sans-semibold-normal-h150-s12
-     :family "Noto Sans"
-     :weight semibold
-     :slant normal
-     :height 150
-     :size 12
-     :text "neomacs")
-    (:id noto-sans-bold-oblique-h150-s12
-     :family "Noto Sans"
-     :weight bold
-     :slant oblique
-     :height 150
-     :size 12
-     :text "neomacs")
-    (:id noto-sans-bold-normal-h100-s10
-     :family "Noto Sans"
-     :weight bold
-     :slant normal
-     :height 100
-     :size 10
-     :text "neomacs")
-    (:id noto-sans-bold-normal-h220-s18
-     :family "Noto Sans"
-     :weight bold
-     :slant normal
-     :height 220
-     :size 18
-     :text "neomacs"))
+  (append
+   (mapcar #'neomacs-font-selection-weight-case
+           neomacs-font-selection-weight-candidates)
+   (mapcar #'neomacs-font-selection-slant-case
+           neomacs-font-selection-slant-candidates)
+   (mapcar #'neomacs-font-selection-size-case
+           neomacs-font-selection-size-candidates))
   "Font-selection requests compared between GNU Emacs and NEO Emacs.")
 
 (defun neomacs-font-selection-label (case)
-  (format "family=%s weight=%s slant=%s height=%s size=%s"
+  (format "axis=%s family=%s weight=%s slant=%s height=%s size=%s"
+          (plist-get case :axis)
           (plist-get case :family)
           (plist-get case :weight)
           (plist-get case :slant)

@@ -94,22 +94,60 @@ fn font_selection_fixture_uses_matrix_cases_with_labels_and_probe_text() {
     let contents = std::fs::read_to_string(&fixture).expect("font selection fixture should exist");
 
     assert!(contents.contains("neomacs-font-selection-cases"));
+    assert!(contents.contains("neomacs-font-selection-weight-candidates"));
+    assert!(contents.contains("neomacs-font-selection-slant-candidates"));
+    assert!(contents.contains("neomacs-font-selection-size-candidates"));
     assert!(contents.contains("neomacs-font-selection-label"));
-    assert!(contents.contains(":id noto-sans-normal-normal-h150-s12"));
-    assert!(contents.contains(":id noto-sans-bold-normal-h150-s12"));
-    assert!(contents.contains(":id noto-sans-normal-italic-h150-s12"));
-    assert!(contents.contains(":id noto-sans-bold-normal-h220-s18"));
+    for weight in [
+        "thin",
+        "ultra-light",
+        "light",
+        "semi-light",
+        "regular",
+        "medium",
+        "semi-bold",
+        "bold",
+        "extra-bold",
+        "black",
+        "ultra-heavy",
+    ] {
+        assert!(
+            contents.contains(&format!(":weight {weight}")),
+            "fixture should probe GNU semantic weight candidate {weight}"
+        );
+    }
+    for slant in [
+        "reverse-oblique",
+        "reverse-italic",
+        "normal",
+        "italic",
+        "oblique",
+    ] {
+        assert!(
+            contents.contains(&format!(":slant {slant}")),
+            "fixture should probe GNU semantic slant candidate {slant}"
+        );
+    }
+    assert!(contents.contains("\"noto-sans-weight-%s-h150-s12\""));
+    assert!(contents.contains("\"noto-sans-slant-%s-h150-s12\""));
+    assert!(contents.contains("\"noto-sans-size-bold-normal-h%s-s%s\""));
     assert!(contents.contains("\"Noto Sans\""));
-    assert!(contents.contains(":weight normal"));
-    assert!(contents.contains(":weight bold"));
-    assert!(contents.contains(":slant italic"));
     assert!(contents.contains(":height 220"));
     assert!(contents.contains(":size 18"));
-    assert!(contents.contains(":text \"neomacs\""));
+    assert!(contents.contains("neomacs-font-selection-text \"neomacs\""));
+    assert!(contents.contains(":text neomacs-font-selection-text"));
     assert!(contents.contains(":label"));
     assert!(contents.contains("font-at"));
     assert!(contents.contains("font-info"));
     assert!(contents.contains("NEOMACS_GUI_FONT_SELECTION_RESULT"));
+    assert!(
+        !contents.contains(":weight semibold"),
+        "fixture should skip weight aliases"
+    );
+    assert!(
+        !contents.contains(":weight heavy"),
+        "fixture should skip weight aliases"
+    );
 }
 
 #[test]
