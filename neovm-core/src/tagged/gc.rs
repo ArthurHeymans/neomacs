@@ -197,6 +197,10 @@ struct ConcurrentMarkJob {
     done: std::sync::Arc<std::sync::atomic::AtomicBool>,
     /// Set by the mutator to ask this loop to exit.
     stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Task #7 stage 2a (Fix B): idle-nap wakeup latch. The mutator's
+    /// `join_concurrent_mark` notifies it after setting `stop`, so the idle
+    /// wait below wakes immediately instead of finishing a fixed sleep.
+    wake: std::sync::Arc<(std::sync::Mutex<()>, std::sync::Condvar)>,
     /// Signalled when the loop exits, so the mutator can take over the gray queue.
     exited: std::sync::mpsc::Sender<()>,
     /// Stage 1b CONCURRENT OBARRAY SCAN: a start-captured snapshot of the obarray's
@@ -365,9 +369,30 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
     // Stage 2 Tier B CONCURRENT VECTOR SCAN: same single-execution guard for the
     // vector-backing scan below.
     let mut vectors_scanned = false;
-    loop {
+    // Task #7 stage 2a (Fix B): how many gray items are processed between
+    // `stop` polls. Small enough that a stop request interrupts a long drain
+    // within ~tens of µs; large enough that the Acquire load is amortized to
+    // nothing against the per-item marking work.
+    const STOP_CHECK_QUANTUM: usize = 512;
+    let mut since_stop_check = 0usize;
+    'mark: loop {
         // Drain the local gray worklist (GC-thread-owned; no sharing).
         while let Some(val) = job.gray.pop() {
+            // Fix B: react to a stop request at a bounded quantum instead of
+            // only between full drains. Any remaining gray work is handed to
+            // the mutator below exactly like `deferred`: the termination fold
+            // pushes it into the STW gray queue, whose full `mark_value` drain
+            // handles every value kind (it already receives non-owned conses
+            // and every non-cons via `deferred`), so no marking is lost — the
+            // residual work moves to the already-stopped-and-waiting mutator.
+            since_stop_check += 1;
+            if since_stop_check >= STOP_CHECK_QUANTUM {
+                since_stop_check = 0;
+                if job.stop.load(Ordering::Acquire) {
+                    job.gray.push(val); // not processed yet — hand it back too
+                    break 'mark;
+                }
+            }
             if val.is_cons() {
                 let ptr = val.xcons_ptr();
                 let addr = ptr as usize;
@@ -482,16 +507,33 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
             // Tentatively drained. Advertise done; exit if the mutator asked.
             job.done.store(true, Ordering::Release);
             if job.stop.load(Ordering::Acquire) {
-                break;
+                break 'mark;
             }
-            // Idle wait — short enough to react to new SATB / stop quickly,
-            // long enough not to peg a core. (A real thread sleep, not the
-            // harness-blocked foreground sleep.)
-            std::thread::sleep(std::time::Duration::from_micros(100));
+            // Idle wait — short enough to react to new SATB quickly, long
+            // enough not to peg a core. Fix B: interruptible — re-check `stop`
+            // UNDER the wake lock before waiting: `join_concurrent_mark`
+            // stores `stop` first and only then locks+notifies, so either the
+            // flag is visible here (skip the wait) or this thread is already
+            // waiting when the notify lands — a wakeup cannot be lost. The
+            // timeout keeps the old 100us cadence as the SATB pickup backstop
+            // (SATB pushes do not notify).
+            let (lock, cvar) = &*job.wake;
+            let guard = lock.lock().unwrap();
+            if !job.stop.load(Ordering::Acquire) {
+                let _ = cvar
+                    .wait_timeout(guard, std::time::Duration::from_micros(100))
+                    .unwrap();
+            }
         } else {
             job.done.store(false, Ordering::Release);
             job.gray.extend(batch);
         }
+    }
+    // Fix B: residual local gray (a mid-drain stop) joins the deferred
+    // handoff; the termination fold routes both through the STW `mark_value`
+    // drain. Empty on the normal (idle-stop) path.
+    if !job.gray.is_empty() {
+        job.deferred.lock().unwrap().extend(job.gray.drain(..));
     }
     let _ = job.exited.send(());
 }
@@ -1622,6 +1664,12 @@ pub struct TaggedHeap {
     satb_string_preimage_addrs: FxHashSet<usize>,
     /// Mutator sets this (Release) to ask the GC thread to finish and exit.
     gc_stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    /// Task #7 stage 2a (Fix B): wakeup latch for the GC thread's idle nap.
+    /// `join_concurrent_mark` notifies it AFTER setting `gc_stop`, so a stop
+    /// request interrupts the nap immediately instead of burning the
+    /// remainder of a fixed 100us sleep (the measured bulk of the
+    /// stop-signal -> thread-exit latency in the termination handshake).
+    gc_wake: std::sync::Arc<(std::sync::Mutex<()>, std::sync::Condvar)>,
     /// Receives when the GC thread has exited its mark loop (so the mutator's
     /// termination can safely take over the gray queue). Set at start.
     gc_exited: Option<std::sync::mpsc::Receiver<()>>,
@@ -1762,6 +1810,7 @@ impl TaggedHeap {
             last_concurrent_str_claimed: 0,
             satb_string_preimage_addrs: FxHashSet::default(),
             gc_stop: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            gc_wake: std::sync::Arc::new((std::sync::Mutex::new(()), std::sync::Condvar::new())),
             gc_exited: None,
             pending_obarray_scan: None,
             concurrent_obarray_start_slots: None,
@@ -4447,6 +4496,7 @@ impl TaggedHeap {
             deferred: self.deferred_veclikes.clone(),
             done: self.gc_done.clone(),
             stop: self.gc_stop.clone(),
+            wake: self.gc_wake.clone(),
             exited: exited_tx,
             // Stage 1b: consume the obarray snapshot the start handshake staged.
             // Take it so it is not left dangling for a later cycle.
@@ -4468,6 +4518,15 @@ impl TaggedHeap {
         let join_t0 = std::time::Instant::now();
         self.gc_stop
             .store(true, std::sync::atomic::Ordering::Release);
+        // Task #7 stage 2a (Fix B): wake the GC thread out of its idle nap
+        // NOW. Store-then-lock+notify pairs with the GC thread's
+        // check-under-lock before waiting, so the notify cannot fall between
+        // its flag check and its wait (no lost wakeup, no full-nap latency).
+        {
+            let (lock, cvar) = &*self.gc_wake;
+            let _guard = lock.lock().unwrap();
+            cvar.notify_all();
+        }
         if let Some(rx) = self.gc_exited.take() {
             let _ = rx.recv(); // block until the GC thread leaves its mark loop
         }
@@ -6931,6 +6990,64 @@ mod ownership_tests {
         heap.finish_incremental_sweep_now();
         assert_snapshots_match(&heap);
         assert_eq!(registry_entries(&heap).len(), 1);
+    }
+
+    /// Task #7 stage 2a (Fix B): a stop request that lands MID-DRAIN (joining
+    /// without waiting for `concurrent_mark_done`) makes the GC thread break
+    /// at its stop-check quantum and hand ALL residual gray work to the
+    /// termination fold via `deferred` — the STW drain then finishes it, so
+    /// the live set is retained bit-for-bit and only real garbage is swept.
+    /// Exercises every interleaving outcome (job not yet started / mid-drain
+    /// quantum break / already drained) with the same outcome-based asserts.
+    #[test]
+    fn immediate_join_mid_drain_hands_residual_work_to_termination() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // A long rooted list so the GC thread is (almost surely) still
+        // draining when the join lands, plus one unrooted garbage cons.
+        const N: i64 = 300_000;
+        let mut list = TaggedValue::fixnum(0);
+        for i in 0..N {
+            list = heap.alloc_cons(TaggedValue::fixnum(i), list);
+        }
+        let root = list;
+        let _garbage = heap.alloc_cons(TaggedValue::fixnum(-2), TaggedValue::fixnum(0));
+        let live_before = heap.cons_live_count;
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+        // JOIN IMMEDIATELY — no `concurrent_mark_done` wait.
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(root);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+
+        assert_eq!(
+            heap.cons_live_count,
+            live_before - 1,
+            "exactly the one garbage cons is swept; the whole rooted list survives",
+        );
+        // The rooted spine is intact and readable (a swept live cons here
+        // would be a use-after-free the asserts / sanitizer catch).
+        let mut node = root;
+        let mut count = 0i64;
+        while node.is_cons() {
+            let car = unsafe { (*node.xcons_ptr()).load_car() };
+            assert_eq!(
+                car.0,
+                TaggedValue::fixnum(N - 1 - count).0,
+                "rooted car intact at index {count}",
+            );
+            node = unsafe { (*node.xcons_ptr()).load_cdr() };
+            count += 1;
+        }
+        assert_eq!(count, N, "the whole rooted list survived the early join");
     }
 
     /// Characterization safety net for the path-collapse refactor: a forced full
