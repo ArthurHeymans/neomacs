@@ -17427,12 +17427,15 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
     let mut lines = String::new();
     for (i, s) in captures.iter().enumerate() {
         lines.push_str(&format!(
-            "cycle#{i} deferred={} satb={} fold={}us drain={}us str_claimed={} kinds[{}]\n",
+            "cycle#{i} deferred={} satb={} fold={}us drain={}us str_claimed={} \
+             f_claimed={} sub_dropped={} kinds[{}]\n",
             s.last_termination_deferred,
             s.last_termination_satb,
             s.last_termination_fold_us,
             s.mark_us,
             s.last_concurrent_str_claimed,
+            s.last_concurrent_float_claimed,
+            s.last_concurrent_subr_dropped,
             s.last_termination_kinds,
         ));
     }
@@ -17443,7 +17446,8 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
     let summary = format!(
         "config={} cycles_captured={} missed={} gc_collections={} \
          churn_chunks={chunks} live={}B\n\
-         medians: deferred={} satb={} fold_us={} drain_us={} str_claimed={}\n\
+         medians: deferred={} satb={} fold_us={} drain_us={} str_claimed={} \
+         f_claimed={} sub_dropped={}\n\
          kind medians: str={} vec={} rec={} clo={} bc={} ht={} ct={} f={} cons={} sub={} other={}\n\
          kind maxima (lifetime): {}\n",
         if pdump { "pdump(mapped-dump)" } else { "plain(dump-less)" },
@@ -17456,6 +17460,8 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
         med(|s| s.last_termination_fold_us),
         med(|s| s.mark_us),
         med(|s| s.last_concurrent_str_claimed as u64),
+        med(|s| s.last_concurrent_float_claimed as u64),
+        med(|s| s.last_concurrent_subr_dropped as u64),
         med(|s| s.last_termination_kinds.string as u64),
         med(|s| s.last_termination_kinds.vector as u64),
         med(|s| s.last_termination_kinds.record as u64),
@@ -17517,7 +17523,7 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
         "HANDSHAKE start: total med={}us max={} | clear med={}[cons={} noncons={} \
          mapped={}] runtime med={}({}) \
          remembered med={}({}) obsnap med={} ctxroots med={} conssnap med={} \
-         vecsnap med={} jobasm med={}\n\
+         vecsnap med={} floatsnap med={} jobasm med={}\n\
          start groups (med us / max us / med count):\n{}\
          HANDSHAKE termination: roots-lump med={}us max={} | join med={} fold med={} \
          runtime med={}({}) remembered med={}({}) ctxroots med={} newsyms med={}({}) \
@@ -17539,6 +17545,7 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
         hmed(&|h| h.last_start_roots.total_us),
         hmed(&|h| h.last_start_conssnap_us),
         hmed(&|h| h.last_start_vecsnap_us),
+        hmed(&|h| h.last_start_floatsnap_us),
         hmed(&|h| h.last_start_jobasm_us),
         group_table(&|h| &h.last_start_roots),
         hmed(&|h| h.last_term_roots_total_us),
@@ -17572,6 +17579,63 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
     // under nextest's capture (NOT a failure).
     panic!(
         "DRAIN-KINDS PROFILE (profiling aid, not a failure)\n{lines}{summary}{handshake_summary}"
+    );
+}
+
+/// Task 01 SUBR RECOGNIZE-AND-DROP in the REAL bootstrap context (mapped
+/// pdump when the cache is warm; the mandated `runtime_startup_context`
+/// driver either way), under the armed partition/tricolor verifiers: the
+/// startup image resolves ~1.6-1.7k builtin subrs as leaked statics that a
+/// concurrent cycle used to park every time. After the drop: (a) the drop
+/// counter is hot on churn-driven cycles, (b) every builtin stays callable
+/// (subr values still work), and (c) the verifiers pass — the oracle that
+/// no MAPPED subr was mis-recognized as leaked (its side-table mark would
+/// be missing and the partition verifier would panic).
+#[test]
+fn gc_concurrent_leaked_subr_drop_under_pdump_verifiers() {
+    crate::test_utils::init_test_tracing();
+    unsafe { std::env::set_var("NEOVM_GC_VERIFY_PARTITION", "1") };
+    let mut ev = runtime_startup_context();
+    if !ev.tagged_heap.dump_partition_active() {
+        // Cold bootstrap cache: the first call ran the live bootstrap and
+        // wrote it; reload so the measured heap has the mapped partition
+        // (mirrors the drain profiler's cold-cache handling).
+        ev = runtime_startup_context();
+    }
+    ev.set_lexical_binding(true);
+
+    // Churn until two concurrent terminations complete (bounded).
+    let seen0 = ev.tagged_heap.sweep_stats().termination_count;
+    let mut guard = 0usize;
+    while ev.tagged_heap.sweep_stats().termination_count < seen0 + 2 {
+        ev.eval_str(
+            "(let ((l nil)) (dotimes (i 2000) (push (format \"s%d\" i) l)) (length l))",
+        )
+        .expect("churn step");
+        guard += 1;
+        assert!(
+            guard < 4000,
+            "no concurrent termination observed under churn",
+        );
+    }
+
+    let stats = ev.tagged_heap.sweep_stats();
+    assert!(
+        stats.last_concurrent_subr_dropped > 0,
+        "builtin subrs (function cells scanned every cycle) must be dropped \
+         on the GC thread (sub_dropped={} kinds[{}])",
+        stats.last_concurrent_subr_dropped,
+        stats.last_termination_kinds,
+    );
+
+    // Subr values still work: builtins dispatch fine after cycles of drops.
+    assert_eq!(
+        ev.eval_str("(car (list 1 2 3))").expect("car"),
+        Value::fixnum(1),
+    );
+    assert_eq!(
+        ev.eval_str("(funcall #'+ 20 22)").expect("funcall +"),
+        Value::fixnum(42),
     );
 }
 

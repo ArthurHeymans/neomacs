@@ -195,14 +195,11 @@ struct ConcurrentMarkJob {
     /// via block arithmetic; others (mapped/dump, or new blocks) are deferred.
     owned_bases: std::sync::Arc<std::collections::HashSet<usize>>,
     /// CONCURRENT CLAIM DISPATCHER state (per-kind page-base snapshots,
-    /// cycle parity, claim counters) for `concurrent_try_mark_owned`.
-    /// Grouped in a sub-struct so the scan closures below — which mutably
-    /// borrow `gray` — can borrow it disjointly.
+    /// cycle parity, dump span, claim counters) for
+    /// `concurrent_try_mark_owned`. Grouped in a sub-struct so the scan
+    /// closures below — which mutably borrow `gray` — can borrow it
+    /// disjointly. The cons arm reads the dump span from here too.
     claims: ConcurrentClaimJob,
-    /// Dump (pdump mmap) address span; conses inside are permanent-black and
-    /// their young children come from the remembered set, so they are skipped.
-    dump_lo: usize,
-    dump_hi: usize,
     /// Overwritten children appended by the mutator's SATB barrier; drained here.
     satb: std::sync::Arc<std::sync::Mutex<Vec<TaggedValue>>>,
     /// Non-cons / non-owned-cons values to trace at the STW termination.
@@ -256,12 +253,37 @@ struct ConcurrentClaimJob {
     /// anymore, but a miss merely defers). A page base can never collide
     /// with non-page memory: a page owns its whole 64KB span exclusively.
     string_page_bases: std::sync::Arc<std::collections::HashSet<usize>>,
+    /// CONCURRENT FLOAT CLAIMS (task 01): the base address of every FLOAT
+    /// ARENA PAGE at the world-stopped start handshake (retired pages
+    /// included — their tenured floats short-circuit to drop). Same
+    /// discipline as `string_page_bases`: HIT ⇒ owned page float ⇒
+    /// claim-eligible; MISS ⇒ DEFER (fail-safe for mid-cycle pages, mapped
+    /// (pdump) floats — which mark via the heap's `mapped_float_ranges` side
+    /// bitmaps only the mutator may touch — and any residual `Box` float).
+    float_page_bases: std::sync::Arc<std::collections::HashSet<usize>>,
+    /// Dump (pdump mmap) address span. The cons arm skips conses inside
+    /// (permanent-black; young children come from the remembered set); the
+    /// subr arm defers span-inside veclikes (every MAPPED veclike
+    /// registration extends this span, so span-inside covers the whole
+    /// mapped-veclike population whose marks live in mutator-only side
+    /// tables).
+    dump_lo: usize,
+    dump_hi: usize,
     /// CONCURRENT STRING MARKING: count of owned interval-free strings this
     /// cycle's GC thread claimed via `concurrent_try_mark_string` (one per
     /// successful `mark_claim_at`, Relaxed — single writer). Read by
     /// `join_concurrent_mark` (after the exit handshake's happens-before) into
     /// the cycle stats; sizes how much string work left the STW drain.
     str_claimed: std::sync::Arc<AtomicUsize>,
+    /// CONCURRENT FLOAT CLAIMS: same pattern as `str_claimed` — owned young
+    /// page floats claimed this cycle (one per successful `mark_claim_at`).
+    float_claimed: std::sync::Arc<AtomicUsize>,
+    /// SUBR RECOGNIZE-AND-DROP: how many times the GC thread dropped a
+    /// leaked-static subr from the defer path this cycle. Counts drop
+    /// EVENTS, not unique subrs (dropping is stateless, so a subr
+    /// re-discovered through many edges counts once per edge) — a
+    /// diagnostic for how much parked-buffer traffic the drop removes.
+    subr_dropped: std::sync::Arc<AtomicUsize>,
 }
 
 /// A unit of work handed to the GC thread, plus a oneshot done-channel the GC
@@ -424,7 +446,17 @@ fn concurrent_try_mark_string(
 /// "miss ⇒ mapped" (a mid-cycle heap object misclassified as mapped would be
 /// a dropped mark = UAF). Arms wired so far:
 ///
-/// - strings: `concurrent_try_mark_string` (owned interval-free pages).
+/// - strings: `concurrent_try_mark_string` (owned interval-free pages);
+/// - floats: page-snapshot claim (zero Lisp children — `mark_value`'s float
+///   arm is mark-only);
+/// - subrs: recognize-and-drop (leaked statics — not a claim at all).
+///
+/// Arm-internal ordering is mandated (H4/H5): any inspection that can still
+/// send the value to `deferred` runs BEFORE the claim (a claimed-then-
+/// deferred object whose termination trace early-returns on the mark bit
+/// would drop its children), and the TENURED check runs before the parity
+/// claim (tenured ≡ permanently black; the flag froze at promotion, which
+/// only runs world-stopped, so the read is stable on this thread).
 #[inline]
 fn concurrent_try_mark_owned(val: TaggedValue, job: &ConcurrentClaimJob) -> bool {
     if val.is_string() {
@@ -434,6 +466,75 @@ fn concurrent_try_mark_owned(val: TaggedValue, job: &ConcurrentClaimJob) -> bool
             job.parity,
             &job.str_claimed,
         );
+    }
+    if val.is_float() {
+        // CONCURRENT FLOAT CLAIMS (task 01): a float has ZERO Lisp children
+        // (`mark_value`'s float arm is mark-only), so claiming the mark bit
+        // IS the complete trace. Ownership via the same start-handshake
+        // page-base snapshot discipline as strings — no dereference before
+        // the page-base hit proves this is a live float-arena slot.
+        let Some(ptr) = val.as_float_ptr() else {
+            return false; // malformed value — let the termination decide
+        };
+        let base = (ptr as usize) & !(OBJECT_PAGE_ALIGN - 1);
+        if !job.float_page_bases.contains(&base) {
+            // Snapshot MISS: mid-cycle page (born-at-parity anyway), mapped
+            // (pdump) float (marks via the mutator-only side ranges), or a
+            // residual Box float — DEFER, fail-safe.
+            return false;
+        }
+        // TENURED short-circuit BEFORE the claim (H5): tenured ≡ permanently
+        // black, never re-traced/re-swept — "handled, nothing owed" without
+        // touching the frozen mark bit.
+        if unsafe { (*ptr).header.tenured } {
+            return true;
+        }
+        // Young owned page float: claim at THIS cycle's parity. A failed
+        // claim means it is already black (allocate-black or an earlier edge
+        // this cycle) — equally done.
+        if unsafe { (*ptr).header.mark_claim_at(job.parity) } {
+            job.float_claimed.fetch_add(1, Ordering::Relaxed);
+        }
+        return true;
+    }
+    if val.is_veclike() {
+        let Some(ptr) = val.as_veclike_ptr() else {
+            return false; // malformed value — let the termination decide
+        };
+        let addr = ptr as usize;
+        // MAPPED (pdump) veclikes mark via the heap's side table
+        // (`mapped_veclike_objects[..].marked`), which only the mutator may
+        // touch → always DEFER. The range check runs FIRST — before any
+        // header read: every mapped-veclike registration extends the dump
+        // span (`register_mapped_veclike_object`), so span-inside covers
+        // the entire mapped population. Recognizing a mapped subr as
+        // "leaked" (or claiming its header) would leave its side-table mark
+        // unset and panic the tricolor/partition verifiers — the mis-claim
+        // UAF shape.
+        if addr >= job.dump_lo && addr < job.dump_hi {
+            return false;
+        }
+        // SUBR RECOGNIZE-AND-DROP (task 01 — NOT a claim). SubrObjs are
+        // `Box::leak`ed statics (`allocate_static_subr_object`): never
+        // page-allocated, never linked into `all_objects`/
+        // `non_cons_object_addrs`, never swept — permanently live by
+        // construction. The header mark bit of a leaked subr is DEAD STATE
+        // nobody reads: `is_value_marked` answers an unconditional `true`
+        // for not-owned/not-mapped veclikes, and the termination's
+        // `mark_value` is a no-op for them (`owns_veclike_object` false,
+        // mapped-lookup miss). Deferring one is pure parked-buffer waste;
+        // "handled, nothing owed" is exact. We do NOT write the header —
+        // no claim — and a subr has no Lisp children to trace
+        // (`trace_veclike`'s Subr arm is empty; `name`/`sym_id` are interner
+        // ids, not Values; `update_static_subr_object_entry`'s in-place
+        // rewrites touch function/arity metadata only). The `type_tag` read
+        // is construction-immutable, same read discipline as the string
+        // arm's interval word.
+        if unsafe { (*ptr).type_tag } == VecLikeType::Subr {
+            job.subr_dropped.fetch_add(1, Ordering::Relaxed);
+            return true;
+        }
+        return false;
     }
     false
 }
@@ -484,7 +585,7 @@ fn run_concurrent_mark(mut job: ConcurrentMarkJob) {
             if val.is_cons() {
                 let ptr = val.xcons_ptr();
                 let addr = ptr as usize;
-                if addr >= job.dump_lo && addr < job.dump_hi {
+                if addr >= job.claims.dump_lo && addr < job.claims.dump_hi {
                     continue; // dump cons: permanent black, children via remembered set
                 }
                 let base = addr & !(CONS_BLOCK_ALIGN - 1);
@@ -1937,6 +2038,15 @@ pub(crate) struct SweepStats {
     /// (the `kinds.string` bucket keeps counting the strings still parked:
     /// interval-bearing + mapped/dump-span ones). Always populated.
     pub last_concurrent_str_claimed: usize,
+    /// CONCURRENT FLOAT CLAIMS (task 01): owned young page floats the GC
+    /// thread claimed concurrently last cycle (the `kinds.float` bucket keeps
+    /// counting the still-parked ones: snapshot-missed/mapped/Box floats).
+    pub last_concurrent_float_claimed: usize,
+    /// SUBR RECOGNIZE-AND-DROP (task 01): defer-path drops of leaked-static
+    /// subrs last cycle (drop EVENTS — one per discovered edge, not unique
+    /// subrs; the `kinds.subr` bucket keeps counting mapped subrs, which
+    /// still park).
+    pub last_concurrent_subr_dropped: usize,
     /// Cost of the `join_concurrent_mark` fold itself (taking the SATB +
     /// deferred buffers, classifying, pushing to gray) — the cheap half of the
     /// termination; the mark fixpoint that follows is the trace line's `drain`.
@@ -2037,6 +2147,9 @@ pub(crate) struct HandshakeStats {
     /// backing snapshot, and the residual job assembly + thread send.
     pub last_start_conssnap_us: u64,
     pub last_start_vecsnap_us: u64,
+    /// CONCURRENT FLOAT CLAIMS (task 01): float-arena page-base snapshot
+    /// capture — O(pages) only, mirrors `last_start_vecsnap_us`.
+    pub last_start_floatsnap_us: u64,
     pub last_start_jobasm_us: u64,
 
     // --- TERMINATION handshake (once per concurrent cycle) ---
@@ -2389,6 +2502,15 @@ pub struct TaggedHeap {
     /// Strings the GC thread claimed concurrently in the last completed cycle
     /// (diagnostics; the concurrent counterpart of `last_termination_kinds.string`).
     last_concurrent_str_claimed: usize,
+    /// CONCURRENT FLOAT CLAIMS (task 01): shared claim counter for the
+    /// in-flight cycle (see `ConcurrentClaimJob::float_claimed`) + its
+    /// last-completed-cycle fold. Same reset/fold seams as the string pair.
+    concurrent_float_claimed: std::sync::Arc<AtomicUsize>,
+    last_concurrent_float_claimed: usize,
+    /// SUBR RECOGNIZE-AND-DROP (task 01): shared drop counter for the
+    /// in-flight cycle (see `ConcurrentClaimJob::subr_dropped`) + its fold.
+    concurrent_subr_dropped: std::sync::Arc<AtomicUsize>,
+    last_concurrent_subr_dropped: usize,
     /// CONCURRENT STRING MARKING: per-cycle dedup for the ENFORCED in-mutator
     /// string interval SATB barrier (`note_string_interval_preimage`), keyed by
     /// `LispString` address — stable for the whole cycle because nothing is
@@ -2557,6 +2679,10 @@ impl TaggedHeap {
             gc_done: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             concurrent_str_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
             last_concurrent_str_claimed: 0,
+            concurrent_float_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
+            last_concurrent_float_claimed: 0,
+            concurrent_subr_dropped: std::sync::Arc::new(AtomicUsize::new(0)),
+            last_concurrent_subr_dropped: 0,
             satb_string_preimage_addrs: FxHashSet::default(),
             gc_stop: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             gc_wake: std::sync::Arc::new((std::sync::Mutex::new(()), std::sync::Condvar::new())),
@@ -2675,6 +2801,8 @@ impl TaggedHeap {
             last_termination_kinds: self.last_termination_kinds,
             max_termination_kinds: self.max_termination_kinds,
             last_concurrent_str_claimed: self.last_concurrent_str_claimed,
+            last_concurrent_float_claimed: self.last_concurrent_float_claimed,
+            last_concurrent_subr_dropped: self.last_concurrent_subr_dropped,
             last_termination_fold_us: self.last_termination_fold_us,
             termination_count: self.termination_count,
             mark_us: self.sweep_mark_us,
@@ -5517,6 +5645,19 @@ impl TaggedHeap {
         }
         self.handshake.last_start_conssnap_us = conssnap_t0.elapsed().as_micros() as u64;
         self.handshake.probe_cons_blocks = self.cons_blocks.len();
+        // CONCURRENT FLOAT CLAIMS (task 01) claim oracle: capture the float
+        // arena's page bases at this same world-stopped instant (retired
+        // pages included — their tenured floats recognize-and-drop at the
+        // claim arm). Same immutability + Arc-publication argument as
+        // `string_page_bases`; pages created after this point are absent and
+        // their floats DEFER (fail-safe). O(pages); own handshake timer.
+        let floatsnap_t0 = std::time::Instant::now();
+        let mut float_bases =
+            std::collections::HashSet::with_capacity(self.float_arena.pages.len());
+        for page in &self.float_arena.pages {
+            float_bases.insert(page.base_addr());
+        }
+        self.handshake.last_start_floatsnap_us = floatsnap_t0.elapsed().as_micros() as u64;
         let vecsnap_t0 = std::time::Instant::now();
         // Stage 2 Tier B CONCURRENT VECTOR SCAN: snapshot every
         // OWNED/Mapped vector backing AT THIS world-stopped point (same instant the
@@ -5591,8 +5732,10 @@ impl TaggedHeap {
         let (exited_tx, exited_rx) = std::sync::mpsc::channel();
         self.gc_done
             .store(false, std::sync::atomic::Ordering::Release);
-        // Fresh per-cycle concurrent string-claim counter.
+        // Fresh per-cycle concurrent claim/drop counters.
         self.concurrent_str_claimed.store(0, Ordering::Relaxed);
+        self.concurrent_float_claimed.store(0, Ordering::Relaxed);
+        self.concurrent_subr_dropped.store(0, Ordering::Relaxed);
         self.gc_stop
             .store(false, std::sync::atomic::Ordering::Release);
         self.gc_exited = Some(exited_rx);
@@ -5607,10 +5750,13 @@ impl TaggedHeap {
                 // Mandated carry: the GC thread claims at THIS cycle's parity.
                 parity: self.mark_parity,
                 string_page_bases: std::sync::Arc::new(string_bases),
+                float_page_bases: std::sync::Arc::new(float_bases),
+                dump_lo: self.dump_addr_lo,
+                dump_hi: self.dump_addr_hi,
                 str_claimed: self.concurrent_str_claimed.clone(),
+                float_claimed: self.concurrent_float_claimed.clone(),
+                subr_dropped: self.concurrent_subr_dropped.clone(),
             },
-            dump_lo: self.dump_addr_lo,
-            dump_hi: self.dump_addr_hi,
             satb: self.satb_shared.clone(),
             deferred: self.deferred_veclikes.clone(),
             done: self.gc_done.clone(),
@@ -5662,10 +5808,15 @@ impl TaggedHeap {
         let deferred = std::mem::take(&mut *self.deferred_veclikes.lock().unwrap());
         self.last_termination_deferred = deferred.len();
         self.max_termination_deferred = self.max_termination_deferred.max(deferred.len());
-        // Strings the GC thread claimed concurrently (they never reached
-        // `deferred`); the exit handshake above (`rx.recv()`) established the
-        // happens-before, so a Relaxed read sees the final count.
+        // Strings/floats the GC thread claimed concurrently and subrs it
+        // dropped (they never reached `deferred`); the exit handshake above
+        // (`rx.recv()`) established the happens-before, so a Relaxed read
+        // sees the final counts.
         self.last_concurrent_str_claimed = self.concurrent_str_claimed.load(Ordering::Relaxed);
+        self.last_concurrent_float_claimed =
+            self.concurrent_float_claimed.load(Ordering::Relaxed);
+        self.last_concurrent_subr_dropped =
+            self.concurrent_subr_dropped.load(Ordering::Relaxed);
         // Classify what the drain is about to trace, per kind — the measurement
         // that decides which kinds a concurrent-tracing extension should take
         // on. Pure counting (marking behavior is unchanged), but the header
@@ -7635,12 +7786,14 @@ mod ownership_tests {
         let mut heap = TaggedHeap::new();
         set_tagged_heap(&mut heap);
 
-        // A rooted cons spine carrying non-cons cars: the GC thread marks the
-        // owned conses but parks every non-cons in `deferred`, so the
-        // termination drain size is deterministically >= the car count.
+        // A rooted cons spine carrying non-cons cars the claim dispatcher
+        // REFUSES (records — floats/strings are claimed concurrently since
+        // task 01 and never park): the GC thread marks the owned conses but
+        // parks every record in `deferred`, so the termination drain size is
+        // deterministically >= the car count.
         let mut list = TaggedValue::fixnum(0);
         for i in 0..1_000 {
-            let car = heap.alloc_float(i as f64);
+            let car = heap.alloc_record(vec![TaggedValue::fixnum(i)]);
             list = heap.alloc_cons(car, list);
         }
         let root = list;
@@ -7671,7 +7824,7 @@ mod ownership_tests {
         heap.incremental_finish(bytes_before, std::time::Instant::now());
         heap.finish_incremental_sweep_now();
         assert!(!heap.sweep_in_progress());
-        assert_eq!(heap.sweep_stats().noncons_freed, 0, "all floats are live");
+        assert_eq!(heap.sweep_stats().noncons_freed, 0, "all records are live");
     }
 
     /// Handshake instrumentation (root-scan floor probe): a concurrent cycle
@@ -7839,7 +7992,19 @@ mod ownership_tests {
             "lambdas + macros share the closure bucket (clo={})",
             kinds.closure,
         );
-        assert!(kinds.float >= N_FLT, "floats parked (f={})", kinds.float);
+        // Task 01: owned young page floats are claimed on the GC thread
+        // (zero children), so the float bucket collapses and the claim
+        // counter carries the count instead.
+        assert!(
+            stats.last_concurrent_float_claimed >= N_FLT,
+            "page floats are claimed concurrently, not parked (claimed={})",
+            stats.last_concurrent_float_claimed,
+        );
+        assert_eq!(
+            kinds.float, 0,
+            "no float may remain parked on a bare page-only heap (f={})",
+            kinds.float,
+        );
         assert!(
             kinds.hash_table >= N_HT,
             "hash tables parked (ht={})",
@@ -8208,6 +8373,151 @@ mod ownership_tests {
             unsafe { (*c.xcons_ptr()).load_car() }.0,
             TaggedValue::fixnum(7).0,
         );
+
+        // Free the fake image object after the heap is gone.
+        drop(heap);
+        let _ = unsafe { Box::from_raw(mapped) };
+    }
+
+    /// Build a leaked-static `SubrObj` exactly like the production
+    /// constructor (`allocate_static_subr_object` `Box::leak`s and never
+    /// registers with any heap list), returning the veclike value + raw ptr.
+    fn leaked_test_subr() -> (TaggedValue, *mut crate::tagged::header::SubrObj) {
+        let obj = Box::new(crate::tagged::header::SubrObj {
+            header: VecLikeHeader::new(VecLikeType::Subr),
+            sym_id: crate::emacs_core::intern::SymId(1),
+            name: crate::emacs_core::intern::NameId(1),
+            min_args: 1,
+            max_args: Some(2),
+            dispatch_kind: crate::tagged::header::SubrDispatchKind::Builtin,
+            function: None,
+        });
+        let ptr = Box::into_raw(obj);
+        let val = unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) };
+        (val, ptr)
+    }
+
+    /// Task 01 SUBR RECOGNIZE-AND-DROP: a leaked-static subr (the only
+    /// non-mapped subr population — `allocate_static_subr_object`
+    /// `Box::leak`s and never links) discovered by the GC thread is DROPPED
+    /// from the defer path: the subr bucket collapses to zero, the drop
+    /// counter records it, and its header — dead state nobody reads — is
+    /// never written. The subr stays permanently live with its payload
+    /// intact (`is_value_marked` unconditionally true for
+    /// not-owned/not-mapped).
+    #[test]
+    fn concurrent_leaked_subr_dropped_from_defer_path() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let (subr_val, subr_ptr) = leaked_test_subr();
+        let root = heap.alloc_cons(subr_val, TaggedValue::fixnum(0));
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+
+        let stats = heap.sweep_stats();
+        assert_eq!(
+            stats.last_termination_kinds.subr, 0,
+            "a leaked subr must no longer park in `deferred` (sub={})",
+            stats.last_termination_kinds.subr,
+        );
+        assert!(
+            stats.last_concurrent_subr_dropped >= 1,
+            "the drop must be counted (got {})",
+            stats.last_concurrent_subr_dropped,
+        );
+        // Dead-state header: the raw bit is still the constructor's `false`
+        // (a drop is NOT a claim).
+        assert!(unsafe { !(*subr_ptr).header.gc.is_marked() });
+        assert!(
+            heap.is_value_marked(subr_val),
+            "not-owned/not-mapped values answer unconditionally live",
+        );
+
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(root);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+
+        // Subr payload intact after the full cycle (permanently live; the
+        // sweep never visits it).
+        unsafe {
+            assert_eq!((*subr_ptr).min_args, 1);
+            assert_eq!((*subr_ptr).max_args, Some(2));
+            assert_eq!((*subr_ptr).header.type_tag, VecLikeType::Subr);
+        }
+        // Leaked on purpose, like production subrs (freeing it would U-A-F
+        // the canonical registry pattern this mirrors).
+    }
+
+    /// Task 01 MAPPED-SUBR CLASSIFICATION (regression guard for the mis-drop
+    /// UAF): with the partition span covering a registered mapped subr, the
+    /// GC thread must DEFER it — the dump-span range check runs BEFORE the
+    /// leaked-static recognition, because a mapped subr's mark lives in the
+    /// `mapped_veclike_objects` side table that only the mutator's
+    /// termination may write. The termination must mark it there, and the
+    /// armed partition/tricolor verifiers must pass.
+    #[test]
+    fn concurrent_mapped_subr_still_deferred_and_side_table_marked() {
+        crate::test_utils::init_test_tracing();
+        unsafe { std::env::set_var("NEOVM_GC_VERIFY_PARTITION", "1") };
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // Fake-mapped subr: registered exactly like the pdump loader
+        // registers image veclikes (extends the dump span over it).
+        let (subr_val, mapped) = leaked_test_subr();
+        unsafe {
+            heap.register_mapped_veclike_object(
+                mapped as *mut VecLikeHeader,
+                std::mem::size_of::<crate::tagged::header::SubrObj>(),
+            )
+        };
+        let root = heap.alloc_cons(subr_val, TaggedValue::fixnum(0));
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+
+        let stats = heap.sweep_stats();
+        assert!(
+            stats.last_termination_kinds.subr >= 1,
+            "the mapped subr must be parked, not dropped (sub={})",
+            stats.last_termination_kinds.subr,
+        );
+        assert_eq!(
+            stats.last_concurrent_subr_dropped, 0,
+            "nothing here is a leaked static",
+        );
+        assert!(
+            unsafe { !(*mapped).header.gc.is_marked() },
+            "a mapped subr's GcHeader bit must never be written by the GC \
+             thread (mapped marks live in the side table)",
+        );
+
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(root);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+
+        // The termination marked it via the mapped side table.
+        let idx = heap.mapped_veclike_index_by_addr[&(mapped as usize)];
+        assert!(heap.mapped_veclike_objects[idx].marked);
 
         // Free the fake image object after the heap is gone.
         drop(heap);
@@ -9693,11 +10003,15 @@ mod float_arena_tests {
         parity_two_cycle_float_survival_and_reclaim_body(true);
     }
 
-    /// (c) Floats parked in `deferred` by the GC thread during a concurrent
-    /// mark resolve correctly at the STW termination: every rooted float is
-    /// parked (the GC thread never marks floats), then marked by the
-    /// termination drain's `mark_value` via the owned (addr-set) arm — and a
-    /// garbage float is NOT retained by that machinery.
+    /// (c) Task 01 CONCURRENT FLOAT CLAIMS: every rooted young page float
+    /// discovered during a concurrent mark is CLAIMED on the GC thread
+    /// (page-snapshot hit + `mark_claim_at`; zero children so the claim is
+    /// the whole trace), never parked — the float bucket collapses to zero
+    /// and the claim counter carries the count. Claimed floats survive the
+    /// sweep with their payloads intact; a garbage float is still collected
+    /// (claims only mark what the marker discovers — the garbage float has
+    /// no inbound edge, stays white, and the deferred sweep frees it within
+    /// this same cycle).
     fn deferred_floats_resolve_at_termination_body(verify: bool) {
         crate::test_utils::init_test_tracing();
         let mut heap = TaggedHeap::new();
@@ -9735,11 +10049,22 @@ mod float_arena_tests {
         heap.join_concurrent_mark();
         let stats = heap.sweep_stats();
         assert!(
-            stats.last_termination_kinds.float >= 500,
-            "every rooted float must reach the termination via `deferred` \
-             (got {})",
+            stats.last_concurrent_float_claimed >= 500,
+            "every rooted page float must be claimed on the GC thread \
+             (claimed={})",
+            stats.last_concurrent_float_claimed,
+        );
+        assert_eq!(
+            stats.last_termination_kinds.float, 0,
+            "no float may be parked once the claim arm is live (f={})",
             stats.last_termination_kinds.float,
         );
+        // Claimed ≡ black at THIS cycle's parity (spot-check one header).
+        assert!(unsafe {
+            (*(float_vals[0].as_float_ptr().unwrap()))
+                .header
+                .is_marked_at(heap.mark_parity)
+        });
         heap.reseed_runtime_and_remembered_roots();
         heap.seed_root(spine);
         heap.seed_root(list);
@@ -9763,13 +10088,137 @@ mod float_arena_tests {
     }
 
     #[test]
-    fn deferred_floats_resolve_at_termination() {
+    fn concurrent_floats_claimed_and_garbage_freed() {
         deferred_floats_resolve_at_termination_body(false);
     }
 
     #[test]
-    fn deferred_floats_resolve_at_termination_verified() {
+    fn concurrent_floats_claimed_and_garbage_freed_verified() {
         deferred_floats_resolve_at_termination_body(true);
+    }
+
+    /// Task 01 H2 (snapshot-miss direction, deterministic unit test of the
+    /// dispatcher arm): a float living in a page created AFTER the
+    /// start-handshake snapshot must DEFER (miss ⇒ defer, never "miss ⇒
+    /// mapped" — the mid-cycle-float population), and a deferred float must
+    /// not bump the claim counter; a snapshot-page float claims at the job
+    /// parity. Drives `concurrent_try_mark_owned` directly with a hand-built
+    /// `ConcurrentClaimJob` so the page-boundary race is not left to timing.
+    #[test]
+    fn concurrent_claim_arm_defers_mid_cycle_float_pages() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // F_OLD lives in a page that exists at the "snapshot" instant.
+        let f_old = heap.alloc_float(1.0);
+        let snap: std::collections::HashSet<usize> = heap
+            .float_arena
+            .pages
+            .iter()
+            .map(|p| p.base_addr())
+            .collect();
+        // Allocate until the arena opens a NEW page; the last allocation is
+        // the one that triggered it, so it lives in the post-snapshot page.
+        let pages_before = heap.float_arena.pages.len();
+        let mut f_new = f_old;
+        while heap.float_arena.pages.len() == pages_before {
+            f_new = heap.alloc_float(2.0);
+        }
+        let new_base =
+            (f_new.as_float_ptr().unwrap() as usize) & !(OBJECT_PAGE_ALIGN - 1);
+        assert!(
+            !snap.contains(&new_base),
+            "the defer probe must live in a post-snapshot page",
+        );
+
+        // Hand-built claim job. Both floats were born at the CURRENT heap
+        // parity; a real cycle flips parity at `begin_collection` before
+        // launching, so claim at the flipped value exactly like the job
+        // a launch would carry.
+        let job = ConcurrentClaimJob {
+            parity: !heap.mark_parity,
+            string_page_bases: std::sync::Arc::new(std::collections::HashSet::new()),
+            float_page_bases: std::sync::Arc::new(snap),
+            dump_lo: usize::MAX,
+            dump_hi: 0,
+            str_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
+            float_claimed: std::sync::Arc::new(AtomicUsize::new(0)),
+            subr_dropped: std::sync::Arc::new(AtomicUsize::new(0)),
+        };
+        assert!(
+            concurrent_try_mark_owned(f_old, &job),
+            "snapshot-page float must be handled (claimed)",
+        );
+        assert_eq!(job.float_claimed.load(Ordering::Relaxed), 1);
+        assert!(unsafe {
+            (*f_old.as_float_ptr().unwrap())
+                .header
+                .is_marked_at(!heap.mark_parity)
+        });
+        assert!(
+            !concurrent_try_mark_owned(f_new, &job),
+            "post-snapshot-page float must DEFER",
+        );
+        assert_eq!(
+            job.float_claimed.load(Ordering::Relaxed),
+            1,
+            "a deferred float must not bump the claim counter",
+        );
+        // The deferred float's header was never touched: still born-at-the-
+        // OLD-parity (i.e. unmarked at the job parity).
+        assert!(unsafe {
+            !(*f_new.as_float_ptr().unwrap())
+                .header
+                .is_marked_at(!heap.mark_parity)
+        });
+    }
+
+    /// Task 01 H5 (tenured short-circuit): a TENURED page float discovered
+    /// by the GC thread is recognize-and-DROPPED — handled without a parity
+    /// claim (counter stays zero), never parked (float bucket zero), and its
+    /// FROZEN mark bit is not scribbled. Runs with the partition + verifiers
+    /// armed; the first STW cycle performs the one-shot promotion.
+    #[test]
+    fn concurrent_tenured_float_dropped_not_claimed() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        arm_verify(&mut heap);
+
+        // F is alive across the FIRST partitioned cycle, so the promotion
+        // page walk tenures it (page slots of survivors freeze).
+        let f = heap.alloc_float(3.25);
+        let root = heap.alloc_cons(f, TaggedValue::fixnum(0));
+        heap.collect_exact(std::iter::once(root));
+        let f_ptr = f.as_float_ptr().unwrap();
+        assert!(
+            unsafe { (*f_ptr).header.tenured },
+            "the first partitioned cycle must promote the surviving float",
+        );
+        let frozen_bit = unsafe { (*f_ptr).header.is_marked() };
+
+        // One full concurrent cycle with F reachable via the rooted cons:
+        // the GC thread discovers F, page-hits (retired/tenured pages stay
+        // in the snapshot), sees `tenured`, and drops it.
+        run_concurrent_cycle(&mut heap, &[root]);
+        let stats = heap.sweep_stats();
+        assert_eq!(
+            stats.last_concurrent_float_claimed, 0,
+            "tenured floats are dropped, not claimed",
+        );
+        assert_eq!(
+            stats.last_termination_kinds.float, 0,
+            "tenured floats are dropped, not parked",
+        );
+        assert_eq!(
+            unsafe { (*f_ptr).header.is_marked() },
+            frozen_bit,
+            "the frozen tenured mark bit must not be scribbled",
+        );
+        assert!(unsafe { (*f_ptr).header.tenured });
+        assert!((f.xfloat() - 3.25).abs() < f64::EPSILON);
+        heap.assert_object_arenas_coherent();
     }
 
     /// (d) Teardown: dropping the heap frees every float page exactly once
