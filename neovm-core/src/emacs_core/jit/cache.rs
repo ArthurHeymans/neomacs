@@ -154,6 +154,45 @@ pub(crate) fn inline_dependent_count_for_test(sym: SymId) -> usize {
     INLINE_DEPS.with(|m| m.borrow().get(&sym).map_or(0, |s| s.len()))
 }
 
+/// R2 increment C (AOT PGO persistence): the `compiled_id`s of the PROVEN-HOT JIT
+/// leaves the AOT tier did NOT already provide — every `COMPILED` entry that is
+/// `Compiled` (not `NotCompilable`) AND NOT [`CompiledLeaf::is_aot_backed`]. This is
+/// exactly the set the shutdown drain persists to `NEOVM_AOT_DIR` (∩ the obarray's
+/// required-only bytecode fns) so next session serves them native from call 1.
+/// Reads the thread-local `COMPILED`, so it MUST run on the eval thread that owns
+/// the cache.
+pub(crate) fn jit_compiled_ids() -> HashSet<u64> {
+    COMPILED.with(|c| {
+        c.borrow()
+            .iter()
+            .filter_map(|(&id, e)| match e {
+                CacheEntry::Compiled(leaf) if !leaf.is_aot_backed() => Some(id),
+                _ => None,
+            })
+            .collect()
+    })
+}
+
+/// Selftest seam (AOT-PGO drain): JIT-compile `func` and cache it as a `Compiled`
+/// leaf WITHOUT the AOT consult [`try_run_compiled`] performs — so the drain
+/// self-test can stage a proven-hot JIT leaf WITHOUT the `try_load_leaf` →
+/// `load_unit` call that would freeze the process-wide AOT unit index (a OnceLock)
+/// BEFORE the drain writes its `.so`. Returns the leaf's `compiled_id`, or `None`
+/// if the body is not JIT-compilable. Non-`cfg(test)` (integration self-tests
+/// compile the lib with `cfg(test)` FALSE), mirroring [`cached_leaf_is_aot_for_func`].
+pub(crate) fn compile_and_cache_jit_leaf(
+    func: &ByteCodeFunction,
+    obarray: Option<&Obarray>,
+) -> Option<u64> {
+    let id = func.runtime.compiled_id_or_assign();
+    let entry = compile_cache_entry(id, func, obarray);
+    let compiled = matches!(entry, CacheEntry::Compiled(_));
+    COMPILED.with(|c| {
+        c.borrow_mut().insert(id, entry);
+    });
+    compiled.then_some(id)
+}
+
 /// Collect, as GC roots, the heap-object constants every currently-cached compiled
 /// leaf loads through its reloc vector (R1a). Generated code holds NO heap-pointer
 /// immediate — only an index into the leaf's `reloc_data` — so without this a

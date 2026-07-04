@@ -333,6 +333,16 @@ impl Runtime {
         }
     }
 
+    /// This function's compiled-cache id if one was ALREADY assigned (it has been
+    /// compiled/hot), else `None` — WITHOUT assigning a fresh one. The AOT-PGO drain
+    /// uses this to intersect the obarray walk with the hot set without minting ids
+    /// for the many never-compiled bound functions it walks past.
+    #[inline]
+    pub fn compiled_id(&self) -> Option<u64> {
+        let cur = self.compiled_id.load(Ordering::Acquire);
+        (cur != 0).then_some(cur)
+    }
+
     /// True once this function has crossed the tier-up threshold.
     #[inline]
     pub fn is_hot(&self) -> bool {

@@ -3119,6 +3119,198 @@ pub fn testkit_pgo_roundtrip_selftest(dir: &std::path::Path) -> Result<(), Strin
     Ok(())
 }
 
+/// R2 increment C — the DRAIN round-trip self-test: stage a proven-hot JIT pred
+/// leaf, run the REAL [`drain_aot_pgo`] (env-gated on `NEOVM_AOT_PGO` +
+/// `NEOVM_AOT_DIR`), and prove the persisted `.so` (i) lands under the correct
+/// unit-index name, (ii) is NOT re-emitted on a second drain (the `.exists()` skip),
+/// and (iii) serves a FRESH-obarray session AOT-backed + pred-FAST-from-call-1 +
+/// result == interp.
+///
+/// The hot leaf is staged via `cache::compile_and_cache_jit_leaf` (NOT
+/// `try_run_compiled`) so the drain runs BEFORE the process's first `load_unit`
+/// freezes the OnceLock unit index — then the fresh-session `try_run_compiled` in
+/// PASS 2 is that first `load_unit`, freezing the index WITH the drained `.so`
+/// present. Invoked from `tests/aot_pgo.rs` (shim-exporting `-rdynamic` binary).
+#[doc(hidden)]
+#[cfg(target_os = "linux")]
+pub fn testkit_pgo_drain_selftest(dir: &std::path::Path) -> Result<(), String> {
+    use super::compile::SUBR_SPEC_FAST_COUNT;
+    use crate::emacs_core::bytecode::{ByteCodeFunction, Vm};
+    use crate::emacs_core::eval::Context;
+    use crate::emacs_core::intern::{SymId, intern};
+    use crate::emacs_core::value::LambdaParams;
+    use std::sync::atomic::Ordering;
+
+    if !aot_enabled() {
+        return Err("NEOVM_AOT not enabled".into());
+    }
+    if !aot_pgo_enabled() {
+        return Err("NEOVM_AOT_PGO not enabled".into());
+    }
+
+    let alias = |ev: &mut Context, alias_name: &str, builtin_name: &str| -> Result<(), String> {
+        let f = ev
+            .obarray
+            .symbol_function_id(intern(builtin_name))
+            .ok_or_else(|| format!("builtin '{builtin_name}' unbound"))?;
+        ev.obarray.set_symbol_function(alias_name, f);
+        Ok(())
+    };
+    let mk_fn = |callee: &str| -> ByteCodeFunction {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![Op::Constant(0), Op::StackRef(1), Op::Call(1), Op::Return];
+        f.constants = vec![Value::symbol(intern(callee))];
+        f.max_stack = 16;
+        f
+    };
+
+    // ---- PASS 1 — stage a hot JIT pred leaf in ctx1, then DRAIN. ----
+    let mut c1 = Context::new();
+    alias(&mut c1, "pgo-drain-callee", "recordp")?;
+    // Bind the fn under an interned name so the drain's obarray WALK finds it, and
+    // retrieve the heap `bc` the walk will use (same identity → same compiled_id).
+    c1.obarray
+        .set_symbol_function("pgo-drain-fn", Value::make_bytecode(mk_fn("pgo-drain-callee")));
+    let bc = c1
+        .obarray
+        .symbol_function_id(intern("pgo-drain-fn"))
+        .and_then(|v| v.get_bytecode_data())
+        .ok_or("pgo-drain-fn not bound to bytecode")?;
+    super::cache::compile_and_cache_jit_leaf(bc, Some(&c1.obarray))
+        .ok_or("staging: hot leaf did not JIT-compile")?;
+    if super::cache::cached_leaf_is_aot_for_func(bc) != Some(false) {
+        return Err("staging: leaf must be JIT-backed (not AOT) before drain".into());
+    }
+
+    let n = drain_aot_pgo(&c1);
+    if n != 1 {
+        return Err(format!("drain emitted {n} .so(s), expected 1"));
+    }
+    // Correct unit-index name.
+    let hash = leaf_content_hash(&bc.ops, &bc.constants, 1).ok_or("content hash None")?;
+    let expected = dir.join(format!("{hash:032x}_{ABI_TAG:08x}.so"));
+    if !expected.exists() {
+        return Err(format!("drained .so not at expected name {}", expected.display()));
+    }
+    // Second drain is a NO-OP (the `.exists()` skip): no duplicate `cc` spawn.
+    let n2 = drain_aot_pgo(&c1);
+    if n2 != 0 {
+        return Err(format!("second drain emitted {n2}, expected 0 (.exists() skip)"));
+    }
+
+    // ---- PASS 2 — a FRESH session serves the drained `.so` AOT + FAST-from-call-1. ----
+    super::cache::clear();
+    let mut c2 = Context::new();
+    alias(&mut c2, "pgo-drain-callee", "recordp")?;
+    let g = mk_fn("pgo-drain-callee");
+    let g_val = Value::make_bytecode(g.clone());
+    let ctx2 = &mut c2 as *mut Context;
+    let args = vec![Value::make_int(5)];
+
+    let fast0 = SUBR_SPEC_FAST_COUNT.load(Ordering::Relaxed);
+    let aot = super::cache::try_run_compiled(ctx2, &g, g_val, &args)
+        .map_err(|_| "pgo-drain: aot run raised".to_string())?
+        .ok_or("pgo-drain: aot run None (drained .so did not serve?)")?;
+    if super::cache::cached_leaf_is_aot_for_func(&g) != Some(true) {
+        return Err("pgo-drain: not served AOT-backed next session".into());
+    }
+    let fast1 = SUBR_SPEC_FAST_COUNT.load(Ordering::Relaxed);
+    if fast1 <= fast0 {
+        return Err(format!(
+            "pgo-drain: pred FAST shim did not fire from call 1; fast {fast0}->{fast1}"
+        ));
+    }
+    let interp = {
+        let h = mk_fn("pgo-drain-callee");
+        let mut vm = Vm::from_context(&mut c2);
+        vm.execute(&h, args.clone())
+            .map_err(|_| "pgo-drain: interp raised".to_string())?
+    };
+    if !crate::emacs_core::value::equal_value(&Value::from_bits(aot), &interp, 0) {
+        return Err(format!(
+            "pgo-drain: AOT {:?} != interp {:?}",
+            Value::from_bits(aot),
+            interp
+        ));
+    }
+    super::cache::clear();
+    Ok(())
+}
+
+/// R2 increment C — DEFAULT-OFF proof: with `NEOVM_AOT_PGO` UNSET, [`drain_aot_pgo`]
+/// writes NOTHING even though a hot JIT leaf is staged AND `NEOVM_AOT_DIR` is set —
+/// no surprise cache files in the default config. Invoked from `tests/aot_pgo.rs`
+/// in a process that deliberately does NOT set `NEOVM_AOT_PGO`.
+#[doc(hidden)]
+#[cfg(target_os = "linux")]
+pub fn testkit_pgo_default_off_selftest(dir: &std::path::Path) -> Result<(), String> {
+    use crate::emacs_core::eval::Context;
+
+    if aot_pgo_enabled() {
+        return Err("NEOVM_AOT_PGO must be UNSET for the default-off proof".into());
+    }
+
+    let mut c1 = Context::new();
+    let f = ev_alias_and_build(&mut c1)?;
+    super::cache::compile_and_cache_jit_leaf(f, Some(&c1.obarray))
+        .ok_or("staging: hot leaf did not JIT-compile")?;
+    // There IS a drainable hot leaf — so a no-op below is the GATE, not an empty set.
+    if super::cache::jit_compiled_ids().is_empty() {
+        return Err("staging: no hot leaf in the JIT set".into());
+    }
+
+    let n = drain_aot_pgo(&c1);
+    if n != 0 {
+        return Err(format!("default-off drain emitted {n} .so(s), expected 0"));
+    }
+    let so_files = std::fs::read_dir(dir)
+        .map_err(|e| format!("read_dir: {e}"))?
+        .flatten()
+        .filter(|e| e.path().extension().is_some_and(|x| x == "so"))
+        .count();
+    if so_files != 0 {
+        return Err(format!("default-off left {so_files} .so file(s) in the dir"));
+    }
+    super::cache::clear();
+    Ok(())
+}
+
+/// Shared setup for the default-off self-test: alias a callee to `recordp` and bind
+/// an interned `(callee x)` pred fn, returning the heap `bc` the drain walk sees.
+#[cfg(target_os = "linux")]
+fn ev_alias_and_build(
+    c: &mut crate::emacs_core::eval::Context,
+) -> Result<&'static crate::emacs_core::bytecode::ByteCodeFunction, String> {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::intern::{SymId, intern};
+    use crate::emacs_core::value::LambdaParams;
+    let cell = c
+        .obarray
+        .symbol_function_id(intern("recordp"))
+        .ok_or("builtin 'recordp' unbound")?;
+    c.obarray.set_symbol_function("pgo-off-callee", cell);
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: vec![SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    f.ops = vec![Op::Constant(0), Op::StackRef(1), Op::Call(1), Op::Return];
+    f.constants = vec![Value::symbol(intern("pgo-off-callee"))];
+    f.max_stack = 16;
+    c.obarray
+        .set_symbol_function("pgo-off-fn", Value::make_bytecode(f));
+    c.obarray
+        .symbol_function_id(intern("pgo-off-fn"))
+        .and_then(|v| v.get_bytecode_data())
+        .ok_or_else(|| "pgo-off-fn not bound to bytecode".to_string())
+}
+
 /// One AOT compilation unit's on-disk location, keyed by content hash.
 type UnitIndex = std::collections::HashMap<u128, std::path::PathBuf>;
 
@@ -3360,6 +3552,22 @@ pub(crate) fn aot_enabled() -> bool {
     *ENABLED.get_or_init(|| {
         matches!(
             std::env::var("NEOVM_AOT").as_deref(),
+            Ok("force") | Ok("1") | Ok("on")
+        )
+    })
+}
+
+/// R2 increment C: whether the AOT-PGO shutdown DRAIN is enabled this session
+/// (`NEOVM_AOT_PGO`). Mirrors [`aot_enabled`]. OFF by default — the drain is a
+/// no-op (no surprise cache files) unless explicitly opted in. Persisting the
+/// drained `.so`s ALSO requires `NEOVM_AOT_DIR` (the drain's write target + the
+/// only place the loader reads next session) and `NEOVM_AOT` set NEXT session to
+/// serve them.
+pub(crate) fn aot_pgo_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| {
+        matches!(
+            std::env::var("NEOVM_AOT_PGO").as_deref(),
             Ok("force") | Ok("1") | Ok("on")
         )
     })
@@ -3741,6 +3949,176 @@ pub fn prepopulate_aot_from_preload(
         stats.loaded - stats.inserted,
     );
     stats
+}
+
+// ---------------------------------------------------------------------------
+// R2 increment C: PGO PERSISTENCE — drain proven-hot JIT leaves to NEOVM_AOT_DIR
+// at shutdown so the NEXT session serves them native + speculative from call 1.
+// EMIT-SIDE + shutdown-only: the load path (try_load_leaf → unit_index) already
+// serves runtime-placed `.so`s (increments A + B2); C only WRITES them.
+// ---------------------------------------------------------------------------
+
+/// Hard cap on the number of `.so`s the shutdown drain emits in one session — the
+/// shutdown-budget lever (hazard 4). Each emit spawns a `cc -shared` subprocess, so
+/// an unbounded drain would regress shutdown latency. 128 covers the hottest tail a
+/// session realistically JITs beyond the dump-time preload; the `.exists()` skip
+/// means successive sessions CONVERGE on the full hot set (each drains a fresh
+/// slice, hottest-first, of what is not yet persisted).
+pub(crate) const PGO_DRAIN_CAP: usize = 128;
+
+/// Monotonic counter for unique temp names in [`pgo_atomic_place`] (composed with
+/// pid + nanos), so concurrent drainers writing the same dir never collide on the
+/// intermediate artifact before the atomic rename.
+static PGO_TEMP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// The FINAL on-disk path of a drained leaf `.so`, in the unit-index naming the
+/// loader indexes: `{hash:032x}_{tag:08x}.so` (same convention as [`unit_index`]).
+fn pgo_final_path(dir: &std::path::Path, content_hash: u128) -> std::path::PathBuf {
+    dir.join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"))
+}
+
+/// ATOMIC place: link `obj_bytes` into a UNIQUE temp `.so` in `dir` then `fs::rename`
+/// it onto its final unit-index name. The rename is atomic on a single filesystem, so
+/// a concurrent next-session loader (or a crash mid-drain) NEVER observes a torn /
+/// partial `.so` under the indexed name — it sees either no file or the complete new
+/// one. The temp `.so` (and `cc`'s own derived temp `.o`) carry pid + a monotonic
+/// counter + nanos, so parallel drainers into a shared dir don't clobber each other's
+/// intermediates; the `.tmp` extension also keeps them out of the loader's
+/// `_<tag>.so` index until the rename lands.
+fn pgo_atomic_place(
+    obj_bytes: &[u8],
+    dir: &std::path::Path,
+    content_hash: u128,
+) -> Result<std::path::PathBuf, CompileError> {
+    use std::sync::atomic::Ordering;
+    let final_path = pgo_final_path(dir, content_hash);
+    let pid = std::process::id();
+    let ctr = PGO_TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let tmp_path = dir.join(format!(
+        "{content_hash:032x}_{ABI_TAG:08x}.{pid}.{ctr}_{nanos}.tmp"
+    ));
+    link_object_to_so(obj_bytes, &tmp_path)?;
+    std::fs::rename(&tmp_path, &final_path).map_err(|e| {
+        // Best-effort cleanup so a failed drain leaves no dangling temp.
+        let _ = std::fs::remove_file(&tmp_path);
+        module_init_err(format!(
+            "pgo atomic rename → {}: {e}",
+            final_path.display()
+        ))
+    })?;
+    Ok(final_path)
+}
+
+/// R2 increment C — the shutdown DRAIN entry point. A NO-OP unless BOTH
+/// [`aot_pgo_enabled`] (`NEOVM_AOT_PGO`) AND `NEOVM_AOT_DIR` are set (so the default
+/// config writes NOTHING — no surprise cache files). Persists this session's
+/// proven-hot-but-not-yet-AOT JIT leaves so the NEXT session serves them native +
+/// speculative from call 1. Returns the number of `.so`s emitted (0 when
+/// disabled/no-op). MUST run on the eval thread (reads the thread-local `COMPILED`).
+pub fn drain_aot_pgo(ctx: &crate::emacs_core::eval::Context) -> usize {
+    if !aot_pgo_enabled() {
+        return 0;
+    }
+    let Some(dir) = std::env::var_os("NEOVM_AOT_DIR") else {
+        return 0;
+    };
+    drain_aot_pgo_to_dir(ctx, std::path::Path::new(&dir), PGO_DRAIN_CAP)
+}
+
+/// The testable core of [`drain_aot_pgo`] with an explicit target `dir` + `cap` (so
+/// a test drives it without env / OnceLock races). Walks `ctx`'s obarray for the
+/// SAME required-only interned-bytecode candidate set the dump-time producer + the
+/// prepopulate pass use (mirror of [`prepopulate_aot_from_preload`]), INTERSECTS it
+/// with the proven-hot JIT set ([`super::cache::jit_compiled_ids`] —
+/// `Compiled && !is_aot_backed`), and emits at most `cap` `.so`s HOTTEST-FIRST via
+/// the UNIFIED producer [`compile_leaf_to_object`] with the LIVE obarray — the SAME
+/// call the loader's `live_reloc_for_emit_tier` mirrors, so a drained leaf loads +
+/// arms IDENTICALLY next session (never `None` obarray → the spec-baking tier fires,
+/// the whole point of C). FAIL-CLOSED: an already-present `.so` (`.exists()`), an
+/// unhashable / non-canonical body, an `Ok(None)` (outside the AOT subset), or any
+/// emit / place error is SKIPPED, never fatal. `cap` bounds `cc` spawns (the
+/// shutdown-budget lever); the `.exists()` skip makes successive sessions converge.
+pub(crate) fn drain_aot_pgo_to_dir(
+    ctx: &crate::emacs_core::eval::Context,
+    dir: &std::path::Path,
+    cap: usize,
+) -> usize {
+    if cap == 0 {
+        return 0;
+    }
+    let hot = super::cache::jit_compiled_ids();
+    if hot.is_empty() {
+        return 0;
+    }
+    // Collect the hot ∩ required-only-bytecode candidates with their heat, to emit
+    // HOTTEST-FIRST under `cap`. Bodies are borrowed `'static` from the heap
+    // (`get_bytecode_data`), so holding refs across the sort is sound.
+    let mut cands: Vec<(u32, u128, &'static crate::emacs_core::bytecode::ByteCodeFunction, usize)> =
+        Vec::new();
+    for (_name_id, func_val) in ctx.obarray.interned_function_cells_with_names() {
+        if !func_val.is_bytecode() {
+            continue;
+        }
+        let Some(bc) = func_val.get_bytecode_data() else {
+            continue;
+        };
+        // Required-only (matches the producer's enumerate + the MIR pure tier).
+        if !bc.params.optional.is_empty() || bc.params.rest.is_some() {
+            continue;
+        }
+        // Hot ∩: only leaves this session PROVED hot AND the AOT tier did not already
+        // serve. A peek (no id assignment for the never-compiled walked-past majority).
+        let Some(id) = bc.runtime.compiled_id() else {
+            continue;
+        };
+        if !hot.contains(&id) {
+            continue;
+        }
+        let arity = bc.params.required.len();
+        let Some(content_hash) = leaf_content_hash(&bc.ops, &bc.constants, arity) else {
+            continue; // non-canonical / non-recipe-able → skip (fail-closed).
+        };
+        cands.push((bc.runtime.heat(), content_hash, bc, arity));
+    }
+    // Hottest first (stable within equal heat = obarray order).
+    cands.sort_by(|a, b| b.0.cmp(&a.0));
+
+    let mut emitted = 0usize;
+    for (_heat, content_hash, bc, arity) in cands {
+        if emitted >= cap {
+            break;
+        }
+        // Already persisted (this or a prior session) → skip WITHOUT a `cc` spawn.
+        if pgo_final_path(dir, content_hash).exists() {
+            continue;
+        }
+        match compile_leaf_to_object(&bc.ops, &bc.constants, arity, Some(&ctx.obarray)) {
+            Ok(Some((obj, h))) => {
+                // content_hash == h by construction (both are leaf_content_hash of the
+                // same body); place under the OBJECT's own hash so the filename the
+                // loader indexes always matches the baked entry/descriptor symbols.
+                debug_assert_eq!(h, content_hash, "drain: emit hash != pre-key hash");
+                match pgo_atomic_place(&obj, dir, h) {
+                    Ok(_) => emitted += 1,
+                    Err(e) => tracing::debug!("aot-pgo: place failed for {h:032x}: {e}; skip"),
+                }
+            }
+            // Ok(None) = outside the AOT subset; Err = emit failure. Fail-closed skip.
+            Ok(None) => {}
+            Err(e) => tracing::debug!("aot-pgo: emit err for {content_hash:032x}: {e}; skip"),
+        }
+    }
+    if emitted > 0 {
+        tracing::debug!(
+            "aot-pgo: drained {emitted} hot leaf .so(s) to {}",
+            dir.display()
+        );
+    }
+    emitted
 }
 
 /// Build a relocatable object (`.o` bytes) for one pure MIR leaf `m`, exporting
@@ -5703,5 +6081,176 @@ mod tests {
 
         super::super::cache::clear();
         test_support::reset();
+    }
+
+    // === R2 increment C: AOT PGO persistence ===
+
+    /// Build a `(callee x)` pred body (Constant(callee), StackRef(1), Call(1), Return).
+    fn pgo_pred_body(callee: &str) -> crate::emacs_core::bytecode::ByteCodeFunction {
+        use crate::emacs_core::intern::{SymId, intern};
+        use crate::emacs_core::value::LambdaParams;
+        let mut f = crate::emacs_core::bytecode::ByteCodeFunction::new(LambdaParams {
+            required: vec![SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![Op::Constant(0), Op::StackRef(1), Op::Call(1), Op::Return];
+        f.constants = vec![Value::symbol(intern(callee))];
+        f.max_stack = 16;
+        f
+    }
+
+    /// Alias a user symbol to a builtin's function cell (control the callee binding).
+    fn pgo_alias(c: &mut crate::emacs_core::eval::Context, alias: &str, builtin: &str) {
+        use crate::emacs_core::intern::intern;
+        let cell = c
+            .obarray
+            .symbol_function_id(intern(builtin))
+            .expect("builtin bound");
+        c.obarray.set_symbol_function(alias, cell);
+    }
+
+    fn count_so(dir: &std::path::Path) -> usize {
+        std::fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.path().extension().is_some_and(|x| x == "so"))
+            .count()
+    }
+
+    /// Hazard-1 equivalence: the drain's producer (`compile_leaf_to_object` with the
+    /// LIVE obarray) is BYTE-IDENTICAL across two independent sessions (fresh
+    /// obarrays, drifted SymId spaces, same callee binding) — so a runtime-emitted
+    /// `.so` and a dump-time `.so` of the same body are the same artifact (same
+    /// content hash, same object). Also proves `aot_pgo_enabled()` defaults OFF.
+    #[test]
+    fn pgo_runtime_emit_is_byte_identical_across_sessions_and_default_off() {
+        use crate::emacs_core::eval::Context;
+        use crate::emacs_core::intern::intern;
+
+        // Default gate: OFF unless NEOVM_AOT_PGO is set (this process never sets it).
+        assert!(!aot_pgo_enabled(), "NEOVM_AOT_PGO must default OFF");
+
+        let mut c1 = Context::new();
+        pgo_alias(&mut c1, "pgo-eq-callee", "recordp");
+        for i in 0..40 {
+            let _ = intern(&format!("pgo-eq-drift1-{i}"));
+        }
+        let mut c2 = Context::new();
+        for i in 0..123 {
+            let _ = intern(&format!("pgo-eq-drift2-{i}"));
+        }
+        pgo_alias(&mut c2, "pgo-eq-callee", "recordp");
+
+        let f = pgo_pred_body("pgo-eq-callee");
+        let (o1, h1) = compile_leaf_to_object(&f.ops, &f.constants, 1, Some(&c1.obarray))
+            .expect("emit1 ok")
+            .expect("emit1 some");
+        let (o2, h2) = compile_leaf_to_object(&f.ops, &f.constants, 1, Some(&c2.obarray))
+            .expect("emit2 ok")
+            .expect("emit2 some");
+        assert_eq!(h1, h2, "content hash must be session-independent");
+        assert_eq!(
+            o1, o2,
+            "runtime-emit must be BYTE-IDENTICAL across sessions (dump-time == runtime)"
+        );
+    }
+
+    /// The drain CAP bounds the number of `.so`s emitted per call, and the
+    /// `.exists()` skip makes a re-drain a no-op (no duplicate `cc` spawn), while
+    /// successive drains CONVERGE on the full hot set.
+    #[test]
+    fn pgo_drain_cap_bounds_count_and_exists_skips() {
+        use crate::emacs_core::eval::Context;
+        use crate::emacs_core::intern::intern;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        super::super::cache::clear();
+        // A bare `(callee x)` is call-dominated → decline the JIT profit gate so it
+        // enters the JIT set as the drain's spec-bearing source.
+        super::super::compile::force_profit_gate_for_test(false);
+        let mut c = Context::new();
+        pgo_alias(&mut c, "pgo-cap-a", "recordp");
+        pgo_alias(&mut c, "pgo-cap-b", "consp");
+        // Bind + stage TWO distinct hot pred bodies (different callees → different hashes).
+        for (fname, callee) in [("pgo-cap-fa", "pgo-cap-a"), ("pgo-cap-fb", "pgo-cap-b")] {
+            c.obarray
+                .set_symbol_function(fname, Value::make_bytecode(pgo_pred_body(callee)));
+            let bc = c
+                .obarray
+                .symbol_function_id(intern(fname))
+                .and_then(|v| v.get_bytecode_data())
+                .expect("bound bytecode");
+            super::super::cache::compile_and_cache_jit_leaf(bc, Some(&c.obarray))
+                .expect("jit-compile hot leaf");
+        }
+        assert_eq!(
+            super::super::cache::jit_compiled_ids().len(),
+            2,
+            "both leaves hot in the JIT set"
+        );
+
+        // CAP=1 → exactly ONE .so emitted (the shutdown-budget lever).
+        assert_eq!(drain_aot_pgo_to_dir(&c, dir.path(), 1), 1, "cap=1 bounds emit");
+        assert_eq!(count_so(dir.path()), 1);
+
+        // CAP high → the remaining leaf emits; the first is `.exists()`-skipped (no dup).
+        assert_eq!(
+            drain_aot_pgo_to_dir(&c, dir.path(), 128),
+            1,
+            "second drain emits only the not-yet-persisted leaf"
+        );
+        assert_eq!(count_so(dir.path()), 2, "two distinct bodies → two .so total");
+
+        // A THIRD drain is a full no-op (both `.exists()`).
+        assert_eq!(
+            drain_aot_pgo_to_dir(&c, dir.path(), 128),
+            0,
+            ".exists() skip → re-drain no-op"
+        );
+        assert_eq!(count_so(dir.path()), 2);
+        super::super::cache::clear();
+    }
+
+    /// `jit_compiled_ids` reports the proven-hot JIT set; a NON-compilable body is
+    /// excluded (never a drain candidate) — and the env-gated `drain_aot_pgo`
+    /// wrapper is a no-op by default even with a hot leaf present.
+    #[test]
+    fn pgo_jit_set_and_wrapper_default_off() {
+        use crate::emacs_core::eval::Context;
+        use crate::emacs_core::intern::intern;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        super::super::cache::clear();
+        super::super::compile::force_profit_gate_for_test(false);
+        let mut c = Context::new();
+        pgo_alias(&mut c, "pgo-set-callee", "recordp");
+        c.obarray.set_symbol_function(
+            "pgo-set-fn",
+            Value::make_bytecode(pgo_pred_body("pgo-set-callee")),
+        );
+        let bc = c
+            .obarray
+            .symbol_function_id(intern("pgo-set-fn"))
+            .and_then(|v| v.get_bytecode_data())
+            .expect("bound bytecode");
+        let id = super::super::cache::compile_and_cache_jit_leaf(bc, Some(&c.obarray))
+            .expect("jit-compile hot leaf");
+        assert!(
+            super::super::cache::jit_compiled_ids().contains(&id),
+            "the staged JIT leaf is in the hot set"
+        );
+
+        // Default-off wrapper: NEOVM_AOT_PGO unset → drain_aot_pgo is a no-op even
+        // though a hot leaf exists; the testable core WOULD have drained it.
+        assert_eq!(drain_aot_pgo(&c), 0, "wrapper no-op when NEOVM_AOT_PGO unset");
+        assert_eq!(count_so(dir.path()), 0, "no surprise cache files by default");
+        assert_eq!(
+            drain_aot_pgo_to_dir(&c, dir.path(), 128),
+            1,
+            "the core drains the same hot leaf when explicitly targeted"
+        );
+        super::super::cache::clear();
     }
 }
