@@ -9569,6 +9569,123 @@ mod ownership_tests {
         }
     }
 
+    /// TSan ADVERSARIAL (task 11): the widest write/claim overlap in one test.
+    /// The mutator (this thread) hammers, across many strings and vectors:
+    ///   * remove-text-properties — `clear_intervals` swaps the `intervals`
+    ///     `AtomicPtr` to null and frees the old table;
+    ///   * put-text-property — `with_string_text_props_mut` -> `ensure_intervals`
+    ///     Release-stores a freshly-allocated table into the same `AtomicPtr`;
+    ///   * vector `aset` — `set_vector_slot` does an atomic slot store + notes
+    ///     the remembered set,
+    /// while the GC thread concurrently marks a large cons spine and CLAIMS
+    /// floats/strings/vectors through the 2026-07 concurrent claim dispatcher
+    /// (parity mark bits + `mark_claim_at`). This is the exact overlap the new
+    /// machinery must survive with zero data races: the `intervals` AtomicPtr
+    /// store/swap vs. the GC's `intervals_ptr` word read, the SATB pre-image
+    /// Mutex log vs. the GC drain, and the atomic vector-slot store vs. the GC
+    /// Tier B backing scan. Under `-Zsanitizer=thread` this is a race check; the
+    /// liveness asserts confirm the last-installed children survive uncorrupted.
+    #[test]
+    fn concurrent_mark_races_textprop_churn_and_aset_with_claiming() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        const N: usize = 256;
+        const ROUNDS: i64 = 4;
+        let mut strings = Vec::with_capacity(N);
+        let mut vectors = Vec::with_capacity(N);
+        let mut list = TaggedValue::fixnum(0);
+        for i in 0..N {
+            // A value reachable ONLY through the string's initial interval table.
+            let born =
+                heap.alloc_cons(TaggedValue::fixnum(i as i64), TaggedValue::fixnum(-1));
+            let s = heap.alloc_string(crate::heap_types::LispString::from_utf8("adv"));
+            unsafe {
+                *(*(s.as_string_ptr().unwrap() as *mut StringObj))
+                    .data
+                    .intervals_mut() = interval_table_carrying(born);
+            }
+            // A vector with a placeholder slot we will `aset` in-flight values into.
+            let vec = heap.alloc_vector(vec![TaggedValue::fixnum(0)]);
+            // Root both via the spine so they MUST survive the cycle.
+            list = heap.alloc_cons(s, list);
+            list = heap.alloc_cons(vec, list);
+            strings.push(s);
+            vectors.push(vec);
+        }
+        // Large filler spine so the GC thread is still marking during the churn.
+        for i in 0..300_000 {
+            list = heap.alloc_cons(TaggedValue::fixnum(i), list);
+        }
+        let root = list;
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+
+        // Mutator: hammer put/remove text-property + ensure_intervals churn +
+        // vector aset while the GC thread claims/defers. Track the LAST value
+        // installed into each sink so the liveness asserts are exact.
+        let mut last_prop = vec![TaggedValue::fixnum(0); N];
+        let mut last_slot = vec![TaggedValue::fixnum(0); N];
+        for round in 0..ROUNDS {
+            for i in 0..N {
+                let s = strings[i];
+                let vec = vectors[i];
+                // remove-text-properties: drop the whole table (AtomicPtr swap).
+                let _ = crate::tagged::mutate::with_lisp_string_mut(s, |ls| {
+                    ls.clear_intervals()
+                });
+                // put-text-property: reinstall a fresh table (ensure_intervals
+                // AtomicPtr store) carrying a fresh in-flight child value.
+                let prop_v = heap.alloc_cons(
+                    TaggedValue::fixnum(round * N as i64 + i as i64),
+                    TaggedValue::fixnum(-2),
+                );
+                let table = interval_table_carrying(prop_v);
+                let _ = crate::tagged::mutate::with_string_text_props_mut(s, |t| {
+                    *t = table
+                });
+                last_prop[i] = prop_v;
+                // vector aset of a fresh in-flight value (atomic slot store).
+                let slot_v = heap.alloc_cons(
+                    TaggedValue::fixnum(1_000_000 + round * N as i64 + i as i64),
+                    TaggedValue::fixnum(-3),
+                );
+                crate::tagged::mutate::set_vector_slot(vec, 0, slot_v);
+                last_slot[i] = slot_v;
+            }
+        }
+
+        finish_concurrent_cycle(&mut heap, root);
+
+        // Every rooted string + vector survived the concurrent cycle.
+        for s in &strings {
+            assert!(heap.owns_non_cons_object(s.as_string_ptr().unwrap() as *const u8));
+        }
+        for v in &vectors {
+            assert!(heap.owns_non_cons_object(v.as_veclike_ptr().unwrap() as *const u8));
+        }
+        // The last-installed interval child + last-`aset` slot child of each sink
+        // are reachable from the re-seeded root at termination, so they survive
+        // uncorrupted (a swept or torn child reads back the wrong car here).
+        for (i, v) in last_prop.iter().enumerate() {
+            assert_eq!(
+                unsafe { (*v.xcons_ptr()).load_car() }.0,
+                TaggedValue::fixnum((ROUNDS - 1) * N as i64 + i as i64).0,
+                "final interval child of string #{i} must survive uncorrupted",
+            );
+        }
+        for (i, v) in last_slot.iter().enumerate() {
+            assert_eq!(
+                unsafe { (*v.xcons_ptr()).load_car() }.0,
+                TaggedValue::fixnum(1_000_000 + (ROUNDS - 1) * N as i64 + i as i64).0,
+                "final aset slot child of vector #{i} must survive uncorrupted",
+            );
+        }
+    }
+
     /// CLAIM-AT-ALL-SINKS (vector sink): strings reachable ONLY through a
     /// vector's slots are discovered by the Tier B backing scan on the GC
     /// thread; the interval-free one must be claimed there (claim counter),
