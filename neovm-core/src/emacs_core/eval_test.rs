@@ -14194,6 +14194,227 @@ fn jit_cbsym_spec_adds_no_eval_depth_level() {
     );
 }
 
+/// R2 COMMIT 5 engagement + parity: hot Tier-A CallBuiltinSym reads
+/// (point/point-min/point-max/bolp/eolp/bobp/eobp/following-char/preceding-char/
+/// char-after) route through `neovm_jit_cbsym_read` (GC-free), fire the fast
+/// path, and match the interpreter byte-for-byte.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_cbsym_read_tiera_engages_and_matches() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    ev.eval_str("(insert \"abc\\ndef\")").unwrap();
+    ev.eval_str("(goto-char 2)").unwrap();
+    #[cfg(debug_assertions)]
+    let (_, fast0, _) = jit_cbsym_spec_counters();
+    for name in [
+        "point",
+        "point-min",
+        "point-max",
+        "bolp",
+        "eolp",
+        "bobp",
+        "eobp",
+        "following-char",
+        "preceding-char",
+        "char-after",
+    ] {
+        let hot = jit_cbsym_spec_caller(name, 0, true);
+        let cold = jit_cbsym_spec_caller(name, 0, false);
+        let native = ev
+            .funcall_general_untraced(hot, Vec::<Value>::new())
+            .unwrap_or_else(|e| panic!("native {name}: {e:?}"));
+        let interp = ev
+            .funcall_general_untraced(cold, Vec::<Value>::new())
+            .unwrap_or_else(|e| panic!("interp {name}: {e:?}"));
+        assert_eq!(
+            native.bits(),
+            interp.bits(),
+            "{name}: Tier-A read parity hot vs cold"
+        );
+    }
+    #[cfg(debug_assertions)]
+    if !jit_cbsym_fastpath_suppressed_by_harness() {
+        let (_, fast1, _) = jit_cbsym_spec_counters();
+        assert!(fast1 > fast0, "the Tier-A read fast path must fire");
+    }
+}
+
+/// Must-nail #1: match-beginning/match-end after a BUFFER regexp search return
+/// CHAR positions (the shim delegates to the body's byte→char conversion — a
+/// register read of the byte offset would be WRONG) == interp, plus the edges:
+/// negative group → args-out-of-range, non-int → wrong-type-argument, group
+/// beyond count → nil.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_cbsym_read_match_beginning_end_char_positions_and_edges() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    ev.eval_str("(insert \"foo bar baz\")").unwrap();
+    ev.eval_str("(goto-char (point-min))").unwrap();
+    ev.eval_str("(search-forward \"bar\")").unwrap(); // sets match-data, group 0 = "bar"
+    let mb_hot = jit_cbsym_spec_caller("match-beginning", 1, true);
+    let mb_cold = jit_cbsym_spec_caller("match-beginning", 1, false);
+    let me_hot = jit_cbsym_spec_caller("match-end", 1, true);
+    let me_cold = jit_cbsym_spec_caller("match-end", 1, false);
+    let call = |ev: &mut Context, f: Value, g: i64| ev.funcall_general_untraced(f, vec![Value::make_int(g)]);
+    // group 0: CHAR positions, == interp (both compiled/interp and the live form).
+    let nb = call(&mut ev, mb_hot, 0).unwrap();
+    assert_eq!(nb, call(&mut ev, mb_cold, 0).unwrap(), "match-beginning 0 hot==cold");
+    assert_eq!(nb, ev.eval_str("(match-beginning 0)").unwrap(), "match-beginning 0 == live interp CHAR pos");
+    let ne = call(&mut ev, me_hot, 0).unwrap();
+    assert_eq!(ne, call(&mut ev, me_cold, 0).unwrap(), "match-end 0 hot==cold");
+    assert_eq!(ne, ev.eval_str("(match-end 0)").unwrap(), "match-end 0 == live interp CHAR pos");
+    // group beyond the match count -> nil.
+    assert_eq!(call(&mut ev, mb_hot, 5).unwrap(), Value::NIL, "group beyond count -> nil");
+    // negative group -> args-out-of-range == interp.
+    let neg_hot = format!("{:?}", call(&mut ev, mb_hot, -1).unwrap_err());
+    let neg_cold = format!("{:?}", call(&mut ev, mb_cold, -1).unwrap_err());
+    assert_eq!(
+        neg_hot, neg_cold,
+        "negative group -> args-out-of-range == interp\nHOT:  {neg_hot}\nCOLD: {neg_cold}"
+    );
+    // non-int group -> wrong-type-argument == interp.
+    let ni_hot = ev.funcall_general_untraced(mb_hot, vec![Value::symbol("x")]);
+    let ni_cold = ev.funcall_general_untraced(mb_cold, vec![Value::symbol("x")]);
+    assert_eq!(
+        format!("{:?}", ni_hot.unwrap_err()),
+        format!("{:?}", ni_cold.unwrap_err()),
+        "non-int group -> wrong-type-argument == interp"
+    );
+}
+
+/// Must-nail #2: following-char/preceding-char at ZV/BOB → 0; char-after at ZV →
+/// nil (in the SAME buffer/point — proves the two are not conflated).
+#[cfg(feature = "jit")]
+#[test]
+fn jit_cbsym_read_char_accessors_at_boundaries() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    ev.eval_str("(insert \"xy\")").unwrap();
+    ev.eval_str("(goto-char (point-max))").unwrap(); // at ZV
+    let fc = jit_cbsym_spec_caller("following-char", 0, true);
+    let ca = jit_cbsym_spec_caller("char-after", 0, true);
+    assert_eq!(
+        ev.funcall_general_untraced(fc, Vec::<Value>::new()).unwrap(),
+        Value::make_int(0),
+        "following-char at ZV -> 0"
+    );
+    assert_eq!(
+        ev.funcall_general_untraced(ca, Vec::<Value>::new()).unwrap(),
+        Value::NIL,
+        "char-after at ZV -> nil (NOT conflated with following-char's 0)"
+    );
+    ev.eval_str("(goto-char (point-min))").unwrap(); // at BOB
+    let pc = jit_cbsym_spec_caller("preceding-char", 0, true);
+    let ca2 = jit_cbsym_spec_caller("char-after", 0, true);
+    assert_eq!(
+        ev.funcall_general_untraced(pc, Vec::<Value>::new()).unwrap(),
+        Value::make_int(0),
+        "preceding-char at BOB -> 0"
+    );
+    assert_eq!(
+        ev.funcall_general_untraced(ca2, Vec::<Value>::new()).unwrap(),
+        Value::make_int('x' as i64),
+        "char-after at BOB -> 'x' (a real char, proves ZV-nil is position-specific)"
+    );
+}
+
+/// Must-nail #6: bolp with point at BEGV of a buffer narrowed to BEGV > 0 → t
+/// (the body's first case, `point == accessible-region start`).
+#[cfg(feature = "jit")]
+#[test]
+fn jit_cbsym_read_bolp_at_begv_in_narrowed_buffer() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    ev.eval_str("(insert \"line1\\nline2\\nline3\")").unwrap();
+    ev.eval_str("(narrow-to-region 3 10)").unwrap(); // BEGV = 3 (mid-line)
+    ev.eval_str("(goto-char (point-min))").unwrap(); // point = BEGV = 3
+    let bolp = jit_cbsym_spec_caller("bolp", 0, true);
+    let bolp_cold = jit_cbsym_spec_caller("bolp", 0, false);
+    let native = ev.funcall_general_untraced(bolp, Vec::<Value>::new()).unwrap();
+    let interp = ev.funcall_general_untraced(bolp_cold, Vec::<Value>::new()).unwrap();
+    assert_eq!(native, interp, "bolp at BEGV parity hot vs cold");
+    assert!(
+        native.is_truthy(),
+        "bolp with point == BEGV (narrowed, BEGV>0) -> t"
+    );
+}
+
+/// Must-nail #3: current-buffer through a compiled CBSym on a buffer whose value
+/// was never materialized bounces (STATUS_NEED_GENERIC — the shim NEVER calls
+/// make_buffer, which would allocate under the unrooted residual stack); result
+/// == interp. A second call (now materialized) takes the GC-free fast path.
+#[cfg(all(feature = "jit", debug_assertions))]
+#[test]
+fn jit_cbsym_read_current_buffer_bounces_when_unmaterialized() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    // Do NOT call current-buffer / make_buffer before the compiled call, so the
+    // current buffer's tagged value is (likely) not yet in the buffer registry.
+    let hot = jit_cbsym_spec_caller("current-buffer", 0, true);
+    let cold = jit_cbsym_spec_caller("current-buffer", 0, false);
+    let (_, fast0, gen0) = jit_cbsym_spec_counters();
+    let native = ev.funcall_general_untraced(hot, Vec::<Value>::new()).unwrap();
+    let (_, fast1, gen1) = jit_cbsym_spec_counters();
+    let interp = ev.funcall_general_untraced(cold, Vec::<Value>::new()).unwrap();
+    assert_eq!(native, interp, "current-buffer compiled == interp");
+    if !jit_cbsym_fastpath_suppressed_by_harness() {
+        // The FIRST compiled call materialized the buffer via the general
+        // fallback (a NEED_GENERIC bounce), NOT the fast path.
+        assert!(
+            gen1 > gen0,
+            "the first current-buffer (unmaterialized) bounced to the general path"
+        );
+        assert_eq!(fast1, fast0, "the shim did NOT take the fast (allocating-risk) path");
+        // Now materialized: a second compiled call takes the GC-free fast path.
+        let hot2 = jit_cbsym_spec_caller("current-buffer", 0, true);
+        let (_, fast2, _) = jit_cbsym_spec_counters();
+        let native2 = ev.funcall_general_untraced(hot2, Vec::<Value>::new()).unwrap();
+        let (_, fast3, _) = jit_cbsym_spec_counters();
+        assert_eq!(native2, interp, "second current-buffer still == interp");
+        assert!(fast3 > fast2, "the materialized buffer now takes the fast path");
+    }
+}
+
+/// Must-nail #7 (Tier-A advice half): overriding a Tier-A primitive's function
+/// CELL is a no-op for the compiled CallBuiltinSym call — CBSym name-dispatches
+/// the STATIC subr table (`lookup_global_subr_entry`), bypassing the cell /
+/// advice, exactly like the interpreter's Bpoint arm.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_cbsym_read_ignores_function_cell_override() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    ev.eval_str("(insert \"abcd\")").unwrap();
+    ev.eval_str("(goto-char 3)").unwrap();
+    let real_point = ev.eval_str("(point)").unwrap(); // 3 (interp CBSym is also cell-immune)
+    // Override the function CELL of `point` (what advice-add ultimately mutates).
+    ev.eval_str("(fset 'point (lambda () 999))").unwrap();
+    // A normal funcall through the cell now yields 999...
+    assert_eq!(
+        ev.eval_str("(funcall (symbol-function 'point))").unwrap(),
+        Value::make_int(999),
+        "the cell override IS visible to a cell dispatch"
+    );
+    // ...but the compiled CallBuiltinSym `point` ignores it (static-table dispatch).
+    let hot = jit_cbsym_spec_caller("point", 0, true);
+    let cold = jit_cbsym_spec_caller("point", 0, false);
+    let native = ev.funcall_general_untraced(hot, Vec::<Value>::new()).unwrap();
+    let interp = ev.funcall_general_untraced(cold, Vec::<Value>::new()).unwrap();
+    assert_eq!(native, interp, "compiled == interp CBSym point (both cell-immune)");
+    assert_eq!(
+        native, real_point,
+        "compiled CBSym point returns the REAL point, ignoring the cell override"
+    );
+}
+
 /// End-to-end: the classic hot shapes the poisoning analysis used to BAIL on
 /// now compile — recursive fib (arithmetic after recursive calls) and a
 /// while-loop mixing a call with arithmetic (guards at the loop join). Both

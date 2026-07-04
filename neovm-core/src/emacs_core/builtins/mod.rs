@@ -521,7 +521,12 @@ pub(crate) use misc_pure::*;
 pub(crate) use strings::*;
 pub(crate) use types::*;
 
-mod buffers;
+// `pub(crate)` so the R2 JIT Tier-A CallBuiltinSym read shim
+// (`jit::compile::neovm_jit_cbsym_read`) can DELEGATE to the GC-free buffer
+// primitive bodies (`builtin_point_0`, `builtin_char_after`, ...) by name
+// instead of reimplementing them (matches the sibling `navigation`/`editfns`/
+// `search` modules, already crate-visible).
+pub(crate) mod buffers;
 mod file_notify;
 pub(crate) mod fringe_bitmap;
 pub(crate) mod fringe_standard_bitmaps;

@@ -1348,6 +1348,156 @@ extern "C" fn neovm_jit_cbsym_spec(
     status
 }
 
+/// The fixed arity of a Tier-A CallBuiltinSym read (all 0-arg except
+/// match-beginning/match-end, which take the group number). The shim bounces to
+/// STATUS_NEED_GENERIC on an arity mismatch so the general path signals
+/// wrong-number-of-arguments identically to the interpreter.
+#[inline]
+fn cbsym_read_expected_nargs(which: u8) -> usize {
+    match which {
+        CBSYM_A_MATCH_BEGINNING | CBSYM_A_MATCH_END => 1,
+        _ => 0,
+    }
+}
+
+/// R2 Tier-A CallBuiltinSym intrinsic (GC-free read): DELEGATE to the REAL
+/// builtin body for `which`, never reimplement — a byte→char conversion
+/// (match-beginning) or a three-case boundary (bolp) can then never drift. Every
+/// OK path returns an IMMEDIATE (fixnum / t / nil / a pre-materialized buffer
+/// value), so the shim needs NO residual-stack rooting (the generated code does
+/// not root it — like the round-1 predicate shims); an Err returns STATUS_SIGNAL,
+/// which DISCARDS the unrooted residual stack (no UAF even if the body's error
+/// path allocates). NO epoch guard (CallBuiltinSym name-dispatches the static
+/// table; advice/fset/override immune): re-read the live entry and bounce to
+/// STATUS_NEED_GENERIC when it is no longer a plain builtin, when the arity is
+/// unexpected, or under the FORCE_CBSYM_GENERIC harness — the general shim
+/// reproduces void/invalid-function / wrong-number-of-arguments exactly.
+///
+/// `current-buffer` is the MISSED-HAZARD case: `builtin_current_buffer` calls
+/// `make_buffer` (ALLOCATES → would corrupt the unrooted residual stack), so this
+/// shim reads the ALREADY-materialized buffer value from the heap's buffer
+/// registry (non-allocating) and bounces to STATUS_NEED_GENERIC when it was never
+/// materialized (the general path materializes it, with a rooted residual stack).
+///
+/// ANTI-REQUIREMENT (upheld by the lowering): the JIT must NEVER value-number or
+/// cache buffer state (current buffer / point / BEGV / ZV) across a CallBuiltinSym
+/// op — `set-buffer`/`insert`/`goto-char`/`widen` change it — so every CBSym op
+/// stays an opaque shim call, re-reading state each time.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+///
+/// JIT-only (NOT in `shim_names.rs`/`MIR_SHIM_NAMES`): Tier-A spec sites exist
+/// only under `Some(obarray)`, and AOT compiles at `None`.
+extern "C" fn neovm_jit_cbsym_read(
+    ctx: *mut u8,
+    which: i64,
+    sym: i64,
+    args_ptr: *const i64,
+    nargs: i64,
+    out: *mut i64,
+) -> i64 {
+    #[cfg(debug_assertions)]
+    CBSYM_SPEC_COUNT.fetch_add(1, Ordering::Relaxed);
+    let which = which as u8;
+    let nargs = nargs as usize;
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let sym_id = SymId(sym as u32);
+    // Advice/fset/override-immune: NO epoch guard. Bounce (general path) when the
+    // static entry is no longer a plain builtin, the arity is unexpected, or the
+    // harness forces it.
+    let armed = !force_cbsym_generic()
+        && nargs == cbsym_read_expected_nargs(which)
+        && lookup_global_subr_entry(sym_id).is_some_and(|e| e.dispatch_kind == SubrDispatchKind::Builtin);
+    if !armed {
+        #[cfg(debug_assertions)]
+        CBSYM_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
+        return STATUS_NEED_GENERIC;
+    }
+    // current-buffer: NEVER allocate. Read the already-materialized buffer value;
+    // bounce when it was never made (general path -> make_buffer, rooted).
+    if which == CBSYM_A_CURRENT_BUFFER {
+        let Some(buf_id) = ctx.buffers.current_buffer().map(|b| b.id) else {
+            #[cfg(debug_assertions)]
+            CBSYM_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
+            return STATUS_NEED_GENERIC;
+        };
+        return match crate::tagged::gc::with_tagged_heap(|h| h.buffer_value(buf_id)) {
+            Some(v) => {
+                #[cfg(debug_assertions)]
+                CBSYM_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
+                // SAFETY: `out` is the generated code's result stack slot.
+                unsafe { *out = v.bits() as i64 };
+                STATUS_OK
+            }
+            None => {
+                #[cfg(debug_assertions)]
+                CBSYM_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
+                STATUS_NEED_GENERIC
+            }
+        };
+    }
+    #[cfg(debug_assertions)]
+    CBSYM_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
+    // DELEGATE to the builtin body (GC-free OK path). match-beginning/end read
+    // ctx.match_data + ctx.buffers and do the byte→char conversion, so a
+    // register-read reimplementation would return BYTE offsets = WRONG.
+    use crate::emacs_core::builtins::{buffers, search};
+    use crate::emacs_core::{editfns, navigation};
+    let res = match which {
+        CBSYM_A_POINT => buffers::builtin_point_0(ctx),
+        CBSYM_A_POINT_MIN => buffers::builtin_point_min_0(ctx),
+        CBSYM_A_POINT_MAX => buffers::builtin_point_max_0(ctx),
+        CBSYM_A_BOLP => navigation::builtin_bolp(ctx, Vec::new()),
+        CBSYM_A_EOLP => navigation::builtin_eolp(ctx, Vec::new()),
+        CBSYM_A_BOBP => navigation::builtin_bobp(ctx, Vec::new()),
+        CBSYM_A_EOBP => navigation::builtin_eobp(ctx, Vec::new()),
+        CBSYM_A_FOLLOWING_CHAR => editfns::builtin_following_char_0(ctx),
+        CBSYM_A_PRECEDING_CHAR => editfns::builtin_preceding_char(ctx, Vec::new()),
+        // Tier-A char-after is 0-arg (nargs gated above): reads at point.
+        CBSYM_A_CHAR_AFTER => buffers::builtin_char_after(ctx, Vec::new()),
+        CBSYM_A_MATCH_BEGINNING => {
+            // SAFETY: the generated code stored exactly nargs==1 word at args_ptr.
+            let group = Value::from_bits(unsafe { *args_ptr } as usize);
+            search::builtin_match_beginning_with_state(Some(&ctx.buffers), &ctx.match_data, &[group])
+        }
+        CBSYM_A_MATCH_END => {
+            // SAFETY: the generated code stored exactly nargs==1 word at args_ptr.
+            let group = Value::from_bits(unsafe { *args_ptr } as usize);
+            search::builtin_match_end_with_state(Some(&ctx.buffers), &ctx.match_data, &[group])
+        }
+        // Unknown discriminant (unreachable for a classified site): bounce.
+        _ => return STATUS_NEED_GENERIC,
+    };
+    // Run the SAME signal post-processing the interpreter arm gets for free via
+    // funcall_general (`dispatch_signal_result_if_needed`): a no-op on Ok (stays
+    // GC-free), and on a signal it runs the debugger dispatch + sets
+    // `search_complete` — so the Err Flow is byte-identical to the interpreter's
+    // (which routes match-beginning/end through funcall_general). The residual
+    // stack is discarded on STATUS_SIGNAL, so any allocation here is UAF-safe.
+    let res = ctx.dispatch_signal_result_if_needed(res);
+    match res {
+        Ok(value) => {
+            // Quit poll AFTER (GNU CallBuiltinSym order). maybe_quit's Flow is
+            // Rust-heap, so this stays GC-free.
+            match ctx.maybe_quit() {
+                Ok(()) => {
+                    // SAFETY: `out` is the generated code's result stack slot.
+                    unsafe { *out = value.bits() as i64 };
+                    STATUS_OK
+                }
+                Err(flow) => {
+                    stash_pending_flow(flow);
+                    STATUS_SIGNAL
+                }
+            }
+        }
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+    }
+}
+
 /// `Op::Throw`: stash `Flow::Throw{tag, value}` for the signal-exit path.
 /// Compiled bodies have no local handlers (handler opcodes bail), so a throw
 /// always propagates out — exactly the interpreter's `resume_nonlocal` once no
@@ -4288,12 +4438,14 @@ struct RtRefs {
     call_subr_spec: Option<FuncRef>,
     pred_spec: Option<FuncRef>,
     eq_incl_props_spec: Option<FuncRef>,
-    /// The R2 Tier-B CallBuiltinSym intrinsic shim ([`neovm_jit_cbsym_spec`]),
-    /// declared ONLY when the body has a CBSym-kind spec site (`declare_rt_refs`'
-    /// `cbsym_spec` flag). Like the round-1 spec shims it is JIT-only
-    /// (`find_spec_sites` requires `Some(obarray)`), so an AOT `ObjectModule`
-    /// never declares it. `None` otherwise.
+    /// The R2 CallBuiltinSym intrinsic shims — Tier-B dispatch-skip
+    /// ([`neovm_jit_cbsym_spec`]) + Tier-A GC-free read
+    /// ([`neovm_jit_cbsym_read`]), declared ONLY when the body has a CBSym-kind
+    /// spec site (`declare_rt_refs`' `cbsym_spec` flag). Like the round-1 spec
+    /// shims they are JIT-only (`find_spec_sites` requires `Some(obarray)`), so
+    /// an AOT `ObjectModule` never declares them. `None` otherwise.
     cbsym_spec: Option<FuncRef>,
+    cbsym_read: Option<FuncRef>,
 }
 
 /// Declare the runtime-shim imports into `module`/`func` and return the callable
@@ -4502,12 +4654,25 @@ fn declare_rt_refs<M: Module>(
     } else {
         None
     };
-    // R2 Tier-B CallBuiltinSym intrinsic shim — same shape as `sig_call`
-    // (vmctx, sym, args_ptr, nargs, out_ptr) -> status. JIT-only (see doc).
-    let cbsym_spec_id = if cbsym_spec {
-        Some(declare(module, "neovm_jit_cbsym_spec", &sig_call)?)
+    // R2 CallBuiltinSym intrinsic shims (JIT-only, see doc). Tier-B dispatch-skip
+    // shares `sig_call`'s shape (vmctx, sym, args_ptr, nargs, out_ptr) -> status;
+    // Tier-A read adds a leading `which` discriminant
+    // (vmctx, which, sym, args_ptr, nargs, out_ptr) -> status.
+    let (cbsym_spec_id, cbsym_read_id) = if cbsym_spec {
+        let mut sig_read = Signature::new(call_conv);
+        sig_read.params.push(AbiParam::new(ptr_ty)); // vmctx
+        sig_read.params.push(AbiParam::new(i64t)); // which
+        sig_read.params.push(AbiParam::new(i64t)); // sym
+        sig_read.params.push(AbiParam::new(ptr_ty)); // args_ptr
+        sig_read.params.push(AbiParam::new(i64t)); // nargs
+        sig_read.params.push(AbiParam::new(ptr_ty)); // out
+        sig_read.returns.push(AbiParam::new(i64t));
+        (
+            Some(declare(module, "neovm_jit_cbsym_spec", &sig_call)?),
+            Some(declare(module, "neovm_jit_cbsym_read", &sig_read)?),
+        )
     } else {
-        None
+        (None, None)
     };
 
     Ok(RtRefs {
@@ -4550,6 +4715,7 @@ fn declare_rt_refs<M: Module>(
         pred_spec: subr_spec_refs.map(|(_, id, _)| module.declare_func_in_func(id, func)),
         eq_incl_props_spec: subr_spec_refs.map(|(_, _, id)| module.declare_func_in_func(id, func)),
         cbsym_spec: cbsym_spec_id.map(|id| module.declare_func_in_func(id, func)),
+        cbsym_read: cbsym_read_id.map(|id| module.declare_func_in_func(id, func)),
     })
 }
 
@@ -5675,14 +5841,29 @@ fn lower_simple_op(
             // only under `Some(obarray)`, so AOT never takes the fast path.
             let cbsym_spec_b = matches!(op, Op::CallBuiltinSym(..))
                 && matches!(spec, Some((_, _, _, SpecCalleeKind::CbsymTierB)));
+            // Tier-A GC-free read (`neovm_jit_cbsym_read`): its OK path returns an
+            // IMMEDIATE and never allocates, so the fast path skips residual-stack
+            // rooting entirely (like the round-1 predicate shims). `which` is the
+            // baked builtin discriminant. NEED_GENERIC still routes to the general
+            // fallback (which DOES root, since it can allocate).
+            let cbsym_a_which: Option<u8> = if matches!(op, Op::CallBuiltinSym(..)) {
+                match spec {
+                    Some((_, _, _, SpecCalleeKind::CbsymTierA { which })) => Some(which),
+                    _ => None,
+                }
+            } else {
+                None
+            };
             let at = stack.len() - nargs;
             for (i, &v) in stack[at..].iter().enumerate() {
                 fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
             }
             stack.truncate(at);
-            // Root remaining live values (arbitrary lisp may run; the shim
-            // roots the operands themselves).
-            let saved = if stack.is_empty() {
+            // Root remaining live values (arbitrary lisp may run; the shim roots
+            // the operands themselves). The Tier-A read shim is GC-free by
+            // contract, so its fast path needs NO residual rooting; its
+            // NEED_GENERIC fallback block re-roots for the general call.
+            let saved = if stack.is_empty() || cbsym_a_which.is_some() {
                 None
             } else {
                 let c = fb.ins().call(rt.refs.gc_save, &[]);
@@ -5718,10 +5899,20 @@ fn lower_simple_op(
             let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
             let n_val = fb.ins().iconst(types::I64, nargs as i64);
             let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
-            // Fast path: the Tier-B intrinsic shim (dispatch skip); NEED_GENERIC
-            // routes to `generic_fallback` (the ORIGINAL named-builtin call).
+            // Fast path: the Tier-A GC-free read shim or the Tier-B dispatch-skip
+            // shim; NEED_GENERIC routes to `generic_fallback` (the ORIGINAL
+            // named-builtin call). Everything else keeps the general lowering.
             let mut generic_fallback: Option<Block> = None;
-            let call = if cbsym_spec_b {
+            let call = if let Some(which) = cbsym_a_which {
+                generic_fallback = Some(fb.create_block());
+                let f = rt
+                    .refs
+                    .cbsym_read
+                    .ok_or(CompileError::UnsupportedOp("cbsym-read-refs"))?;
+                let which_v = fb.ins().iconst(types::I64, which as i64);
+                fb.ins()
+                    .call(f, &[vmctx, which_v, sym_v, args_addr, n_val, out_addr])
+            } else if cbsym_spec_b {
                 generic_fallback = Some(fb.create_block());
                 let f = rt
                     .refs
@@ -7358,9 +7549,11 @@ pub fn lower_leaf_full(
         "neovm_jit_eq_incl_props_spec",
         neovm_jit_eq_incl_props_spec as *const u8,
     );
-    // R2 CallBuiltinSym intrinsic shim (Tier-B dispatch-skip). Unconditional
-    // registration (declares are gated on a CBSym spec site); JIT-only.
+    // R2 CallBuiltinSym intrinsic shims (Tier-B dispatch-skip + Tier-A GC-free
+    // read). Unconditional registration (declares are gated on a CBSym spec
+    // site); JIT-only.
     builder.symbol("neovm_jit_cbsym_spec", neovm_jit_cbsym_spec as *const u8);
+    builder.symbol("neovm_jit_cbsym_read", neovm_jit_cbsym_read as *const u8);
     let mut module = JITModule::new(builder);
     // has_backedge + needs_rt via the shared single-source helpers (R2-E) — same
     // logic as before, just factored so the baseline-AOT emit can reuse it.
