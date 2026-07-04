@@ -739,6 +739,9 @@ fn alloc_roundtrip_cost_probe() {
     run_case("lambda 6 slots", m, |h| {
         h.alloc_lambda(vec![TaggedValue::NIL; 6]);
     }, &mut out);
+    run_case("macro 6 slots", m, |h| {
+        h.alloc_macro(vec![TaggedValue::NIL; 6]);
+    }, &mut out);
     run_case("bytecode (~360B fixed)", m, |h| {
         h.alloc_bytecode(crate::emacs_core::bytecode::ByteCodeFunction::new(
             crate::emacs_core::value::LambdaParams::simple(vec![]),

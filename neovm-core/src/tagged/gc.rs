@@ -1415,6 +1415,25 @@ const _: () = assert!(
     "ByteCodeObj must fit a 384-byte slot with its trailing free-list link \
      (bytes 376..384); bump the bytecode stride if the struct grew",
 );
+// Lambda/Macro (task 03/3b): each is VecLikeHeader 24 + LispValueVec 24 +
+// OnceLock<LambdaParams> (~64) = 112B → a 128B power-of-two class (512
+// slots/page, link in bytes 120..128). LambdaObj and MacroObj are
+// byte-identical in layout (same fields) but DISTINCT Rust types, so each
+// gets its OWN class arena at the shared 128B stride — exactly as
+// string/vector share the 64B stride in separate arenas (per-class
+// registries never merge; a page hit is never a cross-class collision). If
+// either assert fails the struct grew — BUMP THE STRIDE; never squeeze the
+// link into live bytes.
+const _: () = assert!(
+    size_of::<LambdaObj>() <= 120,
+    "LambdaObj must fit a 128-byte slot with its trailing free-list link \
+     (bytes 120..128); bump the lambda/macro stride if the struct grew",
+);
+const _: () = assert!(
+    size_of::<MacroObj>() <= 120,
+    "MacroObj must fit a 128-byte slot with its trailing free-list link \
+     (bytes 120..128); bump the lambda/macro stride if the struct grew",
+);
 
 #[cfg(test)]
 pub(crate) static LIVE_FLOAT_PAGES: AtomicUsize = AtomicUsize::new(0);
@@ -1424,6 +1443,10 @@ pub(crate) static LIVE_STRING_PAGES: AtomicUsize = AtomicUsize::new(0);
 pub(crate) static LIVE_VECTOR_PAGES: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 pub(crate) static LIVE_BYTECODE_PAGES: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+pub(crate) static LIVE_LAMBDA_PAGES: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+pub(crate) static LIVE_MACRO_PAGES: AtomicUsize = AtomicUsize::new(0);
 
 impl PagedObject for FloatObj {
     const SLOT_BYTES: usize = 32;
@@ -1467,6 +1490,28 @@ impl PagedObject for ByteCodeObj {
     }
 }
 
+impl PagedObject for LambdaObj {
+    // Shared 128B lambda/macro class: 512 slots/page, link in bytes 120..128.
+    const SLOT_BYTES: usize = 128;
+    const KIND: HeapObjectKind = HeapObjectKind::VecLike;
+    const CLASS: &'static str = "lambda";
+    #[cfg(test)]
+    fn live_page_counter() -> &'static AtomicUsize {
+        &LIVE_LAMBDA_PAGES
+    }
+}
+
+impl PagedObject for MacroObj {
+    // Shares the 128B lambda class stride in its OWN arena (see LambdaObj).
+    const SLOT_BYTES: usize = 128;
+    const KIND: HeapObjectKind = HeapObjectKind::VecLike;
+    const CLASS: &'static str = "macro";
+    #[cfg(test)]
+    fn live_page_counter() -> &'static AtomicUsize {
+        &LIVE_MACRO_PAGES
+    }
+}
+
 /// Slot count of a float page (test scenarios size their populations off it).
 #[cfg(test)]
 const FLOAT_PAGE_SLOTS: usize = OBJECT_PAGE_BYTES / <FloatObj as PagedObject>::SLOT_BYTES;
@@ -1474,6 +1519,11 @@ const FLOAT_PAGE_SLOTS: usize = OBJECT_PAGE_BYTES / <FloatObj as PagedObject>::S
 /// the 256B page tail is never allocated).
 #[cfg(test)]
 const BYTECODE_PAGE_SLOTS: usize = OBJECT_PAGE_BYTES / <ByteCodeObj as PagedObject>::SLOT_BYTES;
+/// Slot count of a lambda/macro page (512: the 128B stride divides 64KB
+/// exactly, no tail). LambdaObj and MacroObj share the stride so this const
+/// applies to both arenas.
+#[cfg(test)]
+const LAMBDA_PAGE_SLOTS: usize = OBJECT_PAGE_BYTES / <LambdaObj as PagedObject>::SLOT_BYTES;
 
 /// One 64KB-aligned arena page of fixed-stride `T` slots.
 ///
@@ -2585,6 +2635,12 @@ pub struct TaggedHeap {
     string_arena: ObjectArena<StringObj>,
     vector_arena: ObjectArena<VectorObj>,
     bytecode_arena: ObjectArena<ByteCodeObj>,
+    /// Interpreted closures (task 03/3b): 128B class, own arena. Page
+    /// lambdas are owned via the page-span oracle (routed by
+    /// `owns_veclike_object`), never on the intrusive lists / addr-set.
+    lambda_arena: ObjectArena<LambdaObj>,
+    /// Macros (task 03/3b): shares the 128B stride in its OWN arena.
+    macro_arena: ObjectArena<MacroObj>,
     /// Cons cells loaded directly from a mapped pdump image.  GNU's pdumper
     /// uses external mark bits for dumped objects rather than writing mark
     /// state into malloc/GC allocation headers; mirror that for mapped conses.
@@ -2828,6 +2884,8 @@ pub struct TaggedHeap {
     sweep_string_page_cursor: usize,
     sweep_vector_page_cursor: usize,
     sweep_bytecode_page_cursor: usize,
+    sweep_lambda_page_cursor: usize,
+    sweep_macro_page_cursor: usize,
     /// Non-cons objects detached from `all_objects` at sweep start, reclaimed
     /// incrementally. New non-cons allocations link onto a fresh `all_objects`
     /// and are not swept this cycle.
@@ -2896,6 +2954,8 @@ impl TaggedHeap {
             string_arena: ObjectArena::new(),
             vector_arena: ObjectArena::new(),
             bytecode_arena: ObjectArena::new(),
+            lambda_arena: ObjectArena::new(),
+            macro_arena: ObjectArena::new(),
             mapped_cons_ranges: Vec::new(),
             mapped_float_ranges: Vec::new(),
             mapped_veclike_objects: Vec::new(),
@@ -2959,6 +3019,8 @@ impl TaggedHeap {
             sweep_string_page_cursor: 0,
             sweep_vector_page_cursor: 0,
             sweep_bytecode_page_cursor: 0,
+            sweep_lambda_page_cursor: 0,
+            sweep_macro_page_cursor: 0,
             sweep_noncons_pending: std::ptr::null_mut(),
             sweep_noncons_live_bytes: 0,
             sweep_mark_us: 0,
@@ -3788,14 +3850,37 @@ impl TaggedHeap {
     /// Allocate a lambda.
     /// Allocate a lambda (interpreted closure) as a Value vector.
     /// Matches GNU Emacs's PVEC_CLOSURE: all slots are GC-traced Values.
+    ///
+    /// Allocated from the LAMBDA ARENA PAGES (task 03/3b): one FULL-header
+    /// `ptr::write` of the whole `LambdaObj` (a reused slot's stale bytes
+    /// never leak — a stale kind would type-confuse the Drop of garbage
+    /// `Vec`/`OnceLock` pointers), then the unconditional born-at-parity
+    /// store. Page lambdas are OWNED via the page-span oracle
+    /// (`lambda_arena.owns`, routed by `owns_veclike_object`): they NEVER
+    /// touch `all_objects` / `non_cons_object_addrs` / `link_veclike` — the
+    /// intrusive lists sweep with `free_gc_object`/`Box::from_raw`, which
+    /// would corrupt the heap on a page pointer. The page sweep is the only
+    /// lambda reclaimer (its `drop_in_place` frees the closure slot `Vec` +
+    /// the cached `LambdaParams`). MARKING IS UNCHANGED — the GC thread still
+    /// defers every lambda to the STW termination drain (concurrent claiming
+    /// is a future task); `mark_value`'s owned veclike arm traces it as before.
     pub fn alloc_lambda(&mut self, slots: Vec<TaggedValue>) -> TaggedValue {
-        let obj = Box::new(LambdaObj {
-            header: VecLikeHeader::new(VecLikeType::Lambda),
-            data: slots.into(),
-            parsed_params: std::sync::OnceLock::new(),
-        });
-        let ptr = Box::into_raw(obj);
-        self.link_veclike(ptr as *mut VecLikeHeader);
+        let ptr = self.lambda_arena.alloc_slot();
+        unsafe {
+            // FULL-HEADER WRITE: never partially reuse prior slot bytes.
+            std::ptr::write(
+                ptr,
+                LambdaObj {
+                    header: VecLikeHeader::new(VecLikeType::Lambda),
+                    data: slots.into(),
+                    parsed_params: std::sync::OnceLock::new(),
+                },
+            );
+            // BORN-AT-PARITY, unconditionally — the link seam's store.
+            (*ptr).header.gc.set_marked(self.mark_parity);
+        }
+        #[cfg(test)]
+        alloc_probe::record(ptr as *const GcHeader, self.non_cons_object_addrs.len());
         self.allocated_count += 1;
         self.note_allocation_bytes(unsafe { Self::lambda_object_bytes(&*ptr) });
         unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
@@ -3811,15 +3896,26 @@ impl TaggedHeap {
         self.alloc_lambda(slots)
     }
 
-    /// Allocate a macro as a Value vector.
+    /// Allocate a macro as a Value vector, from the MACRO ARENA PAGES (task
+    /// 03/3b — same discipline as `alloc_lambda`, own arena at the shared
+    /// 128B stride; `drop_in_place` frees the slot `Vec` + cached params).
     pub fn alloc_macro(&mut self, slots: Vec<TaggedValue>) -> TaggedValue {
-        let obj = Box::new(MacroObj {
-            header: VecLikeHeader::new(VecLikeType::Macro),
-            data: slots.into(),
-            parsed_params: std::sync::OnceLock::new(),
-        });
-        let ptr = Box::into_raw(obj);
-        self.link_veclike(ptr as *mut VecLikeHeader);
+        let ptr = self.macro_arena.alloc_slot();
+        unsafe {
+            // FULL-HEADER WRITE: never partially reuse prior slot bytes.
+            std::ptr::write(
+                ptr,
+                MacroObj {
+                    header: VecLikeHeader::new(VecLikeType::Macro),
+                    data: slots.into(),
+                    parsed_params: std::sync::OnceLock::new(),
+                },
+            );
+            // BORN-AT-PARITY, unconditionally.
+            (*ptr).header.gc.set_marked(self.mark_parity);
+        }
+        #[cfg(test)]
+        alloc_probe::record(ptr as *const GcHeader, self.non_cons_object_addrs.len());
         self.allocated_count += 1;
         self.note_allocation_bytes(unsafe { Self::macro_object_bytes(&*ptr) });
         unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
@@ -4574,6 +4670,10 @@ impl TaggedHeap {
         // one-time promotion, so FULL-page retirement fires for real here
         // (unlike floats) — retired pages stay registered/owned (C1).
         walk_one(&mut self.bytecode_arena);
+        // Lambdas/macros likewise tenure at the loadup promotion (interpreted
+        // closures are loadup-heavy); their arenas retire full pages too.
+        walk_one(&mut self.lambda_arena);
+        walk_one(&mut self.macro_arena);
     }
 
     /// Scan every permanent object (mapped dump + tenured old gen) for edges to
@@ -5199,6 +5299,12 @@ impl TaggedHeap {
         for slot in self.bytecode_arena.collect_allocated_slots() {
             push(slot as *mut GcHeader);
         }
+        for slot in self.lambda_arena.collect_allocated_slots() {
+            push(slot as *mut GcHeader);
+        }
+        for slot in self.macro_arena.collect_allocated_slots() {
+            push(slot as *mut GcHeader);
+        }
         out
     }
 
@@ -5222,6 +5328,12 @@ impl TaggedHeap {
             push(slot as *mut GcHeader);
         }
         for slot in self.bytecode_arena.collect_allocated_slots() {
+            push(slot as *mut GcHeader);
+        }
+        for slot in self.lambda_arena.collect_allocated_slots() {
+            push(slot as *mut GcHeader);
+        }
+        for slot in self.macro_arena.collect_allocated_slots() {
             push(slot as *mut GcHeader);
         }
         out
@@ -5710,6 +5822,8 @@ impl TaggedHeap {
             (0, self.string_arena.pages.len()),
             (0, self.vector_arena.pages.len()),
             (0, self.bytecode_arena.pages.len()),
+            (0, self.lambda_arena.pages.len()),
+            (0, self.macro_arena.pages.len()),
         );
         let mapped_object_live_bytes = self.mapped_non_cons_live_bytes();
         self.live_bytes = cons_live_bytes
@@ -6393,6 +6507,8 @@ impl TaggedHeap {
         self.sweep_string_page_cursor = 0;
         self.sweep_vector_page_cursor = 0;
         self.sweep_bytecode_page_cursor = 0;
+        self.sweep_lambda_page_cursor = 0;
+        self.sweep_macro_page_cursor = 0;
         self.sweep_noncons_live_bytes = 0;
         self.sweep_mark_us = self.incremental_mark_us;
         self.sweep_bytes_before = bytes_before;
@@ -6450,8 +6566,14 @@ impl TaggedHeap {
                 && self.sweep_float_page_cursor < self.float_arena.pages.len()
             {
                 let idx = self.sweep_float_page_cursor;
-                let (live, freed) =
-                    self.sweep_arena_pages_ranges((idx, idx + 1), (0, 0), (0, 0), (0, 0));
+                let (live, freed) = self.sweep_arena_pages_ranges(
+                    (idx, idx + 1),
+                    (0, 0),
+                    (0, 0),
+                    (0, 0),
+                    (0, 0),
+                    (0, 0),
+                );
                 self.sweep_noncons_live_bytes = self.sweep_noncons_live_bytes.saturating_add(live);
                 float_freed += freed;
                 self.sweep_float_page_cursor += 1;
@@ -6462,8 +6584,14 @@ impl TaggedHeap {
                 && self.sweep_string_page_cursor < self.string_arena.pages.len()
             {
                 let idx = self.sweep_string_page_cursor;
-                let (live, freed) =
-                    self.sweep_arena_pages_ranges((0, 0), (idx, idx + 1), (0, 0), (0, 0));
+                let (live, freed) = self.sweep_arena_pages_ranges(
+                    (0, 0),
+                    (idx, idx + 1),
+                    (0, 0),
+                    (0, 0),
+                    (0, 0),
+                    (0, 0),
+                );
                 self.sweep_noncons_live_bytes = self.sweep_noncons_live_bytes.saturating_add(live);
                 float_freed += freed;
                 self.sweep_string_page_cursor += 1;
@@ -6474,8 +6602,14 @@ impl TaggedHeap {
                 && self.sweep_vector_page_cursor < self.vector_arena.pages.len()
             {
                 let idx = self.sweep_vector_page_cursor;
-                let (live, freed) =
-                    self.sweep_arena_pages_ranges((0, 0), (0, 0), (idx, idx + 1), (0, 0));
+                let (live, freed) = self.sweep_arena_pages_ranges(
+                    (0, 0),
+                    (0, 0),
+                    (idx, idx + 1),
+                    (0, 0),
+                    (0, 0),
+                    (0, 0),
+                );
                 self.sweep_noncons_live_bytes = self.sweep_noncons_live_bytes.saturating_add(live);
                 float_freed += freed;
                 self.sweep_vector_page_cursor += 1;
@@ -6486,11 +6620,53 @@ impl TaggedHeap {
                 && self.sweep_bytecode_page_cursor < self.bytecode_arena.pages.len()
             {
                 let idx = self.sweep_bytecode_page_cursor;
-                let (live, freed) =
-                    self.sweep_arena_pages_ranges((0, 0), (0, 0), (0, 0), (idx, idx + 1));
+                let (live, freed) = self.sweep_arena_pages_ranges(
+                    (0, 0),
+                    (0, 0),
+                    (0, 0),
+                    (idx, idx + 1),
+                    (0, 0),
+                    (0, 0),
+                );
                 self.sweep_noncons_live_bytes = self.sweep_noncons_live_bytes.saturating_add(live);
                 float_freed += freed;
                 self.sweep_bytecode_page_cursor += 1;
+                swept_pages += 1;
+            }
+            let mut swept_pages = 0usize;
+            while swept_pages < budget
+                && self.sweep_lambda_page_cursor < self.lambda_arena.pages.len()
+            {
+                let idx = self.sweep_lambda_page_cursor;
+                let (live, freed) = self.sweep_arena_pages_ranges(
+                    (0, 0),
+                    (0, 0),
+                    (0, 0),
+                    (0, 0),
+                    (idx, idx + 1),
+                    (0, 0),
+                );
+                self.sweep_noncons_live_bytes = self.sweep_noncons_live_bytes.saturating_add(live);
+                float_freed += freed;
+                self.sweep_lambda_page_cursor += 1;
+                swept_pages += 1;
+            }
+            let mut swept_pages = 0usize;
+            while swept_pages < budget
+                && self.sweep_macro_page_cursor < self.macro_arena.pages.len()
+            {
+                let idx = self.sweep_macro_page_cursor;
+                let (live, freed) = self.sweep_arena_pages_ranges(
+                    (0, 0),
+                    (0, 0),
+                    (0, 0),
+                    (0, 0),
+                    (0, 0),
+                    (idx, idx + 1),
+                );
+                self.sweep_noncons_live_bytes = self.sweep_noncons_live_bytes.saturating_add(live);
+                float_freed += freed;
+                self.sweep_macro_page_cursor += 1;
                 swept_pages += 1;
             }
         }
@@ -6533,7 +6709,9 @@ impl TaggedHeap {
             && self.sweep_float_page_cursor >= self.float_arena.pages.len()
             && self.sweep_string_page_cursor >= self.string_arena.pages.len()
             && self.sweep_vector_page_cursor >= self.vector_arena.pages.len()
-            && self.sweep_bytecode_page_cursor >= self.bytecode_arena.pages.len();
+            && self.sweep_bytecode_page_cursor >= self.bytecode_arena.pages.len()
+            && self.sweep_lambda_page_cursor >= self.lambda_arena.pages.len()
+            && self.sweep_macro_page_cursor >= self.macro_arena.pages.len();
         let slice_us = t0.elapsed().as_micros() as u64;
         self.sweep_slice_us_total += slice_us;
         self.sweep_slice_count += 1;
@@ -7173,9 +7351,10 @@ impl TaggedHeap {
     /// tenured-skip, drop-in-place-before-bit-clear, retired-page skip).
     /// Vector slots are evicted from the incremental vector registry at the
     /// free hook — page vectors never pass `unregister_vector_object`.
-    /// Bytecode has no side registry: its free hook is a no-op (the
-    /// `drop_in_place` inside `sweep_range` frees the REAL payload — ops +
-    /// constants vectors, params, GNU byte maps, docstring).
+    /// Bytecode / lambda / macro have no side registry: their free hook is a
+    /// no-op (the `drop_in_place` inside `sweep_range` frees the REAL payload
+    /// — bytecode's ops + constants vectors, params, GNU byte maps, docstring;
+    /// lambda/macro's closure slot Vec + cached params).
     ///
     /// Returns `(survivor bytes, slots freed)` summed over the classes.
     fn sweep_arena_pages_ranges(
@@ -7184,6 +7363,8 @@ impl TaggedHeap {
         string_range: (usize, usize),
         vector_range: (usize, usize),
         bytecode_range: (usize, usize),
+        lambda_range: (usize, usize),
+        macro_range: (usize, usize),
     ) -> (usize, usize) {
         let parity = self.mark_parity;
         let (fl, ff) = self
@@ -7195,6 +7376,12 @@ impl TaggedHeap {
         let (bl, bf) =
             self.bytecode_arena
                 .sweep_range(bytecode_range.0, bytecode_range.1, parity, |_| {});
+        let (lal, laf) =
+            self.lambda_arena
+                .sweep_range(lambda_range.0, lambda_range.1, parity, |_| {});
+        let (mal, maf) =
+            self.macro_arena
+                .sweep_range(macro_range.0, macro_range.1, parity, |_| {});
         let TaggedHeap {
             vector_arena,
             vector_object_addrs,
@@ -7204,9 +7391,9 @@ impl TaggedHeap {
             let removed = vector_object_addrs.remove(&addr);
             debug_assert!(removed, "freed page vector was not in the registry");
         });
-        let freed = ff + sf + vf + bf;
+        let freed = ff + sf + vf + bf + laf + maf;
         self.allocated_count = self.allocated_count.saturating_sub(freed);
-        (fl + sl + vl + bl, freed)
+        (fl + sl + vl + bl + lal + mal, freed)
     }
 
     /// `(total mapped objects, mapped objects currently marked)`.
@@ -7373,13 +7560,15 @@ impl TaggedHeap {
 
     #[inline]
     fn owns_veclike_object(&self, ptr: *const u8) -> bool {
-        // `VecLikeType::Vector` and `VecLikeType::ByteCode` are paged (each
-        // in its own class arena — distinct registries, so a hit is never a
-        // cross-class collision); every other veclike is a residual `Box` in
-        // the addr-set.
+        // `VecLikeType::Vector`, `ByteCode`, `Lambda`, and `Macro` are paged
+        // (each in its own class arena — distinct registries, so a hit is
+        // never a cross-class collision); every other veclike is a residual
+        // `Box` in the addr-set.
         !ptr.is_null()
             && (self.vector_arena.owns(ptr)
                 || self.bytecode_arena.owns(ptr)
+                || self.lambda_arena.owns(ptr)
+                || self.macro_arena.owns(ptr)
                 || self.non_cons_object_addrs.contains(&(ptr as usize)))
     }
 
@@ -7409,6 +7598,8 @@ impl TaggedHeap {
             && (self.string_arena.owns(ptr)
                 || self.vector_arena.owns(ptr)
                 || self.bytecode_arena.owns(ptr)
+                || self.lambda_arena.owns(ptr)
+                || self.macro_arena.owns(ptr)
                 || self.float_arena.owns(ptr)
                 || self.non_cons_object_addrs.contains(&(ptr as usize)))
     }
@@ -7529,6 +7720,18 @@ impl TaggedHeap {
             parity,
             &mut total_marked,
         );
+        verify_arena_slots(
+            &self.lambda_arena,
+            &self.non_cons_object_addrs,
+            parity,
+            &mut total_marked,
+        );
+        verify_arena_slots(
+            &self.macro_arena,
+            &self.non_cons_object_addrs,
+            parity,
+            &mut total_marked,
+        );
         tracing::trace!(
             "GC verify: {} marked non-cons objects, all owned",
             total_marked
@@ -7560,6 +7763,8 @@ impl TaggedHeap {
         self.assert_one_arena_coherent(&self.string_arena);
         self.assert_one_arena_coherent(&self.vector_arena);
         self.assert_one_arena_coherent(&self.bytecode_arena);
+        self.assert_one_arena_coherent(&self.lambda_arena);
+        self.assert_one_arena_coherent(&self.macro_arena);
         // Vector registry ⊇ page vector slots (page alloc inserts; page sweep
         // removes). The registry may also hold residual Box vectors.
         for slot in self.vector_arena.collect_allocated_slots() {
@@ -7580,6 +7785,30 @@ impl TaggedHeap {
             assert!(
                 !self.vector_object_addrs.contains(&(slot as usize)),
                 "bytecode arena slot {slot:p} must NOT be in the vector registry",
+            );
+        }
+        // Lambda/macro slots carry their own type tag and never leak into the
+        // vector registry (they have no side registry — like bytecode).
+        for slot in self.lambda_arena.collect_allocated_slots() {
+            assert_eq!(
+                unsafe { (*(slot as *const VecLikeHeader)).type_tag },
+                VecLikeType::Lambda,
+                "lambda arena slot {slot:p} carries a non-Lambda type tag",
+            );
+            assert!(
+                !self.vector_object_addrs.contains(&(slot as usize)),
+                "lambda arena slot {slot:p} must NOT be in the vector registry",
+            );
+        }
+        for slot in self.macro_arena.collect_allocated_slots() {
+            assert_eq!(
+                unsafe { (*(slot as *const VecLikeHeader)).type_tag },
+                VecLikeType::Macro,
+                "macro arena slot {slot:p} carries a non-Macro type tag",
+            );
+            assert!(
+                !self.vector_object_addrs.contains(&(slot as usize)),
+                "macro arena slot {slot:p} must NOT be in the vector registry",
             );
         }
     }
@@ -7721,18 +7950,19 @@ impl Drop for TaggedHeap {
             }
         }
         // ConsBlocks are dropped automatically (they implement Drop).
-        // Object arena pages likewise: page floats/strings/vectors/bytecode
-        // are on NONE of the lists above (so the walk cannot hand a page
-        // pointer to `free_gc_object`'s `Box::from_raw`), and the arena
-        // fields drop after this body, freeing every page via
+        // Object arena pages likewise: page floats/strings/vectors/bytecode/
+        // lambdas/macros are on NONE of the lists above (so the walk cannot
+        // hand a page pointer to `free_gc_object`'s `Box::from_raw`), and the
+        // arena fields drop after this body, freeing every page via
         // `ObjectPage::drop`, which walks the allocated slots and
         // `drop_in_place`s each live object (strings free their byte storage
         // + interval tables, vectors their element `Vec`, bytecode its
-        // ops/constants vectors + params + GNU byte maps + docstring; floats
-        // are POD and the walk compiles out) before releasing the page
-        // storage — retired pages included. The concurrent-mark join at the
-        // top of this body has already reclaimed exclusive ownership, so the
-        // GC thread cannot still be reading a page.
+        // ops/constants vectors + params + GNU byte maps + docstring,
+        // lambdas/macros their closure slot `Vec` + cached params; floats are
+        // POD and the walk compiles out) before releasing the page storage —
+        // retired pages included. The concurrent-mark join at the top of this
+        // body has already reclaimed exclusive ownership, so the GC thread
+        // cannot still be reading a page.
     }
 }
 
@@ -8061,7 +8291,8 @@ mod ownership_tests {
         // --- Sweep the vector arena: O and Q are unmarked ⇒ freed, their slots
         //     returned to the class free list. ---
         let vpages = heap.vector_arena.pages.len();
-        let (_live, freed) = heap.sweep_arena_pages_ranges((0, 0), (0, 0), (0, vpages), (0, 0));
+        let (_live, freed) =
+            heap.sweep_arena_pages_ranges((0, 0), (0, 0), (0, vpages), (0, 0), (0, 0), (0, 0));
         assert!(
             freed >= 2,
             "the sweep must reclaim the two unrooted garbage vectors (freed={freed})",
@@ -13447,6 +13678,846 @@ mod bytecode_arena_tests {
     #[test]
     fn tenured_page_bytecode_keeps_young_cons_child_alive_verified() {
         tenured_page_bytecode_keeps_young_cons_child_alive_body(true);
+    }
+}
+
+/// LAMBDA + MACRO ARENA test suite (task 03/3b): the 128B power-of-two class
+/// (512 slots/page, no page tail) shared by TWO distinct payload types in
+/// SEPARATE arenas. Covers page-span oracle exactness, alloc/free/reuse +
+/// ownership-tracks-sweep, two-cycle parity survival/reclaim, the
+/// deferred-at-termination resolution through `mark_value`'s
+/// page-oracle-routed veclike arm (TRAP A — closures stay DEFERRED for
+/// marking; concurrent claiming is a future task), adversarial freed-slot
+/// staleness, `drop_in_place` of the closure slot `Vec` (variable-size
+/// live-bytes on both recompute sites + payload teardown counters),
+/// loadup-shaped tenure + FULL-page retirement (C1), and mixed-page parity
+/// survival. Lambda gets the full battery; Macro gets an independent
+/// exactness/sweep/tenure/teardown battery proving its own arena. Scenarios
+/// run plain and (where the partition matters) VERIFY_PARTITION-armed.
+#[cfg(test)]
+mod lambda_macro_arena_tests {
+    use super::*;
+
+    fn arm_partition(heap: &mut TaggedHeap, verify: bool) {
+        if verify {
+            unsafe { std::env::set_var("NEOVM_GC_VERIFY_PARTITION", "1") };
+        }
+        heap.extend_dump_span(4096, 16);
+    }
+
+    /// Drive one full concurrent cycle (copy of the bytecode_arena_tests
+    /// helper, local so this module stands alone).
+    fn run_concurrent_cycle(heap: &mut TaggedHeap, roots: &[TaggedValue]) {
+        heap.concurrent_begin();
+        for &root in roots {
+            heap.seed_root(root);
+        }
+        heap.launch_concurrent_mark();
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        for &root in roots {
+            heap.seed_root(root);
+        }
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+        assert!(!heap.sweep_in_progress());
+    }
+
+    /// A closure slot vector whose slot 0 is a fixnum IDENTITY and slot 1 is
+    /// `child` (an arbitrary value — a cons in the children-coverage tests),
+    /// padded to `n_slots` NILs. The slot `Vec` is the REAL `drop_in_place`
+    /// payload the page sweep must free.
+    fn lambda_slots(id: i64, child: TaggedValue, n_slots: usize) -> Vec<TaggedValue> {
+        let mut v = vec![TaggedValue::NIL; n_slots.max(2)];
+        v[0] = TaggedValue::fixnum(id);
+        v[1] = child;
+        v
+    }
+
+    fn lam_ptr(v: TaggedValue) -> *const u8 {
+        v.as_veclike_ptr().unwrap() as *const u8
+    }
+    fn lam_slot(v: TaggedValue, i: usize) -> TaggedValue {
+        let obj = unsafe { &*(v.as_veclike_ptr().unwrap() as *const LambdaObj) };
+        obj.data.as_slice()[i]
+    }
+    fn mac_slot(v: TaggedValue, i: usize) -> TaggedValue {
+        let obj = unsafe { &*(v.as_veclike_ptr().unwrap() as *const MacroObj) };
+        obj.data.as_slice()[i]
+    }
+
+    /// (a) PAGE-SPAN ORACLE EXACTNESS for the 128B stride: owned for a live
+    /// slot base ONLY — false for freed slots, interior/unaligned addresses,
+    /// and never-bumped slots. Cross-class registries never collide.
+    #[test]
+    fn lambda_page_span_oracle_freed_slot_exactness() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let keep = heap.alloc_lambda(lambda_slots(1, TaggedValue::NIL, 6));
+        let dead = heap.alloc_lambda(lambda_slots(2, TaggedValue::NIL, 6));
+        let keep2 = heap.alloc_lambda(lambda_slots(3, TaggedValue::NIL, 6));
+        let f = heap.alloc_float(1.5);
+        let m = heap.alloc_macro(lambda_slots(9, TaggedValue::NIL, 6));
+        let dead_addr = lam_ptr(dead) as usize;
+
+        // Page lambdas never touch the residual addr-set (TRAP A/B).
+        assert_eq!(heap.non_cons_object_addrs.len(), 0);
+        assert!(heap.lambda_arena.owns(lam_ptr(dead)));
+
+        heap.collect_exact([keep, keep2, f, m].into_iter());
+
+        let b_addr = lam_ptr(keep) as usize;
+        assert!(heap.lambda_arena.owns(b_addr as *const u8));
+        assert!(heap.owns_non_cons_object(b_addr as *const u8));
+        assert!(heap.owns_veclike_object(b_addr as *const u8));
+        // Freed slot answers NOT owned the instant its bit clears.
+        assert!(!heap.lambda_arena.owns(dead_addr as *const u8));
+        assert!(!heap.owns_non_cons_object(dead_addr as *const u8));
+        // Interior (stride-misaligned) + arbitrary unaligned addresses.
+        assert!(!heap.lambda_arena.owns((b_addr + 8) as *const u8));
+        assert!(!heap.lambda_arena.owns((b_addr + 64) as *const u8));
+        assert!(!heap.lambda_arena.owns((b_addr + 1) as *const u8));
+        // Never-allocated slot beyond the bump cursor, inside the page.
+        let page_base = ObjectPage::<LambdaObj>::page_base_for_ptr(b_addr as *const LambdaObj);
+        let beyond_bump = page_base + 400 * <LambdaObj as PagedObject>::SLOT_BYTES;
+        assert!(!heap.lambda_arena.owns(beyond_bump as *const u8));
+        // Cross-class registries: never merged, never colliding — including
+        // the SIBLING 128B macro arena (same stride, distinct registry).
+        let f_addr = f.as_float_ptr().unwrap() as usize;
+        assert!(!heap.lambda_arena.owns(f_addr as *const u8));
+        assert!(!heap.float_arena.owns(b_addr as *const u8));
+        assert!(!heap.vector_arena.owns(b_addr as *const u8));
+        assert!(!heap.macro_arena.owns(b_addr as *const u8));
+        assert!(!heap.lambda_arena.owns(lam_ptr(m)));
+        assert!(heap.macro_arena.owns(lam_ptr(m)));
+        heap.assert_object_arenas_coherent();
+    }
+
+    /// (g) ownership-index-tracks-sweep: the sweep's alloc-bit clear IS the
+    /// ownership eviction; the residual addr-set stays empty throughout and
+    /// payloads stay intact.
+    #[test]
+    fn lambda_ownership_tracks_sweep() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let live = heap.alloc_lambda(lambda_slots(10, TaggedValue::NIL, 8));
+        let dead = heap.alloc_lambda(lambda_slots(20, TaggedValue::NIL, 8));
+        let live_ptr = lam_ptr(live);
+        let dead_ptr = lam_ptr(dead);
+
+        assert!(heap.owns_non_cons_object(live_ptr));
+        assert!(heap.owns_non_cons_object(dead_ptr));
+        assert_eq!(heap.non_cons_object_addrs.len(), 0);
+
+        heap.collect_exact(std::iter::once(live));
+
+        assert!(heap.owns_non_cons_object(live_ptr));
+        assert!(!heap.owns_non_cons_object(dead_ptr));
+        assert!(heap.lambda_arena.owns(live_ptr));
+        assert!(!heap.lambda_arena.owns(dead_ptr));
+        assert_eq!(heap.non_cons_object_addrs.len(), 0);
+        assert_eq!(lam_slot(live, 0).as_fixnum(), Some(10));
+        heap.assert_object_arenas_coherent();
+    }
+
+    /// (b) Parity two-cycle properties: mark-born survives its birth cycle
+    /// unrooted then the next rooted; idle-born garbage reclaimed by the
+    /// first cycle after birth; mark-born garbage floats through its birth
+    /// cycle and is reclaimed by the next.
+    fn parity_two_cycle_lambda_survival_and_reclaim_body(verify: bool) {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        if verify {
+            arm_partition(&mut heap, true);
+        }
+
+        let mut spine = TaggedValue::fixnum(0);
+        for i in 0..100_000 {
+            spine = heap.alloc_cons(TaggedValue::fixnum(i), spine);
+        }
+        heap.collect_exact(std::iter::once(spine));
+        assert!(heap.should_run_concurrent());
+
+        // Cycle 2: lambda born MID-MARK (allocate-black), NOT seeded.
+        heap.concurrent_begin();
+        heap.seed_root(spine);
+        heap.launch_concurrent_mark();
+        let b = heap.alloc_lambda(lambda_slots(25, TaggedValue::NIL, 6));
+        let b_ptr = lam_ptr(b);
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(spine);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+        assert!(
+            heap.owns_non_cons_object(b_ptr),
+            "allocate-black lambda must survive the cycle it was born in",
+        );
+        heap.assert_object_arenas_coherent();
+
+        // Cycle 3 (opposite parity): rooted — survives with payload intact.
+        run_concurrent_cycle(&mut heap, &[spine, b]);
+        assert!(heap.owns_non_cons_object(b_ptr));
+        assert_eq!(lam_slot(b, 0).as_fixnum(), Some(25));
+        heap.assert_object_arenas_coherent();
+
+        // Reclaim: g1 idle-born, g2 mark-born.
+        let g1 = heap.alloc_lambda(lambda_slots(-9, TaggedValue::NIL, 6));
+        let g1_ptr = lam_ptr(g1);
+        heap.concurrent_begin();
+        heap.seed_root(spine);
+        heap.seed_root(b);
+        heap.launch_concurrent_mark();
+        let g2 = heap.alloc_lambda(lambda_slots(-8, TaggedValue::NIL, 6));
+        let g2_ptr = lam_ptr(g2);
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(spine);
+        heap.seed_root(b);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+        assert!(
+            !heap.owns_non_cons_object(g1_ptr),
+            "idle-born garbage lambda must be reclaimed by the next cycle",
+        );
+        assert!(
+            heap.owns_non_cons_object(g2_ptr),
+            "mark-born garbage lambda floats through its birth cycle",
+        );
+        heap.assert_object_arenas_coherent();
+
+        run_concurrent_cycle(&mut heap, &[spine, b]);
+        assert!(
+            !heap.owns_non_cons_object(g2_ptr),
+            "mark-born garbage lambda must be reclaimed by the SECOND cycle",
+        );
+        assert_eq!(lam_slot(b, 0).as_fixnum(), Some(25));
+        heap.assert_object_arenas_coherent();
+    }
+
+    #[test]
+    fn parity_two_cycle_lambda_survival_and_reclaim() {
+        parity_two_cycle_lambda_survival_and_reclaim_body(false);
+    }
+    #[test]
+    fn parity_two_cycle_lambda_survival_and_reclaim_verified() {
+        parity_two_cycle_lambda_survival_and_reclaim_body(true);
+    }
+
+    /// (TRAP A) A lambda parked in `deferred` by the GC thread resolves at
+    /// the STW termination through `mark_value`'s OWNED veclike arm — routed
+    /// (since this commit) through the page-span oracle. A dropped route
+    /// reads as "mapped" and silently drops the mark (UAF). Slot children
+    /// (reachable only through the lambda) must be traced. Closures stay
+    /// DEFERRED for marking (`closure` drain bucket), unchanged by paging.
+    fn deferred_lambda_resolves_at_termination_body(verify: bool) {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        if verify {
+            arm_partition(&mut heap, true);
+        }
+
+        let mut spine = TaggedValue::fixnum(0);
+        for i in 0..100_000 {
+            spine = heap.alloc_cons(TaggedValue::fixnum(i), spine);
+        }
+        heap.collect_exact(std::iter::once(spine));
+        assert!(heap.should_run_concurrent());
+
+        let mut list = TaggedValue::fixnum(0);
+        let mut lambdas = Vec::new();
+        let mut children = Vec::new();
+        for i in 0..300 {
+            let child = heap.alloc_cons(TaggedValue::fixnum(10_000 + i), TaggedValue::fixnum(0));
+            children.push(child);
+            let b = heap.alloc_lambda(lambda_slots(i, child, 6));
+            lambdas.push(b);
+            list = heap.alloc_cons(b, list);
+        }
+        let garbage = heap.alloc_lambda(lambda_slots(-1, TaggedValue::NIL, 6));
+        let garbage_ptr = lam_ptr(garbage);
+
+        heap.concurrent_begin();
+        heap.seed_root(spine);
+        heap.seed_root(list);
+        heap.launch_concurrent_mark();
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        let stats = heap.sweep_stats();
+        assert!(
+            stats.last_termination_kinds.closure >= 300,
+            "every rooted lambda must reach the termination via `deferred` \
+             (got {}) — closures stay deferred in this commit",
+            stats.last_termination_kinds.closure,
+        );
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(spine);
+        heap.seed_root(list);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+
+        for (i, b) in lambdas.iter().enumerate() {
+            assert!(
+                heap.owns_non_cons_object(lam_ptr(*b)),
+                "deferred-then-resolved lambda {i} was swept while rooted",
+            );
+            assert_eq!(lam_slot(*b, 0).as_fixnum(), Some(i as i64));
+            assert_eq!(
+                unsafe { (*children[i].xcons_ptr()).load_car() }.as_fixnum(),
+                Some(10_000 + i as i64),
+                "lambda {i}'s slot child was swept while live",
+            );
+        }
+        assert!(
+            !heap.owns_non_cons_object(garbage_ptr),
+            "unrooted lambda must not be retained by the deferred machinery",
+        );
+        heap.assert_object_arenas_coherent();
+    }
+
+    #[test]
+    fn deferred_lambda_resolves_at_termination() {
+        deferred_lambda_resolves_at_termination_body(false);
+    }
+    #[test]
+    fn deferred_lambda_resolves_at_termination_verified() {
+        deferred_lambda_resolves_at_termination_body(true);
+    }
+
+    /// ALLOCATED-BIT-FIRST under adversarial staleness, payload-class form:
+    /// garbage scribbled into freed slots' object bytes (a junk kind would
+    /// Drop-dispatch garbage `Vec`/`OnceLock` pointers if trusted) is never
+    /// read by the sweep, verifiers, or teardown; reallocation
+    /// FULL-HEADER-WRITEs every stale byte away.
+    fn lambda_freed_slot_garbage_never_read_body(verify: bool) {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        if verify {
+            arm_partition(&mut heap, true);
+            heap.collect_exact(std::iter::empty());
+        }
+
+        let mut lambdas = Vec::new();
+        for i in 0..100 {
+            lambdas.push(heap.alloc_lambda(lambda_slots(i, TaggedValue::NIL, 6)));
+        }
+        let keep: Vec<TaggedValue> = lambdas.iter().copied().step_by(2).collect();
+        let dead_ptrs: Vec<*mut LambdaObj> = lambdas
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| i % 2 == 1)
+            .map(|(_, v)| v.as_veclike_ptr().unwrap() as *mut LambdaObj)
+            .collect();
+
+        heap.collect_exact(keep.iter().copied());
+        for &p in &dead_ptrs {
+            assert!(!heap.owns_non_cons_object(p as *const u8));
+        }
+
+        // ADVERSARY: scribble every freed slot's object bytes with 0xFF
+        // (everything but the trailing link word at 120..128).
+        for &p in &dead_ptrs {
+            unsafe { std::ptr::write_bytes(p as *mut u8, 0xFF, size_of::<LambdaObj>()) };
+        }
+        heap.assert_object_arenas_coherent();
+
+        // A full cycle re-sweeps: scribbled slots' bits are clear, so no
+        // header is Drop-dispatched, size-read, or parity-read.
+        heap.collect_exact(keep.iter().copied());
+        for (i, k) in keep.iter().enumerate() {
+            assert_eq!(lam_slot(*k, 0).as_fixnum(), Some(2 * i as i64));
+        }
+        heap.assert_object_arenas_coherent();
+
+        // Reallocate exactly the freed population: the FULL-HEADER WRITE must
+        // rebuild every byte — a stale 0xFF kind/type would misroute the next
+        // sweep's `drop_in_place` (type-confused Drop of garbage pointers).
+        let mut reused = Vec::new();
+        for i in 0..dead_ptrs.len() {
+            reused.push(heap.alloc_lambda(lambda_slots(500 + i as i64, TaggedValue::NIL, 8)));
+        }
+        let dead_addrs: std::collections::HashSet<usize> =
+            dead_ptrs.iter().map(|&p| p as usize).collect();
+        for (i, r) in reused.iter().enumerate() {
+            let ptr = r.as_veclike_ptr().unwrap() as *const LambdaObj;
+            assert!(
+                dead_addrs.contains(&(ptr as usize)),
+                "reallocation must reuse the freed (scribbled) slots",
+            );
+            unsafe {
+                assert_eq!((*ptr).header.gc.kind, HeapObjectKind::VecLike);
+                assert_eq!((*ptr).header.type_tag, VecLikeType::Lambda);
+                assert!(!(*ptr).header.gc.tenured, "stale tenured byte must be rewritten");
+                assert!((*ptr).header.gc.next.is_null(), "stale next ptr must be rewritten");
+            }
+            assert_eq!(lam_slot(*r, 0).as_fixnum(), Some(500 + i as i64));
+        }
+        heap.assert_object_arenas_coherent();
+
+        // Rebuilt headers + payloads survive a rooted cycle, and a final
+        // unrooted cycle reclaims them cleanly (REAL Drop on rewritten — valid
+        // — pointers, not the scribble).
+        let mut roots: Vec<TaggedValue> = keep.clone();
+        roots.extend(reused.iter().copied());
+        heap.collect_exact(roots.iter().copied());
+        heap.collect_exact(keep.iter().copied());
+        for r in &reused {
+            assert!(!heap.owns_non_cons_object(lam_ptr(*r)));
+        }
+        heap.assert_object_arenas_coherent();
+    }
+
+    #[test]
+    fn lambda_freed_slot_garbage_never_read() {
+        lambda_freed_slot_garbage_never_read_body(false);
+    }
+    #[test]
+    fn lambda_freed_slot_garbage_never_read_verified() {
+        lambda_freed_slot_garbage_never_read_body(true);
+    }
+
+    /// Mid-sweep slot reuse within one cooperative sweep window (the class
+    /// free list hands freed slots to a mutator running BETWEEN slices) for
+    /// the payload class: no double-free, no premature free, `drop_in_place`
+    /// only on dead slots.
+    #[test]
+    fn lambda_reuse_within_one_cooperative_sweep_window() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // Exactly three full pages of lambdas.
+        let n = 3 * LAMBDA_PAGE_SLOTS;
+        let mut lambdas = Vec::with_capacity(n);
+        for i in 0..n {
+            lambdas.push(heap.alloc_lambda(lambda_slots(i as i64, TaggedValue::NIL, 2)));
+        }
+        assert_eq!(heap.lambda_arena.pages.len(), 3);
+        heap.assert_object_arenas_coherent();
+
+        let keep: Vec<TaggedValue> = lambdas.iter().copied().step_by(2).collect();
+        let dead_addrs: std::collections::HashSet<usize> = lambdas
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| i % 2 == 1)
+            .map(|(_, v)| lam_ptr(*v) as usize)
+            .collect();
+        let page0_base = heap.lambda_arena.pages[0].base_addr();
+
+        heap.begin_collection();
+        for &k in &keep {
+            heap.seed_root(k);
+        }
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        assert!(heap.sweep_in_progress());
+
+        // Slice 1 (budget 1): sweeps lambda page 0 only.
+        assert!(!heap.incremental_sweep_slice(1), "3 pages need >1 slice");
+        assert!(heap.sweep_in_progress());
+        heap.assert_object_arenas_coherent();
+
+        // BETWEEN slices the mutator reallocates from the just-swept page.
+        let mut reused = Vec::new();
+        for i in 0..32 {
+            reused.push(heap.alloc_lambda(lambda_slots(1_000 + i, TaggedValue::NIL, 2)));
+        }
+        for r in &reused {
+            let ptr = r.as_veclike_ptr().unwrap() as *const LambdaObj;
+            assert_eq!(
+                ObjectPage::<LambdaObj>::page_base_for_ptr(ptr),
+                page0_base,
+                "mid-sweep reuse must come from the just-swept page",
+            );
+            assert!(dead_addrs.contains(&(ptr as usize)));
+        }
+        heap.assert_object_arenas_coherent();
+
+        while !heap.incremental_sweep_slice(1) {}
+        assert!(!heap.sweep_in_progress());
+        heap.assert_object_arenas_coherent();
+
+        for (i, r) in reused.iter().enumerate() {
+            assert!(heap.owns_non_cons_object(lam_ptr(*r)));
+            assert_eq!(lam_slot(*r, 0).as_fixnum(), Some(1_000 + i as i64));
+        }
+        for (i, k) in keep.iter().enumerate() {
+            assert_eq!(lam_slot(*k, 0).as_fixnum(), Some(2 * i as i64));
+        }
+    }
+
+    /// (c) VARIABLE-size live-bytes accounting on BOTH recompute sites: big
+    /// slot vectors counted for survivors (fixed struct + owned slot storage),
+    /// garbage not.
+    #[test]
+    fn lambda_sweep_live_bytes_track_variable_payload_sizes() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let l_big = heap.alloc_lambda(lambda_slots(7, TaggedValue::NIL, 2_000));
+        let l_small = heap.alloc_lambda(lambda_slots(1, TaggedValue::NIL, 2));
+        let _dead = heap.alloc_lambda(lambda_slots(0, TaggedValue::NIL, 4_000));
+        let mut root = TaggedValue::fixnum(0);
+        let mut cons_count = 0usize;
+        for val in [l_big, l_small] {
+            root = heap.alloc_cons(val, root);
+            cons_count += 1;
+        }
+
+        let expected_objects: usize = [l_big, l_small]
+            .iter()
+            .map(|b| {
+                TaggedHeap::object_bytes_from_header(b.as_veclike_ptr().unwrap() as *const GcHeader)
+            })
+            .sum::<usize>();
+        let expected = expected_objects + cons_count * size_of::<ConsCell>();
+        assert!(expected_objects > 2 * size_of::<LambdaObj>() + 2_000 * size_of::<TaggedValue>());
+
+        // Eager (finalize_collection) recompute site.
+        heap.collect_exact(std::iter::once(root));
+        assert_eq!(
+            heap.live_bytes(),
+            expected,
+            "eager sweep live_bytes != summed survivor bytes",
+        );
+
+        // Incremental (sweep slices -> finish_incremental_sweep) site.
+        heap.begin_collection();
+        heap.seed_root(root);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+        assert_eq!(
+            heap.live_bytes(),
+            expected,
+            "incremental sweep live_bytes != summed survivor bytes",
+        );
+    }
+
+    /// (d) LOADUP-SHAPED tenure + retirement: a full page of rooted lambdas
+    /// retires at the one-time promotion (still owned — C1), a partial page
+    /// does not; the tenured population survives one cycle per parity with
+    /// payloads intact; post-retirement allocation never lands in the retired
+    /// page.
+    fn lambda_survivors_tenure_and_full_pages_retire_body(verify: bool) {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        arm_partition(&mut heap, verify);
+
+        let mut root = TaggedValue::fixnum(0);
+        let mut lambdas = Vec::with_capacity(LAMBDA_PAGE_SLOTS + 2);
+        for i in 0..(LAMBDA_PAGE_SLOTS + 2) {
+            let b = heap.alloc_lambda(lambda_slots(i as i64, TaggedValue::NIL, 4));
+            lambdas.push(b);
+            root = heap.alloc_cons(b, root);
+        }
+        assert_eq!(heap.lambda_arena.pages.len(), 2);
+        assert_eq!(heap.lambda_arena.pages[0].allocated, LAMBDA_PAGE_SLOTS);
+
+        heap.collect_exact(std::iter::once(root));
+        assert!(heap.dump_blackened);
+
+        for b in &lambdas {
+            let ptr = b.as_veclike_ptr().unwrap();
+            assert!(unsafe { (*ptr).gc.tenured }, "page lambda not tenured");
+        }
+        assert!(heap.lambda_arena.pages[0].retired, "full page must retire");
+        assert!(!heap.lambda_arena.pages[1].retired, "partial page retired");
+        assert_eq!(heap.lambda_arena.pages[0].allocated, LAMBDA_PAGE_SLOTS);
+        // C1: retired-page slots STAY owned.
+        assert!(heap.owns_non_cons_object(lam_ptr(lambdas[0])));
+        assert!(heap.lambda_arena.owns(lam_ptr(lambdas[0])));
+        heap.assert_object_arenas_coherent();
+
+        // Post-retirement allocation must never land in the retired page.
+        let retired_base = heap.lambda_arena.pages[0].base_addr();
+        let fresh = heap.alloc_lambda(lambda_slots(-5, TaggedValue::NIL, 2));
+        assert_ne!(
+            ObjectPage::<LambdaObj>::page_base_for_ptr(
+                fresh.as_veclike_ptr().unwrap() as *const LambdaObj
+            ),
+            retired_base,
+            "allocation reused a retired page",
+        );
+
+        for cycle in 0..2 {
+            heap.collect_exact(std::iter::once(root));
+            for (i, b) in lambdas.iter().enumerate() {
+                assert!(
+                    heap.owns_non_cons_object(lam_ptr(*b)),
+                    "tenured page lambda #{i} lost on cycle {cycle}",
+                );
+                assert_eq!(lam_slot(*b, 0).as_fixnum(), Some(i as i64));
+            }
+            assert_eq!(heap.lambda_arena.pages[0].allocated, LAMBDA_PAGE_SLOTS);
+            heap.assert_object_arenas_coherent();
+        }
+    }
+
+    #[test]
+    fn lambda_survivors_tenure_and_full_pages_retire() {
+        lambda_survivors_tenure_and_full_pages_retire_body(false);
+    }
+    #[test]
+    fn lambda_survivors_tenure_and_full_pages_retire_verified() {
+        lambda_survivors_tenure_and_full_pages_retire_body(true);
+    }
+
+    /// (d, mixed) Tenured + post-promotion YOUNG slots share a lambda page
+    /// across TWO alternating-parity cycles: tenured survive intact (a
+    /// parity-blind sweep would free them on the flipped cycle), young
+    /// garbage in the SAME page is reclaimed.
+    fn lambda_mixed_page_tenured_survive_alternating_parities_body(verify: bool) {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        arm_partition(&mut heap, verify);
+
+        let mut keep = Vec::new();
+        let mut root = TaggedValue::fixnum(0);
+        for i in 0..10 {
+            let b = heap.alloc_lambda(lambda_slots(i as i64, TaggedValue::NIL, 4));
+            if i % 2 == 0 {
+                keep.push(b);
+                root = heap.alloc_cons(b, root);
+            }
+        }
+        heap.collect_exact(std::iter::once(root));
+        assert!(heap.dump_blackened);
+        assert!(!heap.lambda_arena.pages[0].retired);
+
+        for cycle in 0..2 {
+            for i in 0..5 {
+                let _ = heap.alloc_lambda(lambda_slots(-(i as i64), TaggedValue::NIL, 4));
+            }
+            heap.collect_exact(std::iter::once(root));
+            for (i, b) in keep.iter().enumerate() {
+                assert!(
+                    heap.owns_non_cons_object(lam_ptr(*b)),
+                    "tenured lambda #{i} freed on parity cycle {cycle}",
+                );
+                assert_eq!(lam_slot(*b, 0).as_fixnum(), Some(2 * i as i64));
+            }
+            heap.assert_object_arenas_coherent();
+        }
+    }
+
+    #[test]
+    fn lambda_mixed_page_tenured_survive_alternating_parities() {
+        lambda_mixed_page_tenured_survive_alternating_parities_body(false);
+    }
+    #[test]
+    fn lambda_mixed_page_tenured_survive_alternating_parities_verified() {
+        lambda_mixed_page_tenured_survive_alternating_parities_body(true);
+    }
+
+    /// (e) Teardown with payload-bearing lambdas: every lambda page is freed
+    /// exactly once at heap drop — retired pages included — with the per-slot
+    /// `drop_in_place` releasing the closure slot `Vec` (ASAN/MIRI catch a
+    /// leak/double-free; the counters prove page accounting either way). The
+    /// sweep-time `drop_in_place` path is exercised too (half die first).
+    fn lambda_payload_pages_freed_at_heap_drop_body(mid_mark: bool) {
+        crate::test_utils::init_test_tracing();
+        let before = LIVE_LAMBDA_PAGES.load(Ordering::Relaxed);
+        {
+            let mut heap = TaggedHeap::new();
+            set_tagged_heap(&mut heap);
+            heap.extend_dump_span(4096, 16);
+
+            let mut root = TaggedValue::fixnum(0);
+            for i in 0..1_500 {
+                let b = heap.alloc_lambda(lambda_slots(i, TaggedValue::NIL, 32));
+                if i % 2 == 0 {
+                    root = heap.alloc_cons(b, root);
+                }
+            }
+            assert!(LIVE_LAMBDA_PAGES.load(Ordering::Relaxed) > before);
+
+            heap.collect_exact(std::iter::once(root));
+            assert!(heap.dump_blackened);
+            heap.assert_object_arenas_coherent();
+
+            if mid_mark {
+                heap.concurrent_begin();
+                heap.seed_root(root);
+                heap.launch_concurrent_mark();
+                assert!(heap.concurrent_mark_running());
+            }
+            drop(heap);
+        }
+        assert_eq!(
+            LIVE_LAMBDA_PAGES.load(Ordering::Relaxed),
+            before,
+            "lambda pages leaked or double-freed at teardown",
+        );
+    }
+
+    #[test]
+    fn lambda_payload_pages_freed_at_heap_drop() {
+        lambda_payload_pages_freed_at_heap_drop_body(false);
+    }
+    #[test]
+    fn lambda_payload_pages_freed_at_heap_drop_mid_concurrent_mark() {
+        lambda_payload_pages_freed_at_heap_drop_body(true);
+    }
+
+    /// Promotion-scan coverage: a page lambda tenured at promotion whose slot
+    /// holds a young CONS child (conses never tenure) and is never mutated —
+    /// the promotion-time page-tenured remembered-set scan must walk lambda
+    /// pages or the child is swept while its permanently-black owner points
+    /// at it.
+    fn tenured_page_lambda_keeps_young_cons_child_alive_body(verify: bool) {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        arm_partition(&mut heap, verify);
+
+        let y = heap.alloc_cons(TaggedValue::fixnum(999), TaggedValue::fixnum(0));
+        let b = heap.alloc_lambda(lambda_slots(1, y, 4));
+        let root = heap.alloc_cons(b, TaggedValue::fixnum(0));
+
+        heap.collect_exact(std::iter::once(root));
+        assert!(heap.dump_blackened);
+        assert!(unsafe { (*b.as_veclike_ptr().unwrap()).gc.tenured });
+
+        for cycle in 0..2 {
+            heap.collect_exact(std::iter::once(root));
+            assert_eq!(
+                unsafe { (*y.xcons_ptr()).load_car() }.as_fixnum(),
+                Some(999),
+                "tenured page lambda's young cons child lost on cycle {cycle}",
+            );
+        }
+        heap.assert_object_arenas_coherent();
+    }
+
+    #[test]
+    fn tenured_page_lambda_keeps_young_cons_child_alive() {
+        tenured_page_lambda_keeps_young_cons_child_alive_body(false);
+    }
+    #[test]
+    fn tenured_page_lambda_keeps_young_cons_child_alive_verified() {
+        tenured_page_lambda_keeps_young_cons_child_alive_body(true);
+    }
+
+    // ---- MACRO arena: an independent battery proving its own 128B arena ----
+
+    /// Macro page-span oracle exactness + ownership-tracks-sweep + payload
+    /// intact + no cross-class collision with the sibling lambda arena.
+    #[test]
+    fn macro_oracle_and_sweep_exactness() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let live = heap.alloc_macro(lambda_slots(10, TaggedValue::NIL, 8));
+        let dead = heap.alloc_macro(lambda_slots(20, TaggedValue::NIL, 8));
+        let sibling = heap.alloc_lambda(lambda_slots(30, TaggedValue::NIL, 8));
+        let live_ptr = lam_ptr(live);
+        let dead_ptr = lam_ptr(dead);
+
+        assert_eq!(heap.non_cons_object_addrs.len(), 0);
+        assert!(heap.macro_arena.owns(live_ptr));
+        assert!(heap.macro_arena.owns(dead_ptr));
+        assert!(!heap.macro_arena.owns(lam_ptr(sibling)));
+        assert!(!heap.lambda_arena.owns(live_ptr));
+
+        heap.collect_exact(std::iter::once(live));
+
+        assert!(heap.owns_non_cons_object(live_ptr));
+        assert!(!heap.owns_non_cons_object(dead_ptr));
+        assert!(heap.macro_arena.owns(live_ptr));
+        assert!(!heap.macro_arena.owns(dead_ptr));
+        // Interior + unaligned answer NOT-owned.
+        assert!(!heap.macro_arena.owns((live_ptr as usize + 8) as *const u8));
+        assert!(!heap.macro_arena.owns((live_ptr as usize + 1) as *const u8));
+        assert_eq!(mac_slot(live, 0).as_fixnum(), Some(10));
+        assert_eq!(heap.non_cons_object_addrs.len(), 0);
+        heap.assert_object_arenas_coherent();
+    }
+
+    /// Macro loadup-shaped tenure + FULL-page retirement (C1) + teardown
+    /// counters with payload `drop_in_place`.
+    fn macro_tenure_retire_and_teardown_body(verify: bool) {
+        crate::test_utils::init_test_tracing();
+        let before = LIVE_MACRO_PAGES.load(Ordering::Relaxed);
+        {
+            let mut heap = TaggedHeap::new();
+            set_tagged_heap(&mut heap);
+            arm_partition(&mut heap, verify);
+
+            let mut root = TaggedValue::fixnum(0);
+            let mut macros = Vec::with_capacity(LAMBDA_PAGE_SLOTS + 2);
+            for i in 0..(LAMBDA_PAGE_SLOTS + 2) {
+                let m = heap.alloc_macro(lambda_slots(i as i64, TaggedValue::NIL, 8));
+                macros.push(m);
+                root = heap.alloc_cons(m, root);
+            }
+            assert_eq!(heap.macro_arena.pages.len(), 2);
+            assert!(LIVE_MACRO_PAGES.load(Ordering::Relaxed) > before);
+
+            heap.collect_exact(std::iter::once(root));
+            assert!(heap.dump_blackened);
+            assert!(heap.macro_arena.pages[0].retired, "full macro page must retire");
+            assert!(!heap.macro_arena.pages[1].retired);
+            // C1: retired-page macro slots stay owned across both parities.
+            for cycle in 0..2 {
+                heap.collect_exact(std::iter::once(root));
+                for (i, m) in macros.iter().enumerate() {
+                    assert!(
+                        heap.owns_non_cons_object(lam_ptr(*m)),
+                        "tenured macro #{i} lost on cycle {cycle}",
+                    );
+                    assert_eq!(mac_slot(*m, 0).as_fixnum(), Some(i as i64));
+                }
+                heap.assert_object_arenas_coherent();
+            }
+            drop(heap);
+        }
+        assert_eq!(
+            LIVE_MACRO_PAGES.load(Ordering::Relaxed),
+            before,
+            "macro pages leaked or double-freed at teardown",
+        );
+    }
+
+    #[test]
+    fn macro_tenure_retire_and_teardown() {
+        macro_tenure_retire_and_teardown_body(false);
+    }
+    #[test]
+    fn macro_tenure_retire_and_teardown_verified() {
+        macro_tenure_retire_and_teardown_body(true);
     }
 }
 
