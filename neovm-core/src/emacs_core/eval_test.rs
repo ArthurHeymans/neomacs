@@ -13891,6 +13891,19 @@ fn jit_cbsym_spec_counters() -> (u64, u64, u64) {
     )
 }
 
+/// True when the differential harness deliberately routes the CBSym shims OFF
+/// their armed FAST path — `NEOVM_JIT_FORCE_CBSYM_GENERIC` forces the
+/// NEED_GENERIC bounce, and `NEOVM_JIT_FORCE_DEOPT` deopts the whole compiled
+/// body to the interpreter. Under either, the fast-path engagement counters do
+/// NOT move, so the *counter* assertions must be skipped (RESULT parity still
+/// holds and is still asserted — the whole point of the harness). Keeps the
+/// FORCE_DEOPT failure SET equal to base.
+#[cfg(all(feature = "jit", debug_assertions))]
+fn jit_cbsym_fastpath_suppressed_by_harness() -> bool {
+    std::env::var("NEOVM_JIT_FORCE_CBSYM_GENERIC").as_deref() == Ok("1")
+        || std::env::var("NEOVM_JIT_FORCE_DEOPT").as_deref() == Ok("1")
+}
+
 /// R2 COMMIT 2 engagement + parity: hot Tier-B CallBuiltinSym sites (`length`
 /// pure, `current-column` state read, `goto-char` idempotent state mutation)
 /// route through `neovm_jit_cbsym_spec`, fire the fast path, and match the
@@ -13926,7 +13939,7 @@ fn jit_cbsym_spec_tierb_engages_and_matches() {
         );
     }
     #[cfg(debug_assertions)]
-    {
+    if !jit_cbsym_fastpath_suppressed_by_harness() {
         let (count1, fast1, _) = jit_cbsym_spec_counters();
         assert!(
             count1 > count0,
@@ -13999,7 +14012,7 @@ fn jit_cbsym_buffer_loop_tiers_with_profit_gate_on() {
     assert_eq!(native.bits(), interp.bits(), "buffer-op loop parity hot vs cold");
     assert_eq!(native, Value::make_int(0), "loop counts down to 0");
     #[cfg(debug_assertions)]
-    {
+    if !jit_cbsym_fastpath_suppressed_by_harness() {
         let (_, fast1, _) = jit_cbsym_spec_counters();
         assert!(
             fast1 > fast0,
@@ -14007,6 +14020,178 @@ fn jit_cbsym_buffer_loop_tiers_with_profit_gate_on() {
              the CBSym re-weight let a formerly-NotProfitable body compile"
         );
     }
+}
+
+/// Must-nail #7 (Tier-B half): an in-place rewrite of a Tier-B primitive's
+/// STATIC entry to a non-Builtin kind makes the compiled CBSym site bounce
+/// (STATUS_NEED_GENERIC), and the general fallback reproduces the SAME signal as
+/// the interpreter (invalid-function). Proves the shim re-reads the FRESH entry
+/// and defers every non-clean case to the general path.
+#[cfg(all(feature = "jit", debug_assertions))]
+#[test]
+fn jit_cbsym_spec_inplace_rewrite_to_nonbuiltin_bounces_like_interp() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    use crate::emacs_core::eval::{
+        SubrEntry, lookup_global_subr_entry, register_global_subr_entry,
+    };
+    use crate::emacs_core::intern::intern;
+    use crate::tagged::header::SubrDispatchKind;
+    let mut ev = Context::new();
+    let widen = intern("widen"); // Tier-B, 0-arg, not used between rewrite/restore
+    let orig = lookup_global_subr_entry(widen).expect("widen is a builtin");
+    let hot = jit_cbsym_spec_caller("widen", 0, true);
+    let cold = jit_cbsym_spec_caller("widen", 0, false);
+    // Armed: fast path returns nil.
+    let r = ev
+        .funcall_general_untraced(hot, Vec::<Value>::new())
+        .expect("armed widen");
+    assert!(r.is_nil(), "(widen) returns nil on the armed fast path");
+    let (_, _, gen0) = jit_cbsym_spec_counters();
+    // In-place rewrite the STATIC entry to a non-Builtin kind (VALUE bits stable).
+    register_global_subr_entry(
+        widen,
+        SubrEntry {
+            dispatch_kind: SubrDispatchKind::SpecialForm,
+            ..orig
+        },
+    );
+    let native = ev.funcall_general_untraced(hot, Vec::<Value>::new());
+    let interp = ev.funcall_general_untraced(cold, Vec::<Value>::new());
+    // Restore BEFORE asserting so a failure can't leave `widen` broken.
+    register_global_subr_entry(widen, orig);
+    let native_err = native.expect_err("compiled widen now signals invalid-function");
+    let interp_err = interp.expect_err("interp widen now signals invalid-function");
+    assert_eq!(
+        format!("{native_err:?}"),
+        format!("{interp_err:?}"),
+        "compiled NEED_GENERIC bounce == interpreter signal"
+    );
+    if !jit_cbsym_fastpath_suppressed_by_harness() {
+        // (FORCE_DEOPT deopts the body to the interpreter, so the shim — and its
+        // GENERIC counter — never runs; the invalid-function parity above still
+        // holds and is asserted unconditionally.)
+        let (_, _, gen1) = jit_cbsym_spec_counters();
+        assert!(
+            gen1 > gen0,
+            "the rewritten (non-Builtin) site bounced to STATUS_NEED_GENERIC"
+        );
+    }
+    // Sanity: restored entry works again.
+    let r = ev
+        .funcall_general_untraced(hot, Vec::<Value>::new())
+        .expect("widen restored");
+    assert!(r.is_nil());
+}
+
+/// Must-nail #4: `(backtrace-frames)` inside an after-change hook fired by a
+/// COMPILED Tier-B `insert` shows the frame's function as `#<subr insert>` (a
+/// SUBR value — `funcall_general` pushes `subr_from_sym_id`, NOT the symbol) ==
+/// the interpreter.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_cbsym_spec_insert_backtrace_shows_subr_frame_like_interp() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    // A hook that captures the printed form of the first `insert` runtime
+    // backtrace frame (mapbacktrace calls (fn EVALD FUNC ARGS FLAGS); FUNC is
+    // the frame's callable). `backtrace-frames` proper is stubbed in neomacs;
+    // `mapbacktrace` walks the REAL specpdl backtrace frames.
+    ev.eval_str(
+        r#"(setq after-change-functions
+             (list (lambda (_b _e _l)
+                     (setq cbsym-cap 'no-subr-frame)
+                     (mapbacktrace
+                       (lambda (_evald func _args _flags)
+                         (if (and (eq cbsym-cap 'no-subr-frame)
+                                  (subrp func)
+                                  (equal (subr-name func) "insert"))
+                             (setq cbsym-cap (prin1-to-string func))))))))"#,
+    )
+    .expect("install hook");
+    let run = |ev: &mut Context, hot: bool| -> String {
+        ev.eval_str("(setq cbsym-cap 'unset)").unwrap();
+        let f = jit_cbsym_spec_caller("insert", 1, hot);
+        ev.funcall_general_untraced(f, vec![Value::string("X")])
+            .expect("insert runs");
+        let cap = ev.eval_str("cbsym-cap").unwrap();
+        crate::emacs_core::print::print_value(&cap)
+    };
+    let cap_hot = run(&mut ev, true);
+    let cap_cold = run(&mut ev, false);
+    assert_eq!(
+        cap_hot, cap_cold,
+        "the insert backtrace frame is identical compiled vs interp"
+    );
+    assert!(
+        cap_hot.contains("#<subr insert>"),
+        "the insert frame is a SUBR (#<subr insert>), not a symbol; got {cap_hot}"
+    );
+}
+
+/// Must-nail #5: deep recursion whose body runs a compiled Tier-B CBSym op hits
+/// `max-lisp-eval-depth` at the SAME recursion depth as the interpreter — the
+/// open-coded CBSym op adds NO lisp-eval-depth level (the shim has no
+/// `with_bytecode_call_depth`, unlike an `Op::Call`).
+#[cfg(feature = "jit")]
+#[test]
+fn jit_cbsym_spec_adds_no_eval_depth_level() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    ev.eval_str("(defvar cbsym-depth 0)").unwrap();
+    // f: (setq cbsym-depth (1+ cbsym-depth)) (widen) (f) — recurse until the
+    // depth guard signals; `cbsym-depth` is left at the deepest level reached.
+    let f_sym = Value::symbol("cbsym-depth-f");
+    let ValueKind::Symbol(f_id) = f_sym.kind() else {
+        panic!("symbol");
+    };
+    let mk = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: Vec::new(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![
+            Op::VarRef(0),                       // 0  [d]        (const0 = cbsym-depth)
+            Op::Add1,                            // 1  [d+1]
+            Op::VarSet(0),                       // 2  []         cbsym-depth = d+1
+            Op::CallBuiltinSym(crate::emacs_core::intern::intern("widen"), 0), // 3 [nil]  Tier-B
+            Op::Pop,                             // 4  []
+            Op::Constant(1),                     // 5  [f]        (const1 = f symbol)
+            Op::Call(0),                         // 6  recurse (adds ONE eval-depth level)
+            Op::Return,                          // 7
+        ];
+        f.constants = vec![Value::symbol("cbsym-depth"), f_sym];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+    // Lower the limit so the recursion terminates quickly and identically.
+    ev.eval_str("(setq max-lisp-eval-depth 150)").unwrap();
+    let depth_after = |ev: &mut Context, hot: bool| -> i64 {
+        ev.eval_str("(setq cbsym-depth 0)").unwrap();
+        ev.obarray
+            .set_symbol_function_id(f_id, mk(hot));
+        // Recurses until max-lisp-eval-depth signals; catch it.
+        let _ = ev.funcall_general_untraced(f_sym, Vec::<Value>::new());
+        ev.eval_str("cbsym-depth").unwrap().as_fixnum().unwrap()
+    };
+    let hot_depth = depth_after(&mut ev, true);
+    let cold_depth = depth_after(&mut ev, false);
+    assert!(hot_depth > 1, "the recursion actually ran (depth {hot_depth})");
+    assert_eq!(
+        hot_depth, cold_depth,
+        "a compiled Tier-B CBSym op adds no eval-depth level: \
+         compiled reached depth {hot_depth}, interp {cold_depth}"
+    );
 }
 
 /// End-to-end: the classic hot shapes the poisoning analysis used to BAIL on
@@ -15243,8 +15428,68 @@ fn jit_bench_cbsym() {
     let want = Value::make_int(0);
     let nat = jit_bench_min(&mut ev, native, n, want, 9);
     let int = jit_bench_min(&mut ev, cold, n, want, 9);
+    // NOTE (R2): `length` is now a Tier-B CBSym intrinsic, so `native` here
+    // exercises `neovm_jit_cbsym_spec` (dispatch skip). Run with
+    // NEOVM_JIT_FORCE_CBSYM_GENERIC=1 to A/B the intrinsic against the general
+    // `neovm_jit_named_builtin` lowering in the same binary.
     panic!(
         "BENCH cbsym-loop(2M length-CallBuiltinSym): native {nat:?} interp {int:?} -> {:.2}x",
+        int.as_secs_f64() / nat.as_secs_f64()
+    );
+}
+
+/// Tier-B CallBuiltinSym intrinsic benchmark: a loop calling the BUFFER
+/// primitive `goto-char` (position 1, idempotent) via `Op::CallBuiltinSym` each
+/// iteration — the hot interactive population R2 targets. `native` routes
+/// through `neovm_jit_cbsym_spec` (dispatch skip); NEOVM_JIT_FORCE_CBSYM_GENERIC=1
+/// forces the general `neovm_jit_named_builtin` path for an in-binary A/B.
+#[cfg(feature = "jit")]
+fn jit_bench_cbsym_goto_value(tier: BenchTier) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    f.ops = vec![
+        Op::StackRef(0),   // 0  [n n]  <- head
+        Op::Constant(0),   // 1  [n n 0]
+        Op::Gtr,           // 2  [n c]
+        Op::GotoIfNil(11), // 3  [n]
+        Op::Constant(1),   // 4  [n 1]  (goto-char position)
+        Op::CallBuiltinSym(crate::emacs_core::intern::intern("goto-char"), 1), // 5 [n pos]
+        Op::Pop,           // 6  [n]
+        Op::StackRef(0),   // 7  [n n]
+        Op::Sub1,          // 8  [n n-1]
+        Op::StackSet(1),   // 9  [n-1]
+        Op::Goto(0),       // 10 backedge
+        Op::StackRef(0),   // 11 [n n]
+        Op::Return,        // 12
+    ];
+    f.constants = vec![Value::make_int(0), Value::make_int(1)];
+    f.max_stack = 16;
+    tier.apply(&f.runtime);
+    Value::make_bytecode(f)
+}
+
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_cbsym_goto() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.eval_str("(insert \"hello world\")").expect("buffer content");
+    let native = jit_bench_cbsym_goto_value(BenchTier::Hot);
+    let cold = jit_bench_cbsym_goto_value(BenchTier::Cold);
+    let n = 2_000_000i64;
+    let want = Value::make_int(0);
+    let nat = jit_bench_min(&mut ev, native, n, want, 9);
+    let int = jit_bench_min(&mut ev, cold, n, want, 9);
+    panic!(
+        "BENCH cbsym-goto-loop(2M goto-char-CallBuiltinSym Tier-B): native {nat:?} interp {int:?} -> {:.2}x",
         int.as_secs_f64() / nat.as_secs_f64()
     );
 }
