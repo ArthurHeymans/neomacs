@@ -17,6 +17,7 @@ use super::eval::Context;
 use super::intern::{intern, intern_lisp_string, resolve_sym};
 use super::value::Value;
 use crate::heap_types::LispString;
+use crate::tagged::gc::{HeapWriteKind, note_heap_write};
 use crate::tagged::header::{EmacsFinalizer, ModuleFunctionObj, UserPtrObj, VecLikeType};
 
 // ============================================================================
@@ -1587,6 +1588,14 @@ unsafe extern "C" fn module_make_interactive(
     let spec_val = value_to_lisp(spec);
     if let Some(veclike_ptr) = func_val.as_veclike_ptr() {
         if func_val.veclike_type() == Some(VecLikeType::ModuleFunction) {
+            // SATB deletion barrier BEFORE clobbering the live, GC-traced
+            // `interactive_form` slot: log the pre-overwrite children so a value
+            // reachable only through the old form is retained if a concurrent
+            // mark is in flight. Owner-driven; a no-op unless a mark is active.
+            // Without it, a second make-interactive overwriting a still-reachable
+            // form mid-mark would drop it. See CONCURRENT_GC.md "Insertion
+            // coverage".
+            note_heap_write(func_val, HeapWriteKind::ModuleFunction);
             unsafe {
                 let mf = veclike_ptr as *mut ModuleFunctionObj;
                 (*mf).interactive_form = if spec_val.is_nil() {

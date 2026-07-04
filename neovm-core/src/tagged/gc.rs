@@ -86,6 +86,13 @@ pub enum HeapWriteKind {
     /// mutated post-load by `intern`, so the remembered set must observe
     /// dumped-obarray → heap edges through this chokepoint.
     ObarrayData,
+    /// Mutation of a module-function object's `interactive_form` slot
+    /// (`module_make_interactive`) — the one traced non-cons slot written
+    /// outside a `mutate.rs` wrapper. `record_heap_write` is owner-driven, so
+    /// this variant carries no dispatch behaviour; it exists so the write site
+    /// names its kind like every other traced veclike, and the barrier logs the
+    /// pre-overwrite `interactive_form` (covered by `collect_veclike_children`).
+    ModuleFunction,
 }
 
 /// A single heap mutation event.
@@ -9243,6 +9250,60 @@ mod ownership_tests {
              must survive (SATB provenance; conses have no dirty-owner net)",
         );
         assert!((x.xfloat() - 6.5).abs() < f64::EPSILON);
+    }
+
+    /// #18 — MODULE-FUNCTION `interactive_form` barrier. A value V reachable
+    /// ONLY through a live `ModuleFunctionObj.interactive_form` slot is
+    /// overwritten MID-MARK (as `module_make_interactive` does), preceded by the
+    /// `note_heap_write(ModuleFunction)` SATB barrier the write site now fires.
+    /// V must survive purely via the barrier's pre-image log: the object is
+    /// Box-allocated ⇒ deferred ⇒ traced at STW on its CURRENT (overwritten)
+    /// form, so the barrier is V's ONLY net. Guards the barrier + `ModuleFunction`
+    /// coverage in `collect_veclike_children` (drop either ⇒ V is swept).
+    #[test]
+    fn concurrent_module_function_interactive_form_overwrite_keeps_child_alive() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // V reachable ONLY via mf.interactive_form.
+        let v = heap.alloc_float(9.5);
+        let mf = heap.alloc_module_function(
+            0,
+            0,
+            std::ptr::null(),
+            std::ptr::null_mut(),
+            TaggedValue::fixnum(0),
+            v,
+        );
+        // Bury mf in a seeded list so the mark takes real time.
+        let mut list = heap.alloc_cons(mf, TaggedValue::fixnum(0));
+        for i in 0..300_000 {
+            list = heap.alloc_cons(TaggedValue::fixnum(i), list);
+        }
+        let root = list;
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+
+        // MID-CYCLE: overwrite interactive_form (unlinking V) exactly as
+        // module_make_interactive does — SATB barrier BEFORE the raw store.
+        note_heap_write(mf, HeapWriteKind::ModuleFunction);
+        unsafe {
+            let mf_ptr = mf.as_veclike_ptr().unwrap() as *mut ModuleFunctionObj;
+            (*mf_ptr).interactive_form = TaggedValue::fixnum(99);
+        }
+
+        finish_concurrent_cycle(&mut heap, root);
+
+        assert!(
+            heap.owns_non_cons_object(v.as_float_ptr().unwrap() as *const u8),
+            "the overwritten interactive_form value must survive via the SATB \
+             pre-image barrier (module-function objects are Box-deferred and \
+             traced at STW on their CURRENT form only)",
+        );
+        assert!((v.xfloat() - 9.5).abs() < f64::EPSILON);
     }
 
     /// Task 01 MAPPED-VECTOR CLASSIFICATION (d): a registered mapped vector
