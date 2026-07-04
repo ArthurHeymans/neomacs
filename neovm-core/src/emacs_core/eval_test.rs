@@ -13897,6 +13897,311 @@ fn jit_subr_spec_many_re_search_forward_engages_and_matches() {
     }
 }
 
+/// R2 phase 2 MUST-NAIL — SIDE-EFFECT goldens: the armed native dispatch of an
+/// allowlisted `SubrFn::Many` builtin performs byte-identical state mutations to
+/// the interpreter. Covers `looking-at` / `re-search-forward` match-state,
+/// `set-match-data` round-trip, and `parse-partial-sexp`'s full state list.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_subr_spec_many_side_effect_goldens_match_interp() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    ev.eval_str("(insert \"foo (bar baz) qux\")").expect("buffer");
+
+    let match_state = |ev: &mut Context| {
+        format_eval_result(&ev.eval_str("(list (match-beginning 0) (match-end 0) (match-data))"))
+    };
+
+    // looking-at at bob: result + match-state parity.
+    let la_hot = jit_subr_spec_caller("looking-at", 1, true);
+    let la_cold = jit_subr_spec_caller("looking-at", 1, false);
+    ev.eval_str("(goto-char (point-min))").unwrap();
+    let a = ev
+        .funcall_general_untraced(la_hot, vec![Value::string("foo ")])
+        .expect("looking-at armed");
+    let a_md = match_state(&mut ev);
+    ev.eval_str("(goto-char (point-min))").unwrap();
+    let i = ev
+        .funcall_general_untraced(la_cold, vec![Value::string("foo ")])
+        .expect("looking-at interp");
+    let i_md = match_state(&mut ev);
+    assert_eq!(a.bits(), i.bits(), "looking-at result parity");
+    assert_eq!(a_md, i_md, "looking-at match-state golden armed==interp");
+
+    // re-search-forward: point-move + match-state parity.
+    let rsf_hot = jit_subr_spec_caller("re-search-forward", 1, true);
+    let rsf_cold = jit_subr_spec_caller("re-search-forward", 1, false);
+    let rsf_state = |ev: &mut Context| {
+        format_eval_result(&ev.eval_str("(list (point) (match-beginning 0) (match-end 0))"))
+    };
+    ev.eval_str("(goto-char (point-min))").unwrap();
+    let a = ev
+        .funcall_general_untraced(rsf_hot, vec![Value::string("bar")])
+        .expect("rsf armed");
+    let a_state = rsf_state(&mut ev);
+    ev.eval_str("(goto-char (point-min))").unwrap();
+    let i = ev
+        .funcall_general_untraced(rsf_cold, vec![Value::string("bar")])
+        .expect("rsf interp");
+    let i_state = rsf_state(&mut ev);
+    assert_eq!(a.bits(), i.bits(), "re-search-forward result parity");
+    assert_eq!(a_state, i_state, "re-search-forward point+match golden armed==interp");
+
+    // set-match-data round-trip: set '(3 6), read back via (match-data).
+    let smd_hot = jit_subr_spec_caller("set-match-data", 1, true);
+    let smd_cold = jit_subr_spec_caller("set-match-data", 1, false);
+    let payload = ev.eval_str("(list 3 6)").unwrap();
+    ev.funcall_general_untraced(smd_hot, vec![payload])
+        .expect("set-match-data armed");
+    let a_rt = format_eval_result(&ev.eval_str("(match-data)"));
+    let payload = ev.eval_str("(list 3 6)").unwrap();
+    ev.funcall_general_untraced(smd_cold, vec![payload])
+        .expect("set-match-data interp");
+    let i_rt = format_eval_result(&ev.eval_str("(match-data)"));
+    assert_eq!(a_rt, i_rt, "set-match-data round-trip golden armed==interp");
+
+    // parse-partial-sexp: full state list parity (single hot vs cold call).
+    let pp_hot = jit_subr_spec_caller("parse-partial-sexp", 2, true);
+    let pp_cold = jit_subr_spec_caller("parse-partial-sexp", 2, false);
+    let a = ev
+        .funcall_general_untraced(pp_hot, vec![Value::make_int(1), Value::make_int(12)])
+        .expect("pp armed");
+    let i = ev
+        .funcall_general_untraced(pp_cold, vec![Value::make_int(1), Value::make_int(12)])
+        .expect("pp interp");
+    assert_eq!(
+        crate::emacs_core::print::print_value(&a),
+        crate::emacs_core::print::print_value(&i),
+        "parse-partial-sexp state list golden armed==interp"
+    );
+}
+
+/// R2 phase 2 MUST-NAIL — SIGNAL parity: an armed Many site that must signal
+/// produces the byte-identical `Flow` (error symbol + payload) as the
+/// interpreter. `re-search-forward` no-match -> `search-failed`; `scan-sexps`
+/// over unbalanced parens -> `scan-error`; `put-text-property` into read-only
+/// text -> `text-read-only`.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_subr_spec_many_signal_parity_armed_vs_interp() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    use crate::emacs_core::error::map_flow;
+    let mut ev = Context::new();
+    ev.eval_str("(insert \"hello (world\")").expect("buffer"); // unbalanced paren
+
+    // re-search-forward, no match, no NOERROR -> search-failed.
+    let rsf_hot = jit_subr_spec_caller("re-search-forward", 1, true);
+    let rsf_cold = jit_subr_spec_caller("re-search-forward", 1, false);
+    ev.eval_str("(goto-char (point-min))").unwrap();
+    let e_a = ev
+        .funcall_general_untraced(rsf_hot, vec![Value::string("ZZZ-nomatch")])
+        .expect_err("rsf armed signals");
+    ev.eval_str("(goto-char (point-min))").unwrap();
+    let e_i = ev
+        .funcall_general_untraced(rsf_cold, vec![Value::string("ZZZ-nomatch")])
+        .expect_err("rsf interp signals");
+    assert_eq!(
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_a))),
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_i))),
+        "re-search-forward search-failed Flow parity armed==interp"
+    );
+
+    // scan-sexps over the unbalanced "(world" -> scan-error.
+    let ss_hot = jit_subr_spec_caller("scan-sexps", 2, true);
+    let ss_cold = jit_subr_spec_caller("scan-sexps", 2, false);
+    let e_a = ev
+        .funcall_general_untraced(ss_hot, vec![Value::make_int(7), Value::make_int(1)])
+        .expect_err("scan-sexps armed signals");
+    let e_i = ev
+        .funcall_general_untraced(ss_cold, vec![Value::make_int(7), Value::make_int(1)])
+        .expect_err("scan-sexps interp signals");
+    assert_eq!(
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_a))),
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_i))),
+        "scan-sexps scan-error Flow parity armed==interp"
+    );
+
+    // put-text-property into read-only text -> text-read-only.
+    ev.eval_str("(put-text-property 1 6 'read-only t)")
+        .expect("mark read-only");
+    let ptp_hot = jit_subr_spec_caller("put-text-property", 4, true);
+    let ptp_cold = jit_subr_spec_caller("put-text-property", 4, false);
+    let ro_args = || {
+        vec![
+            Value::make_int(1),
+            Value::make_int(6),
+            Value::symbol("face"),
+            Value::symbol("bold"),
+        ]
+    };
+    let e_a = ev
+        .funcall_general_untraced(ptp_hot, ro_args())
+        .expect_err("ptp armed signals");
+    let e_i = ev
+        .funcall_general_untraced(ptp_cold, ro_args())
+        .expect_err("ptp interp signals");
+    assert_eq!(
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_a))),
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_i))),
+        "put-text-property text-read-only Flow parity armed==interp"
+    );
+}
+
+/// R2 phase 2 MUST-NAIL — put-text-property is the ONLY allowlisted Many target
+/// whose arity is BODY-enforced (registered `defsubr(...,0,None)`; real 4..5
+/// checked in textprop.rs). So the spec site is created for ANY nargs and the
+/// armed path reaches the body's own arity check — which must signal
+/// byte-identically to the interpreter for BOTH under-arity `Op::Call(2)` and
+/// over-arity `Op::Call(6)`. Also asserts the valid `Op::Call(4)` side effect.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_subr_spec_many_put_text_property_arity_and_effect() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    use crate::emacs_core::error::map_flow;
+    let mut ev = Context::new();
+    ev.eval_str("(insert \"hello world\")").expect("buffer");
+
+    // Valid Op::Call(4): side-effect + result parity.
+    let ptp_hot = jit_subr_spec_caller("put-text-property", 4, true);
+    let ptp_cold = jit_subr_spec_caller("put-text-property", 4, false);
+    let ok_args = || {
+        vec![
+            Value::make_int(1),
+            Value::make_int(6),
+            Value::symbol("face"),
+            Value::symbol("bold"),
+        ]
+    };
+    let a = ev
+        .funcall_general_untraced(ptp_hot, ok_args())
+        .expect("ptp(4) armed");
+    let a_get = format_eval_result(&ev.eval_str("(get-text-property 1 'face)"));
+    ev.eval_str("(set-text-properties 1 12 nil)").ok();
+    let i = ev
+        .funcall_general_untraced(ptp_cold, ok_args())
+        .expect("ptp(4) interp");
+    let i_get = format_eval_result(&ev.eval_str("(get-text-property 1 'face)"));
+    assert_eq!(a.bits(), i.bits(), "put-text-property(4) result parity");
+    assert_eq!(a_get, i_get, "put-text-property(4) side-effect golden armed==interp");
+
+    // Op::Call(2): below the body-enforced min (4) -> wrong-number-of-arguments.
+    let ptp2_hot = jit_subr_spec_caller("put-text-property", 2, true);
+    let ptp2_cold = jit_subr_spec_caller("put-text-property", 2, false);
+    let two = || vec![Value::make_int(1), Value::make_int(2)];
+    let e_a = ev
+        .funcall_general_untraced(ptp2_hot, two())
+        .expect_err("ptp(2) armed signals");
+    let e_i = ev
+        .funcall_general_untraced(ptp2_cold, two())
+        .expect_err("ptp(2) interp signals");
+    assert_eq!(
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_a))),
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_i))),
+        "put-text-property(2) under-arity signal parity armed==interp"
+    );
+
+    // Op::Call(6): above the body-enforced max (5) -> wrong-number-of-arguments.
+    let ptp6_hot = jit_subr_spec_caller("put-text-property", 6, true);
+    let ptp6_cold = jit_subr_spec_caller("put-text-property", 6, false);
+    let six = || {
+        vec![
+            Value::make_int(1),
+            Value::make_int(2),
+            Value::symbol("face"),
+            Value::symbol("bold"),
+            Value::NIL,
+            Value::NIL,
+        ]
+    };
+    let e_a = ev
+        .funcall_general_untraced(ptp6_hot, six())
+        .expect_err("ptp(6) armed signals");
+    let e_i = ev
+        .funcall_general_untraced(ptp6_cold, six())
+        .expect_err("ptp(6) interp signals");
+    assert_eq!(
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_a))),
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_i))),
+        "put-text-property(6) over-arity signal parity armed==interp"
+    );
+}
+
+/// R2 phase 2 MUST-NAIL — advice/redefinition deopt: the allowlisted Many sites
+/// are CELL-DISPATCHED (unlike name-canonical CBSym), so `fset` / `defalias`
+/// over a speculated Many builtin must take effect on the very next call — the
+/// armed site disarms (epoch move / bits mismatch) and its generic fallback
+/// resolves the new binding. Verified for re-search-forward, looking-at, and
+/// put-text-property.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_subr_spec_many_redefinition_deopts_like_interp() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    ev.eval_str("(insert \"hello world\")").ok();
+
+    // fset re-search-forward -> lambda: armed site deopts, new def runs.
+    let rsf = jit_subr_spec_caller("re-search-forward", 1, true);
+    ev.eval_str("(goto-char (point-min))").unwrap();
+    let _ = ev
+        .funcall_general_untraced(rsf, vec![Value::string("world")])
+        .expect("rsf armed");
+    ev.eval_str("(fset 're-search-forward (lambda (&rest _) 'RSF-REDEF))")
+        .expect("fset rsf");
+    let r = ev
+        .funcall_general_untraced(rsf, vec![Value::string("world")])
+        .expect("rsf after fset");
+    assert_eq!(
+        r,
+        Value::symbol("RSF-REDEF"),
+        "fset re-search-forward takes effect: site deopts to the new def"
+    );
+
+    // defalias looking-at -> lambda.
+    let la = jit_subr_spec_caller("looking-at", 1, true);
+    ev.eval_str("(goto-char (point-min))").unwrap();
+    let _ = ev
+        .funcall_general_untraced(la, vec![Value::string("hello")])
+        .expect("la armed");
+    ev.eval_str("(defalias 'looking-at (lambda (&rest _) 'LA-REDEF))")
+        .expect("defalias la");
+    let r = ev
+        .funcall_general_untraced(la, vec![Value::string("hello")])
+        .expect("la after defalias");
+    assert_eq!(
+        r,
+        Value::symbol("LA-REDEF"),
+        "defalias looking-at takes effect: site deopts to the new def"
+    );
+
+    // fset put-text-property -> lambda.
+    let ptp = jit_subr_spec_caller("put-text-property", 4, true);
+    let ptp_args = || {
+        vec![
+            Value::make_int(1),
+            Value::make_int(3),
+            Value::symbol("face"),
+            Value::symbol("bold"),
+        ]
+    };
+    let _ = ev
+        .funcall_general_untraced(ptp, ptp_args())
+        .expect("ptp armed");
+    ev.eval_str("(fset 'put-text-property (lambda (&rest _) 'PTP-REDEF))")
+        .expect("fset ptp");
+    let r = ev
+        .funcall_general_untraced(ptp, ptp_args())
+        .expect("ptp after fset");
+    assert_eq!(
+        r,
+        Value::symbol("PTP-REDEF"),
+        "fset put-text-property takes effect: site deopts to the new def"
+    );
+}
+
 /// Build `(lambda (a1..aK) (CBSYM-NAME a1..aK))` as hand-rolled bytecode: the K
 /// args are pushed then consumed by a single `Op::CallBuiltinSym(name, K)` (the
 /// exact op R2 classifies). Callers disable the profitability gate (COMMIT 2)
@@ -15822,6 +16127,90 @@ fn jit_bench_subr() {
     let int = jit_bench_min(&mut ev, cold, n, want, 9);
     panic!(
         "BENCH subr-loop(2M length-calls): native {nat:?} interp {int:?} -> {:.2}x",
+        int.as_secs_f64() / nat.as_secs_f64()
+    );
+}
+
+/// R2 phase 2 Many-spec benchmark: a loop DOMINATED by `looking-at` (an
+/// allowlisted `SubrFn::Many` builtin) at a fixed point — the font-lock inner-loop
+/// shape. Three Many calls vs two inlined arith ops per iteration, so
+/// `calls > arith`: the profitability gate rejects this body by default (COMMIT B
+/// is exactly the question of whether to re-tier it). The caller forces the gate
+/// off so the Hot copy compiles; the armed Op::Call site dispatches the exact
+/// 1-arg slice straight to the Many subr (skipping symbol resolution + generic
+/// dispatch), vs the interpreter's full protocol. `looking-at` updates the match
+/// state in place and returns an immediate (t/nil) — no per-call lisp allocation,
+/// so the loop isolates dispatch cost cleanly.
+#[cfg(feature = "jit")]
+fn jit_bench_many_value(tier: BenchTier) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: vec![crate::emacs_core::intern::SymId(1)],
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    f.ops = vec![
+        Op::StackRef(0),   // 0  [n n]        <- loop head
+        Op::Constant(0),   // 1  [n n 0]
+        Op::Gtr,           // 2  [n c]
+        Op::GotoIfNil(20), // 3  [n]          -> END
+        Op::Constant(1),   // 4  looking-at
+        Op::Constant(2),   // 5  regex
+        Op::Call(1),       // 6  [n t/nil]    <- Many subr via general dispatch
+        Op::Pop,           // 7  [n]
+        Op::Constant(1),   // 8
+        Op::Constant(2),   // 9
+        Op::Call(1),       // 10
+        Op::Pop,           // 11
+        Op::Constant(1),   // 12
+        Op::Constant(2),   // 13
+        Op::Call(1),       // 14
+        Op::Pop,           // 15
+        Op::StackRef(0),   // 16 [n n]
+        Op::Sub1,          // 17 [n n-1]      inlined decrement
+        Op::StackSet(1),   // 18 [n-1]
+        Op::Goto(0),       // 19 backedge
+        Op::StackRef(0),   // 20 [n n]        END
+        Op::Return,        // 21
+    ];
+    f.constants = vec![
+        Value::make_int(0),
+        Value::symbol("looking-at"),
+        Value::string("(defun\\|[a-z]+"),
+    ];
+    f.max_stack = 16;
+    tier.apply(&f.runtime);
+    Value::make_bytecode(f)
+}
+
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_many() {
+    crate::test_utils::init_test_tracing();
+    // Call-DOMINATED body (3 Many calls vs 2 arith) — NotProfitable by default,
+    // so force the gate off to tier the Hot copy. This is the exact shape COMMIT
+    // B weighs: does forced-tier + Many-spec beat the interpreter? Cold stays
+    // interpreted (the tier-0 baseline production runs without the re-weight).
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    ev.eval_str("(insert \"(defun f (a b) (+ a b))\")")
+        .expect("buffer content for looking-at");
+    ev.eval_str("(goto-char (point-min))").expect("point to bob");
+    let native = jit_bench_many_value(BenchTier::Hot);
+    let cold = jit_bench_many_value(BenchTier::Cold);
+    let n = std::env::var("NEOVM_BENCH_N")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(2_000_000i64);
+    let want = Value::make_int(0);
+    let nat = jit_bench_min(&mut ev, native, n, want, 9);
+    let int = jit_bench_min(&mut ev, cold, n, want, 9);
+    panic!(
+        "BENCH many-loop({n}*3 looking-at Many-spec): native {nat:?} interp {int:?} -> {:.2}x",
         int.as_secs_f64() / nat.as_secs_f64()
     );
 }
