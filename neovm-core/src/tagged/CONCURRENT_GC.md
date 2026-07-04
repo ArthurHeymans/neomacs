@@ -329,17 +329,33 @@ adversarial review (a soundness proof + a failed reproduction attempt):
    would surface them as a rare UAF; extending the re-gray to conses is a
    possible future symmetric hardening.
 
-**KNOWN LATENT GAP (do not lose — filed as a follow-up):** `emacs_core/
-dynamic_module.rs:1592` (`module_make_interactive`) writes a fresh cons into a
-LIVE, GC-traced `ModuleFunctionObj.interactive_form` slot with NO deletion
-barrier — the sole crate-wide unbarriered write to a traced non-cons slot
-(there is no `HeapWriteKind::ModuleFunction`). Benign under today's callers
-(`ModuleFunctionObj` is Box-allocated ⇒ always deferred ⇒ traced at STW on its
-CURRENT `interactive_form`; the overwritten old value is dead-on-overwrite with
-no API path reading it back into a black object). It becomes a live UAF the day
-`ModuleFunctionObj` is made concurrently claimable, or if a second
-`make-interactive` overwrites a still-reachable form. Proper fix (its own review
-round, since it edits the hot barrier dispatch): add `HeapWriteKind::
-ModuleFunction`, route it through `record_heap_write`/`push_value_children_to_satb_shared`
-(the child enumerator already covers `ModuleFunction`), and fire the barrier at
-the write site.
+**CLOSED GAP (2026-07):** `module_make_interactive` (`dynamic_module.rs`) used to
+write a fresh cons into a live, GC-traced `ModuleFunctionObj.interactive_form`
+slot with no deletion barrier. FIXED: it now fires
+`note_heap_write(func_val, HeapWriteKind::ModuleFunction)` before the store
+(`record_heap_write` is owner-driven, so the barrier logs the pre-overwrite
+`interactive_form` via `collect_veclike_children`). Regression test
+`concurrent_module_function_interactive_form_overwrite_keeps_child_alive`.
+
+**KNOWN RACE — FLAGGED, UNFIXED (found by the TSan pass, 2026-07; own fix round):**
+the concurrent obarray scan (`ObarrayScanSnapshot::scan`, `symbol.rs`) reads a
+symbol slot's presence (`if let Some(sym)` over `[Option<LispSymbol>; 4096]`)
+non-atomically ON THE GC THREAD while the mutator writes `LispSymbol`'s
+`function_unbound: bool` non-atomically (`set_symbol_function_id` via `defalias`,
+`fmakunbound_id`, etc.). Rust NICHE-OPTIMIZES the `Option` tag INTO that trailing
+`bool` byte, so the presence check and the bool write hit the SAME byte with no
+synchronization — a data race (TSan-confirmed, deterministic). The Stage-1b
+per-chunk seqlock hardened only the value-cell arm (redirect+val); it structurally
+cannot cover the presence byte, which GATES ENTRY to the seqlock read. Likely
+benign on x86 in practice (both live `bool` values are valid `Some` states, so
+presence is never misread; values coincide), but real UB. Latent siblings:
+non-atomic writes to `function_unbound`/`interned_global` at several symbol.rs
+sites. Reproduce: `scripts/run-gc-tsan.sh
+gc_concurrent_leaked_subr_drop_under_pdump_verifiers` (needs a complete `lisp/`).
+Fix direction (design + critique required — obarray/symbol hot path): stop niching
+the presence discriminant into a concurrently-mutated field — make
+`function_unbound`/`interned_global` relaxed-atomic bytes and read slot-presence
+via an atomic byte load, or represent the slot so the `Option` tag does not alias
+a live field. Audit ALL non-atomic writes to obarray-resident `LispSymbol` fields
+(`TSAN_OPTIONS=halt_on_error=0` enumerates the full set) and add an
+obarray-scan-vs-defalias-churn adversarial test alongside the fix.
