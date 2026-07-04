@@ -18425,6 +18425,156 @@ fn gc_concurrent_leaked_subr_drop_under_pdump_verifiers() {
     );
 }
 
+/// TSan GATE for task #23 — the concurrent obarray-scan presence-byte race.
+///
+/// The concurrent GC obarray scan (`ObarrayScanSnapshot::scan`, GC thread) walks
+/// the `[LispSymbol; 4096]` chunks over slots `[0, n_slots)`. `n_slots` is the
+/// chunk-ROUNDED capacity, not the interned count, so the EMPTY tail slots of the
+/// last chunk are IN RANGE. Meanwhile the mutator (this thread) concurrently:
+///   (a) flips `function_unbound` in place via `set_symbol_function_id` /
+///       `fmakunbound_id` on already-interned symbols (race A), and
+///   (b) fresh-fills those empty tail slots None->Some via `intern`
+///       (races B/C/D/E: the fill's arm writes vs the scan's val/function/plist
+///       loads).
+/// Before the fix, the scan read slot PRESENCE off the `Option<LispSymbol>` niche
+/// — which Rust packed into the `function_unbound` byte — so the presence read
+/// data-raced both writers.
+///
+/// This is a TSAN GATE, NOT a functional test. The race is BENIGN on x86
+/// (presence is monotonic None->Some, so even a torn/stale presence read still
+/// resolves correctly), so the assertions below passing does NOT prove the fix —
+/// they only guard against a functional regression. The real acceptance
+/// criterion is a ThreadSanitizer run:
+///   neovm-core/scripts/run-gc-tsan.sh gc_concurrent_obarray_scan_vs_defalias_churn
+/// which RACES on pre-fix `main` and is CLEAN post-fix (0 races on obarray-slot
+/// memory). The test name is on `run-gc-tsan.sh`'s `SURFACE_RE`
+/// (`^emacs_core::eval::tests::gc_concurrent`).
+#[test]
+fn gc_concurrent_obarray_scan_vs_defalias_churn() {
+    crate::test_utils::init_test_tracing();
+    // This is a TSan DATA-RACE gate; it runs in PLAIN mode (run-gc-tsan.sh builds
+    // without stress instrumentation). Under NEOVM_GC_STRESS the runtime bootstrap
+    // (`runtime_startup_context` below) forces a full GC at every allocation-bearing
+    // safe point (eval.rs `gc_stress_enabled`), so startup alone is orders of
+    // magnitude slower and blows the test timeout -- the same pre-existing reason
+    // the other full-bootstrap tests time out under stress. Stress mode adds no
+    // race signal for this gate, so skip it rather than time out.
+    if std::env::var("NEOVM_GC_STRESS").as_deref() == Ok("1") {
+        return;
+    }
+    // Real pdump-partitioned config, same guard as the leaked-subr repro: the
+    // concurrent mark engages and its obarray scan runs on the GC thread.
+    unsafe { std::env::set_var("NEOVM_GC_VERIFY_PARTITION", "1") };
+    let mut ev = runtime_startup_context();
+    if !ev.tagged_heap.dump_partition_active() {
+        // Cold bootstrap cache: reload so the measured heap has the partition.
+        ev = runtime_startup_context();
+    }
+    ev.set_lexical_binding(true);
+
+    // The scan needs >=2 chunks so the last chunk has EMPTY tail slots that are
+    // in-range for the snapshot (fresh interns land there -> races B/C/D/E).
+    // `current_slot_len()` is always a multiple of the 4096-slot chunk; the real
+    // startup obarray already spans several chunks, but top up defensively so the
+    // precondition holds on any build.
+    let mut topup = 0u64;
+    while ev.obarray.current_slot_len() < 2 * 4096 {
+        ev.obarray.intern(&format!("t23-topup-{topup}"));
+        topup += 1;
+    }
+    assert!(ev.obarray.current_slot_len() >= 2 * 4096);
+
+    // A pool of already-interned symbols whose function cells we flip IN PLACE
+    // (race A). Materialize their obarray slots up front so the churn below is a
+    // pure in-place flip, not a fresh fill.
+    let churn_ids: Vec<SymId> = (0..64)
+        .map(|i| {
+            let id = crate::emacs_core::intern::intern(&format!("t23-churn-{i}"));
+            ev.obarray.set_symbol_function_id(id, Value::NIL);
+            id
+        })
+        .collect();
+
+    // Overlap strategy: the GC obarray scan runs at the START of each concurrent
+    // mark, so the mutator must be actively writing the obarray *during* mark
+    // start. We therefore run a fixed, MUTATION-DENSE burst — a full flip batch
+    // (race A) plus tail-slot fills (races B/C/D/E) EVERY iteration — with a
+    // per-iteration heap bump to keep concurrent marks (hence their
+    // start-of-cycle scans) starting. Over the burst the mutator spends almost
+    // all its time writing obarray slots, so the many concurrent scans that run
+    // reliably overlap a mutation of the same slot. The churn is cheap (tens of
+    // ms per iteration — startup dominates wall time); the burst is sized for
+    // many scan overlaps.
+    let seen0 = ev.tagged_heap.sweep_stats().termination_count;
+    let mut fresh = 0u64;
+    // Cap fresh interns so the obarray can't grow without bound; the fset churn
+    // (race A) keeps running regardless.
+    const MAX_FRESH: u64 = 60_000;
+    const BURST: u64 = 256;
+    for _ in 0..BURST {
+        // (a) in-place function-cell / `function_unbound` flips on existing
+        //     interned symbols — the write the pre-fix presence read raced.
+        for (k, &id) in churn_ids.iter().enumerate() {
+            if k % 2 == 0 {
+                ev.obarray.set_symbol_function_id(id, Value::fixnum(k as i64));
+            } else {
+                ev.obarray.fmakunbound_id(id);
+            }
+        }
+        // (b) fresh-fill empty tail slots None->Some (races B/C/D/E): each new
+        //     name mints the next dense SymId, filling an in-range empty tail slot
+        //     of the snapshotted obarray.
+        if fresh < MAX_FRESH {
+            for _ in 0..16 {
+                ev.obarray.intern(&format!("t23-fill-{fresh}"));
+                fresh += 1;
+            }
+        }
+        // Heap bump to arm the pacer so concurrent marks keep starting (same
+        // recipe as the leaked-subr repro).
+        ev.eval_str("(let ((l nil)) (dotimes (i 2000) (push (format \"s%d\" i) l)) (length l))")
+            .expect("churn alloc");
+    }
+
+    // Concurrency actually engaged: the GC obarray scan demonstrably ran on the
+    // GC thread while we churned (else there was no race surface to exercise).
+    // Mirrors the leaked-subr repro's ">=2 concurrent terminations" bar.
+    let terminations = ev.tagged_heap.sweep_stats().termination_count - seen0;
+    assert!(
+        terminations >= 2,
+        "concurrent GC did not engage under churn (terminations={terminations}); \
+         the obarray-scan race surface was never exercised",
+    );
+
+    // Functional correctness — a REGRESSION guard, not proof of the fix. Every
+    // churned symbol resolves to its deterministic last write, a fresh symbol
+    // dispatches, and the whole obarray still walks.
+    for (k, &id) in churn_ids.iter().enumerate() {
+        if k % 2 == 0 {
+            assert_eq!(
+                ev.obarray.symbol_function_id(id),
+                Some(Value::fixnum(k as i64)),
+                "churn symbol {k} lost its function cell across concurrent GC",
+            );
+        } else {
+            assert!(
+                ev.obarray.is_function_unbound_id(id),
+                "fmakunbound'd churn symbol {k} not unbound after concurrent GC",
+            );
+        }
+    }
+    assert_eq!(
+        ev.eval_str("(car (list 1 2 3))").expect("car"),
+        Value::fixnum(1),
+    );
+    assert_eq!(ev.eval_str("(+ 20 22)").expect("plus"), Value::fixnum(42));
+    // The freshly-filled tail symbols are present and resolvable.
+    assert!(
+        ev.obarray.all_symbols().len() >= churn_ids.len(),
+        "obarray scan/walk lost interned symbols",
+    );
+}
+
 /// Which kinds dominate the concurrent GC's STW termination drain — the
 /// measurement that decides the concurrent-tracing extension order
 /// (strings-first vs records/closures vs "hash tables dominate, stop").

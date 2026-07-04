@@ -38,6 +38,7 @@ use crate::gc_trace::GcTrace;
 use crate::heap_types::LispString;
 use crate::tagged::header::{load_value_atomic, store_value_atomic};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 // ===========================================================================
 // Redirect machinery — mirrors GNU `lisp.h:771-829`
@@ -301,10 +302,26 @@ pub struct LispBufferLocalValue {
 /// (Phase 1). As of Phase H the legacy `SymbolValue`/`special`/`constant`
 /// mirror fields have been removed; all reads and writes go through
 /// `flags` + `val`.
-#[derive(Clone, Debug)]
+/// Reserved [`NameId`] stored in the `name` cell of an EMPTY obarray slot.
+/// The obarray's chunk store holds fully-initialized [`LispSymbol`]s rather
+/// than `Option<LispSymbol>`; a slot is "empty" (never interned) iff its
+/// `name` atom equals this sentinel. `u32::MAX` is reserved: real `NameId`s
+/// mint densely from `NameId(strings.len())` (`intern.rs`), and the mint site
+/// carries a `debug_assert` that a real id never reaches `u32::MAX`.
+pub(crate) const SYMBOL_NAME_SENTINEL: NameId = NameId(u32::MAX);
+
+#[derive(Debug)]
 pub struct LispSymbol {
-    /// The symbol's name.
-    pub name: NameId,
+    /// The symbol's name, held as the raw [`NameId`] `u32` in an atomic cell.
+    /// This field is BOTH the real name AND the obarray slot's presence
+    /// discriminant ([`SYMBOL_NAME_SENTINEL`] == empty), so that the concurrent
+    /// GC obarray scan ([`ObarrayScanSnapshot::scan`], the only cross-thread
+    /// reader) can gate on presence with an `Acquire` load that pairs with the
+    /// slot fill's terminal `Release` store (see [`LispSymbol::publish_fill`]):
+    /// observing a non-sentinel name happens-after every arm write. Write-once
+    /// (name is never reset to the sentinel on a live slot — presence is
+    /// monotonic), so the single mutator reads it `Relaxed` ([`LispSymbol::name`]).
+    name: AtomicU32,
     /// Packed flags: redirect tag, trapped-write tag, interned tag,
     /// declared-special bit. Mirrors the first byte of GNU
     /// `Lisp_Symbol::s` (`lisp.h:786-792`).
@@ -330,6 +347,16 @@ pub struct LispSymbol {
 const _: () = {
     assert!(core::mem::align_of::<Value>() >= core::mem::align_of::<usize>());
     assert!(core::mem::size_of::<Value>() == core::mem::size_of::<usize>());
+};
+
+// The obarray scan is the pause-floor bottleneck (CONCURRENT_GC.md:185-222): it
+// walks `[LispSymbol; 4096]` chunks cache-line by cache-line. Reusing the
+// write-once `name` field as the presence discriminant (an `AtomicU32`, same 4
+// bytes as the old `NameId`) keeps the slot at its historical 32 bytes — do NOT
+// grow it. This const-asserts that invariant so a future field addition trips
+// the build rather than silently regressing scan throughput.
+const _: () = {
+    assert!(core::mem::size_of::<LispSymbol>() == 32);
 };
 
 /// Mirrors GNU `swap_in_symval_forwarding` (`src/data.c:1539-1571`).
@@ -438,11 +465,16 @@ pub enum MakeAliasError {
 }
 
 impl LispSymbol {
-    pub fn new(id: SymId) -> Self {
+    /// A fully-initialized EMPTY obarray slot: `name == `[`SYMBOL_NAME_SENTINEL`]
+    /// with the arm defaults GNU gives a freshly-interned symbol (Plainval /
+    /// UNBOUND / NIL / NIL). The chunk store is
+    /// `std::array::from_fn(|_| LispSymbol::empty())`; a slot is later published
+    /// by [`Self::publish_fill`], which flips the name off the sentinel LAST.
+    fn empty() -> Self {
         let mut flags = SymbolFlags::default();
         flags.set_redirect(SymbolRedirect::Plainval);
         Self {
-            name: symbol_name_id(id),
+            name: AtomicU32::new(SYMBOL_NAME_SENTINEL.0),
             flags,
             val: SymbolVal {
                 plain: Value::UNBOUND,
@@ -452,6 +484,56 @@ impl LispSymbol {
             interned_global: false,
             function_unbound: false,
         }
+    }
+
+    pub fn new(id: SymId) -> Self {
+        let sym = Self::empty();
+        // Fresh single-threaded construction. The cross-thread PUBLISH (a
+        // `Release` store) happens at the obarray slot fill (`publish_fill`),
+        // not here, so `Relaxed` is correct for building a detached symbol.
+        sym.name.store(symbol_name_id(id).0, Ordering::Relaxed);
+        sym
+    }
+
+    /// The symbol's name. Write-once, and read here only by the single mutator
+    /// thread, so `Relaxed` is correct (program order orders the construction /
+    /// publish store before any same-thread read). The concurrent GC obarray
+    /// scan is the ONLY cross-thread reader and loads the name atom with
+    /// `Acquire` itself — it does not go through this accessor.
+    #[inline]
+    pub fn name(&self) -> NameId {
+        NameId(self.name.load(Ordering::Relaxed))
+    }
+
+    /// Presence predicate for the single mutator and stop-the-world callers
+    /// (get/get_mut/iter/from_dump/trace/clone). `Relaxed`: the concurrent GC
+    /// scan is the only reader that needs `Acquire`, and it loads the atom
+    /// directly at its presence gate.
+    #[inline]
+    fn is_present(&self) -> bool {
+        self.name.load(Ordering::Relaxed) != SYMBOL_NAME_SENTINEL.0
+    }
+
+    /// Publish `src` into this (currently EMPTY) slot: write ALL arm fields
+    /// FIRST, THEN `Release`-store the name LAST. The terminal `Release`
+    /// publishes the whole fill; the concurrent GC obarray scan's `Acquire`
+    /// load of the name is the pairing entry gate, so once the scan observes
+    /// the published (non-sentinel) name every arm write above happens-before
+    /// its arm reads. A plain struct memcpy would NOT establish that ordering —
+    /// the name store MUST be a separate `Release` after the arm writes. Called
+    /// only on a pristine empty slot (presence is monotonic: None -> Some only).
+    #[inline]
+    fn publish_fill(&mut self, src: LispSymbol) {
+        let published_name = src.name.load(Ordering::Relaxed);
+        self.flags = src.flags;
+        self.val = src.val;
+        self.function = src.function;
+        self.plist = src.plist;
+        self.interned_global = src.interned_global;
+        self.function_unbound = src.function_unbound;
+        // Terminal Release: publishes the arm writes above to the GC scan's
+        // Acquire load of `name`.
+        self.name.store(published_name, Ordering::Release);
     }
 
     /// Read the redirect tag.
@@ -502,6 +584,25 @@ impl LispSymbol {
     }
 }
 
+// Hand-written because `name: AtomicU32` is not `Clone`-derivable. A cloned
+// obarray is never concurrently scanned, so a `Relaxed` load of the source name
+// is sufficient; the arms are plain `Copy`. Mirrors what `#[derive(Clone)]`
+// produced before the presence-byte-race fix (empty slots clone to empty:
+// name == SENTINEL is copied verbatim).
+impl Clone for LispSymbol {
+    fn clone(&self) -> Self {
+        Self {
+            name: AtomicU32::new(self.name.load(Ordering::Relaxed)),
+            flags: self.flags,
+            val: self.val,
+            function: self.function,
+            plist: self.plist,
+            interned_global: self.interned_global,
+            function_unbound: self.function_unbound,
+        }
+    }
+}
+
 /// The obarray — a table of interned symbols.
 ///
 /// This is the central symbol registry. `intern` looks up or creates symbols,
@@ -536,7 +637,14 @@ const OBARRAY_CHUNK: usize = 4096;
 /// realloc UAF. Slot `idx` (== `SymId`) lives at `chunks[idx >> 12][idx & 4095]`,
 /// preserving the dense `SymId == slot-index` identity the dump + iteration rely on.
 struct SymbolChunks {
-    chunks: Vec<Box<[Option<LispSymbol>; OBARRAY_CHUNK]>>,
+    /// Fully-initialized symbol slots. Each is a valid [`LispSymbol`]; an
+    /// unfilled (never-interned) slot is [`LispSymbol::empty`]
+    /// (`name == `[`SYMBOL_NAME_SENTINEL`]). Storing `LispSymbol` rather than
+    /// `Option<LispSymbol>` removes the `Option` niche (which Rust packed into
+    /// the `function_unbound` byte), so the concurrent GC scan's presence read
+    /// no longer races the mutator's in-place flag flips / fresh fills — presence
+    /// is now the atomic write-once `name` cell (task #23).
+    chunks: Vec<Box<[LispSymbol; OBARRAY_CHUNK]>>,
     /// Per-chunk seqlock (one `AtomicU32` per chunk, index-aligned with `chunks`).
     /// Boxed so the counter address stays stable for the concurrent GC reader even
     /// when the `Vec` spine reallocs. Even = stable; odd = a `(flags, val)` write
@@ -573,27 +681,36 @@ impl SymbolChunks {
         }
     }
 
+    /// Borrow the slot at `idx` iff it is in range AND PRESENT (published).
+    /// Empty (never-interned) slots read as `None`, exactly like the old
+    /// `Option<LispSymbol>` tail did under `.flatten()`. Mutator/STW caller, so
+    /// the presence check is `Relaxed` (see [`LispSymbol::is_present`]).
     #[inline(always)]
-    fn get(&self, idx: usize) -> Option<&Option<LispSymbol>> {
+    fn get(&self, idx: usize) -> Option<&LispSymbol> {
         if idx >= self.len {
             return None;
         }
-        Some(&self.chunks[idx >> 12][idx & (OBARRAY_CHUNK - 1)])
+        let slot = &self.chunks[idx >> 12][idx & (OBARRAY_CHUNK - 1)];
+        slot.is_present().then_some(slot)
     }
 
     #[inline(always)]
-    fn get_mut(&mut self, idx: usize) -> Option<&mut Option<LispSymbol>> {
+    fn get_mut(&mut self, idx: usize) -> Option<&mut LispSymbol> {
         if idx >= self.len {
             return None;
         }
-        Some(&mut self.chunks[idx >> 12][idx & (OBARRAY_CHUNK - 1)])
+        let slot = &mut self.chunks[idx >> 12][idx & (OBARRAY_CHUNK - 1)];
+        if slot.is_present() { Some(slot) } else { None }
     }
 
     /// Grow (appending chunks; existing chunks never move) until `idx` is in
-    /// range, returning a mutable reference to its slot.
-    fn ensure(&mut self, idx: usize) -> &mut Option<LispSymbol> {
+    /// range, returning a mutable reference to its (possibly EMPTY) slot. New
+    /// chunks are filled with [`LispSymbol::empty`]; a fresh slot is published
+    /// by [`LispSymbol::publish_fill`].
+    fn ensure(&mut self, idx: usize) -> &mut LispSymbol {
         while self.len <= idx {
-            self.chunks.push(Box::new(std::array::from_fn(|_| None)));
+            self.chunks
+                .push(Box::new(std::array::from_fn(|_| LispSymbol::empty())));
             self.seqs
                 .push(Box::new(std::sync::atomic::AtomicU32::new(0)));
             self.len += OBARRAY_CHUNK;
@@ -606,13 +723,15 @@ impl SymbolChunks {
         self.len
     }
 
-    /// Iterate every slot in global `SymId` order (untouched tail slots are
-    /// `None`, inert under `.flatten()`; `.enumerate()` yields the global index).
-    fn iter(&self) -> impl Iterator<Item = &Option<LispSymbol>> {
+    /// Iterate every slot in global `SymId` order — INCLUDING empty
+    /// (never-interned) tail slots, which read `is_present() == false`.
+    /// `.enumerate()` yields the global index; callers skip empties with
+    /// `.filter(|s| s.is_present())` (was `.flatten()` over `Option`).
+    fn iter(&self) -> impl Iterator<Item = &LispSymbol> {
         self.chunks.iter().flat_map(|c| c.iter())
     }
 
-    fn iter_mut(&mut self) -> impl Iterator<Item = &mut Option<LispSymbol>> {
+    fn iter_mut(&mut self) -> impl Iterator<Item = &mut LispSymbol> {
         self.chunks.iter_mut().flat_map(|c| c.iter_mut())
     }
 
@@ -640,10 +759,7 @@ impl SymbolChunks {
     fn snapshot_parts(
         &self,
     ) -> (
-        Vec<(
-            *const Option<LispSymbol>,
-            *const std::sync::atomic::AtomicU32,
-        )>,
+        Vec<(*const LispSymbol, *const std::sync::atomic::AtomicU32)>,
         usize,
     ) {
         let parts = self
@@ -675,10 +791,7 @@ impl SymbolChunks {
 /// never move (see [`SymbolChunks`]). Single mutator, single GC thread.
 pub(crate) struct ObarrayScanSnapshot {
     /// (slots-array base ptr, chunk seqlock ptr) for each chunk present at start.
-    chunks: Vec<(
-        *const Option<LispSymbol>,
-        *const std::sync::atomic::AtomicU32,
-    )>,
+    chunks: Vec<(*const LispSymbol, *const std::sync::atomic::AtomicU32)>,
     /// Logical live-slot count at start (so the scan covers slots [0, n_slots)).
     n_slots: usize,
     /// Chunk count at start (chunks beyond this are interned mid-cycle).
@@ -733,14 +846,25 @@ impl ObarrayScanSnapshot {
                 if global_idx >= self.n_slots {
                     break;
                 }
-                // Safety: slots_ptr is this chunk's [Option<LispSymbol>; CHUNK]
-                // base; `offset < OBARRAY_CHUNK` is in bounds; the chunk never
-                // moves. A concurrent mutator only mutates the value-cell ARM
-                // (flags + val word) under the seqlock, which the read protocol
-                // validates — it never resizes or relocates the slot.
-                let sym_opt = unsafe { &*slots_ptr.add(offset) };
-                if let Some(sym) = sym_opt {
-                    read_symbol_children_consistent(seq, sym, &mut push);
+                // Safety: slots_ptr is this chunk's [LispSymbol; CHUNK] base;
+                // `offset < OBARRAY_CHUNK` is in bounds; the chunk never moves.
+                // Every slot is a valid (possibly EMPTY) LispSymbol — there is no
+                // uninitialized memory to read. A concurrent mutator only either
+                // (a) publishes an empty slot via a terminal `Release` store to
+                // `name` after writing the arms, or (b) mutates an
+                // already-published slot's value-cell ARM under the seqlock;
+                // neither resizes or relocates the slot.
+                let slot = unsafe { &*slots_ptr.add(offset) };
+                // PRESENCE GATE — the ONLY cross-thread presence read. `Acquire`
+                // load of the write-once `name` cell, pairing with the fill's
+                // terminal `Release` (`publish_fill`): observing a non-sentinel
+                // name happens-after every arm write, so the seqlock read below
+                // sees a fully-initialized slot (no data race on the arms). A
+                // slot still reading SENTINEL is never-interned OR a fresh fill
+                // not yet published — skip it; a symbol interned mid-cycle is
+                // allocate-black / SATB-retained and need not be scanned now.
+                if slot.name.load(Ordering::Acquire) != SYMBOL_NAME_SENTINEL.0 {
+                    read_symbol_children_consistent(seq, slot, &mut push);
                 }
                 global_idx += 1;
             }
@@ -868,7 +992,7 @@ impl Clone for Obarray {
             blv_map.insert(orig as usize, cloned_ptr);
         }
         let mut symbols = self.symbols.clone();
-        for slot in symbols.iter_mut().flatten() {
+        for slot in symbols.iter_mut().filter(|s| s.is_present()) {
             if slot.flags.redirect() == SymbolRedirect::Localized {
                 let orig = unsafe { slot.val.blv };
                 if let Some(&new_ptr) = blv_map.get(&(orig as usize)) {
@@ -911,23 +1035,27 @@ impl Obarray {
 
     #[inline(always)]
     fn slot(&self, id: SymId) -> Option<&LispSymbol> {
-        self.symbols
-            .get(Self::slot_index(id))
-            .and_then(Option::as_ref)
+        // `get` already folds presence (empty slots read as `None`).
+        self.symbols.get(Self::slot_index(id))
     }
 
     #[inline(always)]
     fn slot_mut(&mut self, id: SymId) -> Option<&mut LispSymbol> {
-        self.symbols
-            .get_mut(Self::slot_index(id))
-            .and_then(Option::as_mut)
+        self.symbols.get_mut(Self::slot_index(id))
     }
 
     fn ensure_slot(&mut self, id: SymId) -> &mut LispSymbol {
         let idx = Self::slot_index(id);
-        self.symbols
-            .ensure(idx)
-            .get_or_insert_with(|| LispSymbol::new(id))
+        let slot = self.symbols.ensure(idx);
+        if !slot.is_present() {
+            // Fresh fill (None -> Some): publish arms-then-name via a terminal
+            // `Release` store so the concurrent GC obarray scan never reads a
+            // half-written slot's arms (see `LispSymbol::publish_fill`). Matches
+            // the old `get_or_insert_with(|| LispSymbol::new(id))` semantics —
+            // only an empty slot is written.
+            slot.publish_fill(LispSymbol::new(id));
+        }
+        slot
     }
 
     /// Returns a seqlock guard for the chunk holding `id`'s slot, armed only while a
@@ -973,7 +1101,7 @@ impl Obarray {
     pub(crate) fn trace_new_symbol_cells(&self, from_slot: usize, mut push: impl FnMut(Value)) {
         let len = self.symbols.len();
         for idx in from_slot..len {
-            let Some(Some(sym)) = self.symbols.get(idx) else {
+            let Some(sym) = self.symbols.get(idx) else {
                 continue;
             };
             match sym.flags.redirect() {
@@ -1294,7 +1422,7 @@ impl Obarray {
     #[inline(always)]
     pub fn symbol_value_id_copied(&self, id: SymId) -> Option<Value> {
         let sym = match self.symbols.get(Self::slot_index(id)) {
-            Some(Some(sym)) => sym,
+            Some(sym) => sym,
             _ => return None,
         };
         match sym.flags.redirect() {
@@ -1333,7 +1461,7 @@ impl Obarray {
         while remaining > 0 {
             remaining -= 1;
             let sym = match self.symbols.get(Self::slot_index(current)) {
-                Some(Some(sym)) => sym,
+                Some(sym) => sym,
                 _ => return None,
             };
             match sym.flags.redirect() {
@@ -1380,7 +1508,7 @@ impl Obarray {
         let mut current = id;
         for _ in 0..50 {
             let sym = match self.symbols.get(Self::slot_index(current)) {
-                Some(Some(sym)) => sym,
+                Some(sym) => sym,
                 _ => return None,
             };
             match sym.flags.redirect() {
@@ -1964,7 +2092,7 @@ impl Obarray {
     /// legacy `value` enum field. Visits Plainval symbols (non-UNBOUND)
     /// and BLV defcell defaults (for Localized symbols).
     pub fn for_each_value_cell_mut(&mut self, mut f: impl FnMut(&mut Value)) {
-        for sym in self.symbols.iter_mut().flatten() {
+        for sym in self.symbols.iter_mut().filter(|s| s.is_present()) {
             match sym.flags.redirect() {
                 SymbolRedirect::Plainval => {
                     // Safety: redirect=Plainval guarantees val.plain is live.
@@ -2630,9 +2758,8 @@ impl Obarray {
     pub fn all_symbols(&self) -> Vec<&str> {
         self.symbols
             .iter()
-            .flatten()
-            .filter(|sym| sym.interned_global)
-            .map(|sym| resolve_name(sym.name))
+            .filter(|sym| sym.is_present() && sym.interned_global)
+            .map(|sym| resolve_name(sym.name()))
             .collect()
     }
 
@@ -2653,9 +2780,13 @@ impl Obarray {
     ) -> impl Iterator<Item = (NameId, Value)> + '_ {
         self.symbols
             .iter()
-            .flatten()
-            .filter(|sym| sym.interned_global && !sym.function_unbound && !sym.function.is_nil())
-            .map(|sym| (sym.name, sym.function))
+            .filter(|sym| {
+                sym.is_present()
+                    && sym.interned_global
+                    && !sym.function_unbound
+                    && !sym.function.is_nil()
+            })
+            .map(|sym| (sym.name(), sym.function))
     }
 
     /// Remove a symbol from the obarray.  Returns `true` if it was present.
@@ -2718,7 +2849,8 @@ impl Obarray {
     pub(crate) fn iter_symbols(&self) -> impl Iterator<Item = (SymId, &LispSymbol)> {
         self.symbols.iter().enumerate().filter_map(|(idx, slot)| {
             debug_assert!(idx <= u32::MAX as usize, "symbol index overflow");
-            slot.as_ref().map(|sym| (SymId(idx as u32), sym))
+            // `iter()` yields every slot including empty tail slots; skip those.
+            slot.is_present().then_some((SymId(idx as u32), slot))
         })
     }
 
@@ -2764,7 +2896,11 @@ impl Obarray {
         for (id, mut sym) in symbols {
             sym.interned_global = false;
             sym.function_unbound = false;
-            *ob.symbols.ensure(Self::slot_index(id)) = Some(sym);
+            // Publish arms-then-name (Release) into the empty slot, consistent
+            // with the live `ensure_slot` fill. Dump load is single-threaded (no
+            // concurrent mark), but keeping the one fill discipline avoids a
+            // second, subtly-different publish path.
+            ob.symbols.ensure(Self::slot_index(id)).publish_fill(sym);
         }
         for id in global_members {
             let sym = ob
@@ -2794,7 +2930,7 @@ impl GcTrace for Obarray {
         // the barrier does not track BLV valcell/where_buf rebinds, so it stays a
         // per-termination residual.
         let skip_symbol_cells = SEED_SKIP_OBARRAY_SYMBOL_CELLS.with(|c| c.get());
-        for sym in self.symbols.iter().flatten() {
+        for sym in self.symbols.iter().filter(|s| s.is_present()) {
             if skip_symbol_cells {
                 continue;
             }

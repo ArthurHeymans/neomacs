@@ -94,6 +94,17 @@ impl StringInterner {
             return idx;
         }
         let idx = NameId(self.strings.len() as u32);
+        // `NameId(u32::MAX)` is reserved as the obarray empty-slot presence
+        // sentinel (`symbol::SYMBOL_NAME_SENTINEL`): a `LispSymbol` slot is
+        // "empty" iff its atomic `name` equals it. NameIds mint densely from 0,
+        // so reaching `u32::MAX` (4.3B distinct symbol names) means the sentinel
+        // would alias a real name and a live slot could read as empty.
+        debug_assert_ne!(
+            idx,
+            crate::emacs_core::symbol::SYMBOL_NAME_SENTINEL,
+            "NameId space exhausted: a real symbol name collided with the \
+             obarray empty-slot presence sentinel (u32::MAX)",
+        );
         let leaked = Box::leak(Box::new(normalized.into_owned())) as &'static LispString;
         self.strings.push(leaked);
         self.map.insert(leaked, idx);
