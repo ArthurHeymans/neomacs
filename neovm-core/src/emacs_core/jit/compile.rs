@@ -64,8 +64,8 @@ use crate::emacs_core::bytecode::vm::condition_frame_resume;
 use crate::emacs_core::bytecode::{ByteCodeFunction, Vm};
 use crate::emacs_core::error::{Flow, make_signal_binding_value, signal};
 use crate::emacs_core::eval::{
-    ConditionFrame, Context, LispArgVec, ResumeTarget, push_scratch_gc_root,
-    restore_scratch_gc_roots, save_scratch_gc_roots, subr_entry_from_value,
+    ConditionFrame, Context, LispArgVec, ResumeTarget, lookup_global_subr_entry,
+    push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots, subr_entry_from_value,
 };
 use crate::emacs_core::intern::{SymId, intern, resolve_sym};
 use crate::emacs_core::symbol::Obarray;
@@ -5774,7 +5774,42 @@ enum SpecCalleeKind {
     /// `equal-including-properties` (2 args): `neovm_jit_eq_incl_props_spec`,
     /// bitwise-eq hit → `t`; anything else bounces to the generic block.
     EqInclProps,
+    /// R2 CallBuiltinSym intrinsic, Tier-A (`which` = a `CBSYM_A_*`
+    /// discriminant): a provably-trivial buffer/match-state read whose builtin
+    /// body allocates no lisp — `neovm_jit_cbsym_read` calls the body GC-free,
+    /// bouncing to [`STATUS_NEED_GENERIC`] when the static entry is no longer a
+    /// plain builtin (or, for `current-buffer`, when the buffer value was never
+    /// materialized). Classified BY NAME off `Op::CallBuiltinSym` (advice/fset
+    /// immune — the op name-dispatches the static subr table).
+    CbsymTierA { which: u8 },
+    /// R2 CallBuiltinSym intrinsic, Tier-B (dispatch-skip): a plain builtin
+    /// reached via `neovm_jit_cbsym_spec`, which reproduces the CBSym
+    /// interpreter arm EXACTLY (fresh entry re-read, SUBR-value backtrace frame
+    /// via `subr_from_sym_id`, arity vs the fresh entry, exact-slice args, NO
+    /// `with_bytecode_call_depth`, quit-AFTER) — skipping only the
+    /// `resolve_sym` → `builtin_name_id` → special-name string-switch round
+    /// trip. Bounces to [`STATUS_NEED_GENERIC`] (→ the general CBSym lowering)
+    /// when the fresh entry is not `Some` + `Builtin`.
+    CbsymTierB,
 }
+
+/// Tier-A `which` discriminants (baked into generated code as an `iconst` and
+/// read by [`neovm_jit_cbsym_read`]). Each maps 1:1 to a builtin whose body the
+/// shim calls GC-free; a register-read reimplementation would diverge (e.g.
+/// match-beginning does a byte→char conversion), so the shim always DELEGATES.
+pub(crate) const CBSYM_A_POINT: u8 = 0;
+pub(crate) const CBSYM_A_POINT_MIN: u8 = 1;
+pub(crate) const CBSYM_A_POINT_MAX: u8 = 2;
+pub(crate) const CBSYM_A_BOLP: u8 = 3;
+pub(crate) const CBSYM_A_EOLP: u8 = 4;
+pub(crate) const CBSYM_A_BOBP: u8 = 5;
+pub(crate) const CBSYM_A_EOBP: u8 = 6;
+pub(crate) const CBSYM_A_FOLLOWING_CHAR: u8 = 7;
+pub(crate) const CBSYM_A_PRECEDING_CHAR: u8 = 8;
+pub(crate) const CBSYM_A_CHAR_AFTER: u8 = 9;
+pub(crate) const CBSYM_A_CURRENT_BUFFER: u8 = 10;
+pub(crate) const CBSYM_A_MATCH_BEGINNING: u8 = 11;
+pub(crate) const CBSYM_A_MATCH_END: u8 = 12;
 
 impl SpecCalleeKind {
     /// Kinds whose direct path passes its 1–2 args in REGISTERS with no
@@ -5786,6 +5821,30 @@ impl SpecCalleeKind {
             SpecCalleeKind::PredRecordp
                 | SpecCalleeKind::PredSymbolWithPos
                 | SpecCalleeKind::EqInclProps
+        )
+    }
+
+    /// The three round-1 direct-SUBR speculation kinds that make
+    /// `declare_rt_refs` pull in the JIT-only `neovm_jit_{call_subr,pred,eq_incl_props}_spec`
+    /// shims. CBSym kinds are deliberately excluded — they declare their own
+    /// shims off a separate flag so a CBSym-only body never imports the
+    /// `Op::Call` spec shims.
+    fn is_round1_subr(self) -> bool {
+        matches!(
+            self,
+            SpecCalleeKind::SubrGeneral
+                | SpecCalleeKind::PredRecordp
+                | SpecCalleeKind::PredSymbolWithPos
+                | SpecCalleeKind::EqInclProps
+        )
+    }
+
+    /// The CallBuiltinSym intrinsic kinds (Tier-A read shims / Tier-B
+    /// dispatch-skip). Keyed by the op's own SymId, resolved BY NAME.
+    fn is_cbsym(self) -> bool {
+        matches!(
+            self,
+            SpecCalleeKind::CbsymTierA { .. } | SpecCalleeKind::CbsymTierB
         )
     }
 }
@@ -5857,6 +5916,113 @@ fn subr_spec_kind(binding: Value, site_sym: SymId, nargs: usize) -> Option<SpecC
         ("equal-including-properties", 2) => SpecCalleeKind::EqInclProps,
         _ => SpecCalleeKind::SubrGeneral,
     })
+}
+
+/// The `dispatch_vm_builtin_unrooted` special names (vm.rs) — VM-internal
+/// bytecode operations that are NOT real Elisp subrs (they are handled by an
+/// explicit string switch BEFORE `funcall_general`). A CBSym site whose name is
+/// one of these must never be intrinsified: the fast shim funnels through
+/// `funcall_general`, which would resolve the name-canonical static subr
+/// entry — a DIFFERENT dispatch than the special-name arm. None of the R2 ship
+/// set collides with these (asserted by `cbsym_shipset_excludes_special_names`
+/// in the tests), but the classifier denylists them anyway for defence.
+const CBSYM_SPECIAL_NAMES: &[&str] = &[
+    "call-interactively",
+    "start-kbd-macro",
+    "end-kbd-macro",
+    "call-last-kbd-macro",
+    "execute-kbd-macro",
+    "garbage-collect",
+    "mapatoms",
+    "maphash",
+    "store-kbd-macro-event",
+    "cancel-kbd-macro-events",
+    "%%defvar",
+    "%%defconst",
+    "%%unimplemented-elc-bytecode",
+];
+
+/// Classify an `Op::CallBuiltinSym(sym, nargs)` site for R2 intrinsification, or
+/// `None` when it must stay on the general named-builtin lowering. The
+/// distinguishing property of CallBuiltinSym (vs the `Op::Call` sites
+/// `subr_spec_kind` handles): the op carries the EXACT nargs and name-dispatches
+/// the static subr table (`subr_from_sym_id(builtin_name_id(resolve_sym(sym)))`,
+/// vm.rs) — it is advice/fset/override-IMMUNE, so there is NO epoch guard and NO
+/// `compiler_function_overrides_active` gate; the target is name-canonical and
+/// `Box::leak` process-stable. Every clause is load-bearing:
+///
+/// * `lookup_global_subr_entry(sym)` + `dispatch_kind == Builtin` — the op must
+///   currently name a plain builtin. Re-checked FRESH in the shim (entries are
+///   rewritten in place); a mismatch there bounces to `STATUS_NEED_GENERIC`.
+/// * ALLOWLIST by name (the profiled R2 winners only) — so nothing outside the
+///   audited ship set is ever intrinsified. This structurally excludes the
+///   `aset`/`fillarray` writeback names, `funcall`/`apply`/`eval`, and every
+///   `dispatch_vm_builtin_unrooted` special name (none are in the allowlist);
+///   the explicit denylist below is defence-in-depth.
+/// * NO fixed-arity gate (unlike `subr_spec_kind`): the Tier-B shim dispatches
+///   through `funcall_general` on the exact-length arg vector, so a `Many` subr
+///   gets `into_vec()` (byte-identical) and a wrong-arity call signals
+///   `wrong-number-of-arguments` with the SUBR payload identically to the
+///   interpreter arm — no need to force those to the generic path.
+///
+/// Runs only under `Some(obarray)` (via `find_spec_sites`), so AOT
+/// (`obarray = None`) structurally skips it — the CallBuiltinSym op keeps its
+/// plain op-SymId-reloc-by-name lowering under AOT.
+fn cbsym_spec_kind(sym: SymId, _nargs: usize) -> Option<SpecCalleeKind> {
+    let entry = lookup_global_subr_entry(sym)?;
+    if entry.dispatch_kind != SubrDispatchKind::Builtin {
+        return None;
+    }
+    let name = resolve_sym(sym);
+    // Defence-in-depth denylist (the allowlist below already excludes these).
+    if CBSYM_SPECIAL_NAMES.contains(&name)
+        || matches!(name, "aset" | "fillarray" | "funcall" | "apply" | "eval")
+    {
+        return None;
+    }
+    // Tier-A: provably-trivial GC-free reads (COMMIT 5 shims). char-after is
+    // Tier-A only in its 0-arg form; a 1-arg / marker call bounces to Tier-B's
+    // generic path via the None fall-through here.
+    let tier_a = match name {
+        "point" => Some(CBSYM_A_POINT),
+        "point-min" => Some(CBSYM_A_POINT_MIN),
+        "point-max" => Some(CBSYM_A_POINT_MAX),
+        "bolp" => Some(CBSYM_A_BOLP),
+        "eolp" => Some(CBSYM_A_EOLP),
+        "bobp" => Some(CBSYM_A_BOBP),
+        "eobp" => Some(CBSYM_A_EOBP),
+        "following-char" => Some(CBSYM_A_FOLLOWING_CHAR),
+        "preceding-char" => Some(CBSYM_A_PRECEDING_CHAR),
+        "char-after" if _nargs == 0 => Some(CBSYM_A_CHAR_AFTER),
+        "current-buffer" => Some(CBSYM_A_CURRENT_BUFFER),
+        "match-beginning" => Some(CBSYM_A_MATCH_BEGINNING),
+        "match-end" => Some(CBSYM_A_MATCH_END),
+        _ => None,
+    };
+    if let Some(which) = tier_a {
+        return Some(SpecCalleeKind::CbsymTierA { which });
+    }
+    // Tier-B: plain builtins reached via `neovm_jit_cbsym_spec` (dispatch skip).
+    if matches!(
+        name,
+        "length"
+            | "insert"
+            | "set-marker"
+            | "goto-char"
+            | "delete-region"
+            | "forward-line"
+            | "forward-char"
+            | "buffer-substring"
+            | "set-buffer"
+            | "skip-chars-forward"
+            | "skip-chars-backward"
+            | "current-column"
+            | "widen"
+            | "indent-to"
+    ) {
+        return Some(SpecCalleeKind::CbsymTierB);
+    }
+    None
 }
 
 /// Per-site speculation state, baked into generated code by raw address and
@@ -5943,6 +6109,31 @@ fn find_spec_sites(
             SpecSite {
                 sym: sym_id.0,
                 expected_bits: binding.bits() as u64,
+                slot: next_slot,
+                kind,
+            },
+        );
+        next_slot += 1;
+    }
+    // R2: CallBuiltinSym intrinsic sites. Unlike the `Op::Call` window above, a
+    // CallBuiltinSym op is self-contained (it carries its callee SymId + the
+    // EXACT nargs), so there is no callee-slot-rewrite window to validate and no
+    // jump-target hazard — classify it in place by NAME. Keyed at the op's own
+    // index (disjoint from the `Op::Call` indices above: an index is one op).
+    for (i, op) in ops.iter().enumerate() {
+        let Op::CallBuiltinSym(sym, n) = op else {
+            continue;
+        };
+        let Some(kind) = cbsym_spec_kind(*sym, *n as usize) else {
+            continue;
+        };
+        sites.insert(
+            i,
+            SpecSite {
+                sym: sym.0,
+                // Unused for CBSym: the target is name-canonical (no epoch
+                // guard); the shim recomputes `subr_from_sym_id(sym)` itself.
+                expected_bits: 0,
                 slot: next_slot,
                 kind,
             },
@@ -7181,12 +7372,13 @@ fn build_leaf_fn<M: Module>(
         // re-enters the runtime (`Cons` / `Call`).
         let rt = if needs_rt {
             // Declare the JIT-only subr-speculation shims iff the body has
-            // subr-kind spec sites. AOT always compiles with an EMPTY site map
-            // (`build_baseline_leaf_object`), so this is always false there —
-            // an ObjectModule never even declares those import names.
-            let subr_spec = spec_sites
-                .values()
-                .any(|site| site.kind != SpecCalleeKind::Bytecode);
+            // round-1 subr-kind spec sites. AOT always compiles with an EMPTY
+            // site map (`build_baseline_leaf_object`), so this is always false
+            // there — an ObjectModule never even declares those import names.
+            // CBSym-kind sites are deliberately NOT counted here: they get their
+            // own R2 shims (COMMIT 2), so a CBSym-only body never imports the
+            // `Op::Call` spec shims.
+            let subr_spec = spec_sites.values().any(|site| site.kind.is_round1_subr());
             // `module` is already `&mut M`; reborrow it for the call.
             let refs = declare_rt_refs(&mut *module, fb.func, call_conv, ptr_ty, subr_spec)?;
             let vmctx_var = fb.declare_var(ptr_ty);
@@ -9586,6 +9778,87 @@ mod tests {
         .expect("aset body compiles");
         assert_eq!(leaf.call(ctx_ptr, &[]), NativeRun::Signal);
         let _ = take_pending_flow().expect("signal stashed");
+    }
+
+    #[test]
+    fn cbsym_classifier_selects_shipset_by_name() {
+        // R2 COMMIT 1: `find_spec_sites` classifies CallBuiltinSym sites BY NAME
+        // (Tier-A read / Tier-B dispatch-skip), allowlist only, keyed at the
+        // op's own index. Nothing consumes these kinds yet (the lowering ignores
+        // them) — this pins the classifier itself.
+        use crate::emacs_core::eval::Context;
+        use crate::emacs_core::intern::intern;
+        let ev = Context::new();
+        let point = Op::CallBuiltinSym(intern("point"), 0);
+        let insert = Op::CallBuiltinSym(intern("insert"), 1);
+        let car = Op::CallBuiltinSym(intern("car"), 1); // real builtin, NOT shipped
+        let gc = Op::CallBuiltinSym(intern("garbage-collect"), 0); // special name
+        let goto = Op::CallBuiltinSym(intern("goto-char"), 1);
+        let mbeg = Op::CallBuiltinSym(intern("match-beginning"), 1);
+        let ops = [point, insert, car, gc, goto, mbeg, Op::Return];
+        // The CBSym loop ignores `leaders`; pass the entry leader only.
+        let sites = find_spec_sites(&ops, &[], &[0], &ev.obarray);
+        assert_eq!(
+            sites.get(&0).map(|s| s.kind),
+            Some(SpecCalleeKind::CbsymTierA {
+                which: CBSYM_A_POINT
+            }),
+            "point -> Tier-A read"
+        );
+        assert_eq!(
+            sites.get(&1).map(|s| s.kind),
+            Some(SpecCalleeKind::CbsymTierB),
+            "insert -> Tier-B dispatch-skip"
+        );
+        assert!(!sites.contains_key(&2), "car is not in the R2 ship set");
+        assert!(
+            !sites.contains_key(&3),
+            "garbage-collect is a dispatch_vm_builtin_unrooted special name"
+        );
+        assert_eq!(
+            sites.get(&4).map(|s| s.kind),
+            Some(SpecCalleeKind::CbsymTierB),
+            "goto-char -> Tier-B"
+        );
+        assert_eq!(
+            sites.get(&5).map(|s| s.kind),
+            Some(SpecCalleeKind::CbsymTierA {
+                which: CBSYM_A_MATCH_BEGINNING
+            }),
+            "match-beginning -> Tier-A (does a byte->char conversion; must delegate)"
+        );
+        // Every classified CBSym site reports `is_cbsym`; none report `is_round1_subr`.
+        for idx in [0u32, 1, 4, 5] {
+            let k = sites[&(idx as usize)].kind;
+            assert!(k.is_cbsym(), "{idx}: classified kind is CBSym");
+            assert!(!k.is_round1_subr(), "{idx}: not an Op::Call subr kind");
+        }
+    }
+
+    #[test]
+    fn cbsym_shipset_excludes_special_and_writeback_names() {
+        // The `dispatch_vm_builtin_unrooted` special names + the writeback /
+        // re-entrant names must NEVER classify: the fast shim funnels through
+        // `funcall_general`, a DIFFERENT dispatch than the special-name arm, and
+        // aset/fillarray carry a writeback protocol. Allowlist construction makes
+        // this automatic; assert it functionally (a collision would classify one).
+        use crate::emacs_core::eval::Context;
+        use crate::emacs_core::intern::intern;
+        let _ev = Context::new();
+        for name in CBSYM_SPECIAL_NAMES
+            .iter()
+            .copied()
+            .chain(["aset", "fillarray", "funcall", "apply", "eval"])
+        {
+            assert!(
+                cbsym_spec_kind(intern(name), 0).is_none(),
+                "excluded name {name:?} must never classify as a CBSym intrinsic"
+            );
+            assert!(
+                cbsym_spec_kind(intern(name), 1).is_none(),
+                "excluded name {name:?} (1-arg) must never classify"
+            );
+        }
     }
 
     #[test]
