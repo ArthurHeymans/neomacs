@@ -2228,6 +2228,32 @@ fn maybe_prepopulate_aot(mode: RuntimeMode, evaluator: &Context) {
 #[cfg(not(feature = "jit"))]
 fn maybe_prepopulate_aot(_mode: RuntimeMode, _evaluator: &Context) {}
 
+/// R2 increment C — at shutdown (post-`recursive_edit`, the `Context` still alive on
+/// THIS eval thread), persist this session's proven-hot JIT leaves to
+/// `NEOVM_AOT_DIR` so the NEXT session serves them native + speculative from call 1.
+/// Self-gates internally on `NEOVM_AOT_PGO` + `NEOVM_AOT_DIR` (a no-op — and zero
+/// cost — in the default config, so this call is non-fatal and pays nothing off the
+/// PGO path) and on `RuntimeMode::FinalRun` (the production image). MUST run on the
+/// eval thread that owns the thread-local `COMPILED` cache — this is that thread.
+/// `kill-emacs` unwinds `recursive_edit` back to here, so no kill-emacs-hook wiring
+/// is needed. Emit-side only: it WRITES `.so`s; the load path is unchanged.
+#[cfg(feature = "jit")]
+fn maybe_drain_aot_pgo(mode: RuntimeMode, evaluator: &Context) {
+    if mode != RuntimeMode::FinalRun {
+        return;
+    }
+    let n = neovm_core::emacs_core::jit::aot::drain_aot_pgo(evaluator);
+    if n > 0 {
+        tracing::info!(
+            "AOT-PGO: persisted {n} hot JIT leaf .so(s) to NEOVM_AOT_DIR for the next session"
+        );
+    }
+}
+
+/// No-op when the `jit` feature is off (no AOT producer compiled in).
+#[cfg(not(feature = "jit"))]
+fn maybe_drain_aot_pgo(_mode: RuntimeMode, _evaluator: &Context) {}
+
 fn run_gui_evaluator_worker(
     mode: RuntimeMode,
     startup: StartupOptions,
@@ -2351,6 +2377,11 @@ fn run_gui_evaluator_worker(
         .cmd_tx
         .try_send(RenderCommand::Lifecycle(LifecycleCommand::Shutdown));
     render_waker.wake();
+
+    // R2 increment C: persist this session's proven-hot JIT leaves before exit
+    // (Context still alive on this eval thread; runs BEFORE the shutdown-request
+    // early return so it fires on kill-emacs too). No-op unless NEOVM_AOT_PGO set.
+    maybe_drain_aot_pgo(mode, &evaluator);
 
     if let Some(request) = evaluator.shutdown_request() {
         let exit = EvaluatorExit {
@@ -2666,6 +2697,11 @@ pub fn run(mode: RuntimeMode) {
         tty_init::tty_shutdown_terminal();
     }
     log_clean_process_exit(process_started_at, &process_args);
+
+    // R2 increment C: persist this session's proven-hot JIT leaves before exit
+    // (Context still alive on this eval thread; runs BEFORE the shutdown-request
+    // early return so it fires on kill-emacs too). No-op unless NEOVM_AOT_PGO set.
+    maybe_drain_aot_pgo(mode, &evaluator);
 
     if let Some(request) = evaluator.shutdown_request() {
         if request.restart {
