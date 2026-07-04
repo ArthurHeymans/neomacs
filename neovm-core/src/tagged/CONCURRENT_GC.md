@@ -276,3 +276,70 @@ handshake. Move to (2) only if the snapshot handshake proves too long.
   `collect`) yet unmarked via the remembered path → a silent UAF the gate cannot
   catch. (Found 2026-06-19: hash-table `user_cmp_function`/`user_hash_function`
   were missing from `collect`; added.) When adding a veclike field, update BOTH.
+
+## Insertion coverage & the precise-rooting precondition (task 01 / #17, 2026-07-04)
+
+Task 01 made the GC thread CLAIM (mark, without inline-tracing) the headers of
+owned floats / vectors / bytecode. A claimed veclike's header bit is set, so the
+STW termination's `mark_value` early-returns on it and never re-runs
+`trace_veclike`. Before claiming, that termination re-trace of every *deferred*
+veclike's CURRENT backing silently covered mid-cycle INSERTIONS (a value stored
+into an owner AFTER it was scanned). Claiming removed that backstop, so the
+collector now leans on the following invariants — verified sound by a two-lens
+adversarial review (a soundness proof + a failed reproduction attempt):
+
+1. **Precise-rooting precondition.** The collector is precise; there is NO
+   conservative stack scan (`set_stack_bottom` is a no-op). Every heap value the
+   mutator will use after a safepoint MUST be reachable from a seeded root
+   (`trace_roots` — operand stacks/`bc_buf`/`vm_root_frames`/specpdl/scratch
+   `GcRoot`s — or a thread-local root table) at every world-stopped mark-start.
+   Allocation never triggers a GC, so a value need only be rooted before the next
+   *safepoint*, not the next allocation. A live value held ONLY in an un-seeded
+   Rust local across a mark-start is a root-discipline violation that the STW
+   collector mishandles at the same safe point too (it also does not walk Rust
+   locals) — it is NOT a concurrent-GC regression.
+
+2. **SATB snapshot completeness.** Every value reachable from roots at the start
+   snapshot is marked by end-of-mark. This rests on: the atomic world-stopped
+   seed; a deletion barrier on EVERY heap-slot overwrite (all `mutate.rs` sites
+   fire `note_heap_write` BEFORE the store) and EVERY symbol value/function/plist
+   overwrite (`note_root_overwrite` — symbol cells are the ONE root the seed
+   skips, via `ObarraySymbolCellSkipGuard`, because the GC thread scans them
+   concurrently and re-walks the whole obarray at termination); allocate-black
+   for mid-cycle births; and the BLV-pool full re-scan at both handshakes.
+
+3. **Cons interior invariant.** A value stored into a cons (fresh OR pre-existing)
+   is protected by its OWN provenance — snapshot-marked, born-black,
+   deletion-logged on unlink, or obarray-covered — NEVER by tracing the cons.
+   Conses are DELIBERATELY excluded from the dirty-owner re-gray (they bypass
+   `satb_snapshotted_owners` in `record_heap_write`); a fresh or already-marked
+   cons is never re-traced (`mark_cons` returns false on a set bit). Correctness
+   therefore requires the inserted value to be provenance-covered, i.e. precise
+   rooting (invariant 1). Regression guard:
+   `concurrent_fresh_cons_interior_of_snapshot_value_survives`.
+
+4. **Fix-(2) scope (`join_concurrent_mark` dirty-owner re-gray).** At join, the
+   CURRENT children of every owner mutated this cycle (`satb_snapshotted_owners`)
+   are re-grayed. This restores, for concurrently-CLAIMED veclike/string owners,
+   the current-backing re-trace that header-claiming removed. It is
+   defense-in-depth guarding the relaxed-snapshot exposure of claiming — NOT a
+   correctness requirement for correctly-rooted programs — and it deliberately
+   does NOT extend to conses (invariant 3). It also MASKS precise-rooting bugs
+   for veclike/string owners (an un-seeded inserted value survives) where conses
+   would surface them as a rare UAF; extending the re-gray to conses is a
+   possible future symmetric hardening.
+
+**KNOWN LATENT GAP (do not lose — filed as a follow-up):** `emacs_core/
+dynamic_module.rs:1592` (`module_make_interactive`) writes a fresh cons into a
+LIVE, GC-traced `ModuleFunctionObj.interactive_form` slot with NO deletion
+barrier — the sole crate-wide unbarriered write to a traced non-cons slot
+(there is no `HeapWriteKind::ModuleFunction`). Benign under today's callers
+(`ModuleFunctionObj` is Box-allocated ⇒ always deferred ⇒ traced at STW on its
+CURRENT `interactive_form`; the overwritten old value is dead-on-overwrite with
+no API path reading it back into a black object). It becomes a live UAF the day
+`ModuleFunctionObj` is made concurrently claimable, or if a second
+`make-interactive` overwrites a still-reachable form. Proper fix (its own review
+round, since it edits the hot barrier dispatch): add `HeapWriteKind::
+ModuleFunction`, route it through `record_heap_write`/`push_value_children_to_satb_shared`
+(the child enumerator already covers `ModuleFunction`), and fire the barrier at
+the write site.

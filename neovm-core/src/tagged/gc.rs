@@ -9193,6 +9193,58 @@ mod ownership_tests {
         assert!((x.xfloat() - 7.5).abs() < f64::EPSILON);
     }
 
+    /// #17 — CONS INTERIOR under concurrent marking. A value `x` reachable at
+    /// the snapshot ONLY through a pre-existing cons `p` is re-homed MID-MARK
+    /// into a FRESH (born-black) cons `c` and unlinked from `p`, both via the
+    /// production `mutate::set_cons_*` deletion barriers. `x` must survive: it
+    /// was snapshot-reachable (grayed when `p` is traced, or logged by the cons
+    /// deletion barrier on the unlink race), and the born-black `c` is merely
+    /// another reference to the already-protected value.
+    ///
+    /// Deliberate asymmetry vs the vector insertion tests above: conses are
+    /// EXCLUDED from the dirty-owner re-gray (`satb_snapshotted_owners`, see
+    /// `record_heap_write`), so a fresh cons has NO fix-(2) insertion net. Cons
+    /// interiors are sound purely by SATB provenance — the value MUST be
+    /// snapshot-reachable (precise rooting). An UNSEEDED value laundered through
+    /// a fresh cons is CORRECTLY swept (a root-discipline violation the STW
+    /// collector mishandles at the same safe point too), so this test keeps `x`
+    /// snapshot-reachable. See CONCURRENT_GC.md, "Insertion coverage".
+    #[test]
+    fn concurrent_fresh_cons_interior_of_snapshot_value_survives() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        // x reachable at the snapshot ONLY via p.car; p is buried in the seeded
+        // list so it is traced late (the deletion barrier is the race net).
+        let x = heap.alloc_float(6.5);
+        let p = heap.alloc_cons(x, TaggedValue::fixnum(0));
+        let mut list = heap.alloc_cons(p, TaggedValue::fixnum(0));
+        for i in 0..300_000 {
+            list = heap.alloc_cons(TaggedValue::fixnum(i), list);
+        }
+        let root = list;
+
+        heap.concurrent_begin();
+        heap.seed_root(root);
+        heap.launch_concurrent_mark();
+
+        // MID-CYCLE: re-home x into a FRESH born-black cons reachable from the
+        // seeded root (p.cdr), then UNLINK x from p.car — both barriered.
+        let c = heap.alloc_cons(x, TaggedValue::fixnum(0));
+        assert!(crate::tagged::mutate::set_cons_cdr(p, c));
+        assert!(crate::tagged::mutate::set_cons_car(p, TaggedValue::fixnum(99)));
+
+        finish_concurrent_cycle(&mut heap, root);
+
+        assert!(
+            heap.owns_non_cons_object(x.as_float_ptr().unwrap() as *const u8),
+            "a snapshot-reachable value re-homed into a fresh born-black cons \
+             must survive (SATB provenance; conses have no dirty-owner net)",
+        );
+        assert!((x.xfloat() - 6.5).abs() < f64::EPSILON);
+    }
+
     /// Task 01 MAPPED-VECTOR CLASSIFICATION (d): a registered mapped vector
     /// page-MISSES the claim arm and keeps the STW defer path — the
     /// termination marks it via the mapped side table AND re-traces its
