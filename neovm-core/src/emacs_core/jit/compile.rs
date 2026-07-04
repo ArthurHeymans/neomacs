@@ -373,7 +373,7 @@ struct ShimAddr(*const ());
 unsafe impl Sync for ShimAddr {}
 
 #[used]
-static JIT_SHIM_ANCHOR: [ShimAddr; 35] = [
+static JIT_SHIM_ANCHOR: [ShimAddr; 37] = [
     ShimAddr(neovm_jit_apply as *const ()),
     ShimAddr(neovm_jit_backedge as *const ()),
     ShimAddr(neovm_jit_builtin1 as *const ()),
@@ -382,6 +382,10 @@ static JIT_SHIM_ANCHOR: [ShimAddr; 35] = [
     ShimAddr(neovm_jit_builtin_slice as *const ()),
     ShimAddr(neovm_jit_call as *const ()),
     ShimAddr(neovm_jit_call_spec as *const ()),
+    // R2 increment A: the two CBSym intrinsic shims are now AOT-importable, so
+    // they must survive `--gc-sections` for `--export-dynamic-symbol` to promote.
+    ShimAddr(neovm_jit_cbsym_read as *const ()),
+    ShimAddr(neovm_jit_cbsym_spec as *const ()),
     ShimAddr(neovm_jit_cons as *const ()),
     ShimAddr(neovm_jit_eq_slow as *const ()),
     ShimAddr(neovm_jit_gc_push as *const ()),
@@ -1274,10 +1278,17 @@ extern "C" fn neovm_jit_eq_incl_props_spec(
 /// is `Box::leak`'d, so the callee value needs no root.
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
 ///
-/// JIT-only by construction (NOT in `shim_names.rs`/`MIR_SHIM_NAMES`): CBSym
-/// spec sites exist only under `Some(obarray)`, and AOT compiles at `None`
-/// (`build_baseline_leaf_object`), so no AOT object can reference this symbol.
-extern "C" fn neovm_jit_cbsym_spec(
+/// R2 increment A (CBSym-in-AOT): EXPORTED (`#[unsafe(no_mangle)] pub` + listed
+/// in `shim_names.rs`/`MIR_SHIM_NAMES` + anchored by `JIT_SHIM_ANCHOR`). The
+/// CBSym classification (`cbsym_spec_kind`) is name-canonical + obarray-free
+/// (static subr table + name resolution only), so the AOT baseline emit
+/// (`build_baseline_leaf_object`, `obarray=None`) now classifies CBSym sites too —
+/// an AOT `.so` may import this shim and binds it against the host at `dlopen`.
+/// (The round-1 `Op::Call` subr-spec shims stay JIT-only: their `find_spec_sites`
+/// pass still requires `Some(obarray)` — that's increment B.)
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_cbsym_spec(
     ctx: *mut u8,
     sym: i64,
     args_ptr: *const i64,
@@ -1385,9 +1396,14 @@ fn cbsym_read_expected_nargs(which: u8) -> usize {
 /// stays an opaque shim call, re-reading state each time.
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
 ///
-/// JIT-only (NOT in `shim_names.rs`/`MIR_SHIM_NAMES`): Tier-A spec sites exist
-/// only under `Some(obarray)`, and AOT compiles at `None`.
-extern "C" fn neovm_jit_cbsym_read(
+/// R2 increment A (CBSym-in-AOT): EXPORTED (`#[unsafe(no_mangle)] pub` + listed
+/// in `shim_names.rs`/`MIR_SHIM_NAMES` + anchored by `JIT_SHIM_ANCHOR`). Tier-A
+/// classification is name-canonical + obarray-free, so the AOT baseline emit
+/// (`obarray=None`) now emits Tier-A sites too — an AOT `.so` may import this shim
+/// and binds it against the host at `dlopen`.
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_cbsym_read(
     ctx: *mut u8,
     which: i64,
     sym: i64,
@@ -4441,9 +4457,11 @@ struct RtRefs {
     /// The R2 CallBuiltinSym intrinsic shims — Tier-B dispatch-skip
     /// ([`neovm_jit_cbsym_spec`]) + Tier-A GC-free read
     /// ([`neovm_jit_cbsym_read`]), declared ONLY when the body has a CBSym-kind
-    /// spec site (`declare_rt_refs`' `cbsym_spec` flag). Like the round-1 spec
-    /// shims they are JIT-only (`find_spec_sites` requires `Some(obarray)`), so
-    /// an AOT `ObjectModule` never declares them. `None` otherwise.
+    /// spec site (`declare_rt_refs`' `cbsym_spec` flag). UNLIKE the round-1 subr
+    /// shims (still `Some(obarray)`-gated), CBSym classification is obarray-free,
+    /// so these ARE declared for AOT baseline leaves too (increment A) — both are
+    /// exported (`shim_names.rs`) and bind against the host at `dlopen`. `None`
+    /// when the body has no CBSym-kind site.
     cbsym_spec: Option<FuncRef>,
     cbsym_read: Option<FuncRef>,
 }
@@ -4457,13 +4475,16 @@ struct RtRefs {
 /// JIT path and the future `ObjectModule` AOT path with no change — it only
 /// calls `Module::declare_function`, a trait method available on both.
 ///
-/// `subr_spec`: declare the three JIT-only subr-speculation shims (Gap 1).
-/// `cbsym_spec`: declare the JIT-only R2 CallBuiltinSym intrinsic shim.
-/// Both are passed TRUE only by `build_leaf_fn` when the body has the matching
-/// spec sites — which requires `Some(obarray)`, i.e. never AOT — so the shim
-/// names (absent from `shim_names.rs`) can never even be DECLARED into an
-/// `ObjectModule`, independent of whether unreferenced declarations would
-/// reach the emitted object.
+/// `subr_spec`: declare the three round-1 subr-speculation shims (Gap 1) — still
+/// JIT-only (their `find_spec_sites` pass requires `Some(obarray)`, i.e. never
+/// AOT — increment B), so those names (absent from `shim_names.rs`) are never
+/// DECLARED into an `ObjectModule`, independent of whether unreferenced
+/// declarations would reach the emitted object.
+/// `cbsym_spec`: declare the R2 CallBuiltinSym intrinsic shims (Tier-A read +
+/// Tier-B dispatch-skip). CBSym classification is obarray-free, so as of increment
+/// A this flag is TRUE for AOT baseline leaves too — the shims ARE in
+/// `shim_names.rs` (exported + salted) and resolve at `dlopen`.
+/// Both flags are set by `build_leaf_fn` from the body's actual spec sites.
 fn declare_rt_refs<M: Module>(
     module: &mut M,
     func: &mut Function,
@@ -5836,9 +5857,12 @@ fn lower_simple_op(
             }
             // R2: a Tier-B CallBuiltinSym spec site takes the dispatch-skip fast
             // path (`neovm_jit_cbsym_spec`) with a NEED_GENERIC fallback to THIS
-            // op's original general lowering; Tier-A sites (COMMIT 5) and every
-            // other named-builtin op keep the general lowering. Spec sites exist
-            // only under `Some(obarray)`, so AOT never takes the fast path.
+            // op's original general lowering; Tier-A sites (COMMIT 5) take the
+            // GC-free read shim; every other named-builtin op keeps the general
+            // lowering. As of increment A BOTH JIT and AOT baseline emit take the
+            // fast path (CBSym classification is obarray-free) — the `sym`
+            // materialize below is AOT-reloc-aware, so the baked shim call reloads
+            // the SymId by name under AOT and iconsts it under JIT (byte-identical).
             let cbsym_spec_b = matches!(op, Op::CallBuiltinSym(..))
                 && matches!(spec, Some((_, _, _, SpecCalleeKind::CbsymTierB)));
             // Tier-A GC-free read (`neovm_jit_cbsym_read`): its OK path returns an
@@ -6445,9 +6469,11 @@ const CBSYM_SPECIAL_NAMES: &[&str] = &[
 ///   `wrong-number-of-arguments` with the SUBR payload identically to the
 ///   interpreter arm — no need to force those to the generic path.
 ///
-/// Runs only under `Some(obarray)` (via `find_spec_sites`), so AOT
-/// (`obarray = None`) structurally skips it — the CallBuiltinSym op keeps its
-/// plain op-SymId-reloc-by-name lowering under AOT.
+/// Obarray-FREE: consults only `lookup_global_subr_entry` (the static subr table)
+/// and name resolution, so it classifies identically at JIT emit (`Some(obarray)`,
+/// via `find_spec_sites`) AND AOT baseline emit (`obarray=None`, via
+/// `find_cbsym_spec_sites` — increment A). The CallBuiltinSym op then takes the
+/// Tier-A/B fast shim in BOTH tiers (its op-SymId is reloc'd by name under AOT).
 fn cbsym_spec_kind(sym: SymId, _nargs: usize) -> Option<SpecCalleeKind> {
     let entry = lookup_global_subr_entry(sym)?;
     if entry.dispatch_kind != SubrDispatchKind::Builtin {
@@ -6537,10 +6563,12 @@ pub(crate) struct SpecSlot {
 ///   same epoch/bits validation applies; the armed shims re-read the ENTRY
 ///   fresh per call precisely because of those in-place rewrites.
 ///
-/// This runs ONLY under `Some(obarray)` (see `lower_leaf_full`), which
-/// auto-excludes AOT: `build_baseline_leaf_object` compiles at `obarray=None`
-/// with an empty site map, so no AOT object ever bakes spec state or
-/// references the subr spec shims.
+/// This full pass runs ONLY under `Some(obarray)` (see `lower_leaf_full`), so its
+/// `Op::Call` SUBR speculation auto-excludes AOT — no AOT object bakes subr-spec
+/// slot state or references the round-1/`Op::Call` spec shims (that is increment
+/// B). The CBSym pass it ends with ([`append_cbsym_spec_sites`]) is obarray-FREE,
+/// and the AOT baseline emit runs it separately ([`find_cbsym_spec_sites`]), so
+/// AOT bodies DO reference the CBSym shims (increment A).
 fn find_spec_sites(
     ops: &[Op],
     constants: &[Value],
@@ -6595,11 +6623,33 @@ fn find_spec_sites(
         );
         next_slot += 1;
     }
-    // R2: CallBuiltinSym intrinsic sites. Unlike the `Op::Call` window above, a
-    // CallBuiltinSym op is self-contained (it carries its callee SymId + the
-    // EXACT nargs), so there is no callee-slot-rewrite window to validate and no
-    // jump-target hazard — classify it in place by NAME. Keyed at the op's own
-    // index (disjoint from the `Op::Call` indices above: an index is one op).
+    // R2: CallBuiltinSym intrinsic sites (self-contained per-op, classified by
+    // NAME — obarray-free). Runs for BOTH JIT (here) and AOT baseline emit (via
+    // `find_cbsym_spec_sites`, increment A); continues the slot numbering from the
+    // `Op::Call` pass above so the JIT map is byte-identical.
+    append_cbsym_spec_sites(ops, &mut sites, &mut next_slot);
+    sites
+}
+
+/// The CallBuiltinSym intrinsic classification pass of [`find_spec_sites`], split
+/// out so the AOT baseline emit (`obarray=None`) can run it WITHOUT the `Op::Call`
+/// subr pass (increment B). A `CallBuiltinSym` op is self-contained (it carries
+/// its callee SymId + the EXACT nargs), so there is no callee-slot-rewrite window
+/// to validate and no jump-target hazard — classify in place by NAME.
+/// [`cbsym_spec_kind`] consults ONLY the static subr table + name resolution (NO
+/// obarray), so it classifies identically at JIT emit (`Some(obarray)`) and AOT
+/// emit (`None`). Sites are keyed at the op's own index (disjoint from the
+/// `Op::Call` indices: an index is one op) and numbered from `*next_slot`.
+///
+/// CBSym is SLOTLESS/EPOCHLESS: a site carries a `slot` index for uniformity with
+/// the `Op::Call` sites, but its lowering (`Op::CallBuiltinSym` arm) reads ONLY
+/// the site's `kind` (Tier-A `which` / Tier-B) — it never bakes the slot pointer
+/// or `expected_bits`. So an AOT body needs no per-site descriptor entry.
+fn append_cbsym_spec_sites(
+    ops: &[Op],
+    sites: &mut HashMap<usize, SpecSite>,
+    next_slot: &mut usize,
+) {
     for (i, op) in ops.iter().enumerate() {
         let Op::CallBuiltinSym(sym, n) = op else {
             continue;
@@ -6614,12 +6664,23 @@ fn find_spec_sites(
                 // Unused for CBSym: the target is name-canonical (no epoch
                 // guard); the shim recomputes `subr_from_sym_id(sym)` itself.
                 expected_bits: 0,
-                slot: next_slot,
+                slot: *next_slot,
                 kind,
             },
         );
-        next_slot += 1;
+        *next_slot += 1;
     }
+}
+
+/// R2 increment A: the CBSym-only speculation-site map for the AOT baseline emit
+/// (`obarray=None`). The `Op::Call` subr speculation stays JIT-only (needs a live
+/// obarray binding — increment B), but CBSym is name-canonical + obarray-free, so
+/// AOT bodies get the Tier-A/B fast shims too. Slots number from 0; the sites'
+/// slot pointers are never baked (CBSym is slotless — see [`append_cbsym_spec_sites`]).
+fn find_cbsym_spec_sites(ops: &[Op]) -> HashMap<usize, SpecSite> {
+    let mut sites = HashMap::new();
+    let mut next_slot = 0usize;
+    append_cbsym_spec_sites(ops, &mut sites, &mut next_slot);
     sites
 }
 
@@ -7705,9 +7766,11 @@ pub(crate) struct BaselineAotMeta {
 /// into `module` as an AOT object entry (`build_leaf_fn::<M>(aot=true)`), for
 /// bodies the MIR tier rejects (Switch/Throw/handlers/CallBuiltin(Sym)/VarRef...).
 ///
-/// Replicates [`lower_leaf_full`]'s analysis prologue but: (1) D0 — `obarray=None`
-/// so `spec_sites` is EMPTY (no speculation, no per-spec-slot baked state — the
-/// deopt then fits the sidecar's existing bases); (2) the reloc set is the
+/// Replicates [`lower_leaf_full`]'s analysis prologue but: (1) `obarray=None`, so
+/// the `Op::Call` subr speculation is skipped (increment B), but the CBSym
+/// intrinsic sites ARE classified (name-canonical + obarray-free — increment A);
+/// CBSym is slotless, so there is still no per-spec-slot baked state and the deopt
+/// fits the sidecar's existing bases; (2) the reloc set is the
 /// caller's (covering const-relocs + the named-builtin op-symbols, #16/#17), with
 /// the index keyed by tagged bits; (3) `aot=true` so reloc/deopt bases load from
 /// the sidecar; (4) the entry is `Linkage::Export` under `entry_name` for the
@@ -7727,10 +7790,24 @@ pub(crate) fn build_baseline_leaf_object<M: Module>(
     let cfg = analyze_cfg(ops, constants, None, arity)?;
     let known_fixnum_slots = compute_known_fixnum_slots(ops, constants, &cfg);
     let n = ops.len();
-    // D0: no obarray → empty speculation (no spec-slot baked pointers, so the
-    // baseline deopt fits the existing sidecar fields — see materialize_deopt_refs).
-    let spec_sites: HashMap<usize, SpecSite> = HashMap::new();
-    let spec_slots: Box<[SpecSlot]> = Box::from([]);
+    // R2 increment A (CBSym-in-AOT): classify the CallBuiltinSym intrinsic sites.
+    // `cbsym_spec_kind` is name-canonical + obarray-free (static subr table + name
+    // resolution only), so it runs at `obarray=None` — the AOT body then uses the
+    // Tier-A/B fast shims (`neovm_jit_cbsym_read` / `neovm_jit_cbsym_spec`) instead
+    // of the general `neovm_jit_named_builtin` path. The `Op::Call` subr
+    // speculation stays JIT-only (needs a live obarray binding — increment B).
+    // CBSym is SLOTLESS/EPOCHLESS: the lowering never bakes a slot pointer or
+    // `expected_bits`, so the baseline deopt still fits the sidecar's existing
+    // bases (no per-spec-slot state — see materialize_deopt_refs). The SpecSlots
+    // are allocated only to keep the per-op `spec_sites.get(&i)` slot index in
+    // range; they stay inert (never referenced by the CBSym lowering).
+    let spec_sites: HashMap<usize, SpecSite> = find_cbsym_spec_sites(ops);
+    let spec_slots: Box<[SpecSlot]> = (0..spec_sites.len())
+        .map(|_| SpecSlot {
+            epoch: AtomicU64::new(0),
+            leaf: AtomicU64::new(0),
+        })
+        .collect();
     let has_backedge = baseline_has_backedge(ops, &cfg);
     let needs_rt = baseline_needs_rt(ops, has_backedge);
     // Sized-but-unbaked deopt buffers: in AOT mode build_leaf_fn loads the spill +
@@ -7856,17 +7933,20 @@ fn build_leaf_fn<M: Module>(
         // Declare the runtime-call machinery into this function if the body
         // re-enters the runtime (`Cons` / `Call`).
         let rt = if needs_rt {
-            // Declare the JIT-only subr-speculation shims iff the body has
-            // round-1 subr-kind spec sites. AOT always compiles with an EMPTY
-            // site map (`build_baseline_leaf_object`), so this is always false
-            // there — an ObjectModule never even declares those import names.
-            // CBSym-kind sites are deliberately NOT counted here: they get their
-            // own R2 shims (COMMIT 2), so a CBSym-only body never imports the
-            // `Op::Call` spec shims.
+            // Declare the JIT-only round-1 subr-speculation shims iff the body has
+            // round-1 subr-kind spec sites. The AOT baseline emit classifies ONLY
+            // CBSym sites (`find_cbsym_spec_sites`; the `Op::Call` subr pass is
+            // increment B), so this is always false for AOT — an ObjectModule
+            // never declares the round-1 subr import names. CBSym-kind sites are
+            // deliberately NOT counted here: they get their own R2 shims, so a
+            // CBSym-only body never imports the `Op::Call` spec shims.
             let subr_spec = spec_sites.values().any(|site| site.kind.is_round1_subr());
-            // The R2 CallBuiltinSym intrinsic shim (Tier-B dispatch-skip),
-            // likewise JIT-only (`Some(obarray)` gates `find_spec_sites`),
-            // declared only when a CBSym-kind site exists.
+            // The R2 CallBuiltinSym intrinsic shims (Tier-A read / Tier-B
+            // dispatch-skip), declared when a CBSym-kind site exists. UNLIKE the
+            // round-1 shims these are NOW emitted by AOT too (increment A): CBSym
+            // classification is obarray-free, so `find_cbsym_spec_sites` populates
+            // this for the baseline `ObjectModule` and the two shims become imports
+            // resolved against the host at `dlopen`.
             let cbsym_spec = spec_sites.values().any(|site| site.kind.is_cbsym());
             // `module` is already `&mut M`; reborrow it for the call.
             let refs =

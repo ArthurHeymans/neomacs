@@ -24,6 +24,12 @@ const NEOVM_JIT_SHIM_NAMES: &[&str] = &[
     "neovm_jit_builtin_slice",
     "neovm_jit_call",
     "neovm_jit_call_spec",
+    // R2 increment A (CBSym-in-AOT): the two CallBuiltinSym intrinsic shims are now
+    // emitted by AOT baseline leaves too (their classification is name-canonical +
+    // obarray-free), so an AOT `.so` may import them — they MUST be in the exported
+    // + salted set (was JIT-only through round 2).
+    "neovm_jit_cbsym_read",
+    "neovm_jit_cbsym_spec",
     "neovm_jit_cons",
     "neovm_jit_eq_slow",
     "neovm_jit_gc_push",
