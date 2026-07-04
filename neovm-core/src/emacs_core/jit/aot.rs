@@ -63,7 +63,11 @@ pub(crate) const ABI_TAG: u32 = compute_abi_tag();
 /// reflects the real 4-param ABI (was a stale 3-param code) and salts the
 /// `LeafSidecar` size; the tag value changes accordingly (harmless — no on-disk
 /// `.so` artifacts predate this).
-const ABI_TAG_VERSION: u32 = 2;
+/// v3: R2 increment A (CBSym-in-AOT) — AOT baseline leaves now import the two
+/// `neovm_jit_cbsym_*` shims (auto-salted via the grown `MIR_SHIM_NAMES`) and bake
+/// the Tier-A `CBSYM_A_*` `which` discriminants as iconsts, so the discriminant
+/// set is salted explicitly (see [`compute_abi_tag`]) — a renumber/swap re-tags.
+const ABI_TAG_VERSION: u32 = 3;
 
 // The FULL set of `neovm_jit_*` runtime shims an AOT `.so` may import (resolved
 // against the host at `dlopen`). This is the complete `declare_rt_refs` set —
@@ -103,8 +107,10 @@ const fn compute_abi_tag() -> u32 {
     }
     mix_u64!(ABI_TAG_VERSION as u64);
     // STATUS_* codes (the loader + code agree on these). STATUS_NEED_GENERIC
-    // never crosses the leaf entry ABI (it is consumed inside a JIT leaf's own
-    // generated code, and AOT leaves can't contain subr spec sites), but it is
+    // never crosses the leaf entry ABI (it is consumed inside a leaf's OWN
+    // generated code by the fast-shim -> generic-fallback branch — this now
+    // includes AOT baseline leaves, which as of increment A DO contain CBSym spec
+    // sites; the round-1/`Op::Call` subr spec sites remain JIT-only), but it is
     // part of the status-code SPACE — salt it so any renumbering re-tags.
     mix_u64!(super::compile::STATUS_OK as u64);
     mix_u64!(super::compile::STATUS_DEOPT as u64);
@@ -134,6 +140,25 @@ const fn compute_abi_tag() -> u32 {
         }
         si += 1;
     }
+    // R2 increment A: the Tier-A `CBSYM_A_*` discriminants are baked into AOT code
+    // as an iconst `which` and switched on by `neovm_jit_cbsym_read` at load. A
+    // renumber (or a swap, e.g. `CBSYM_A_POINT`<->`CBSYM_A_POINT_MIN`) would make a
+    // stale `.so` read the WRONG Tier-A op, so salt every discriminant VALUE in
+    // definition order — catches a renumber, a swap, AND a count change. (The
+    // shim-name loop above already salts the two new shim NAMES.)
+    mix_u64!(super::compile::CBSYM_A_POINT as u64);
+    mix_u64!(super::compile::CBSYM_A_POINT_MIN as u64);
+    mix_u64!(super::compile::CBSYM_A_POINT_MAX as u64);
+    mix_u64!(super::compile::CBSYM_A_BOLP as u64);
+    mix_u64!(super::compile::CBSYM_A_EOLP as u64);
+    mix_u64!(super::compile::CBSYM_A_BOBP as u64);
+    mix_u64!(super::compile::CBSYM_A_EOBP as u64);
+    mix_u64!(super::compile::CBSYM_A_FOLLOWING_CHAR as u64);
+    mix_u64!(super::compile::CBSYM_A_PRECEDING_CHAR as u64);
+    mix_u64!(super::compile::CBSYM_A_CHAR_AFTER as u64);
+    mix_u64!(super::compile::CBSYM_A_CURRENT_BUFFER as u64);
+    mix_u64!(super::compile::CBSYM_A_MATCH_BEGINNING as u64);
+    mix_u64!(super::compile::CBSYM_A_MATCH_END as u64);
     h
 }
 
@@ -2158,6 +2183,175 @@ pub fn testkit_callbuiltinsym_aot_selftest(dir: &std::path::Path) -> Result<(), 
     Ok(())
 }
 
+/// R2 increment A (CBSym-in-AOT) debug-build snapshot of the `(fast, generic)`
+/// CallBuiltinSym intrinsic-shim counters (host-side statics touched by
+/// `neovm_jit_cbsym_read` / `neovm_jit_cbsym_spec`). A served AOT `.so` binds those
+/// shims against THESE host statics at `dlopen`, so the counter moving is proof the
+/// shim both resolved and ran the op itself.
+#[cfg(all(target_os = "linux", debug_assertions))]
+fn cbsym_shim_counters() -> (u64, u64) {
+    use std::sync::atomic::Ordering;
+    (
+        super::compile::CBSYM_SPEC_FAST_COUNT.load(Ordering::Relaxed),
+        super::compile::CBSYM_SPEC_GENERIC_COUNT.load(Ordering::Relaxed),
+    )
+}
+
+/// R2 increment A: serve an ALREADY-PLACED CBSym-bearing baseline `.so` through
+/// `try_run_compiled` and assert three things: (1) it served AOT-backed (the cbsym
+/// shim import RESOLVED at `dlopen` — an unexported shim would fail to bind and the
+/// leaf would never serve); (2) the FAST intrinsic shim fired (debug-build counter
+/// moved, no NEED_GENERIC bounce — i.e. NOT the slow `neovm_jit_named_builtin`
+/// path); (3) the served result == the interpreter on the SAME context state.
+///
+/// The caller MUST have placed the `.so` (via `testkit_emit_baseline_and_place_so`)
+/// BEFORE the first serve of ANY unit: the AOT unit index scans `NEOVM_AOT_DIR`
+/// once (a process-wide `OnceLock` frozen on the first `load_unit`), so a `.so`
+/// planted after that first serve would never be discovered.
+#[cfg(target_os = "linux")]
+fn cbsym_aot_serve_and_check(
+    ev: &mut crate::emacs_core::eval::Context,
+    ops: &[Op],
+    constants: &[Value],
+    arity: usize,
+    args: &[Value],
+    label: &str,
+) -> Result<(), String> {
+    use crate::emacs_core::bytecode::{ByteCodeFunction, Vm};
+    use crate::emacs_core::intern::SymId;
+    use crate::emacs_core::value::LambdaParams;
+
+    let mk = || {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: (1..=arity as u32).map(SymId).collect(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops.to_vec();
+        f.constants = constants.to_vec();
+        f.max_stack = 16;
+        f
+    };
+
+    #[cfg(debug_assertions)]
+    let (fast0, gen0) = cbsym_shim_counters();
+
+    let f = mk();
+    let f_val = Value::make_bytecode(f.clone());
+    let ctx: *mut crate::emacs_core::eval::Context = &mut *ev;
+    let aot = super::cache::try_run_compiled(ctx, &f, f_val, args)
+        .map_err(|_| format!("{label}: aot run raised"))?
+        .ok_or_else(|| format!("{label}: aot run returned None"))?;
+    if super::cache::cached_leaf_is_aot_for_func(&f) != Some(true) {
+        return Err(format!("{label}: body not served AOT-backed"));
+    }
+
+    // DLOPEN + FAST-SHIM proof (debug builds): the served leaf CALLED the cbsym shim
+    // (so it resolved at dlopen) AND the shim ran the op itself (fast count moved,
+    // no NEED_GENERIC bounce to the slow named_builtin path).
+    #[cfg(debug_assertions)]
+    {
+        let (fast1, gen1) = cbsym_shim_counters();
+        if fast1 <= fast0 {
+            return Err(format!(
+                "{label}: CBSym FAST shim did not fire (fast {fast0}->{fast1}) — the AOT leaf took the slow named_builtin path (or the shim failed to bind at dlopen)"
+            ));
+        }
+        if gen1 != gen0 {
+            return Err(format!(
+                "{label}: unexpected NEED_GENERIC bounce (generic {gen0}->{gen1})"
+            ));
+        }
+    }
+
+    // Result == interp on the SAME context state (a wrong/stale reloc'd SymId or a
+    // mis-baked Tier-A `which` would compute a different value).
+    let interp = {
+        let g = mk();
+        let mut vm = Vm::from_context(&mut *ev);
+        vm.execute(&g, args.to_vec())
+            .map_err(|_| format!("{label}: interp raised"))?
+    };
+    if !crate::emacs_core::value::eql_value(&Value::from_bits(aot), &interp) {
+        return Err(format!(
+            "{label}: AOT {:?} != interp {:?}",
+            Value::from_bits(aot),
+            interp
+        ));
+    }
+    Ok(())
+}
+
+/// R2 increment A (CBSym-in-AOT) self-test — THE DLOPEN + FAST-SHIM proof. A
+/// BASELINE-tier AOT leaf whose body is a CallBuiltinSym intrinsic now emits the
+/// FAST shim (its classification is name-canonical + obarray-free, so it runs at
+/// the AOT emit's `obarray=None`), so a served `.so` must bind the shim against the
+/// host at `dlopen` and RUN it. Covers BOTH shims:
+///   * `(point)`    → Tier-A `neovm_jit_cbsym_read` (GC-free read);
+///   * `(length x)` → Tier-B `neovm_jit_cbsym_spec` (dispatch-skip).
+/// Each leg proves the shim resolved (served AOT-backed), fired the fast path (the
+/// host counter moved, no generic bounce), and matched the interpreter. This is the
+/// sidecar-free proof-of-concept that validates the shim-export + dlopen + reloc
+/// machinery before increment B.
+#[doc(hidden)]
+#[cfg(target_os = "linux")]
+pub fn testkit_cbsym_aot_fast_shim_selftest(dir: &std::path::Path) -> Result<(), String> {
+    use crate::emacs_core::eval::Context;
+    use crate::emacs_core::intern::intern;
+
+    if !aot_enabled() {
+        return Err("NEOVM_AOT not enabled".into());
+    }
+
+    // A Context with a non-trivial buffer + a moved point, so `(point)` is a
+    // deterministic non-trivial fixnum (and `(point)` is a pure read, so the AOT
+    // run doesn't perturb the interp cross-check).
+    let mut ev = Context::new();
+    ev.eval_str("(insert \"abc\\ndef\")")
+        .map_err(|_| "buffer setup (insert) failed".to_string())?;
+    ev.eval_str("(goto-char 3)")
+        .map_err(|_| "buffer setup (goto-char) failed".to_string())?;
+
+    let point_ops = vec![Op::CallBuiltinSym(intern("point"), 0), Op::Return];
+    let length_ops = vec![
+        Op::StackRef(0),
+        Op::CallBuiltinSym(intern("length"), 1),
+        Op::Return,
+    ];
+    let arg = Value::list(vec![
+        Value::make_int(1),
+        Value::make_int(2),
+        Value::make_int(3),
+        Value::make_int(4),
+    ]);
+
+    // Emit + place BOTH `.so`s FIRST. The AOT unit index scans NEOVM_AOT_DIR ONCE
+    // (a process-wide OnceLock frozen on the first `load_unit`), so every `.so`
+    // must be on disk before the first serve below. CBSym bodies land in the
+    // BASELINE tier (the MIR pure tier rejects CallBuiltinSym).
+    testkit_emit_baseline_and_place_so(&point_ops, &[], 0, dir)
+        .ok_or("Tier-A (point) baseline AOT emit/place failed")?;
+    testkit_emit_baseline_and_place_so(&length_ops, &[], 1, dir)
+        .ok_or("Tier-B (length) baseline AOT emit/place failed")?;
+
+    // Tier-A: (point) → neovm_jit_cbsym_read (GC-free read).
+    cbsym_aot_serve_and_check(&mut ev, &point_ops, &[], 0, &[], "Tier-A (point) [cbsym_read]")?;
+
+    // Tier-B: (length x) → neovm_jit_cbsym_spec (dispatch-skip), x a 4-element list.
+    cbsym_aot_serve_and_check(
+        &mut ev,
+        &length_ops,
+        &[],
+        1,
+        &[arg],
+        "Tier-B (length) [cbsym_spec]",
+    )?;
+
+    super::cache::clear();
+    Ok(())
+}
+
 /// R2-E audit CRITICAL fix: prove the OTHER baseline op-SymId sites — a SYMBOL
 /// `Op::Constant` and the dynamic-variable ops (`VarRef`/`VarSet`/`VarBind`) —
 /// also reloc their session-specific SymId BY NAME, not bake it.
@@ -3389,6 +3583,56 @@ mod tests {
         assert!(
             cons_shim.is_undefined(),
             "shim neovm_jit_cons must be an undefined import"
+        );
+    }
+
+    /// R2 increment A (CBSym-in-AOT) — the object-level before/after proof. The
+    /// baseline AOT emit now classifies CallBuiltinSym intrinsics at `obarray=None`
+    /// (their classification is name-canonical + obarray-free), so the emitted
+    /// object imports the Tier-A read shim (`neovm_jit_cbsym_read`) / Tier-B
+    /// dispatch-skip shim (`neovm_jit_cbsym_spec`). BEFORE this increment the same
+    /// body imported ONLY the general `neovm_jit_named_builtin` — so the PRESENCE of
+    /// the fast-shim import is the proof classification engaged. (The general shim
+    /// is STILL imported for the per-site NEED_GENERIC fallback, so this asserts the
+    /// fast shim's presence, not the general shim's absence.) The emit's own
+    /// `assert_aot_imports_exported` also proves the two shims are in the exported +
+    /// salted `MIR_SHIM_NAMES` set (else the emit would error).
+    #[test]
+    fn baseline_cbsym_object_imports_the_fast_intrinsic_shims() {
+        use crate::emacs_core::intern::intern;
+        // Populate the thread-local static subr table (`lookup_global_subr_entry`,
+        // which `cbsym_spec_kind` consults) — done by `defsubr_*` on Context setup.
+        let _ev = crate::emacs_core::eval::Context::new();
+
+        let imports = |ops: &[Op], constants: &[Value], arity: usize| -> Vec<String> {
+            let (obj, _hash) = build_baseline_object_for_leaf(ops, constants, arity)
+                .expect("baseline emit ok")
+                .expect("baseline emit produced an object");
+            let file = object::File::parse(&*obj).expect("parse object");
+            file.symbols()
+                .filter(|s| s.is_undefined())
+                .filter_map(|s| s.name().ok().map(str::to_owned))
+                .collect()
+        };
+
+        // Tier-A: (point) → neovm_jit_cbsym_read.
+        let point_ops = [Op::CallBuiltinSym(intern("point"), 0), Op::Return];
+        let a = imports(&point_ops, &[], 0);
+        assert!(
+            a.iter().any(|n| n == "neovm_jit_cbsym_read"),
+            "Tier-A (point) AOT object must import neovm_jit_cbsym_read (classification did not engage at obarray=None) — imports: {a:?}"
+        );
+
+        // Tier-B: (length x) → neovm_jit_cbsym_spec.
+        let length_ops = [
+            Op::StackRef(0),
+            Op::CallBuiltinSym(intern("length"), 1),
+            Op::Return,
+        ];
+        let b = imports(&length_ops, &[], 1);
+        assert!(
+            b.iter().any(|n| n == "neovm_jit_cbsym_spec"),
+            "Tier-B (length) AOT object must import neovm_jit_cbsym_spec (classification did not engage at obarray=None) — imports: {b:?}"
         );
     }
 
