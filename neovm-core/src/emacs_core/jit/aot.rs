@@ -943,12 +943,28 @@ fn collect_baseline_aot_relocs(
 /// is a DIFFERENT shape — it picks which `.o` to BUILD, not which reloc collector to
 /// run — so it is intentionally NOT folded here; only the two load-path copies were
 /// verbatim-identical.)
-fn live_reloc_for_emit_tier(ops: &[Op], constants: &[Value], arity: usize) -> Option<Vec<Value>> {
-    match mir::build_mir(ops, constants, arity) {
-        Ok(m) if mir_is_aot_runnable(&m) => Some(collect_reloc_consts(&m)),
-        // MIR-rejected (or built-but-not-MIR-AOT-runnable) → baseline reloc set.
-        _ => Some(collect_baseline_aot_relocs(ops, constants)?.0),
+fn live_reloc_for_emit_tier(
+    ops: &[Op],
+    constants: &[Value],
+    arity: usize,
+    // R2 increment B2: the LIVE obarray. A spec-bearing body was emitted BASELINE
+    // (tier-pivot), so its reloc set MUST be collected with the BASELINE collector
+    // (same order the emitter assigned) — else the MIR order mismatches, the recipe-
+    // compare rejects, and the leaf never serves. `None` (test/testkit) → the
+    // pre-B2 MIR-first choice.
+    obarray: Option<&crate::emacs_core::symbol::Obarray>,
+) -> Option<Vec<Value>> {
+    // Mirror the EMIT tier-pivot: spec-bearing → BASELINE collector, unconditionally.
+    let spec_forced = obarray
+        .is_some_and(|ob| super::compile::has_op_call_spec_sites(ops, constants, arity, ob));
+    if !spec_forced
+        && let Ok(m) = mir::build_mir(ops, constants, arity)
+        && mir_is_aot_runnable(&m)
+    {
+        return Some(collect_reloc_consts(&m));
     }
+    // MIR-rejected / not-MIR-AOT-runnable / spec-forced → baseline reloc set.
+    Some(collect_baseline_aot_relocs(ops, constants)?.0)
 }
 
 /// Compile one bytecode leaf to a relocatable `.o` for AOT (R1c + sidecar).
@@ -1040,22 +1056,38 @@ pub(crate) fn compile_leaf_to_object(
     ops: &[Op],
     constants: &[Value],
     arity: usize,
+    // R2 increment B2: the LIVE obarray. `Some` with an `Op::Call` spec site forces
+    // the BASELINE tier (only it bakes the spec fast paths); `None` (tests/testkits)
+    // keeps the MIR-first routing unchanged.
+    obarray: Option<&crate::emacs_core::symbol::Obarray>,
 ) -> Result<Option<(Vec<u8>, u128)>, CompileError> {
-    // MIR tier first (the existing pure/reloc/call-bearing subset).
-    if let Some(p) = prepare_leaf_emit(ops, constants, arity)? {
-        // build_object_for_leaf_inner runs the #15 shim-import audit on the bytes.
-        let obj =
-            build_object_for_leaf_inner(&p.m, &p.entry_name, Some((&p.desc_name, &p.desc_bytes)))?;
-        return Ok(Some((obj, p.content_hash)));
+    // TIER-PIVOT (increment B2): a body with ≥1 `Op::Call` subr/bytecode spec site
+    // MUST emit via the BASELINE tier — the MIR tier never bakes those spec fast
+    // paths, and the LOAD path (`live_reloc_for_emit_tier`) mirrors this so both
+    // agree on the reloc collector (else the leaf silently never serves). Only when
+    // NOT spec-forced do we try the (faster) MIR tier first.
+    let spec_forced = obarray
+        .is_some_and(|ob| super::compile::has_op_call_spec_sites(ops, constants, arity, ob));
+    if !spec_forced {
+        // MIR tier first (the existing pure/reloc/call-bearing subset).
+        if let Some(p) = prepare_leaf_emit(ops, constants, arity)? {
+            // build_object_for_leaf_inner runs the #15 shim-import audit on the bytes.
+            let obj = build_object_for_leaf_inner(
+                &p.m,
+                &p.entry_name,
+                Some((&p.desc_name, &p.desc_bytes)),
+            )?;
+            return Ok(Some((obj, p.content_hash)));
+        }
     }
-    // R2-E (b/d): fall back to the BASELINE tier for a body the MIR tier rejects
-    // (Switch/Throw/handlers, or CallBuiltin(Sym)/VarRef Opaque-lowering errors),
-    // BUT only for the conservatively-allowlisted op set whose AOT-deopt soundness
-    // we've validated (Q2). Outside the allowlist → stay JIT-only (Ok(None)).
+    // R2-E (b/d): the BASELINE tier for a body the MIR tier rejects (Switch/Throw/
+    // handlers, or CallBuiltin(Sym)/VarRef Opaque-lowering errors) OR a spec-forced
+    // body — BUT only for the conservatively-allowlisted op set whose AOT-deopt
+    // soundness we've validated (Q2). Outside the allowlist → stay JIT-only.
     if !baseline_is_aot_runnable(ops) {
         return Ok(None);
     }
-    build_baseline_object_for_leaf(ops, constants, arity)
+    build_baseline_object_for_leaf(ops, constants, arity, obarray)
 }
 
 /// R2-E (Q2): the CONSERVATIVE allowlist of ops the baseline-tier AOT path may
@@ -1176,6 +1208,9 @@ pub struct PreloadBuildStats {
 /// + [`PreloadBuildStats`] (no silent drops — candidates/unique/deduped/skipped).
 pub fn build_preload_object(
     leaves: &[LoadupLeaf],
+    // R2 increment B2: the LIVE (dump-time) obarray, so spec-bearing loadup bodies
+    // bake their `Op::Call` spec fast paths + descriptor entries. `None` → CBSym-only.
+    obarray: Option<&crate::emacs_core::symbol::Obarray>,
 ) -> Result<(Vec<u8>, PreloadBuildStats), CompileError> {
     let mut module = make_aot_object_module()?;
     let mut seen: std::collections::HashSet<u128> = std::collections::HashSet::new();
@@ -1184,27 +1219,36 @@ pub fn build_preload_object(
         ..Default::default()
     };
     for leaf in leaves {
-        // MIR tier first (the existing pure/reloc/call-bearing subset).
-        if let Some(p) = prepare_leaf_emit(leaf.ops, leaf.constants, leaf.arity)? {
-            stats.prepared += 1;
-            if !seen.insert(p.content_hash) {
-                // Identical body already emitted — its entry/descriptor symbols are
-                // shared; re-defining them would collide. Skip (correct: same code).
-                stats.deduped += 1;
+        // TIER-PIVOT (increment B2): a spec-bearing body MUST go BASELINE (only it
+        // bakes the `Op::Call` spec fast paths; the load path mirrors this). Try the
+        // MIR tier first ONLY when not spec-forced (same routing as
+        // compile_leaf_to_object).
+        let spec_forced = obarray.is_some_and(|ob| {
+            super::compile::has_op_call_spec_sites(leaf.ops, leaf.constants, leaf.arity, ob)
+        });
+        if !spec_forced {
+            // MIR tier first (the existing pure/reloc/call-bearing subset).
+            if let Some(p) = prepare_leaf_emit(leaf.ops, leaf.constants, leaf.arity)? {
+                stats.prepared += 1;
+                if !seen.insert(p.content_hash) {
+                    // Identical body already emitted — its entry/descriptor symbols
+                    // are shared; re-defining them would collide. Skip (same code).
+                    stats.deduped += 1;
+                    continue;
+                }
+                define_leaf_into_module(
+                    &mut module,
+                    &p.m,
+                    &p.entry_name,
+                    Some((&p.desc_name, &p.desc_bytes)),
+                )?;
+                stats.unique_emitted += 1;
                 continue;
             }
-            define_leaf_into_module(
-                &mut module,
-                &p.m,
-                &p.entry_name,
-                Some((&p.desc_name, &p.desc_bytes)),
-            )?;
-            stats.unique_emitted += 1;
-            continue;
         }
-        // R2-E: BASELINE tier for a MIR-rejected body in the conservative allowlist
-        // (mirrors compile_leaf_to_object's routing, so the producer's emitted set ==
-        // the is_d0_aot_candidate set — no "candidate but not emitted" gap).
+        // R2-E: BASELINE tier for a MIR-rejected (or spec-forced) body in the
+        // conservative allowlist (mirrors compile_leaf_to_object's routing, so the
+        // producer's emitted set == the is_d0_aot_candidate set — no gap).
         if !baseline_is_aot_runnable(leaf.ops) {
             stats.skipped_unsupported += 1;
             continue;
@@ -1227,6 +1271,7 @@ pub fn build_preload_object(
             leaf.arity,
             &entry_name,
             &desc_name,
+            obarray,
         )?
         .is_none()
         {
@@ -1476,7 +1521,7 @@ pub fn build_and_link_preload(
         let Some(hash) = leaf_content_hash(leaf.ops, leaf.constants, leaf.arity) else {
             continue;
         };
-        let member = is_d0_aot_candidate(leaf.ops, leaf.constants, leaf.arity);
+        let member = is_d0_aot_candidate(leaf.ops, leaf.constants, leaf.arity, Some(&ctx.obarray));
         prekey_lines.push_str(&manifest_leaf_line(
             member,
             leaf.ops.len(),
@@ -1489,7 +1534,11 @@ pub fn build_and_link_preload(
             members.push(leaf);
         }
     }
-    let (obj, stats) = build_preload_object(&members)?;
+    // B2: emit WITH the dump-time obarray so spec-bearing loadup bodies bake their
+    // `Op::Call` spec fast paths + descriptor entries (armed at load = native FAST
+    // from call 1). The runtime prepopulate re-classifies against the same (same
+    // pdump) obarray, so the classification matches by construction.
+    let (obj, stats) = build_preload_object(&members, Some(&ctx.obarray))?;
     let so_path = out_dir.join(PRELOAD_SO_NAME);
     link_object_to_so(&obj, &so_path)?;
 
@@ -1538,7 +1587,7 @@ pub fn run_dump_time_preload(ctx: &crate::emacs_core::eval::Context, dump_dir: &
 
     if dry_run {
         let leaves = enumerate_loadup_leaves(ctx, /*d0_filter=*/ true);
-        match build_preload_object(&leaves) {
+        match build_preload_object(&leaves, Some(&ctx.obarray)) {
             Ok((_, stats)) => {
                 tracing::info!(
                     "aot-preload DRY-RUN: candidates={} prepared={} unique_emitted={} \
@@ -1657,7 +1706,9 @@ pub fn testkit_emit_and_place_so(
     arity: usize,
     dir: &std::path::Path,
 ) -> Option<u128> {
-    let (obj, content_hash) = compile_leaf_to_object(ops, constants, arity).ok()??;
+    // These low-level testkits emit WITHOUT a live obarray (no `Op::Call` spec
+    // baking); the spec-aware selftests call the emit fns with an obarray directly.
+    let (obj, content_hash) = compile_leaf_to_object(ops, constants, arity, None).ok()??;
     let so_path = dir.join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
     link_object_to_so(&obj, &so_path).ok()?;
     Some(content_hash)
@@ -1674,7 +1725,7 @@ pub fn testkit_emit_baseline_and_place_so(
     arity: usize,
     dir: &std::path::Path,
 ) -> Option<u128> {
-    let (obj, content_hash) = build_baseline_object_for_leaf(ops, constants, arity).ok()??;
+    let (obj, content_hash) = build_baseline_object_for_leaf(ops, constants, arity, None).ok()??;
     let so_path = dir.join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
     link_object_to_so(&obj, &so_path).ok()?;
     Some(content_hash)
@@ -1705,9 +1756,9 @@ pub struct LoadupLeaf {
 /// `d0_filter` — keeps only those the AOT emitter actually accepts (R2-B3:
 /// `compile_leaf_to_object` Some ⇒ MIR-lowerable, AOT-runnable, recipe-able).
 ///
-/// D0-only: callers compile with `obarray=None` (no spec/inline), so the emitted
-/// code is the plain Tier-0-equivalent native. Returns the candidates in
-/// obarray order (deterministic for a given image).
+/// The D0 gate compiles with the LIVE obarray (increment B2), so a spec-bearing
+/// body is admitted via the same BASELINE tier the preload producer uses (matching
+/// emitted sets). Returns the candidates in obarray order (deterministic per image).
 pub fn enumerate_loadup_leaves(
     ctx: &crate::emacs_core::eval::Context,
     d0_filter: bool,
@@ -1730,7 +1781,7 @@ pub fn enumerate_loadup_leaves(
             continue;
         }
         let arity = bc.params.required.len();
-        if d0_filter && !is_d0_aot_candidate(&bc.ops, &bc.constants, arity) {
+        if d0_filter && !is_d0_aot_candidate(&bc.ops, &bc.constants, arity, Some(&ctx.obarray)) {
             continue;
         }
         out.push(LoadupLeaf {
@@ -1748,8 +1799,18 @@ pub fn enumerate_loadup_leaves(
 /// MIR-lowerable, passes `mir_is_aot_runnable`, and every const is recipe-able).
 /// This is the SAME gate the runtime load path uses, so a candidate emitted here
 /// will load there.
-pub fn is_d0_aot_candidate(ops: &[Op], constants: &[Value], arity: usize) -> bool {
-    matches!(compile_leaf_to_object(ops, constants, arity), Ok(Some(_)))
+pub fn is_d0_aot_candidate(
+    ops: &[Op],
+    constants: &[Value],
+    arity: usize,
+    // R2 increment B2: the dump-time obarray, so the candidate gate matches the
+    // spec-forced tier the preload producer uses (no "candidate but not emitted" gap).
+    obarray: Option<&crate::emacs_core::symbol::Obarray>,
+) -> bool {
+    matches!(
+        compile_leaf_to_object(ops, constants, arity, obarray),
+        Ok(Some(_))
+    )
 }
 
 /// Crate-internal self-test for CALL-BEARING AOT, invoked from the
@@ -2658,6 +2719,279 @@ pub fn testkit_baseline_op_symbol_reloc_selftest(dir: &std::path::Path) -> Resul
     Ok(())
 }
 
+/// R2 increment B2 CROSS-SESSION SOUNDNESS CORPUS — the `Op::Call` spec-in-AOT
+/// selftest, invoked from `tests/aot_spec.rs` (a shim-exporting `-rdynamic`
+/// integration binary, so the three round-1 spec shims resolve at `dlopen`).
+///
+/// A body `(callee arg…)` is EMITTED via the baseline AOT tier WITH an obarray in
+/// which a USER symbol is aliased to a builtin subr (so `find_spec_sites` bakes the
+/// `Op::Call` spec fast path + a descriptor entry), the `.so` is placed in
+/// `NEOVM_AOT_DIR`, then it is LOADED against a FRESH obarray. Proves, end to end
+/// through the PUBLIC `try_run_compiled` under `NEOVM_AOT=force`:
+///  (a) ARMED cross-session: a pred + subr spec body loads ARMED against a fresh
+///      obarray + a grown intern table, serves the CORRECT result, and takes the
+///      FAST shim FROM CALL 1 (`SUBR_SPEC_FAST_COUNT` moves at heat=0) — dlopen e2e
+///      for `neovm_jit_pred_spec` + `neovm_jit_call_subr_spec` (they resolve or the
+///      leaves would not serve; the eq shim is export/import-audit-covered);
+///  (b/c) THE CRUX: re-alias the callee to a DIFFERENT subr before load → the
+///      baked `PredRecordp` site RE-CLASSIFIES to a mismatched kind → DISARMS
+///      (never arms `is_record` against the wrong type): the result is the
+///      re-aliased subr's (`stringp` → `t` on a string), NOT `is_record`'s (`nil`);
+///  (d) the DISARMED slot NEVER re-arms: repeated calls keep `SUBR_SPEC_FAST_COUNT`
+///      at 0 and move `SUBR_SPEC_GENERIC_COUNT` each time (the `SPEC_EPOCH_DISARMED`
+///      short-circuit, distinct from a re-armable epoch-stale slot).
+#[doc(hidden)]
+#[cfg(target_os = "linux")]
+pub fn testkit_spec_aot_selftest(dir: &std::path::Path) -> Result<(), String> {
+    use super::compile::{SUBR_SPEC_FAST_COUNT, SUBR_SPEC_GENERIC_COUNT};
+    use crate::emacs_core::bytecode::{ByteCodeFunction, Vm};
+    use crate::emacs_core::eval::Context;
+    use crate::emacs_core::intern::{SymId, intern};
+    use crate::emacs_core::value::LambdaParams;
+    use std::sync::atomic::Ordering;
+
+    if !aot_enabled() {
+        return Err("NEOVM_AOT not enabled (env must be set before any AOT call)".into());
+    }
+
+    // Alias a USER symbol `alias_name` to the builtin `builtin_name`'s function cell
+    // in `ev`'s obarray (so we control the callee binding per "session").
+    let alias = |ev: &mut Context, alias_name: &str, builtin_name: &str| -> Result<(), String> {
+        let f = ev
+            .obarray
+            .symbol_function_id(intern(builtin_name))
+            .ok_or_else(|| format!("builtin '{builtin_name}' unbound"))?;
+        ev.obarray.set_symbol_function(alias_name, f);
+        Ok(())
+    };
+    // Build `(alias arg…)`: Constant(alias) then `nargs` pushes then Call(nargs).
+    let mk_fn = |alias_name: &str, arity: usize, pushes: &[Op]| -> ByteCodeFunction {
+        let mut ops = vec![Op::Constant(0)];
+        ops.extend_from_slice(pushes);
+        ops.push(Op::Call(pushes.len() as u16));
+        ops.push(Op::Return);
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: (0..arity).map(|i| SymId(1 + i as u32)).collect(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops;
+        f.constants = vec![Value::symbol(intern(alias_name))];
+        f.max_stack = 16;
+        f
+    };
+
+    // ---- (a) ARMED cross-session + fast-from-call-1, for all three spec shims. ----
+    struct Armed {
+        label: &'static str,
+        alias: &'static str,
+        builtin: &'static str,
+        arity: usize,
+        pushes: Vec<Op>,
+        args: Vec<Value>,
+    }
+    // Both callees are Rust builtins bound in a minimal `Context::new()` (so no
+    // loadup is needed). This exercises the two round-1 spec shims a builtin-only
+    // context can reach — `neovm_jit_pred_spec` (PredRecordp) and
+    // `neovm_jit_call_subr_spec` (SubrGeneral). The third shim
+    // (`neovm_jit_eq_incl_props_spec`, for `equal-including-properties`, which is
+    // lisp-defined so unbound here) is still exported + salted into `ABI_TAG` +
+    // covered by the emit-time `assert_aot_imports_exported` import audit.
+    let corpus = [
+        // recordp (PredRecordp → neovm_jit_pred_spec): (p x), x=5 → nil.
+        Armed {
+            label: "pred/recordp",
+            alias: "aot-spec-pred",
+            builtin: "recordp",
+            arity: 1,
+            pushes: vec![Op::StackRef(1)],
+            args: vec![Value::make_int(5)],
+        },
+        // consp (SubrGeneral → neovm_jit_call_subr_spec): (c x), x=5 → nil.
+        Armed {
+            label: "subr/consp",
+            alias: "aot-spec-subr",
+            builtin: "consp",
+            arity: 1,
+            pushes: vec![Op::StackRef(1)],
+            args: vec![Value::make_int(5)],
+        },
+    ];
+
+    // PASS 1 — EMIT every `.so` BEFORE any load (the unit index is a OnceLock frozen
+    // at the first `load_unit`, so all artifacts must be on disk first). Each body
+    // is emitted with its callee aliased to its builtin so `find_spec_sites` bakes
+    // the spec fast path + descriptor entry.
+    for c in &corpus {
+        let mut emit_ctx = Context::new();
+        alias(&mut emit_ctx, c.alias, c.builtin)?;
+        let f = mk_fn(c.alias, c.arity, &c.pushes);
+        let (obj, content_hash) =
+            build_baseline_object_for_leaf(&f.ops, &f.constants, c.arity, Some(&emit_ctx.obarray))
+                .map_err(|e| format!("{}: emit err {e}", c.label))?
+                .ok_or_else(|| format!("{}: emit produced no object (not spec-baked?)", c.label))?;
+        let so_path = dir.join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
+        link_object_to_so(&obj, &so_path).map_err(|e| format!("{}: link err {e}", c.label))?;
+    }
+    // Emit the CRUX body — aliased to `recordp` at emit (bakes a PredRecordp site).
+    {
+        let mut emit_ctx = Context::new();
+        alias(&mut emit_ctx, "aot-spec-crux", "recordp")?;
+        let f = mk_fn("aot-spec-crux", 1, &[Op::StackRef(1)]);
+        let (obj, content_hash) =
+            build_baseline_object_for_leaf(&f.ops, &f.constants, 1, Some(&emit_ctx.obarray))
+                .map_err(|e| format!("crux: emit err {e}"))?
+                .ok_or("crux: emit produced no object")?;
+        let so_path = dir.join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
+        link_object_to_so(&obj, &so_path).map_err(|e| format!("crux: link err {e}"))?;
+    }
+
+    // Cross-session drift: grow the intern table AFTER all emits so the load-session
+    // obarray + SymId space differs from emit (a baked emit-time SymId would be stale).
+    for i in 0..96 {
+        let _ = intern(&format!("aot-spec-decoy-{i}"));
+    }
+
+    // PASS 2a — SERVE each armed body against a FRESH obarray (same binding), and
+    // prove FAST-from-call-1 + AOT==interp.
+    for c in &corpus {
+        let mut load_ctx = Context::new();
+        alias(&mut load_ctx, c.alias, c.builtin)?;
+        let ctx = &mut load_ctx as *mut Context;
+        let g = mk_fn(c.alias, c.arity, &c.pushes);
+        let g_val = Value::make_bytecode(g.clone());
+
+        let fast0 = SUBR_SPEC_FAST_COUNT.load(Ordering::Relaxed);
+        let aot = super::cache::try_run_compiled(ctx, &g, g_val, &c.args)
+            .map_err(|_| format!("{}: aot run raised", c.label))?
+            .ok_or_else(|| format!("{}: aot run None (spec .so did not serve?)", c.label))?;
+        if super::cache::cached_leaf_is_aot_for_func(&g) != Some(true) {
+            return Err(format!("{}: not served AOT-backed", c.label));
+        }
+        // FAST-FROM-CALL-1: the loader armed the slot, so the very first call takes
+        // the armed fast shim (dlopen resolved it, else this shim call would abort).
+        let fast1 = SUBR_SPEC_FAST_COUNT.load(Ordering::Relaxed);
+        if fast1 <= fast0 {
+            return Err(format!(
+                "{}: FAST shim did not fire from call 1 (armed spec not served); fast {fast0}->{fast1}",
+                c.label
+            ));
+        }
+        // Result equals the interpreter.
+        let interp = {
+            let h = mk_fn(c.alias, c.arity, &c.pushes);
+            let mut vm = Vm::from_context(&mut load_ctx);
+            vm.execute(&h, c.args.clone())
+                .map_err(|_| format!("{}: interp raised", c.label))?
+        };
+        if !crate::emacs_core::value::equal_value(&Value::from_bits(aot), &interp, 0) {
+            return Err(format!(
+                "{}: AOT {:?} != interp {:?}",
+                c.label,
+                Value::from_bits(aot),
+                interp
+            ));
+        }
+        super::cache::clear();
+    }
+
+    // ---- PASS 2b (b/c/d) THE CRUX: load the recordp-baked body against an obarray
+    // where the SAME alias is bound to `stringp` (a different subr). The baked
+    // PredRecordp site must DISARM (not run `is_record`): on a STRING, the generic
+    // `stringp` returns `t` where a wrongly-armed `is_record` would return `nil`.
+    {
+        let mut load_ctx = Context::new();
+        alias(&mut load_ctx, "aot-spec-crux", "stringp")?;
+        // Sanity: the load-session binding IS `stringp` now — resolve the actual
+        // subr NAME its cell holds, so a mismatch is diagnosable.
+        {
+            let bind = load_ctx
+                .obarray
+                .symbol_function_id(intern("aot-spec-crux"))
+                .ok_or("crux SETUP: aot-spec-crux unbound in load_ctx")?;
+            let name = crate::emacs_core::eval::subr_entry_from_value(bind)
+                .map(|(s, _)| crate::emacs_core::intern::resolve_sym(s).to_string())
+                .unwrap_or_else(|| "<not-a-subr>".to_string());
+            if name != "stringp" {
+                return Err(format!(
+                    "crux SETUP: after alias→stringp, aot-spec-crux resolves to '{name}' \
+                     (expected stringp) — re-alias did not take"
+                ));
+            }
+        }
+        let ctx = &mut load_ctx as *mut Context;
+        let g = mk_fn("aot-spec-crux", 1, &[Op::StackRef(1)]);
+        let g_val = Value::make_bytecode(g.clone());
+        let arg = Value::string("a-string");
+
+        let fast0 = SUBR_SPEC_FAST_COUNT.load(Ordering::Relaxed);
+        let gen0 = SUBR_SPEC_GENERIC_COUNT.load(Ordering::Relaxed);
+        let aot = super::cache::try_run_compiled(ctx, &g, g_val, &[arg])
+            .map_err(|_| "crux: aot run raised".to_string())?
+            .ok_or("crux: aot run None")?;
+        if super::cache::cached_leaf_is_aot_for_func(&g) != Some(true) {
+            return Err("crux: not served AOT-backed".into());
+        }
+        let aot_v = Value::from_bits(aot);
+        // Ground truth for the CURRENT (stringp) binding: interp of the same body.
+        let interp = {
+            let h = mk_fn("aot-spec-crux", 1, &[Op::StackRef(1)]);
+            let mut vm = Vm::from_context(&mut load_ctx);
+            vm.execute(&h, vec![Value::string("a-string")])
+                .map_err(|_| "crux: interp raised".to_string())?
+        };
+        // The RE-CLASSIFY-DISARM property: the AOT result equals the interpreter of
+        // the LIVE (`stringp`) binding — `t` on a string — NOT the baked
+        // `is_record`'s `nil`. A naive "builtin+arity" arm would run `is_record` and
+        // return nil (≠ interp), so this catches an arm-the-wrong-op regression.
+        if aot_v != interp || aot_v != Value::T {
+            return Err(format!(
+                "crux: DISARM FAILED — AOT {aot_v:?}, interp {interp:?} (stringp('a-string')); \
+                 expected both t. A wrongly-armed is_record on a string returns nil."
+            ));
+        }
+        // The DISARMED slot took the GENERIC path (not FAST) on this first call.
+        let fast1 = SUBR_SPEC_FAST_COUNT.load(Ordering::Relaxed);
+        let gen1 = SUBR_SPEC_GENERIC_COUNT.load(Ordering::Relaxed);
+        if fast1 != fast0 {
+            return Err("crux: FAST shim fired on a DISARMED site (should be generic)".into());
+        }
+        if gen1 <= gen0 {
+            return Err("crux: GENERIC counter did not move on the disarmed site".into());
+        }
+        // (d) The DISARMED slot NEVER re-arms: many more calls (each a cache HIT on
+        // the same leaf) keep FAST at 0 and move GENERIC each time (the
+        // SPEC_EPOCH_DISARMED short-circuit — a merely epoch-stale slot would
+        // re-validate + re-arm and FAST would move).
+        for _ in 0..5 {
+            let _ = super::cache::try_run_compiled(
+                ctx,
+                &g,
+                Value::make_bytecode(g.clone()),
+                &[Value::string("s")],
+            )
+            .map_err(|_| "crux: repeated disarmed run raised".to_string())?
+            .ok_or("crux: repeated disarmed run None")?;
+        }
+        let fast2 = SUBR_SPEC_FAST_COUNT.load(Ordering::Relaxed);
+        let gen2 = SUBR_SPEC_GENERIC_COUNT.load(Ordering::Relaxed);
+        if fast2 != fast0 {
+            return Err(format!(
+                "crux: DISARMED slot RE-ARMED across repeated calls (fast {fast0}->{fast2})"
+            ));
+        }
+        if gen2 < gen1 + 5 {
+            return Err(format!(
+                "crux: GENERIC did not move on every repeated disarmed call ({gen1}->{gen2})"
+            ));
+        }
+        super::cache::clear();
+    }
+
+    Ok(())
+}
+
 /// One AOT compilation unit's on-disk location, keyed by content hash.
 type UnitIndex = std::collections::HashMap<u128, std::path::PathBuf>;
 
@@ -2935,7 +3269,7 @@ pub(crate) fn try_load_leaf(
     // AOT leaf is `eq`-identical to interp/JIT. Tier-selected to match the emit path
     // (the single source: `live_reloc_for_emit_tier`). `None` → non-recipe-able
     // baseline const → stay JIT-only.
-    let live_reloc = live_reloc_for_emit_tier(ops, constants, arity)?;
+    let live_reloc = live_reloc_for_emit_tier(ops, constants, arity, obarray)?;
     load_leaf_from_unit(&unit, content_hash, arity, &live_reloc, obarray)
 }
 
@@ -3242,7 +3576,9 @@ pub fn prepopulate_aot_from_preload(
         // non-recipe-able baseline const — unreachable on a membership hit (a
         // hashable body is recipe-able, and the producer only emitted recipe-able
         // leaves); kept as a counted miss for visibility.
-        let Some(live_reloc) = live_reloc_for_emit_tier(&bc.ops, &bc.constants, arity) else {
+        let Some(live_reloc) =
+            live_reloc_for_emit_tier(&bc.ops, &bc.constants, arity, Some(&ctx.obarray))
+        else {
             stats.missed += 1;
             continue;
         };
@@ -3473,6 +3809,9 @@ fn define_baseline_leaf_into_module(
     arity: usize,
     entry_name: &str,
     desc_name: &str,
+    // R2 increment B2: the LIVE obarray, so the baseline leaf bakes its `Op::Call`
+    // subr/bytecode spec fast paths + descriptor entries. `None` → CBSym-only.
+    obarray: Option<&crate::emacs_core::symbol::Obarray>,
 ) -> Result<Option<()>, CompileError> {
     let Some((reloc_data, reloc_index, recipe)) = prepare_baseline_relocs(ops, constants) else {
         return Ok(None);
@@ -3485,6 +3824,7 @@ fn define_baseline_leaf_into_module(
         &reloc_data,
         &reloc_index,
         entry_name,
+        obarray,
     )?;
     let meta = super::compile::AotLeafMeta {
         arity: bmeta.arity,
@@ -3496,10 +3836,10 @@ fn define_baseline_leaf_into_module(
         max_depth: bmeta.max_depth,
         has_precise_deopt: true,
     };
-    // Baseline leaves emit an empty spec-section until the emit path threads the
-    // obarray (increment B2 emit wiring) — `build_baseline_leaf_object` still runs
-    // the obarray-free `find_cbsym_spec_sites` (no `Op::Call` subr/bytecode spec).
-    let desc_bytes = encode_descriptor(&meta, &recipe, reloc_data.len() as u32, &[]);
+    // Bake the baseline leaf's `Op::Call` spec sites (in slot order) into the
+    // descriptor so the loader can re-classify + arm each runtime SpecSlot.
+    let desc_bytes =
+        encode_descriptor(&meta, &recipe, reloc_data.len() as u32, &bmeta.spec_sites);
     let data_id = module
         .declare_data(desc_name, Linkage::Export, /*writable=*/ false, /*tls=*/ false)
         .map_err(|e| module_init_err(e.to_string()))?;
@@ -3521,6 +3861,7 @@ pub(crate) fn build_baseline_object_for_leaf(
     ops: &[Op],
     constants: &[Value],
     arity: usize,
+    obarray: Option<&crate::emacs_core::symbol::Obarray>,
 ) -> Result<Option<(Vec<u8>, u128)>, CompileError> {
     let Some(content_hash) = leaf_content_hash(ops, constants, arity) else {
         return Ok(None);
@@ -3528,8 +3869,16 @@ pub(crate) fn build_baseline_object_for_leaf(
     let entry_name = aot_entry_symbol(content_hash);
     let desc_name = aot_descriptor_symbol(content_hash);
     let mut module = make_aot_object_module()?;
-    if define_baseline_leaf_into_module(&mut module, ops, constants, arity, &entry_name, &desc_name)?
-        .is_none()
+    if define_baseline_leaf_into_module(
+        &mut module,
+        ops,
+        constants,
+        arity,
+        &entry_name,
+        &desc_name,
+        obarray,
+    )?
+    .is_none()
     {
         return Ok(None);
     }
@@ -3735,7 +4084,7 @@ mod tests {
         let _ev = crate::emacs_core::eval::Context::new();
 
         let imports = |ops: &[Op], constants: &[Value], arity: usize| -> Vec<String> {
-            let (obj, _hash) = build_baseline_object_for_leaf(ops, constants, arity)
+            let (obj, _hash) = build_baseline_object_for_leaf(ops, constants, arity, None)
                 .expect("baseline emit ok")
                 .expect("baseline emit produced an object");
             let file = object::File::parse(&*obj).expect("parse object");
@@ -3947,7 +4296,7 @@ mod tests {
         use crate::emacs_core::value::LambdaParams;
 
         // Emit → link → dlopen → load via the production helpers.
-        let (obj, content_hash) = compile_leaf_to_object(ops, constants, nargs)
+        let (obj, content_hash) = compile_leaf_to_object(ops, constants, nargs, None)
             .expect("compile ok")
             .expect("pure subset → Some");
         let dir = tempfile::tempdir().expect("tempdir");
@@ -4100,7 +4449,7 @@ mod tests {
         let arity = 1usize;
 
         let Some((obj, content_hash)) =
-            compile_leaf_to_object(&ops, &constants, arity).expect("compile ok")
+            compile_leaf_to_object(&ops, &constants, arity, None).expect("compile ok")
         else {
             panic!("symbol-bearing shim-free leaf must be AOT-runnable");
         };
@@ -4187,7 +4536,7 @@ mod tests {
         let ops = [Op::Constant(0), Op::Return];
         let constants = [gensym];
         assert!(
-            compile_leaf_to_object(&ops, &constants, 1)
+            compile_leaf_to_object(&ops, &constants, 1, None)
                 .expect("compile ok")
                 .is_none(),
             "a gensym-const leaf must NOT be AOT-emitted (stays JIT)"
@@ -4223,7 +4572,7 @@ mod tests {
         let arity = 1usize;
 
         // The leaf is reloc-bearing (heap const) but shim-free → AOT-runnable.
-        let (obj, content_hash) = compile_leaf_to_object(&ops, &constants, arity)
+        let (obj, content_hash) = compile_leaf_to_object(&ops, &constants, arity, None)
             .expect("compile ok")
             .expect("reloc-bearing shim-free leaf → Some");
         let dir = tempfile::tempdir().expect("tempdir");
@@ -4286,7 +4635,7 @@ mod tests {
         let arity = 1usize;
 
         let Some((obj, content_hash)) =
-            compile_leaf_to_object(&ops, &constants, arity).expect("compile ok")
+            compile_leaf_to_object(&ops, &constants, arity, None).expect("compile ok")
         else {
             // If this body isn't MIR-lowerable/AOT-runnable, skip (don't fail) —
             // the single-const test already covers the reloc mechanism.
@@ -4352,7 +4701,7 @@ mod tests {
         let constants = vec![Value::string("needle-aot-root")];
         let arity = 1usize;
 
-        let (obj, content_hash) = compile_leaf_to_object(&ops, &constants, arity)
+        let (obj, content_hash) = compile_leaf_to_object(&ops, &constants, arity, None)
             .expect("compile ok")
             .expect("reloc shim-free leaf");
         let dir = tempfile::tempdir().expect("tempdir");
@@ -4421,7 +4770,7 @@ mod tests {
         let ops = [Op::Constant(0), Op::Add, Op::Return];
         let constants = [Value::make_int(5)];
         let arity = 1usize;
-        let (obj, content_hash) = compile_leaf_to_object(&ops, &constants, arity)
+        let (obj, content_hash) = compile_leaf_to_object(&ops, &constants, arity, None)
             .expect("compile ok")
             .expect("pure subset");
         let dir = tempfile::tempdir().expect("tempdir");
@@ -4459,7 +4808,7 @@ mod tests {
         let arity = 1usize;
 
         // Build + link the `.so`, dlopen it, inject the unit by content hash.
-        let (obj, content_hash) = compile_leaf_to_object(&ops, &constants, arity)
+        let (obj, content_hash) = compile_leaf_to_object(&ops, &constants, arity, None)
             .expect("compile ok")
             .expect("pure subset");
         let dir = tempfile::tempdir().expect("tempdir");
@@ -4596,7 +4945,7 @@ mod tests {
             leaf("distinct", &sub1),
         ];
 
-        let (obj, stats) = build_preload_object(&leaves).expect("build preload object");
+        let (obj, stats) = build_preload_object(&leaves, None).expect("build preload object");
         assert_eq!(stats.candidates, 3);
         assert_eq!(stats.prepared, 3, "all three are AOT-runnable");
         assert_eq!(stats.unique_emitted, 2, "two DISTINCT bodies emitted");
@@ -4653,7 +5002,7 @@ mod tests {
         // Build the ONE preload `.so` (the producer's multi-leaf object), dlopen,
         // and inject it as THE preload (so load_preload returns it).
         let leaves = enumerate_loadup_leaves(&ev, /*d0_filter=*/ true);
-        let (obj, _stats) = build_preload_object(&leaves).expect("build preload object");
+        let (obj, _stats) = build_preload_object(&leaves, None).expect("build preload object");
         let dir = tempfile::tempdir().expect("tempdir");
         let so_path = dir.path().join(PRELOAD_SO_NAME);
         link_object_to_so(&obj, &so_path).expect("link");
@@ -4826,7 +5175,7 @@ mod tests {
         // (2) Now enable AOT + inject a real preload that DOES contain this fn,
         // then prepopulate. The slot is already warm (JIT) → must be KEPT.
         let leaves = enumerate_loadup_leaves(&ev, /*d0_filter=*/ true);
-        let (obj, _) = build_preload_object(&leaves).expect("build preload object");
+        let (obj, _) = build_preload_object(&leaves, None).expect("build preload object");
         let dir = tempfile::tempdir().expect("tempdir");
         let so_path = dir.path().join(PRELOAD_SO_NAME);
         link_object_to_so(&obj, &so_path).expect("link");
@@ -5090,7 +5439,7 @@ mod tests {
             arity: 1,
         };
         let (obj, _) =
-            build_preload_object(std::slice::from_ref(&member_leaf)).expect("build preload");
+            build_preload_object(std::slice::from_ref(&member_leaf), None).expect("build preload");
         let dir = tempfile::tempdir().expect("tempdir");
         let so_path = dir.path().join(PRELOAD_SO_NAME);
         link_object_to_so(&obj, &so_path).expect("link");
@@ -5192,7 +5541,7 @@ mod tests {
             constants: Box::leak(consts.clone().into_boxed_slice()),
             arity: 1,
         };
-        let (obj, _) = build_preload_object(std::slice::from_ref(&leaf)).expect("build preload");
+        let (obj, _) = build_preload_object(std::slice::from_ref(&leaf), None).expect("build preload");
         let dir = tempfile::tempdir().expect("tempdir");
         let so_path = dir.path().join(PRELOAD_SO_NAME);
         link_object_to_so(&obj, &so_path).expect("link");

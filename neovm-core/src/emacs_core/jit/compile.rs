@@ -6535,6 +6535,7 @@ impl SpecCalleeKind {
 /// holds the constant symbol `sym`, fbound at compile time to the bytecode
 /// object or fixed-arity builtin subr `expected_bits` (see `kind`). `slot`
 /// indexes the leaf's armed-epoch slots.
+#[derive(Clone, Copy)]
 struct SpecSite {
     sym: u32,
     expected_bits: u64,
@@ -6917,6 +6918,91 @@ fn find_cbsym_spec_sites(ops: &[Op]) -> HashMap<usize, SpecSite> {
     let mut next_slot = 0usize;
     append_cbsym_spec_sites(ops, &mut sites, &mut next_slot);
     sites
+}
+
+/// R2 increment B2 tier-pivot: does this body have ≥1 `Op::Call` subr/bytecode
+/// speculation site against the LIVE `obarray`? Used by the AOT EMIT path
+/// (`compile_leaf_to_object` / `build_preload_object`) to force a spec-bearing body
+/// to the BASELINE tier (only it bakes the `Op::Call` spec fast paths) AND by the
+/// LOAD path (`live_reloc_for_emit_tier`) to pick the matching baseline reloc
+/// collector — so both agree and the leaf actually serves. Obarray-classified, so a
+/// callee redefined away from a spec kind between dump + load simply yields `false`
+/// (the recipe-compare / re-classify then keep it sound — bail-to-JIT or DISARM).
+pub(crate) fn has_op_call_spec_sites(
+    ops: &[Op],
+    constants: &[Value],
+    arity: usize,
+    obarray: &Obarray,
+) -> bool {
+    let Ok(cfg) = analyze_cfg(ops, constants, None, arity) else {
+        return false;
+    };
+    find_spec_sites(ops, constants, &cfg.leaders, obarray)
+        .values()
+        .any(|s| s.kind.to_spec_disc().is_some())
+}
+
+/// R2 increment B2: finalize a baseline leaf's speculation-site map for AOT emit —
+/// DROP any `Op::Call` spec site whose callee symbol isn't in the reloc vector
+/// (`materialize_op_sym_id` would otherwise bake a session SymId; the site then
+/// falls to the generic `None` arm — the leaf still emits, never bails), RENUMBER
+/// the surviving slots densely (`Op::Call` spec sites 0..K, then the slotless CBSym
+/// sites K..N) so the loader's descriptor position IS the codegen slot index, and
+/// return the surviving `Op::Call` sites as [`AotSpecSite`]s in slot order.
+///
+/// (In practice a callee push is always the `Op::Constant` that
+/// `collect_baseline_aot_relocs` collected, so the drop path is defence-in-depth.)
+fn finalize_baseline_spec_sites(
+    spec_sites: &mut HashMap<usize, SpecSite>,
+    ops: &[Op],
+    reloc_index: &std::collections::HashMap<usize, u32>,
+) -> Vec<super::aot::AotSpecSite> {
+    // Snapshot (op_idx, site) in the original slot order (find_spec_sites numbers
+    // Op::Call sites first, then CBSym), then rebuild the map with dense slots.
+    let mut ordered: Vec<(usize, SpecSite)> = spec_sites.iter().map(|(&op, s)| (op, *s)).collect();
+    ordered.sort_by_key(|(_, s)| s.slot);
+    spec_sites.clear();
+    let mut aot_sites: Vec<super::aot::AotSpecSite> = Vec::new();
+    let mut next_slot = 0usize;
+    // Pass 1: the Op::Call subr/bytecode spec sites (own the descriptor entries).
+    for (op_idx, mut site) in ordered
+        .iter()
+        .copied()
+        .filter(|(_, s)| s.kind.to_spec_disc().is_some())
+    {
+        let key = (site.sym as usize) << TAG_BITS | TAG_SYMBOL;
+        let Some(&callee_reloc_idx) = reloc_index.get(&key) else {
+            continue; // DROP — un-reloc'd callee → generic None arm; do NOT bail.
+        };
+        let nargs = match ops.get(op_idx) {
+            Some(Op::Call(n)) => *n,
+            _ => continue, // spec sites are keyed at an Op::Call; be defensive.
+        };
+        let kind_disc = site
+            .kind
+            .to_spec_disc()
+            .expect("filtered to an Op::Call spec disc");
+        site.slot = next_slot;
+        next_slot += 1;
+        spec_sites.insert(op_idx, site);
+        aot_sites.push(super::aot::AotSpecSite {
+            kind_disc,
+            which: 0,
+            nargs,
+            callee_reloc_idx,
+        });
+    }
+    // Pass 2: the slotless CBSym sites (no descriptor entry), renumbered after.
+    for (op_idx, mut site) in ordered
+        .iter()
+        .copied()
+        .filter(|(_, s)| s.kind.to_spec_disc().is_none())
+    {
+        site.slot = next_slot;
+        next_slot += 1;
+        spec_sites.insert(op_idx, site);
+    }
+    aot_sites
 }
 
 /// Resolve the static target set of the `Op::Switch` at `i`: the byte
@@ -7997,6 +8083,11 @@ pub(crate) struct BaselineAotMeta {
     pub has_binds: bool,
     /// condition-case/catch handlers present.
     pub has_handlers: bool,
+    /// R2 increment B2: the `Op::Call` subr/bytecode spec sites baked into this
+    /// leaf (in slot order — descriptor position == codegen slot index). Empty when
+    /// emitted without a live obarray (CBSym-only, increment A). The descriptor
+    /// carries these so the loader can re-classify + arm each runtime `SpecSlot`.
+    pub spec_sites: Vec<super::aot::AotSpecSite>,
 }
 
 /// R2-E (baseline-tier AOT emit): lower a bytecode body through the BASELINE tier
@@ -8015,6 +8106,7 @@ pub(crate) struct BaselineAotMeta {
 /// from the sidecar, not these addresses) — throwaway here.
 ///
 /// Returns the [`BaselineAotMeta`] for the descriptor.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn build_baseline_leaf_object<M: Module>(
     module: &mut M,
     ops: &[Op],
@@ -8023,22 +8115,26 @@ pub(crate) fn build_baseline_leaf_object<M: Module>(
     reloc_data: &[Value],
     reloc_index: &std::collections::HashMap<usize, u32>,
     entry_name: &str,
+    // R2 increment B2: the compiling thread's obarray. `Some` → the `Op::Call`
+    // subr/bytecode speculation pass runs (spec fast paths baked, descriptor
+    // entries emitted); `None` → CBSym-only (increment A, obarray-free).
+    obarray: Option<&Obarray>,
 ) -> Result<BaselineAotMeta, CompileError> {
     let cfg = analyze_cfg(ops, constants, None, arity)?;
     let known_fixnum_slots = compute_known_fixnum_slots(ops, constants, &cfg);
     let n = ops.len();
-    // R2 increment A (CBSym-in-AOT): classify the CallBuiltinSym intrinsic sites.
-    // `cbsym_spec_kind` is name-canonical + obarray-free (static subr table + name
-    // resolution only), so it runs at `obarray=None` — the AOT body then uses the
-    // Tier-A/B fast shims (`neovm_jit_cbsym_read` / `neovm_jit_cbsym_spec`) instead
-    // of the general `neovm_jit_named_builtin` path. The `Op::Call` subr
-    // speculation stays JIT-only (needs a live obarray binding — increment B).
-    // CBSym is SLOTLESS/EPOCHLESS: the lowering never bakes a slot pointer or
-    // `expected_bits`, so the baseline deopt still fits the sidecar's existing
-    // bases (no per-spec-slot state — see materialize_deopt_refs). The SpecSlots
-    // are allocated only to keep the per-op `spec_sites.get(&i)` slot index in
-    // range; they stay inert (never referenced by the CBSym lowering).
-    let spec_sites: HashMap<usize, SpecSite> = find_cbsym_spec_sites(ops);
+    // Classify speculation sites. With a LIVE obarray (increment B2) the full
+    // `Op::Call` subr/bytecode pass runs alongside the obarray-free CBSym pass;
+    // without one, only CBSym (increment A). CBSym is SLOTLESS/EPOCHLESS (its
+    // lowering reads only the `kind`, never the slot/expected), so it needs no
+    // descriptor entry; the `Op::Call` spec sites DO (the loader re-classifies +
+    // arms each). `finalize_baseline_spec_sites` DROPs an un-reloc'd callee, dense-
+    // renumbers the surviving slots, and returns the descriptor sites in slot order.
+    let mut spec_sites: HashMap<usize, SpecSite> = match obarray {
+        Some(ob) => find_spec_sites(ops, constants, &cfg.leaders, ob),
+        None => find_cbsym_spec_sites(ops),
+    };
+    let aot_spec_sites = finalize_baseline_spec_sites(&mut spec_sites, ops, reloc_index);
     let spec_slots: Box<[SpecSlot]> = (0..spec_sites.len())
         .map(|_| SpecSlot {
             epoch: AtomicU64::new(0),
@@ -8098,6 +8194,7 @@ pub(crate) fn build_baseline_leaf_object<M: Module>(
                 Op::PushConditionCase(_) | Op::PushConditionCaseRaw(_) | Op::PushCatch(_)
             )
         }),
+        spec_sites: aot_spec_sites,
     })
 }
 

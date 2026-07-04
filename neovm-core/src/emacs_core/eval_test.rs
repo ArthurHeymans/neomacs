@@ -15326,7 +15326,7 @@ fn aot_bench_compute_loop() {
 
     // Emit + link the body's AOT `.so`, dlopen, inject by content hash (the pure
     // arith body has NO shim imports, so its `.so` dlopens in the unit-test binary).
-    let (obj, content_hash) = aot::compile_leaf_to_object(&ops, &constants, arity)
+    let (obj, content_hash) = aot::compile_leaf_to_object(&ops, &constants, arity, None)
         .expect("compile ok")
         .expect("pure-arith body is AOT-runnable");
     let dir = tempfile::tempdir().expect("tempdir");
@@ -15476,7 +15476,7 @@ fn aot_bench_real_algorithm() {
     assert_eq!(collatz_ref(97), 118);
 
     // Emit + serve via AOT (pure body, no shim imports → dlopens in this binary).
-    let (obj, content_hash) = aot::compile_leaf_to_object(&ops, &constants, arity)
+    let (obj, content_hash) = aot::compile_leaf_to_object(&ops, &constants, arity, None)
         .expect("compile ok")
         .expect("pure-fixnum collatz body is AOT-runnable");
     let dir = tempfile::tempdir().expect("tempdir");
