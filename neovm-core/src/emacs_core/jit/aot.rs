@@ -2992,6 +2992,133 @@ pub fn testkit_spec_aot_selftest(dir: &std::path::Path) -> Result<(), String> {
     Ok(())
 }
 
+/// R2 increment C (AOT PGO persistence) — STEP 1 GO/NO-GO round-trip proof.
+///
+/// Proves the win the PGO drain will bank SURVIVES the runtime-emit →
+/// next-session-load path, using the EXACT producer the drain calls:
+/// [`compile_leaf_to_object`] with the LIVE obarray (NOT
+/// [`build_baseline_object_for_leaf`] directly — the unified tier-select computes
+/// `spec_forced` and picks the tier the LOADER re-derives via
+/// `live_reloc_for_emit_tier`, so emit + load agree on the reloc collector). A
+/// pred-class body `(recordp x)` is emitted via that producer with an obarray
+/// aliasing the callee to `recordp` (so the `Op::Call` pred spec fast path bakes),
+/// placed in `NEOVM_AOT_DIR` under the unit-index naming BEFORE any load (the index
+/// is a OnceLock frozen at the first `load_unit`), then LOADED against a FRESH
+/// obarray + a grown intern table through the PUBLIC [`super::cache::try_run_compiled`]
+/// under `NEOVM_AOT=force`. Asserts, from CALL 1: (i) served AOT-backed, (ii) the
+/// pred FAST shim fires at heat 0 (`SUBR_SPEC_FAST_COUNT` moves), (iii) result ==
+/// interp.
+///
+/// Invoked from `tests/aot_pgo.rs` (a shim-exporting `-rdynamic` integration binary,
+/// so the `neovm_jit_pred_spec` import resolves at dlopen).
+#[doc(hidden)]
+#[cfg(target_os = "linux")]
+pub fn testkit_pgo_roundtrip_selftest(dir: &std::path::Path) -> Result<(), String> {
+    use super::compile::SUBR_SPEC_FAST_COUNT;
+    use crate::emacs_core::bytecode::{ByteCodeFunction, Vm};
+    use crate::emacs_core::eval::Context;
+    use crate::emacs_core::intern::{SymId, intern};
+    use crate::emacs_core::value::LambdaParams;
+    use std::sync::atomic::Ordering;
+
+    if !aot_enabled() {
+        return Err("NEOVM_AOT not enabled (env must be set before any AOT call)".into());
+    }
+
+    // Alias a USER symbol to a builtin's function cell (control the callee binding
+    // per "session"), mirroring `testkit_spec_aot_selftest`.
+    let alias = |ev: &mut Context, alias_name: &str, builtin_name: &str| -> Result<(), String> {
+        let f = ev
+            .obarray
+            .symbol_function_id(intern(builtin_name))
+            .ok_or_else(|| format!("builtin '{builtin_name}' unbound"))?;
+        ev.obarray.set_symbol_function(alias_name, f);
+        Ok(())
+    };
+    // Build `(alias arg…)`: Constant(alias) then `nargs` pushes then Call(nargs).
+    let mk_fn = |alias_name: &str, arity: usize, pushes: &[Op]| -> ByteCodeFunction {
+        let mut ops = vec![Op::Constant(0)];
+        ops.extend_from_slice(pushes);
+        ops.push(Op::Call(pushes.len() as u16));
+        ops.push(Op::Return);
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: (0..arity).map(|i| SymId(1 + i as u32)).collect(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = ops;
+        f.constants = vec![Value::symbol(intern(alias_name))];
+        f.max_stack = 16;
+        f
+    };
+
+    // PASS 1 — EMIT the pred `.so` via the UNIFIED producer (the drain's exact call),
+    // BEFORE any load. Aliased to `recordp` so `find_spec_sites` bakes the pred spec
+    // fast path + descriptor entry.
+    {
+        let mut emit_ctx = Context::new();
+        alias(&mut emit_ctx, "aot-pgo-pred", "recordp")?;
+        let f = mk_fn("aot-pgo-pred", 1, &[Op::StackRef(1)]);
+        let (obj, content_hash) =
+            compile_leaf_to_object(&f.ops, &f.constants, 1, Some(&emit_ctx.obarray))
+                .map_err(|e| format!("pgo-roundtrip: emit err {e}"))?
+                .ok_or(
+                    "pgo-roundtrip: compile_leaf_to_object produced no object \
+                     (not AOT-runnable / not spec-baked?)",
+                )?;
+        let so_path = dir.join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
+        link_object_to_so(&obj, &so_path).map_err(|e| format!("pgo-roundtrip: link err {e}"))?;
+    }
+
+    // Cross-session drift: grow the intern table AFTER the emit so the load-session
+    // obarray + SymId space differs from emit (a baked emit-time SymId would be stale).
+    for i in 0..96 {
+        let _ = intern(&format!("aot-pgo-decoy-{i}"));
+    }
+
+    // PASS 2 — SERVE against a FRESH obarray (same binding); prove FAST-from-call-1
+    // + AOT==interp through the PUBLIC try_run_compiled.
+    let mut load_ctx = Context::new();
+    alias(&mut load_ctx, "aot-pgo-pred", "recordp")?;
+    let ctx = &mut load_ctx as *mut Context;
+    let g = mk_fn("aot-pgo-pred", 1, &[Op::StackRef(1)]);
+    let g_val = Value::make_bytecode(g.clone());
+    let args = vec![Value::make_int(5)];
+
+    let fast0 = SUBR_SPEC_FAST_COUNT.load(Ordering::Relaxed);
+    let aot = super::cache::try_run_compiled(ctx, &g, g_val, &args)
+        .map_err(|_| "pgo-roundtrip: aot run raised".to_string())?
+        .ok_or("pgo-roundtrip: aot run None (round-trip .so did not serve?)")?;
+    if super::cache::cached_leaf_is_aot_for_func(&g) != Some(true) {
+        return Err("pgo-roundtrip: not served AOT-backed".into());
+    }
+    // FAST-FROM-CALL-1: the loader armed the slot, so the very first call takes the
+    // armed pred fast shim (dlopen resolved it, else this shim call would abort).
+    let fast1 = SUBR_SPEC_FAST_COUNT.load(Ordering::Relaxed);
+    if fast1 <= fast0 {
+        return Err(format!(
+            "pgo-roundtrip: pred FAST shim did not fire from call 1 \
+             (armed spec not served); fast {fast0}->{fast1}"
+        ));
+    }
+    let interp = {
+        let h = mk_fn("aot-pgo-pred", 1, &[Op::StackRef(1)]);
+        let mut vm = Vm::from_context(&mut load_ctx);
+        vm.execute(&h, args.clone())
+            .map_err(|_| "pgo-roundtrip: interp raised".to_string())?
+    };
+    if !crate::emacs_core::value::equal_value(&Value::from_bits(aot), &interp, 0) {
+        return Err(format!(
+            "pgo-roundtrip: AOT {:?} != interp {:?}",
+            Value::from_bits(aot),
+            interp
+        ));
+    }
+    super::cache::clear();
+    Ok(())
+}
+
 /// One AOT compilation unit's on-disk location, keyed by content hash.
 type UnitIndex = std::collections::HashMap<u128, std::path::PathBuf>;
 
