@@ -59,7 +59,9 @@ fi
 
 echo ">>> Building TSan-instrumented neovm-core test binary (build-std, --no-default-features)..."
 BUILD_LOG="$(mktemp)"
-if ! RUSTFLAGS="-Zsanitizer=thread" \
+# -fuse-ld=mold: the GNU-ld link of the TSan-instrumented binary OOM-SIGKILLs
+# under memory contention (sibling builds); mold links it comfortably.
+if ! RUSTFLAGS="-Zsanitizer=thread -Clink-arg=-fuse-ld=mold" \
       cargo "+$TOOLCHAIN" test -p neovm-core --lib --no-run \
       -Zbuild-std --target "$TARGET" --no-default-features >"$BUILD_LOG" 2>&1; then
   echo "BUILD FAILED:" >&2; cat "$BUILD_LOG" >&2; exit 1

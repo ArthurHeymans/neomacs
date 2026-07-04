@@ -337,25 +337,41 @@ slot with no deletion barrier. FIXED: it now fires
 `interactive_form` via `collect_veclike_children`). Regression test
 `concurrent_module_function_interactive_form_overwrite_keeps_child_alive`.
 
-**KNOWN RACE — FLAGGED, UNFIXED (found by the TSan pass, 2026-07; own fix round):**
-the concurrent obarray scan (`ObarrayScanSnapshot::scan`, `symbol.rs`) reads a
-symbol slot's presence (`if let Some(sym)` over `[Option<LispSymbol>; 4096]`)
-non-atomically ON THE GC THREAD while the mutator writes `LispSymbol`'s
-`function_unbound: bool` non-atomically (`set_symbol_function_id` via `defalias`,
-`fmakunbound_id`, etc.). Rust NICHE-OPTIMIZES the `Option` tag INTO that trailing
-`bool` byte, so the presence check and the bool write hit the SAME byte with no
-synchronization — a data race (TSan-confirmed, deterministic). The Stage-1b
-per-chunk seqlock hardened only the value-cell arm (redirect+val); it structurally
-cannot cover the presence byte, which GATES ENTRY to the seqlock read. Likely
-benign on x86 in practice (both live `bool` values are valid `Some` states, so
-presence is never misread; values coincide), but real UB. Latent siblings:
-non-atomic writes to `function_unbound`/`interned_global` at several symbol.rs
-sites. Reproduce: `scripts/run-gc-tsan.sh
-gc_concurrent_leaked_subr_drop_under_pdump_verifiers` (needs a complete `lisp/`).
-Fix direction (design + critique required — obarray/symbol hot path): stop niching
-the presence discriminant into a concurrently-mutated field — make
-`function_unbound`/`interned_global` relaxed-atomic bytes and read slot-presence
-via an atomic byte load, or represent the slot so the `Option` tag does not alias
-a live field. Audit ALL non-atomic writes to obarray-resident `LispSymbol` fields
-(`TSAN_OPTIONS=halt_on_error=0` enumerates the full set) and add an
-obarray-scan-vs-defalias-churn adversarial test alongside the fix.
+**FIXED RACE (task #23, 2026-07):** the concurrent obarray scan
+(`ObarrayScanSnapshot::scan`) used to read a symbol slot's presence
+(`if let Some(sym)` over `[Option<LispSymbol>; 4096]`) non-atomically while the
+mutator wrote `LispSymbol.function_unbound` — Rust had niched the `Option` tag
+INTO that `bool` byte, so the presence read raced the write (+ the fresh-fill
+raced the GC's arm reads). FIXED by removing the niche: `name: NameId` →
+`name: AtomicU32`; the chunk store is `[LispSymbol; 4096]` with
+`name == SYMBOL_NAME_SENTINEL (u32::MAX)` marking an empty slot; a fill writes the
+arm fields then publishes with a terminal `name.store(id, Release)`; the scan gates
+on `name.load(Acquire) != SENTINEL` before the seqlock arm reads. `name` is
+write-once, so presence is monotonic (None→Some only) and the slot stays 32B (no
+pause-floor-scan regression). Regression test
+`gc_concurrent_obarray_scan_vs_defalias_churn` (a TSan gate — the race was
+benign on x86, so a functional pass does not prove the fix). TSan: 9 races → 0.
+
+**KNOWN BENIGN RACE — DEFERRED (task #24, 2026-07):** the concurrent-claim
+dispatcher (`concurrent_try_mark_owned`) reads an arena object's `GcHeader.tenured`
+byte while the mutator's arena `ptr::write` (a non-atomic memcpy in
+`alloc_bytecode`/`alloc_float`/`alloc_vector`) writes the whole header — no
+happens-before because the publication chain (symbol/cons/vector cell stores +
+the GC's reads) is all `Ordering::Relaxed`. BENIGN on x86-64 (TSO retires the
+memcpy before the Relaxed publication store; `tenured` is a single byte, cannot
+tear; a reused slot's prior occupant was non-tenured, so a stale read is still
+`false` → never misclassifies → no UAF). REAL UB on weak-memory (ARM / Apple
+Silicon), where a StoreStore reorder could expose a torn/premature header.
+`run-gc-tsan.sh` therefore has ONE known-benign residual race on
+`gc_concurrent_leaked_subr_drop_under_pdump_verifiers` (the bytecode/float/vector
+tenured class). DEFERRED (a benign-on-x86 issue; owner decision 2026-07-04). Fix
+space when revived — needs a design + two-critic round (hot GC path): (A)
+Release/Acquire on the mutator publication stores + the GC-thread acquisition
+loads — FREE on x86 (Acquire-load/Release-store are plain `mov` under TSO), adds
+the required barriers on ARM, and unifies the whole class; (B) atomic-write only
+the concurrently-read header bytes (marked@0, tenured@2) in the arena alloc
+instead of the full-header `ptr::write` (contained to gc.rs/header.rs, but changes
+the full-header-write invariant + needs a stale-byte/Drop review); (C) a TSan
+suppression (cheap, hides the UB, x86-only). Repro: `run-gc-tsan.sh
+gc_concurrent_leaked_subr_drop_under_pdump_verifiers` with
+`TSAN_OPTIONS=halt_on_error=0`.
