@@ -15365,3 +15365,9 @@ fn value_list_to_values(list: &Value) -> LispArgVec {
 #[cfg(test)]
 #[path = "eval_test.rs"]
 mod tests;
+
+// task3-jitcrash-diag: diagnostic repros for the pre-existing JIT
+// heap-corruption crash (no fix here).
+#[cfg(test)]
+#[path = "jit_crash_repro_test.rs"]
+mod jit_crash_repro_tests;
