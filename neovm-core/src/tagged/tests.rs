@@ -420,7 +420,7 @@ fn bulk_mutation_helpers_record_bulk_write_kinds() {
 }
 
 #[test]
-fn full_collection_clears_dirty_owner_tracking() {
+fn collection_clears_dirty_owner_tracking_at_begin() {
     crate::test_utils::init_test_tracing();
     let mut heap = super::gc::TaggedHeap::new();
     heap.set_write_tracking_mode(super::gc::WriteTrackingMode::OwnersAndRecords);
@@ -435,7 +435,28 @@ fn full_collection_clears_dirty_owner_tracking() {
     assert_eq!(heap.dirty_owner_count(), 1);
     assert_eq!(heap.dirty_write_count(), 1);
 
-    heap.collect_exact(std::iter::once(reachable));
+    // Clear-at-BEGIN (the dirty_owners ABA fix): the owner-tracking tables are
+    // reset when a cycle STARTS — on the same per-cycle lifecycle as the SATB
+    // dedup sets — NOT at end-of-collection. A pre-cycle entry must not survive
+    // into this cycle's sweep, where a freed owner's slot can be reused under the
+    // same owner address bits (the ABA). So the reset is observable right after
+    // `begin_collection`, before the sweep runs.
+    heap.begin_collection();
+    assert_eq!(
+        heap.dirty_owner_count(),
+        0,
+        "begin_collection must clear dirty-owner tracking"
+    );
+    assert_eq!(
+        heap.dirty_write_count(),
+        0,
+        "begin_collection must clear the write records too"
+    );
+
+    // Completing the cycle leaves them clear (marking traces but writes no heap
+    // slots, so the barrier records nothing).
+    heap.seed_root(reachable);
+    heap.complete_collection();
     assert_eq!(heap.dirty_owner_count(), 0);
     assert_eq!(heap.dirty_write_count(), 0);
 }

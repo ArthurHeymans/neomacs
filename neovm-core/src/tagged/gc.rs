@@ -4385,6 +4385,23 @@ impl TaggedHeap {
         // set must start empty so each vector owner is cloned+retired at most once
         // per cycle (a carried-over entry would wrongly suppress this cycle's clone).
         self.concurrent_cloned_vectors.clear();
+        // OWNER-TRACKING REMEMBERED-SET PRECURSOR (`dirty_owners` /
+        // `dirty_owner_bits` / `dirty_writes`): clear it HERE, at the START of the
+        // cycle, on the same per-cycle lifecycle as the SATB dedup sets above —
+        // NOT at end-of-collection. A carried-over entry is not merely wasteful;
+        // it is an ABA hazard. An owner address recorded before this cycle can be
+        // FREED by this cycle's sweep and its slot handed to a NEW same-class
+        // object by the arena; the stale `dirty_owner_bits` entry would then dedup
+        // (suppress) the new object's barriered write — a missed remembered-write.
+        // Clearing at begin makes the tables hold only writes made SINCE this
+        // cycle started, so no entry outlives the object it names into a
+        // sweep+reuse. This is the exact ABA-safety argument the SATB sets rely
+        // on (per-cycle; no free during mark; cleared at begin). The tables are
+        // the seam for the future generational remembered set (task 06), whose
+        // consumer walks them per cycle and needs no cross-cycle accumulation;
+        // every reader today is a test.
+        self.clear_dirty_owners();
+        self.clear_dirty_writes();
         self.seed_internal_runtime_roots();
         if partitioned {
             // Re-scan dumped/tenured objects mutated to point at young heap
@@ -5764,9 +5781,12 @@ impl TaggedHeap {
             self.gc_threshold,
         );
 
-        // A full-heap collection subsumes any remembered-set bookkeeping.
-        self.clear_dirty_owners();
-        self.clear_dirty_writes();
+        // Owner-tracking remembered-set precursor: NOT cleared here. Its
+        // per-cycle lifecycle is clear-at-BEGIN (`begin_collection`), aligned with
+        // the SATB dedup sets, so a freed owner's address cannot linger across a
+        // sweep+arena-reuse into a stale dedup (the dirty_owners ABA). Clearing at
+        // end would restore that hazard for any consumer that keeps the tables
+        // live through the sweep.
 
         // A full STW cycle has completed: the heap now has consistent live
         // accounting and an empty gray queue, the baseline the concurrent
@@ -6599,8 +6619,10 @@ impl TaggedHeap {
                 self.live_bytes,
             );
         }
-        self.clear_dirty_owners();
-        self.clear_dirty_writes();
+        // Owner-tracking remembered-set precursor: NOT cleared at sweep
+        // completion. Its lifecycle is clear-at-BEGIN (`begin_collection`), the
+        // ABA-safe per-cycle discipline shared with the SATB sets; see the note
+        // in `begin_collection` and `complete_collection`.
         self.sweep_in_progress = false;
     }
 
@@ -7976,6 +7998,114 @@ pub(crate) mod alloc_probe {
 #[cfg(test)]
 mod ownership_tests {
     use super::*;
+
+    /// TASK 10 — the `dirty_owners` ABA regression.
+    ///
+    /// The owner-tracking side tables (`dirty_owners` / `dirty_owner_bits` /
+    /// `dirty_writes`) are the remembered-set precursor. Their dedup is keyed on
+    /// the owner's address bits. If an entry recorded in one window survives into
+    /// a later cycle's sweep, that cycle can FREE the owner and the arena can hand
+    /// its slot (same size class ⇒ same address AND tag ⇒ identical bits) to a new
+    /// object — whose barriered write is then wrongly deduped ("suppressed") by
+    /// the stale entry. This test drives exactly that sequence with REAL frees and
+    /// REAL deterministic arena slot reuse, and asserts the tables track the new
+    /// occupant, not the freed ghosts.
+    ///
+    /// It has teeth only under clear-at-BEGIN: revert `begin_collection`'s
+    /// `clear_dirty_owners()/clear_dirty_writes()` (restore the end-of-collection
+    /// clears) and BOTH the post-`begin_collection` `== 0` assertion and the final
+    /// `== 1` assertion fail (the stale O/Q entries linger, and O''s write is
+    /// deduped against O's ghost).
+    #[test]
+    fn dirty_owner_tracking_is_cleared_at_begin_so_freed_slot_reuse_is_not_deduped() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        heap.set_write_tracking_mode(WriteTrackingMode::OwnersAndRecords);
+        set_tagged_heap(&mut heap);
+
+        // --- Previous window: two GARBAGE owners O and Q, both mutated (barriered
+        //     write) so both land in the owner tables. Neither is rooted, so the
+        //     next collection will sweep them. ---
+        let o = heap.alloc_vector(vec![TaggedValue::fixnum(1), TaggedValue::fixnum(2)]);
+        let q = heap.alloc_vector(vec![TaggedValue::fixnum(3), TaggedValue::fixnum(4)]);
+        let o_addr = o.as_veclike_ptr().unwrap() as usize;
+        assert!(crate::tagged::mutate::set_vector_slot(
+            o,
+            0,
+            TaggedValue::fixnum(10)
+        ));
+        assert!(crate::tagged::mutate::set_vector_slot(
+            q,
+            0,
+            TaggedValue::fixnum(20)
+        ));
+        assert_eq!(
+            heap.dirty_owner_count(),
+            2,
+            "O and Q are both recorded dirty owners in this window"
+        );
+
+        // --- Start the collection that will free O and Q. Clear-at-begin empties
+        //     the owner tables HERE, before the sweep can free-and-reuse a slot.
+        //     (mark_all drains the internal runtime roots seeded by
+        //     begin_collection so only the unrooted O and Q are swept.) ---
+        heap.begin_collection();
+        heap.mark_all();
+        assert_eq!(
+            heap.dirty_owner_count(),
+            0,
+            "begin_collection must clear owner tracking (clear-at-begin): a stale \
+             pre-cycle entry that outlives this cycle's sweep is the ABA hazard",
+        );
+
+        // --- Sweep the vector arena: O and Q are unmarked ⇒ freed, their slots
+        //     returned to the class free list. ---
+        let vpages = heap.vector_arena.pages.len();
+        let (_live, freed) = heap.sweep_arena_pages_ranges((0, 0), (0, 0), (0, vpages), (0, 0));
+        assert!(
+            freed >= 2,
+            "the sweep must reclaim the two unrooted garbage vectors (freed={freed})",
+        );
+
+        // --- Deterministic reuse: allocating the same class pops the just-freed
+        //     slots off the free list, so O's exact address recurs. ---
+        let mut o_prime = None;
+        for _ in 0..64 {
+            let v = heap.alloc_vector(vec![TaggedValue::fixnum(0), TaggedValue::fixnum(0)]);
+            if v.as_veclike_ptr().unwrap() as usize == o_addr {
+                o_prime = Some(v);
+                break;
+            }
+        }
+        let o_prime =
+            o_prime.expect("arena must hand O's freed slot back to a new same-class vector");
+        assert_eq!(
+            o_prime.as_veclike_ptr().unwrap() as usize,
+            o_addr,
+            "O' must occupy O's reclaimed slot (identical owner bits)",
+        );
+
+        // --- The barriered write to O' must be recorded as a FRESH owner. Under
+        //     the ABA-prone clear-at-end lifecycle, O's ghost bits (== O''s bits)
+        //     would dedup this write away, and Q's freed-but-uncleared entry would
+        //     still inflate the count — so the table would read 2 ghosts, never
+        //     the one true owner O'. ---
+        assert!(crate::tagged::mutate::set_vector_slot(
+            o_prime,
+            1,
+            TaggedValue::fixnum(99)
+        ));
+        assert!(
+            heap.is_dirty_owner(o_prime),
+            "O''s write must be recorded in the owner tables"
+        );
+        assert_eq!(
+            heap.dirty_owner_count(),
+            1,
+            "exactly O' is dirty; a lingering ghost O (deduped) plus ghost Q \
+             (freed, never cleared) would make this 2 under the stale-dedup ABA",
+        );
+    }
 
     #[test]
     fn heap_identity_is_unique_across_heap_lifetimes() {
