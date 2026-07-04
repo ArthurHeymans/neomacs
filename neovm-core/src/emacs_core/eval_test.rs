@@ -13846,6 +13846,57 @@ fn jit_subr_spec_inplace_rewrite_calls_fresh_entry() {
     }
 }
 
+/// R2 phase 2 (Op::Call Many allowlist) engagement + parity: `re-search-forward`
+/// is an allowlisted `SubrFn::Many` builtin — round-1 EXCLUDED as non-fixed-arity
+/// — that now routes through the `SubrGeneral` subr shim. A hot `(re-search-forward
+/// re)` engages a spec site, fires the armed fast path, performs the identical
+/// search side effect (point move + match-state), and matches the interpreter on
+/// the RESULT and on `(point)`/`(match-beginning 0)`/`(match-end 0)`.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_subr_spec_many_re_search_forward_engages_and_matches() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    ev.eval_str("(insert \"hello world\")").expect("buffer content");
+    let hot = jit_subr_spec_caller("re-search-forward", 1, true);
+    let cold = jit_subr_spec_caller("re-search-forward", 1, false);
+    #[cfg(debug_assertions)]
+    let (entries0, fast0, _) = jit_subr_spec_counters();
+
+    fn probe(ev: &mut Context) -> String {
+        format_eval_result(&ev.eval_str("(list (point) (match-beginning 0) (match-end 0))"))
+    }
+    ev.eval_str("(goto-char (point-min))").expect("point to bob");
+    let native = ev
+        .funcall_general_untraced(hot, vec![Value::string("world")])
+        .expect("native re-search-forward");
+    let native_state = probe(&mut ev);
+    ev.eval_str("(goto-char (point-min))").expect("point to bob");
+    let interp = ev
+        .funcall_general_untraced(cold, vec![Value::string("world")])
+        .expect("interp re-search-forward");
+    let interp_state = probe(&mut ev);
+    assert_eq!(
+        native.bits(),
+        interp.bits(),
+        "re-search-forward result parity hot vs cold"
+    );
+    assert_eq!(
+        native_state, interp_state,
+        "point + match-state parity after the armed Many dispatch"
+    );
+    #[cfg(debug_assertions)]
+    {
+        let (entries1, fast1, _) = jit_subr_spec_counters();
+        assert!(
+            entries1 > entries0,
+            "the re-search-forward Many site routes through the subr spec shim"
+        );
+        assert!(fast1 > fast0, "the armed Many fast path must fire");
+    }
+}
+
 /// Build `(lambda (a1..aK) (CBSYM-NAME a1..aK))` as hand-rolled bytecode: the K
 /// args are pushed then consumed by a single `Op::CallBuiltinSym(name, K)` (the
 /// exact op R2 classifies). Callers disable the profitability gate (COMMIT 2)

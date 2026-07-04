@@ -70,7 +70,7 @@ use crate::emacs_core::eval::{
 use crate::emacs_core::intern::{SymId, intern, resolve_sym};
 use crate::emacs_core::symbol::Obarray;
 use crate::emacs_core::value::{Value, ValueKind};
-use crate::tagged::header::{ConsCell, SubrDispatchKind};
+use crate::tagged::header::{ConsCell, SubrDispatchKind, SubrFn};
 use crate::tagged::value::{
     FIXNUM_CHECK_MASK, FIXNUM_CHECK_VALUE, FIXNUM_SHIFT, TAG_BITS, TAG_CONS, TAG_MASK, TAG_STRING,
     TAG_SYMBOL,
@@ -6283,6 +6283,40 @@ struct SpecSite {
     kind: SpecCalleeKind,
 }
 
+/// R2 phase 2 — the NAME ALLOWLIST of `SubrFn::Many` builtins that an
+/// `Op::Call(n)` site is permitted to speculate on (classified as
+/// [`SpecCalleeKind::SubrGeneral`], reusing the round-1 subr shim). Chosen from
+/// the real interactive-session profile's `Op::Call` HOT group (re-search-forward
+/// 3.4%, parse-partial-sexp 4.65%, looking-at 1.78%, intern-soft 2.57%,
+/// put-text-property 1.92%, match-data/set-match-data, scan-sexps, ...) — all
+/// registered `SubrFn::Many`, which round-1's fixed-arity gate
+/// (`subr_entry_uses_fixed_value_call`) excludes by construction.
+///
+/// `Op::Call(n)` carries the EXACT nargs, and the armed path passes that exact
+/// slice to the Many subr (`call_spec_subr_stack` ->
+/// `dispatch_builtin_subr_from_stack_args_unchecked`'s `Many` arm, exact-length
+/// `.to_vec()` — NO nil-pad), so it is byte-identical to the generic/interpreter
+/// dispatch of the same site.
+///
+/// Membership is `SubrFn::Many` ONLY, never `ManySlice`: the `ManySlice`
+/// variadics (`+`/`logand`/`logior`/`logxor`/`list`/`vector`/`append`/`nconc`/
+/// `string-match`, all `max=None`) are rejected by the `SubrFn::Many` match in
+/// `subr_spec_kind`, independent of this list (asserted by
+/// `subr_spec_kind_rejects_registered_manyslice`).
+const SUBR_MANY_ALLOWLIST: &[&str] = &[
+    "re-search-forward",
+    "looking-at",
+    "parse-partial-sexp",
+    "match-data",
+    "set-match-data",
+    "scan-sexps",
+    "intern-soft",
+    "line-end-position",
+    "syntax-table",
+    "set-syntax-table",
+    "put-text-property",
+];
+
 /// Classify a compile-time function-cell binding for SUBR speculation at an
 /// `Op::Call(nargs)` site on `site_sym`, or `None` when the site must stay on
 /// the generic path. Every clause is load-bearing:
@@ -6291,14 +6325,6 @@ struct SpecSite {
 ///   builtins; special forms / context-callables have different call
 ///   protocols. Checked again at run time (fresh entry read) since entries
 ///   are rewritten in place.
-/// * FIXED-ARITY `A0..A8` only (`subr_entry_uses_fixed_value_call`) — the
-///   interpreter passes `Many`/`ManySlice` the EXACT-length argument vector
-///   (`dispatch_subr_func_unchecked`), so nil-padding them would diverge.
-///   (The armed dispatcher still handles an entry rewritten in place to
-///   `Many` correctly — the stack-args dispatcher passes the exact slice.)
-/// * `min_args <= nargs <= max_args` — a call that must signal
-///   wrong-number-of-arguments stays generic so the signal (payload, frame
-///   shape) is byte-identical.
 /// * `aset`/`fillarray` excluded on BOTH the site name and the resolved subr
 ///   name — their mutating-first-string-arg WRITEBACK protocol
 ///   (`Vm::mutates_first_arg_name` / `maybe_writeback_mutating_first_arg`)
@@ -6307,23 +6333,32 @@ struct SpecSite {
 ///   `writeback_mutating_callable_names` detects through the cell.
 /// * `funcall`/`apply`/`eval` excluded (both names) — re-entrant drivers;
 ///   depth/backtrace conservatism (`eval` IS a fixed-arity A2).
-/// * `vectorp` stays General (correct, just not a tag test): bool-vectors and
+///
+/// Then one of two disjoint arms:
+///
+/// * FIXED-ARITY `A0..A8` (`subr_entry_uses_fixed_value_call`), the round-1
+///   surface. `min_args <= nargs <= max_args`, else a call that must signal
+///   wrong-number-of-arguments stays generic (byte-identical payload/frame).
+///   `vectorp` stays General (correct, just not a tag test): bool-vectors and
 ///   sentinel char-tables are genuine `VecLikeType::Vector` objects that
-///   `builtin_vectorp_1` distinguishes semantically — an inline tag test
-///   would return `t` where the builtin returns `nil`. `keywordp`/`symbolp`
-///   stay General because their builtins consult `symbols-with-pos-enabled`.
+///   `builtin_vectorp_1` distinguishes semantically — an inline tag test would
+///   return `t` where the builtin returns `nil`. `keywordp`/`symbolp` stay
+///   General because their builtins consult `symbols-with-pos-enabled`.
+/// * ALLOWLISTED `SubrFn::Many` (R2 phase 2, [`SUBR_MANY_ALLOWLIST`]) — the
+///   armed path dispatches the EXACT-length arg slice to the Many subr (no
+///   nil-pad, so byte-identical to generic). `nargs >= min_args` always; when
+///   `max_args` is `Some`, also `nargs <= max_args` (an over-arity call stays
+///   generic for the identical signal). When `max_args` is `None`
+///   (`put-text-property`, registered `defsubr(...,0,None)` with its real 4..5
+///   range body-enforced in `textprop.rs`), permit any `nargs >= min_args`: the
+///   body self-checks and spec ≡ generic both reach that same body check.
+///   The site is CELL-DISPATCHED, so the round-1 guards (per-site epoch,
+///   `compiler_function_overrides_active`, fresh-entry re-read in
+///   `call_spec_subr_stack`) still deopt on advice/defalias/fset — unlike the
+///   name-canonical `Op::CallBuiltinSym` path, which is override-immune.
 fn subr_spec_kind(binding: Value, site_sym: SymId, nargs: usize) -> Option<SpecCalleeKind> {
     let (subr_sym, entry) = subr_entry_from_value(binding)?;
     if entry.dispatch_kind != SubrDispatchKind::Builtin {
-        return None;
-    }
-    if !Context::subr_entry_uses_fixed_value_call(entry) {
-        return None;
-    }
-    if nargs < entry.min_args as usize {
-        return None;
-    }
-    if entry.max_args.is_none_or(|max| nargs > max as usize) {
         return None;
     }
     let site_name = resolve_sym(site_sym);
@@ -6333,12 +6368,34 @@ fn subr_spec_kind(binding: Value, site_sym: SymId, nargs: usize) -> Option<SpecC
     }) {
         return None;
     }
-    Some(match (resolved_name, nargs) {
-        ("recordp", 1) => SpecCalleeKind::PredRecordp,
-        ("symbol-with-pos-p", 1) => SpecCalleeKind::PredSymbolWithPos,
-        ("equal-including-properties", 2) => SpecCalleeKind::EqInclProps,
-        _ => SpecCalleeKind::SubrGeneral,
-    })
+    if Context::subr_entry_uses_fixed_value_call(entry) {
+        if nargs < entry.min_args as usize {
+            return None;
+        }
+        if entry.max_args.is_none_or(|max| nargs > max as usize) {
+            return None;
+        }
+        Some(match (resolved_name, nargs) {
+            ("recordp", 1) => SpecCalleeKind::PredRecordp,
+            ("symbol-with-pos-p", 1) => SpecCalleeKind::PredSymbolWithPos,
+            ("equal-including-properties", 2) => SpecCalleeKind::EqInclProps,
+            _ => SpecCalleeKind::SubrGeneral,
+        })
+    } else if matches!(entry.function, Some(SubrFn::Many(_)))
+        && SUBR_MANY_ALLOWLIST.contains(&resolved_name)
+    {
+        if nargs < entry.min_args as usize {
+            return None;
+        }
+        // Some(max): enforce `nargs <= max`. None (`put-text-property`): the
+        // body self-enforces its real range, so permit any `nargs >= min`.
+        if entry.max_args.is_some_and(|max| nargs > max as usize) {
+            return None;
+        }
+        Some(SpecCalleeKind::SubrGeneral)
+    } else {
+        None
+    }
 }
 
 /// The `dispatch_vm_builtin_unrooted` special names (vm.rs) — VM-internal
@@ -11732,6 +11789,83 @@ mod tests {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /// COMMIT A compile-time assert: not one `SubrFn::Many` allowlist name is a
+    /// known `ManySlice` variadic — the two sets are disjoint by construction, so
+    /// no arithmetic/list ManySlice builtin can ever leak onto the allowlist.
+    #[test]
+    fn subr_spec_many_allowlist_disjoint_from_manyslice() {
+        const MANYSLICE: &[&str] = &[
+            "+", "logand", "logior", "logxor", "list", "vector", "append", "nconc",
+            "string-match",
+        ];
+        for name in SUBR_MANY_ALLOWLIST {
+            assert!(
+                !MANYSLICE.contains(name),
+                "{name:?} is a ManySlice variadic and must not be on SUBR_MANY_ALLOWLIST"
+            );
+        }
+    }
+
+    /// COMMIT A ManySlice-rejection: the classifier ACCEPTS every allowlisted
+    /// `SubrFn::Many` builtin (as `SubrGeneral`) at a representative in-range
+    /// arity, and REJECTS every registered `ManySlice` variadic
+    /// (`+`/logand/logior/logxor/list/vector/append/nconc/string-match). The
+    /// `SubrFn::Many` match in `subr_spec_kind` — NOT the allowlist — does the
+    /// ManySlice exclusion, so no ManySlice subr ever classifies regardless of
+    /// what the allowlist names.
+    #[test]
+    fn subr_spec_kind_rejects_registered_manyslice() {
+        use crate::emacs_core::eval::Context;
+        let ev = Context::new();
+        let sid = |name: &str| match Value::symbol(name).kind() {
+            crate::emacs_core::value::ValueKind::Symbol(id) => id,
+            _ => panic!("symbol"),
+        };
+        // ACCEPT: each allowlisted Many builtin classifies as SubrGeneral.
+        for (name, nargs) in [
+            ("re-search-forward", 1usize),
+            ("looking-at", 1),
+            ("parse-partial-sexp", 2),
+            ("match-data", 0),
+            ("set-match-data", 1),
+            ("scan-sexps", 2),
+            ("intern-soft", 1),
+            ("line-end-position", 0),
+            ("syntax-table", 0),
+            ("set-syntax-table", 1),
+            ("put-text-property", 4),
+        ] {
+            let id = sid(name);
+            let binding = ev
+                .obarray
+                .symbol_function_id(id)
+                .unwrap_or_else(|| panic!("{name} fbound"));
+            assert_eq!(
+                subr_spec_kind(binding, id, nargs),
+                Some(SpecCalleeKind::SubrGeneral),
+                "{name} (allowlisted Many) must classify as SubrGeneral"
+            );
+        }
+        // REJECT: every registered ManySlice variadic stays generic at any arity.
+        for name in [
+            "+", "logand", "logior", "logxor", "list", "vector", "append", "nconc",
+            "string-match",
+        ] {
+            let id = sid(name);
+            let binding = ev
+                .obarray
+                .symbol_function_id(id)
+                .unwrap_or_else(|| panic!("{name} fbound"));
+            for nargs in [0usize, 2, 4] {
+                assert_eq!(
+                    subr_spec_kind(binding, id, nargs),
+                    None,
+                    "{name} is ManySlice and must NEVER classify (nargs={nargs})"
+                );
             }
         }
     }
