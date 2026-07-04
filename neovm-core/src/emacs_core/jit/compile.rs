@@ -206,6 +206,22 @@ pub(crate) static SUBR_SPEC_FAST_COUNT: AtomicU64 = AtomicU64::new(0);
 #[cfg(debug_assertions)]
 pub(crate) static SUBR_SPEC_GENERIC_COUNT: AtomicU64 = AtomicU64::new(0);
 
+/// Debug-build counters for the R2 CallBuiltinSym intrinsic shims (Tier-A read
+/// `neovm_jit_cbsym_read` [COMMIT 5] + Tier-B dispatch-skip
+/// [`neovm_jit_cbsym_spec`]), mirroring `SUBR_SPEC_{COUNT,FAST,GENERIC}`. COUNT
+/// = shim entries; FAST = the
+/// shim completed the op itself; GENERIC = a [`STATUS_NEED_GENERIC`] bounce
+/// (the fresh static entry is no longer a plain builtin, `current-buffer`'s
+/// value was never materialized, or the `NEOVM_JIT_FORCE_CBSYM_GENERIC`
+/// harness). Engagement tests read these to prove the fast path fires instead
+/// of silently bouncing to the general CBSym lowering.
+#[cfg(debug_assertions)]
+pub(crate) static CBSYM_SPEC_COUNT: AtomicU64 = AtomicU64::new(0);
+#[cfg(debug_assertions)]
+pub(crate) static CBSYM_SPEC_FAST_COUNT: AtomicU64 = AtomicU64::new(0);
+#[cfg(debug_assertions)]
+pub(crate) static CBSYM_SPEC_GENERIC_COUNT: AtomicU64 = AtomicU64::new(0);
+
 /// Take the `Flow` stashed by a shim that returned [`STATUS_SIGNAL`].
 pub fn take_pending_flow() -> Option<Flow> {
     PENDING_FLOW.with(|p| p.borrow_mut().take())
@@ -1218,6 +1234,118 @@ extern "C" fn neovm_jit_eq_incl_props_spec(
     #[cfg(debug_assertions)]
     SUBR_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
     STATUS_NEED_GENERIC
+}
+
+/// R2 Tier-B CallBuiltinSym intrinsic (dispatch-skip): reproduce the
+/// `Op::CallBuiltinSym` interpreter arm EXACTLY, skipping only the
+/// `resolve_sym` → `builtin_name_id` → `dispatch_vm_builtin_unrooted`
+/// special-name string-switch round trip. CallBuiltinSym name-dispatches the
+/// STATIC subr table (`subr_from_sym_id(builtin_name_id(resolve_sym(sym)))`,
+/// vm.rs) and is advice/fset/override IMMUNE, so there is NO epoch guard and NO
+/// `compiler_function_overrides_active` gate: the shim RE-READS the live static
+/// entry each call (`lookup_global_subr_entry`, safe against in-place rewrites)
+/// and either
+///
+/// * `Some` + `dispatch_kind == Builtin` — dispatches via `funcall_general` on
+///   the name-canonical SUBR value (`subr_from_sym_id(sym)`; canonicalizes a
+///   name-alias, `Box::leak` process-stable). `funcall_general` IS the arm's
+///   own dispatch (vm.rs → `dispatch_vm_builtin_unrooted` → `funcall_general`),
+///   so this is byte-identical: a SUBR-value backtrace frame, the arity check
+///   vs the FRESH entry signalling `wrong-number-of-arguments` with the SUBR
+///   payload, exact-slice args (`Many` gets `into_vec`; fixed arity nil-pads
+///   after the arity gate), the debugger `dispatch_signal_result_if_needed`,
+///   and `unbind_to_with_result` — WITHOUT `with_bytecode_call_depth` (open-
+///   coded ops add no lisp-eval-depth level). The `maybe_quit` poll runs AFTER
+///   the op (GNU `Op::CallBuiltinSym` order), only on the Ok path. The R2 ship
+///   set excludes `aset`/`fillarray`, so the arm's mutating-first-arg writeback
+///   never applies and is correctly absent here.
+/// * anything else — [`STATUS_NEED_GENERIC`]. The per-site generated fallback
+///   re-runs the ORIGINAL general CBSym lowering (`neovm_jit_named_builtin`
+///   variant 1 → `Vm::callbuiltinsym_for_jit`), which reproduces
+///   void-function / invalid-function / the special-name arm exactly. Deferring
+///   every edge case there keeps THIS shim's correctness obligation to the
+///   clean `Some`+`Builtin` case only.
+///
+/// GC rooting: args are pushed onto the GC-traced `bc_buf` (rooted across the
+/// subr, which can allocate/GC/signal) — the [`neovm_jit_call_subr_spec`]
+/// scheme; the generated code rooted its residual operand stack via
+/// gc_save/gc_push before this call, and `funcall_general` additionally roots
+/// the args in its backtrace frame. `subr_from_sym_id`'s canonical subr object
+/// is `Box::leak`'d, so the callee value needs no root.
+/// SAFETY: same vmctx contract as [`neovm_jit_call`].
+///
+/// JIT-only by construction (NOT in `shim_names.rs`/`MIR_SHIM_NAMES`): CBSym
+/// spec sites exist only under `Some(obarray)`, and AOT compiles at `None`
+/// (`build_baseline_leaf_object`), so no AOT object can reference this symbol.
+extern "C" fn neovm_jit_cbsym_spec(
+    ctx: *mut u8,
+    sym: i64,
+    args_ptr: *const i64,
+    nargs: i64,
+    out: *mut i64,
+) -> i64 {
+    #[cfg(debug_assertions)]
+    CBSYM_SPEC_COUNT.fetch_add(1, Ordering::Relaxed);
+    let nargs = nargs as usize;
+    // SAFETY: see neovm_jit_call's function-level contract.
+    let ctx = unsafe { &mut *(ctx as *mut Context) };
+    let sym_id = SymId(sym as u32);
+    // Advice/fset/override-immune: NO epoch guard. Re-read the live static entry
+    // (in-place-rewrite safe). Not a plain builtin now → bounce so the general
+    // shim reproduces void/invalid-function exactly. FORCE_CBSYM_GENERIC forces
+    // every classified site down this bounce (harness).
+    let armed = !force_cbsym_generic()
+        && lookup_global_subr_entry(sym_id).is_some_and(|e| e.dispatch_kind == SubrDispatchKind::Builtin);
+    if !armed {
+        #[cfg(debug_assertions)]
+        CBSYM_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
+        return STATUS_NEED_GENERIC;
+    }
+    #[cfg(debug_assertions)]
+    CBSYM_SPEC_FAST_COUNT.fetch_add(1, Ordering::Relaxed);
+    // The name-canonical SUBR value the arm's funcall_general dispatches on.
+    let subr_value = Value::subr_from_sym_id(sym_id);
+    let saved = save_scratch_gc_roots();
+    // Root the args on the GC-traced bc_buf (like neovm_jit_call_subr_spec),
+    // then build the exact-length arg vector funcall_general copies into its
+    // backtrace frame.
+    let args_start = ctx.bc_buf.len();
+    for i in 0..nargs {
+        // SAFETY: the generated code stored exactly `nargs` argument words at
+        // `args_ptr` (its call-args slot) immediately before this call.
+        let v = Value::from_bits(unsafe { *args_ptr.add(i) } as usize);
+        ctx.bc_buf.push(v);
+    }
+    let args: LispArgVec = ctx.bc_buf[args_start..args_start + nargs]
+        .iter()
+        .copied()
+        .collect();
+    let res = ctx.funcall_general(subr_value, args);
+    ctx.bc_buf.truncate(args_start);
+    let status = match res {
+        Ok(value) => {
+            // Quit poll AFTER the op (GNU Op::CallBuiltinSym order; the arm polls
+            // maybe_quit only once the result is computed, and never on the
+            // error path).
+            match ctx.maybe_quit() {
+                Ok(()) => {
+                    // SAFETY: `out` is the generated code's result stack slot.
+                    unsafe { *out = value.bits() as i64 };
+                    STATUS_OK
+                }
+                Err(flow) => {
+                    stash_pending_flow(flow);
+                    STATUS_SIGNAL
+                }
+            }
+        }
+        Err(flow) => {
+            stash_pending_flow(flow);
+            STATUS_SIGNAL
+        }
+    };
+    restore_scratch_gc_roots(saved);
+    status
 }
 
 /// `Op::Throw`: stash `Flow::Throw{tag, value}` for the signal-exit path.
@@ -2416,6 +2544,19 @@ fn jit_force_slow_spec() -> bool {
     *FORCE.get_or_init(|| std::env::var("NEOVM_JIT_FORCE_SLOW_SPEC").as_deref() == Ok("1"))
 }
 
+/// Verification harness (R2): when `NEOVM_JIT_FORCE_CBSYM_GENERIC=1`, EVERY
+/// CallBuiltinSym intrinsic shim ([`neovm_jit_cbsym_spec`] +
+/// `neovm_jit_cbsym_read`) bounces to [`STATUS_NEED_GENERIC`] on every call,
+/// forcing the per-site generated fallback (the general CBSym lowering →
+/// `Vm::callbuiltinsym_for_jit`). A differential run with this on
+/// (`NEOVM_JIT_THRESHOLD=1`) proves the fallback path is byte-identical to the
+/// fast path — the CBSym analogue of [`jit_force_slow_spec`] / `jit_force_deopt`.
+fn force_cbsym_generic() -> bool {
+    use std::sync::OnceLock;
+    static FORCE: OnceLock<bool> = OnceLock::new();
+    *FORCE.get_or_init(|| std::env::var("NEOVM_JIT_FORCE_CBSYM_GENERIC").as_deref() == Ok("1"))
+}
+
 fn jit_profile_emit(f: &ByteCodeFunction, obarray: Option<&Obarray>, compiled: bool) {
     let Some(path) = jit_profile_path() else {
         return;
@@ -3580,8 +3721,9 @@ pub(crate) fn build_mir_leaf_fn<M: Module>(
         // only the referenced shims (call/apply/gc_*) are resolved at finalize.
         let rt = if needs_rt {
             // `module` is already `&mut M`; reborrow it for the call. The MIR
-            // tier never emits subr-speculated calls (subr_spec=false).
-            let refs = declare_rt_refs(&mut *module, fb.func, call_conv, ptr_ty, false)?;
+            // tier never emits subr-speculated or CBSym-intrinsic calls
+            // (subr_spec=false, cbsym_spec=false).
+            let refs = declare_rt_refs(&mut *module, fb.func, call_conv, ptr_ty, false, false)?;
             let vmctx_var = fb.declare_var(ptr_ty);
             let max_call_args = m
                 .blocks
@@ -4133,6 +4275,12 @@ struct RtRefs {
     call_subr_spec: Option<FuncRef>,
     pred_spec: Option<FuncRef>,
     eq_incl_props_spec: Option<FuncRef>,
+    /// The R2 Tier-B CallBuiltinSym intrinsic shim ([`neovm_jit_cbsym_spec`]),
+    /// declared ONLY when the body has a CBSym-kind spec site (`declare_rt_refs`'
+    /// `cbsym_spec` flag). Like the round-1 spec shims it is JIT-only
+    /// (`find_spec_sites` requires `Some(obarray)`), so an AOT `ObjectModule`
+    /// never declares it. `None` otherwise.
+    cbsym_spec: Option<FuncRef>,
 }
 
 /// Declare the runtime-shim imports into `module`/`func` and return the callable
@@ -4145,9 +4293,10 @@ struct RtRefs {
 /// calls `Module::declare_function`, a trait method available on both.
 ///
 /// `subr_spec`: declare the three JIT-only subr-speculation shims (Gap 1).
-/// Passed as TRUE only by `build_leaf_fn` when the body has subr-kind spec
-/// sites — which requires `Some(obarray)`, i.e. never AOT — so the shim names
-/// (absent from `shim_names.rs`) can never even be DECLARED into an
+/// `cbsym_spec`: declare the JIT-only R2 CallBuiltinSym intrinsic shim.
+/// Both are passed TRUE only by `build_leaf_fn` when the body has the matching
+/// spec sites — which requires `Some(obarray)`, i.e. never AOT — so the shim
+/// names (absent from `shim_names.rs`) can never even be DECLARED into an
 /// `ObjectModule`, independent of whether unreferenced declarations would
 /// reach the emitted object.
 fn declare_rt_refs<M: Module>(
@@ -4156,6 +4305,7 @@ fn declare_rt_refs<M: Module>(
     call_conv: cranelift_codegen::isa::CallConv,
     ptr_ty: Type,
     subr_spec: bool,
+    cbsym_spec: bool,
 ) -> Result<RtRefs, CompileError> {
     let i64t = types::I64;
     let mut sig_ret = Signature::new(call_conv); // () -> i64
@@ -4339,6 +4489,13 @@ fn declare_rt_refs<M: Module>(
     } else {
         None
     };
+    // R2 Tier-B CallBuiltinSym intrinsic shim — same shape as `sig_call`
+    // (vmctx, sym, args_ptr, nargs, out_ptr) -> status. JIT-only (see doc).
+    let cbsym_spec_id = if cbsym_spec {
+        Some(declare(module, "neovm_jit_cbsym_spec", &sig_call)?)
+    } else {
+        None
+    };
 
     Ok(RtRefs {
         gc_save: module.declare_func_in_func(save_id, func),
@@ -4379,6 +4536,7 @@ fn declare_rt_refs<M: Module>(
         call_subr_spec: subr_spec_refs.map(|(id, _, _)| module.declare_func_in_func(id, func)),
         pred_spec: subr_spec_refs.map(|(_, id, _)| module.declare_func_in_func(id, func)),
         eq_incl_props_spec: subr_spec_refs.map(|(_, _, id)| module.declare_func_in_func(id, func)),
+        cbsym_spec: cbsym_spec_id.map(|id| module.declare_func_in_func(id, func)),
     })
 }
 
@@ -5497,6 +5655,13 @@ fn lower_simple_op(
             if stack.len() < nargs {
                 return Err(CompileError::StackUnderflow);
             }
+            // R2: a Tier-B CallBuiltinSym spec site takes the dispatch-skip fast
+            // path (`neovm_jit_cbsym_spec`) with a NEED_GENERIC fallback to THIS
+            // op's original general lowering; Tier-A sites (COMMIT 5) and every
+            // other named-builtin op keep the general lowering. Spec sites exist
+            // only under `Some(obarray)`, so AOT never takes the fast path.
+            let cbsym_spec_b = matches!(op, Op::CallBuiltinSym(..))
+                && matches!(spec, Some((_, _, _, SpecCalleeKind::CbsymTierB)));
             let at = stack.len() - nargs;
             for (i, &v) in stack[at..].iter().enumerate() {
                 fb.ins().stack_store(v, rt.call_args_slot, (i * 8) as i32);
@@ -5515,7 +5680,6 @@ fn lower_simple_op(
                 Some(s)
             };
             let vmctx = fb.use_var(rt.vmctx_var);
-            let variant_v = fb.ins().iconst(types::I64, variant);
             // R2-E (must-nail #2): the named-builtin callee SymId is session-specific.
             // The JIT bakes it (`iconst(sym)`); AOT must RELOC it BY NAME — the op's
             // symbol Value was collected into the per-leaf reloc vector, so load its
@@ -5523,6 +5687,8 @@ fn lower_simple_op(
             // TAG_SYMBOL==0). Keyed on `reloc_index` presence: the JIT reloc set never
             // contains op-symbols (only heap consts), so JIT always bakes → byte-
             // identical. `Aset` (variant 2, sym==0) has no symbol → unchanged iconst.
+            // Shared by the fast-shim call, the direct general call, AND the
+            // fallback (all JIT-only when a CBSym spec site exists).
             let sym_v = match reloc_index
                 .get(&((sym as usize) << TAG_BITS | TAG_SYMBOL))
                 .filter(|_| variant != 2)
@@ -5539,10 +5705,23 @@ fn lower_simple_op(
             let args_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_args_slot, 0);
             let n_val = fb.ins().iconst(types::I64, nargs as i64);
             let out_addr = fb.ins().stack_addr(rt.ptr_ty, rt.call_result_slot, 0);
-            let call = fb.ins().call(
-                rt.refs.named_builtin,
-                &[vmctx, variant_v, sym_v, args_addr, n_val, out_addr],
-            );
+            // Fast path: the Tier-B intrinsic shim (dispatch skip); NEED_GENERIC
+            // routes to `generic_fallback` (the ORIGINAL named-builtin call).
+            let mut generic_fallback: Option<Block> = None;
+            let call = if cbsym_spec_b {
+                generic_fallback = Some(fb.create_block());
+                let f = rt
+                    .refs
+                    .cbsym_spec
+                    .ok_or(CompileError::UnsupportedOp("cbsym-spec-refs"))?;
+                fb.ins().call(f, &[vmctx, sym_v, args_addr, n_val, out_addr])
+            } else {
+                let variant_v = fb.ins().iconst(types::I64, variant);
+                fb.ins().call(
+                    rt.refs.named_builtin,
+                    &[vmctx, variant_v, sym_v, args_addr, n_val, out_addr],
+                )
+            };
             let status = fb.inst_results(call)[0];
             if let Some(s) = saved {
                 fb.ins().call(rt.refs.gc_restore, &[s]);
@@ -5550,7 +5729,47 @@ fn lower_simple_op(
             let se = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
             let cont = fb.create_block();
             let ok = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_OK);
-            fb.ins().brif(ok, cont, &[], se, &[]);
+            if let Some(gen_block) = generic_fallback {
+                // STATUS_OK -> cont; STATUS_NEED_GENERIC -> the general CBSym
+                // lowering; anything else -> STATUS_SIGNAL via the signal target.
+                let check = fb.create_block();
+                fb.ins().brif(ok, cont, &[], check, &[]);
+                fb.switch_to_block(check);
+                fb.seal_block(check);
+                let need_gen = fb.ins().icmp_imm(IntCC::Equal, status, STATUS_NEED_GENERIC);
+                fb.ins().brif(need_gen, gen_block, &[], se, &[]);
+                // Fallback: the ORIGINAL general CBSym lowering (variant 1 ->
+                // `Vm::callbuiltinsym_for_jit`). The fast shim left the args in
+                // `call_args_slot` untouched, so reuse `args_addr`; the residual
+                // stack was restored above, so re-root it around this call.
+                fb.switch_to_block(gen_block);
+                fb.seal_block(gen_block);
+                let saved_gen = if stack.is_empty() {
+                    None
+                } else {
+                    let c = fb.ins().call(rt.refs.gc_save, &[]);
+                    let s = fb.inst_results(c)[0];
+                    for &v in stack.iter() {
+                        fb.ins().call(rt.refs.gc_push, &[v]);
+                    }
+                    Some(s)
+                };
+                let vmctx_gen = fb.use_var(rt.vmctx_var);
+                let variant_gen = fb.ins().iconst(types::I64, variant);
+                let call_gen = fb.ins().call(
+                    rt.refs.named_builtin,
+                    &[vmctx_gen, variant_gen, sym_v, args_addr, n_val, out_addr],
+                );
+                let status_gen = fb.inst_results(call_gen)[0];
+                if let Some(s) = saved_gen {
+                    fb.ins().call(rt.refs.gc_restore, &[s]);
+                }
+                let se_gen = signal_target_for_site(fb, signal_exit, handlers, pending, stack);
+                let ok_gen = fb.ins().icmp_imm(IntCC::Equal, status_gen, STATUS_OK);
+                fb.ins().brif(ok_gen, cont, &[], se_gen, &[]);
+            } else {
+                fb.ins().brif(ok, cont, &[], se, &[]);
+            }
             fb.switch_to_block(cont);
             fb.seal_block(cont);
             let result = fb.ins().stack_load(types::I64, rt.call_result_slot, 0);
@@ -7126,6 +7345,9 @@ pub fn lower_leaf_full(
         "neovm_jit_eq_incl_props_spec",
         neovm_jit_eq_incl_props_spec as *const u8,
     );
+    // R2 CallBuiltinSym intrinsic shim (Tier-B dispatch-skip). Unconditional
+    // registration (declares are gated on a CBSym spec site); JIT-only.
+    builder.symbol("neovm_jit_cbsym_spec", neovm_jit_cbsym_spec as *const u8);
     let mut module = JITModule::new(builder);
     // has_backedge + needs_rt via the shared single-source helpers (R2-E) — same
     // logic as before, just factored so the baseline-AOT emit can reuse it.
@@ -7379,8 +7601,13 @@ fn build_leaf_fn<M: Module>(
             // own R2 shims (COMMIT 2), so a CBSym-only body never imports the
             // `Op::Call` spec shims.
             let subr_spec = spec_sites.values().any(|site| site.kind.is_round1_subr());
+            // The R2 CallBuiltinSym intrinsic shim (Tier-B dispatch-skip),
+            // likewise JIT-only (`Some(obarray)` gates `find_spec_sites`),
+            // declared only when a CBSym-kind site exists.
+            let cbsym_spec = spec_sites.values().any(|site| site.kind.is_cbsym());
             // `module` is already `&mut M`; reborrow it for the call.
-            let refs = declare_rt_refs(&mut *module, fb.func, call_conv, ptr_ty, subr_spec)?;
+            let refs =
+                declare_rt_refs(&mut *module, fb.func, call_conv, ptr_ty, subr_spec, cbsym_spec)?;
             let vmctx_var = fb.declare_var(ptr_ty);
             let max_call_args = ops
                 .iter()

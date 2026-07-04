@@ -13846,6 +13846,99 @@ fn jit_subr_spec_inplace_rewrite_calls_fresh_entry() {
     }
 }
 
+/// Build `(lambda (a1..aK) (CBSYM-NAME a1..aK))` as hand-rolled bytecode: the K
+/// args are pushed then consumed by a single `Op::CallBuiltinSym(name, K)` (the
+/// exact op R2 classifies). Callers disable the profitability gate (COMMIT 2)
+/// or rely on the COMMIT 3 re-weight.
+#[cfg(feature = "jit")]
+fn jit_cbsym_spec_caller(name: &str, nargs: usize, hot: bool) -> Value {
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::intern::{SymId, intern};
+    use crate::emacs_core::value::LambdaParams;
+    let mut f = ByteCodeFunction::new(LambdaParams {
+        required: (1..=nargs as u32).map(SymId).collect(),
+        optional: Vec::new(),
+        rest: None,
+    });
+    f.lexical = true;
+    let mut ops = Vec::new();
+    // Push a1..aK: each `StackRef(nargs-1)` walks the arg window as the pushes
+    // shift it (no callee constant — CallBuiltinSym carries the SymId).
+    for _ in 0..nargs {
+        ops.push(Op::StackRef((nargs - 1) as u16));
+    }
+    ops.push(Op::CallBuiltinSym(intern(name), nargs as u8));
+    ops.push(Op::Return);
+    f.ops = ops;
+    f.constants = Vec::new();
+    f.max_stack = 16;
+    if hot {
+        f.runtime.set_hot_for_test();
+    }
+    Value::make_bytecode(f)
+}
+
+/// Debug-build snapshot of the R2 CBSym-spec counters (entries/fast/generic).
+#[cfg(all(feature = "jit", debug_assertions))]
+fn jit_cbsym_spec_counters() -> (u64, u64, u64) {
+    use crate::emacs_core::jit::compile;
+    use std::sync::atomic::Ordering;
+    (
+        compile::CBSYM_SPEC_COUNT.load(Ordering::Relaxed),
+        compile::CBSYM_SPEC_FAST_COUNT.load(Ordering::Relaxed),
+        compile::CBSYM_SPEC_GENERIC_COUNT.load(Ordering::Relaxed),
+    )
+}
+
+/// R2 COMMIT 2 engagement + parity: hot Tier-B CallBuiltinSym sites (`length`
+/// pure, `current-column` state read, `goto-char` idempotent state mutation)
+/// route through `neovm_jit_cbsym_spec`, fire the fast path, and match the
+/// interpreter byte-for-byte.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_cbsym_spec_tierb_engages_and_matches() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    ev.eval_str("(insert \"hello world\")").expect("buffer setup");
+    #[cfg(debug_assertions)]
+    let (count0, fast0, _) = jit_cbsym_spec_counters();
+    let list = ev.eval_str("'(a b c d)").expect("list");
+    let cases: [(&str, usize, Vec<Value>); 3] = [
+        ("length", 1, vec![list]),
+        ("current-column", 0, vec![]),
+        ("goto-char", 1, vec![Value::make_int(3)]),
+    ];
+    for (name, nargs, args) in cases {
+        let hot = jit_cbsym_spec_caller(name, nargs, true);
+        let cold = jit_cbsym_spec_caller(name, nargs, false);
+        let native = ev
+            .funcall_general_untraced(hot, args.clone())
+            .unwrap_or_else(|e| panic!("native {name}: {e:?}"));
+        let interp = ev
+            .funcall_general_untraced(cold, args)
+            .unwrap_or_else(|e| panic!("interp {name}: {e:?}"));
+        assert_eq!(
+            native.bits(),
+            interp.bits(),
+            "{name}: Tier-B CBSym parity hot vs cold"
+        );
+    }
+    #[cfg(debug_assertions)]
+    {
+        let (count1, fast1, _) = jit_cbsym_spec_counters();
+        assert!(
+            count1 > count0,
+            "a Tier-B CBSym site must route through neovm_jit_cbsym_spec"
+        );
+        assert!(
+            fast1 > fast0,
+            "the Tier-B fast path must fire (not silently bounce to generic)"
+        );
+    }
+}
+
 /// End-to-end: the classic hot shapes the poisoning analysis used to BAIL on
 /// now compile — recursive fib (arithmetic after recursive calls) and a
 /// while-loop mixing a call with arithmetic (guards at the loop join). Both
