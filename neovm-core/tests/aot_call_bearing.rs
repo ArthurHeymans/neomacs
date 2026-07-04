@@ -88,8 +88,9 @@ fn aot_baseline_deep_rawslot_deopt_matches_interp() {
 /// R2-E E1b (must-nail #2): a baseline-tier AOT leaf calling a builtin via
 /// `Op::CallBuiltinSym` serves AOT==interp, with the callee SymId reloc'd BY NAME
 /// (recipe encodes the name; served result correct) — the cross-session-correct
-/// op-SymId reloc. Integration test: CallBuiltinSym lowers to the
-/// `neovm_jit_named_builtin` shim, which needs this shim-exporting binary.
+/// op-SymId reloc. Integration test: as of increment A the `length` CBSym site
+/// lowers to the Tier-B `neovm_jit_cbsym_spec` fast shim (was
+/// `neovm_jit_named_builtin`), which needs this shim-exporting binary.
 #[test]
 fn aot_baseline_callbuiltinsym_relocs_callee_by_name_and_matches_interp() {
     let dir = tempfile::tempdir().expect("tempdir");
@@ -105,6 +106,35 @@ fn aot_baseline_callbuiltinsym_relocs_callee_by_name_and_matches_interp() {
     }
     if let Err(e) = r {
         panic!("CallBuiltinSym AOT self-test failed: {e}");
+    }
+}
+
+/// R2 increment A (CBSym-in-AOT) — THE DLOPEN + FAST-SHIM proof. A baseline-tier
+/// AOT leaf whose body is a CallBuiltinSym intrinsic now emits the FAST shim
+/// (`neovm_jit_cbsym_read` for Tier-A `(point)` / `neovm_jit_cbsym_spec` for Tier-B
+/// `(length x)`) instead of the general `neovm_jit_named_builtin` path. A served
+/// `.so` must therefore bind those two newly-AOT-importable shims against the host
+/// at `dlopen` and RUN them — proving the shim-export (`#[unsafe(no_mangle)] pub` +
+/// `shim_names.rs` + `JIT_SHIM_ANCHOR` + per-shim `--export-dynamic-symbol`) works.
+/// The self-test also asserts the host fast-path counter moved (fast shim fired, no
+/// slow-path bounce) and the served result == interp. MUST be an integration test:
+/// the host's `neovm_jit_*` shims are exported into the dynamic symbol table only
+/// for integration-test binaries (see neovm-core/build.rs).
+#[test]
+fn aot_baseline_cbsym_intrinsic_hits_fast_shim_via_dlopen() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    // SAFETY: single-threaded setup before any AOT entry point reads these.
+    unsafe {
+        std::env::set_var("NEOVM_AOT", "force");
+        std::env::set_var("NEOVM_AOT_DIR", dir.path());
+    }
+    let r = neovm_core::emacs_core::jit::aot::testkit_cbsym_aot_fast_shim_selftest(dir.path());
+    unsafe {
+        std::env::remove_var("NEOVM_AOT");
+        std::env::remove_var("NEOVM_AOT_DIR");
+    }
+    if let Err(e) = r {
+        panic!("CBSym-in-AOT fast-shim self-test failed: {e}");
     }
 }
 
