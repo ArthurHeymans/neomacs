@@ -1434,6 +1434,17 @@ const _: () = assert!(
     "MacroObj must fit a 128-byte slot with its trailing free-list link \
      (bytes 120..128); bump the lambda/macro stride if the struct grew",
 );
+// Record (task 03/3b): `RecordObj` is VecLikeHeader 24 + LispValueVec 24 =
+// 48B → the 64B class (1024 slots/page, link in bytes 56..64), shared with
+// string/vector in its OWN arena. `RecordObj` backs BOTH the `Record` and
+// `WindowConfiguration` type tags (`alloc_record` / `alloc_window_configuration`
+// — same Rust type, distinct tag), so both funnel to `record_arena`. If this
+// assert fails the struct grew — bump the stride; never squeeze the link.
+const _: () = assert!(
+    size_of::<RecordObj>() <= 56,
+    "RecordObj must fit a 64-byte slot with its trailing free-list link \
+     (bytes 56..64); bump the record stride if the struct grew",
+);
 
 #[cfg(test)]
 pub(crate) static LIVE_FLOAT_PAGES: AtomicUsize = AtomicUsize::new(0);
@@ -1447,6 +1458,8 @@ pub(crate) static LIVE_BYTECODE_PAGES: AtomicUsize = AtomicUsize::new(0);
 pub(crate) static LIVE_LAMBDA_PAGES: AtomicUsize = AtomicUsize::new(0);
 #[cfg(test)]
 pub(crate) static LIVE_MACRO_PAGES: AtomicUsize = AtomicUsize::new(0);
+#[cfg(test)]
+pub(crate) static LIVE_RECORD_PAGES: AtomicUsize = AtomicUsize::new(0);
 
 impl PagedObject for FloatObj {
     const SLOT_BYTES: usize = 32;
@@ -1512,6 +1525,18 @@ impl PagedObject for MacroObj {
     }
 }
 
+impl PagedObject for RecordObj {
+    // 64B class (shared stride, own arena): 1024 slots/page, link 56..64.
+    // Backs both the Record and WindowConfiguration type tags.
+    const SLOT_BYTES: usize = 64;
+    const KIND: HeapObjectKind = HeapObjectKind::VecLike;
+    const CLASS: &'static str = "record";
+    #[cfg(test)]
+    fn live_page_counter() -> &'static AtomicUsize {
+        &LIVE_RECORD_PAGES
+    }
+}
+
 /// Slot count of a float page (test scenarios size their populations off it).
 #[cfg(test)]
 const FLOAT_PAGE_SLOTS: usize = OBJECT_PAGE_BYTES / <FloatObj as PagedObject>::SLOT_BYTES;
@@ -1524,6 +1549,9 @@ const BYTECODE_PAGE_SLOTS: usize = OBJECT_PAGE_BYTES / <ByteCodeObj as PagedObje
 /// applies to both arenas.
 #[cfg(test)]
 const LAMBDA_PAGE_SLOTS: usize = OBJECT_PAGE_BYTES / <LambdaObj as PagedObject>::SLOT_BYTES;
+/// Slot count of a record page (1024: 64B stride divides 64KB exactly).
+#[cfg(test)]
+const RECORD_PAGE_SLOTS: usize = OBJECT_PAGE_BYTES / <RecordObj as PagedObject>::SLOT_BYTES;
 
 /// One 64KB-aligned arena page of fixed-stride `T` slots.
 ///
@@ -2641,6 +2669,9 @@ pub struct TaggedHeap {
     lambda_arena: ObjectArena<LambdaObj>,
     /// Macros (task 03/3b): shares the 128B stride in its OWN arena.
     macro_arena: ObjectArena<MacroObj>,
+    /// Records (task 03/3b): 64B class, own arena — backs both the Record and
+    /// WindowConfiguration type tags (same `RecordObj`, distinct tag).
+    record_arena: ObjectArena<RecordObj>,
     /// Cons cells loaded directly from a mapped pdump image.  GNU's pdumper
     /// uses external mark bits for dumped objects rather than writing mark
     /// state into malloc/GC allocation headers; mirror that for mapped conses.
@@ -2886,6 +2917,7 @@ pub struct TaggedHeap {
     sweep_bytecode_page_cursor: usize,
     sweep_lambda_page_cursor: usize,
     sweep_macro_page_cursor: usize,
+    sweep_record_page_cursor: usize,
     /// Non-cons objects detached from `all_objects` at sweep start, reclaimed
     /// incrementally. New non-cons allocations link onto a fresh `all_objects`
     /// and are not swept this cycle.
@@ -2956,6 +2988,7 @@ impl TaggedHeap {
             bytecode_arena: ObjectArena::new(),
             lambda_arena: ObjectArena::new(),
             macro_arena: ObjectArena::new(),
+            record_arena: ObjectArena::new(),
             mapped_cons_ranges: Vec::new(),
             mapped_float_ranges: Vec::new(),
             mapped_veclike_objects: Vec::new(),
@@ -3021,6 +3054,7 @@ impl TaggedHeap {
             sweep_bytecode_page_cursor: 0,
             sweep_lambda_page_cursor: 0,
             sweep_macro_page_cursor: 0,
+            sweep_record_page_cursor: 0,
             sweep_noncons_pending: std::ptr::null_mut(),
             sweep_noncons_live_bytes: 0,
             sweep_mark_us: 0,
@@ -4099,29 +4133,51 @@ impl TaggedHeap {
     }
 
     /// Allocate a record.
+    ///
+    /// Allocated from the RECORD ARENA PAGES (task 03/3b): the single
+    /// `RecordObj` allocation chokepoint alongside `alloc_window_configuration`
+    /// (same Rust type, distinct tag — both funnel to `record_arena`). One
+    /// FULL-header `ptr::write` (a stale kind would type-confuse the Drop of
+    /// the garbage slot `Vec`), unconditional born-at-parity store; NO
+    /// intrusive-list / addr-set entry (owned via the page-span oracle,
+    /// routed by `owns_veclike_object`). The page sweep's `drop_in_place`
+    /// frees the record's slot `Vec`. Marking is unchanged (deferred).
     pub fn alloc_record(&mut self, items: Vec<TaggedValue>) -> TaggedValue {
         self.add_memory_use_count(MemoryUseCountSlot::VectorCells, items.len() as u64);
-        let obj = Box::new(RecordObj {
-            header: VecLikeHeader::new(VecLikeType::Record),
-            data: items.into(),
-        });
-        let ptr = Box::into_raw(obj);
-        self.link_veclike(ptr as *mut VecLikeHeader);
-        self.allocated_count += 1;
-        self.note_allocation_bytes(unsafe { Self::record_object_bytes(&*ptr) });
-        unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
+        self.alloc_record_like(VecLikeType::Record, items)
     }
 
     /// Allocate a window configuration. Structurally a record (`{header, data}`)
     /// but tagged `WindowConfiguration` so it is a distinct pseudovector type.
+    /// Shares the record arena (same `RecordObj`).
     pub fn alloc_window_configuration(&mut self, items: Vec<TaggedValue>) -> TaggedValue {
         self.add_memory_use_count(MemoryUseCountSlot::VectorCells, items.len() as u64);
-        let obj = Box::new(RecordObj {
-            header: VecLikeHeader::new(VecLikeType::WindowConfiguration),
-            data: items.into(),
-        });
-        let ptr = Box::into_raw(obj);
-        self.link_veclike(ptr as *mut VecLikeHeader);
+        self.alloc_record_like(VecLikeType::WindowConfiguration, items)
+    }
+
+    /// Shared `RecordObj` page allocator for the `Record` and
+    /// `WindowConfiguration` tags. `add_memory_use_count` is the caller's job
+    /// (both currently count `VectorCells`).
+    fn alloc_record_like(&mut self, tag: VecLikeType, items: Vec<TaggedValue>) -> TaggedValue {
+        debug_assert!(matches!(
+            tag,
+            VecLikeType::Record | VecLikeType::WindowConfiguration
+        ));
+        let ptr = self.record_arena.alloc_slot();
+        unsafe {
+            // FULL-HEADER WRITE: never partially reuse prior slot bytes.
+            std::ptr::write(
+                ptr,
+                RecordObj {
+                    header: VecLikeHeader::new(tag),
+                    data: items.into(),
+                },
+            );
+            // BORN-AT-PARITY, unconditionally.
+            (*ptr).header.gc.set_marked(self.mark_parity);
+        }
+        #[cfg(test)]
+        alloc_probe::record(ptr as *const GcHeader, self.non_cons_object_addrs.len());
         self.allocated_count += 1;
         self.note_allocation_bytes(unsafe { Self::record_object_bytes(&*ptr) });
         unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
@@ -4674,6 +4730,7 @@ impl TaggedHeap {
         // closures are loadup-heavy); their arenas retire full pages too.
         walk_one(&mut self.lambda_arena);
         walk_one(&mut self.macro_arena);
+        walk_one(&mut self.record_arena);
     }
 
     /// Scan every permanent object (mapped dump + tenured old gen) for edges to
@@ -5305,6 +5362,9 @@ impl TaggedHeap {
         for slot in self.macro_arena.collect_allocated_slots() {
             push(slot as *mut GcHeader);
         }
+        for slot in self.record_arena.collect_allocated_slots() {
+            push(slot as *mut GcHeader);
+        }
         out
     }
 
@@ -5334,6 +5394,9 @@ impl TaggedHeap {
             push(slot as *mut GcHeader);
         }
         for slot in self.macro_arena.collect_allocated_slots() {
+            push(slot as *mut GcHeader);
+        }
+        for slot in self.record_arena.collect_allocated_slots() {
             push(slot as *mut GcHeader);
         }
         out
@@ -5824,6 +5887,7 @@ impl TaggedHeap {
             (0, self.bytecode_arena.pages.len()),
             (0, self.lambda_arena.pages.len()),
             (0, self.macro_arena.pages.len()),
+            (0, self.record_arena.pages.len()),
         );
         let mapped_object_live_bytes = self.mapped_non_cons_live_bytes();
         self.live_bytes = cons_live_bytes
@@ -6509,6 +6573,7 @@ impl TaggedHeap {
         self.sweep_bytecode_page_cursor = 0;
         self.sweep_lambda_page_cursor = 0;
         self.sweep_macro_page_cursor = 0;
+        self.sweep_record_page_cursor = 0;
         self.sweep_noncons_live_bytes = 0;
         self.sweep_mark_us = self.incremental_mark_us;
         self.sweep_bytes_before = bytes_before;
@@ -6573,6 +6638,7 @@ impl TaggedHeap {
                     (0, 0),
                     (0, 0),
                     (0, 0),
+                    (0, 0),
                 );
                 self.sweep_noncons_live_bytes = self.sweep_noncons_live_bytes.saturating_add(live);
                 float_freed += freed;
@@ -6587,6 +6653,7 @@ impl TaggedHeap {
                 let (live, freed) = self.sweep_arena_pages_ranges(
                     (0, 0),
                     (idx, idx + 1),
+                    (0, 0),
                     (0, 0),
                     (0, 0),
                     (0, 0),
@@ -6609,6 +6676,7 @@ impl TaggedHeap {
                     (0, 0),
                     (0, 0),
                     (0, 0),
+                    (0, 0),
                 );
                 self.sweep_noncons_live_bytes = self.sweep_noncons_live_bytes.saturating_add(live);
                 float_freed += freed;
@@ -6625,6 +6693,7 @@ impl TaggedHeap {
                     (0, 0),
                     (0, 0),
                     (idx, idx + 1),
+                    (0, 0),
                     (0, 0),
                     (0, 0),
                 );
@@ -6645,6 +6714,7 @@ impl TaggedHeap {
                     (0, 0),
                     (idx, idx + 1),
                     (0, 0),
+                    (0, 0),
                 );
                 self.sweep_noncons_live_bytes = self.sweep_noncons_live_bytes.saturating_add(live);
                 float_freed += freed;
@@ -6663,10 +6733,30 @@ impl TaggedHeap {
                     (0, 0),
                     (0, 0),
                     (idx, idx + 1),
+                    (0, 0),
                 );
                 self.sweep_noncons_live_bytes = self.sweep_noncons_live_bytes.saturating_add(live);
                 float_freed += freed;
                 self.sweep_macro_page_cursor += 1;
+                swept_pages += 1;
+            }
+            let mut swept_pages = 0usize;
+            while swept_pages < budget
+                && self.sweep_record_page_cursor < self.record_arena.pages.len()
+            {
+                let idx = self.sweep_record_page_cursor;
+                let (live, freed) = self.sweep_arena_pages_ranges(
+                    (0, 0),
+                    (0, 0),
+                    (0, 0),
+                    (0, 0),
+                    (0, 0),
+                    (0, 0),
+                    (idx, idx + 1),
+                );
+                self.sweep_noncons_live_bytes = self.sweep_noncons_live_bytes.saturating_add(live);
+                float_freed += freed;
+                self.sweep_record_page_cursor += 1;
                 swept_pages += 1;
             }
         }
@@ -6711,7 +6801,8 @@ impl TaggedHeap {
             && self.sweep_vector_page_cursor >= self.vector_arena.pages.len()
             && self.sweep_bytecode_page_cursor >= self.bytecode_arena.pages.len()
             && self.sweep_lambda_page_cursor >= self.lambda_arena.pages.len()
-            && self.sweep_macro_page_cursor >= self.macro_arena.pages.len();
+            && self.sweep_macro_page_cursor >= self.macro_arena.pages.len()
+            && self.sweep_record_page_cursor >= self.record_arena.pages.len();
         let slice_us = t0.elapsed().as_micros() as u64;
         self.sweep_slice_us_total += slice_us;
         self.sweep_slice_count += 1;
@@ -7351,12 +7442,17 @@ impl TaggedHeap {
     /// tenured-skip, drop-in-place-before-bit-clear, retired-page skip).
     /// Vector slots are evicted from the incremental vector registry at the
     /// free hook — page vectors never pass `unregister_vector_object`.
-    /// Bytecode / lambda / macro have no side registry: their free hook is a
-    /// no-op (the `drop_in_place` inside `sweep_range` frees the REAL payload
-    /// — bytecode's ops + constants vectors, params, GNU byte maps, docstring;
-    /// lambda/macro's closure slot Vec + cached params).
+    /// Bytecode / lambda / macro / record have no side registry: their free
+    /// hook is a no-op (the `drop_in_place` inside `sweep_range` frees the
+    /// REAL payload — bytecode's ops + constants vectors, params, GNU byte
+    /// maps, docstring; lambda/macro/record's slot `Vec`).
     ///
     /// Returns `(survivor bytes, slots freed)` summed over the classes.
+    // One `(start, end)` per size class — a mechanical fan-out over the
+    // per-class arenas, not distinct conceptual parameters. The eager path
+    // passes every class's full range; the incremental path passes one real
+    // range and `(0, 0)` for the rest.
+    #[allow(clippy::too_many_arguments)]
     fn sweep_arena_pages_ranges(
         &mut self,
         float_range: (usize, usize),
@@ -7365,6 +7461,7 @@ impl TaggedHeap {
         bytecode_range: (usize, usize),
         lambda_range: (usize, usize),
         macro_range: (usize, usize),
+        record_range: (usize, usize),
     ) -> (usize, usize) {
         let parity = self.mark_parity;
         let (fl, ff) = self
@@ -7382,6 +7479,9 @@ impl TaggedHeap {
         let (mal, maf) =
             self.macro_arena
                 .sweep_range(macro_range.0, macro_range.1, parity, |_| {});
+        let (rel, ref_) =
+            self.record_arena
+                .sweep_range(record_range.0, record_range.1, parity, |_| {});
         let TaggedHeap {
             vector_arena,
             vector_object_addrs,
@@ -7391,9 +7491,9 @@ impl TaggedHeap {
             let removed = vector_object_addrs.remove(&addr);
             debug_assert!(removed, "freed page vector was not in the registry");
         });
-        let freed = ff + sf + vf + bf + laf + maf;
+        let freed = ff + sf + vf + bf + laf + maf + ref_;
         self.allocated_count = self.allocated_count.saturating_sub(freed);
-        (fl + sl + vl + bl + lal + mal, freed)
+        (fl + sl + vl + bl + lal + mal + rel, freed)
     }
 
     /// `(total mapped objects, mapped objects currently marked)`.
@@ -7560,7 +7660,8 @@ impl TaggedHeap {
 
     #[inline]
     fn owns_veclike_object(&self, ptr: *const u8) -> bool {
-        // `VecLikeType::Vector`, `ByteCode`, `Lambda`, and `Macro` are paged
+        // `VecLikeType::Vector`, `ByteCode`, `Lambda`, `Macro`, and `Record`
+        // (incl. the `WindowConfiguration` tag — same `RecordObj`) are paged
         // (each in its own class arena — distinct registries, so a hit is
         // never a cross-class collision); every other veclike is a residual
         // `Box` in the addr-set.
@@ -7569,6 +7670,7 @@ impl TaggedHeap {
                 || self.bytecode_arena.owns(ptr)
                 || self.lambda_arena.owns(ptr)
                 || self.macro_arena.owns(ptr)
+                || self.record_arena.owns(ptr)
                 || self.non_cons_object_addrs.contains(&(ptr as usize)))
     }
 
@@ -7600,6 +7702,7 @@ impl TaggedHeap {
                 || self.bytecode_arena.owns(ptr)
                 || self.lambda_arena.owns(ptr)
                 || self.macro_arena.owns(ptr)
+                || self.record_arena.owns(ptr)
                 || self.float_arena.owns(ptr)
                 || self.non_cons_object_addrs.contains(&(ptr as usize)))
     }
@@ -7732,6 +7835,12 @@ impl TaggedHeap {
             parity,
             &mut total_marked,
         );
+        verify_arena_slots(
+            &self.record_arena,
+            &self.non_cons_object_addrs,
+            parity,
+            &mut total_marked,
+        );
         tracing::trace!(
             "GC verify: {} marked non-cons objects, all owned",
             total_marked
@@ -7765,6 +7874,7 @@ impl TaggedHeap {
         self.assert_one_arena_coherent(&self.bytecode_arena);
         self.assert_one_arena_coherent(&self.lambda_arena);
         self.assert_one_arena_coherent(&self.macro_arena);
+        self.assert_one_arena_coherent(&self.record_arena);
         // Vector registry ⊇ page vector slots (page alloc inserts; page sweep
         // removes). The registry may also hold residual Box vectors.
         for slot in self.vector_arena.collect_allocated_slots() {
@@ -7809,6 +7919,20 @@ impl TaggedHeap {
             assert!(
                 !self.vector_object_addrs.contains(&(slot as usize)),
                 "macro arena slot {slot:p} must NOT be in the vector registry",
+            );
+        }
+        // Record slots carry EITHER the Record or WindowConfiguration tag
+        // (same `RecordObj`, distinct pseudovector type) and never leak into
+        // the vector registry.
+        for slot in self.record_arena.collect_allocated_slots() {
+            let tag = unsafe { (*(slot as *const VecLikeHeader)).type_tag };
+            assert!(
+                matches!(tag, VecLikeType::Record | VecLikeType::WindowConfiguration),
+                "record arena slot {slot:p} carries a non-Record/WindowConfiguration tag ({tag:?})",
+            );
+            assert!(
+                !self.vector_object_addrs.contains(&(slot as usize)),
+                "record arena slot {slot:p} must NOT be in the vector registry",
             );
         }
     }
@@ -7951,14 +8075,14 @@ impl Drop for TaggedHeap {
         }
         // ConsBlocks are dropped automatically (they implement Drop).
         // Object arena pages likewise: page floats/strings/vectors/bytecode/
-        // lambdas/macros are on NONE of the lists above (so the walk cannot
-        // hand a page pointer to `free_gc_object`'s `Box::from_raw`), and the
-        // arena fields drop after this body, freeing every page via
+        // lambdas/macros/records are on NONE of the lists above (so the walk
+        // cannot hand a page pointer to `free_gc_object`'s `Box::from_raw`),
+        // and the arena fields drop after this body, freeing every page via
         // `ObjectPage::drop`, which walks the allocated slots and
         // `drop_in_place`s each live object (strings free their byte storage
         // + interval tables, vectors their element `Vec`, bytecode its
         // ops/constants vectors + params + GNU byte maps + docstring,
-        // lambdas/macros their closure slot `Vec` + cached params; floats are
+        // lambdas/macros/records their slot `Vec` + cached params; floats are
         // POD and the walk compiles out) before releasing the page storage —
         // retired pages included. The concurrent-mark join at the top of this
         // body has already reclaimed exclusive ownership, so the GC thread
@@ -8291,8 +8415,15 @@ mod ownership_tests {
         // --- Sweep the vector arena: O and Q are unmarked ⇒ freed, their slots
         //     returned to the class free list. ---
         let vpages = heap.vector_arena.pages.len();
-        let (_live, freed) =
-            heap.sweep_arena_pages_ranges((0, 0), (0, 0), (0, vpages), (0, 0), (0, 0), (0, 0));
+        let (_live, freed) = heap.sweep_arena_pages_ranges(
+            (0, 0),
+            (0, 0),
+            (0, vpages),
+            (0, 0),
+            (0, 0),
+            (0, 0),
+            (0, 0),
+        );
         assert!(
             freed >= 2,
             "the sweep must reclaim the two unrooted garbage vectors (freed={freed})",
@@ -14518,6 +14649,689 @@ mod lambda_macro_arena_tests {
     #[test]
     fn macro_tenure_retire_and_teardown_verified() {
         macro_tenure_retire_and_teardown_body(true);
+    }
+}
+
+/// RECORD ARENA test suite (task 03/3b): the 64B class (1024 slots/page,
+/// shared stride, OWN arena) backing BOTH the `Record` and
+/// `WindowConfiguration` type tags. Covers page-span oracle exactness,
+/// ownership-tracks-sweep, two-cycle parity survival/reclaim, the
+/// deferred-at-termination resolution (TRAP A — records stay DEFERRED for
+/// marking), adversarial freed-slot staleness, `drop_in_place` of the slot
+/// `Vec` (variable-size live-bytes on both recompute sites + teardown
+/// counters), loadup-shaped tenure + FULL-page retirement (C1), mixed-page
+/// parity survival, and the WindowConfiguration dual-tag sharing the arena.
+/// Scenarios run plain and (where the partition matters) VERIFY_PARTITION.
+#[cfg(test)]
+mod record_arena_tests {
+    use super::*;
+
+    fn arm_partition(heap: &mut TaggedHeap, verify: bool) {
+        if verify {
+            unsafe { std::env::set_var("NEOVM_GC_VERIFY_PARTITION", "1") };
+        }
+        heap.extend_dump_span(4096, 16);
+    }
+
+    fn run_concurrent_cycle(heap: &mut TaggedHeap, roots: &[TaggedValue]) {
+        heap.concurrent_begin();
+        for &root in roots {
+            heap.seed_root(root);
+        }
+        heap.launch_concurrent_mark();
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        for &root in roots {
+            heap.seed_root(root);
+        }
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+        assert!(!heap.sweep_in_progress());
+    }
+
+    /// slot 0 = fixnum IDENTITY, slot 1 = `child`, padded to `n` NILs.
+    fn record_items(id: i64, child: TaggedValue, n: usize) -> Vec<TaggedValue> {
+        let mut v = vec![TaggedValue::NIL; n.max(2)];
+        v[0] = TaggedValue::fixnum(id);
+        v[1] = child;
+        v
+    }
+    fn rec_ptr(v: TaggedValue) -> *const u8 {
+        v.as_veclike_ptr().unwrap() as *const u8
+    }
+    fn rec_slot(v: TaggedValue, i: usize) -> TaggedValue {
+        let obj = unsafe { &*(v.as_veclike_ptr().unwrap() as *const RecordObj) };
+        obj.data.as_slice()[i]
+    }
+
+    /// (a) PAGE-SPAN ORACLE EXACTNESS for the 64B record class + cross-class
+    /// no-collision (incl. the same-stride string/vector arenas).
+    #[test]
+    fn record_page_span_oracle_freed_slot_exactness() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let keep = heap.alloc_record(record_items(1, TaggedValue::NIL, 4));
+        let dead = heap.alloc_record(record_items(2, TaggedValue::NIL, 4));
+        let keep2 = heap.alloc_record(record_items(3, TaggedValue::NIL, 4));
+        let v = heap.alloc_vector(vec![TaggedValue::fixnum(1); 4]);
+        let dead_addr = rec_ptr(dead) as usize;
+
+        assert_eq!(heap.non_cons_object_addrs.len(), 0);
+        assert!(heap.record_arena.owns(rec_ptr(dead)));
+
+        heap.collect_exact([keep, keep2, v].into_iter());
+
+        let b_addr = rec_ptr(keep) as usize;
+        assert!(heap.record_arena.owns(b_addr as *const u8));
+        assert!(heap.owns_non_cons_object(b_addr as *const u8));
+        assert!(heap.owns_veclike_object(b_addr as *const u8));
+        assert!(!heap.record_arena.owns(dead_addr as *const u8));
+        assert!(!heap.owns_non_cons_object(dead_addr as *const u8));
+        assert!(!heap.record_arena.owns((b_addr + 8) as *const u8));
+        assert!(!heap.record_arena.owns((b_addr + 32) as *const u8));
+        assert!(!heap.record_arena.owns((b_addr + 1) as *const u8));
+        let page_base = ObjectPage::<RecordObj>::page_base_for_ptr(b_addr as *const RecordObj);
+        let beyond_bump = page_base + 800 * <RecordObj as PagedObject>::SLOT_BYTES;
+        assert!(!heap.record_arena.owns(beyond_bump as *const u8));
+        // Same-stride sibling arenas (vector/string 64B) never collide.
+        let v_addr = v.as_veclike_ptr().unwrap() as usize;
+        assert!(!heap.record_arena.owns(v_addr as *const u8));
+        assert!(!heap.vector_arena.owns(b_addr as *const u8));
+        assert!(!heap.string_arena.owns(b_addr as *const u8));
+        assert!(!heap.float_arena.owns(b_addr as *const u8));
+        heap.assert_object_arenas_coherent();
+    }
+
+    /// (g) ownership-index-tracks-sweep; addr-set stays empty; payload intact.
+    #[test]
+    fn record_ownership_tracks_sweep() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let live = heap.alloc_record(record_items(10, TaggedValue::NIL, 6));
+        let dead = heap.alloc_record(record_items(20, TaggedValue::NIL, 6));
+        let live_ptr = rec_ptr(live);
+        let dead_ptr = rec_ptr(dead);
+
+        assert!(heap.owns_non_cons_object(live_ptr));
+        assert!(heap.owns_non_cons_object(dead_ptr));
+        assert_eq!(heap.non_cons_object_addrs.len(), 0);
+
+        heap.collect_exact(std::iter::once(live));
+
+        assert!(heap.record_arena.owns(live_ptr));
+        assert!(!heap.record_arena.owns(dead_ptr));
+        assert_eq!(heap.non_cons_object_addrs.len(), 0);
+        assert_eq!(rec_slot(live, 0).as_fixnum(), Some(10));
+        heap.assert_object_arenas_coherent();
+    }
+
+    /// (b) Parity two-cycle survival/reclaim.
+    fn parity_two_cycle_record_survival_and_reclaim_body(verify: bool) {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        if verify {
+            arm_partition(&mut heap, true);
+        }
+
+        let mut spine = TaggedValue::fixnum(0);
+        for i in 0..100_000 {
+            spine = heap.alloc_cons(TaggedValue::fixnum(i), spine);
+        }
+        heap.collect_exact(std::iter::once(spine));
+        assert!(heap.should_run_concurrent());
+
+        heap.concurrent_begin();
+        heap.seed_root(spine);
+        heap.launch_concurrent_mark();
+        let b = heap.alloc_record(record_items(25, TaggedValue::NIL, 4));
+        let b_ptr = rec_ptr(b);
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(spine);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+        assert!(
+            heap.owns_non_cons_object(b_ptr),
+            "allocate-black record must survive the cycle it was born in",
+        );
+        heap.assert_object_arenas_coherent();
+
+        run_concurrent_cycle(&mut heap, &[spine, b]);
+        assert!(heap.owns_non_cons_object(b_ptr));
+        assert_eq!(rec_slot(b, 0).as_fixnum(), Some(25));
+
+        let g1 = heap.alloc_record(record_items(-9, TaggedValue::NIL, 4));
+        let g1_ptr = rec_ptr(g1);
+        heap.concurrent_begin();
+        heap.seed_root(spine);
+        heap.seed_root(b);
+        heap.launch_concurrent_mark();
+        let g2 = heap.alloc_record(record_items(-8, TaggedValue::NIL, 4));
+        let g2_ptr = rec_ptr(g2);
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(spine);
+        heap.seed_root(b);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+        assert!(
+            !heap.owns_non_cons_object(g1_ptr),
+            "idle-born garbage record must be reclaimed by the next cycle",
+        );
+        assert!(
+            heap.owns_non_cons_object(g2_ptr),
+            "mark-born garbage record floats through its birth cycle",
+        );
+
+        run_concurrent_cycle(&mut heap, &[spine, b]);
+        assert!(
+            !heap.owns_non_cons_object(g2_ptr),
+            "mark-born garbage record must be reclaimed by the SECOND cycle",
+        );
+        assert_eq!(rec_slot(b, 0).as_fixnum(), Some(25));
+        heap.assert_object_arenas_coherent();
+    }
+
+    #[test]
+    fn parity_two_cycle_record_survival_and_reclaim() {
+        parity_two_cycle_record_survival_and_reclaim_body(false);
+    }
+    #[test]
+    fn parity_two_cycle_record_survival_and_reclaim_verified() {
+        parity_two_cycle_record_survival_and_reclaim_body(true);
+    }
+
+    /// (TRAP A) Records parked in `deferred` resolve at termination through
+    /// the page-oracle-routed veclike arm; slot children traced. Records stay
+    /// DEFERRED for marking (`record` drain bucket).
+    fn deferred_record_resolves_at_termination_body(verify: bool) {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        if verify {
+            arm_partition(&mut heap, true);
+        }
+
+        let mut spine = TaggedValue::fixnum(0);
+        for i in 0..100_000 {
+            spine = heap.alloc_cons(TaggedValue::fixnum(i), spine);
+        }
+        heap.collect_exact(std::iter::once(spine));
+        assert!(heap.should_run_concurrent());
+
+        let mut list = TaggedValue::fixnum(0);
+        let mut records = Vec::new();
+        let mut children = Vec::new();
+        for i in 0..300 {
+            let child = heap.alloc_cons(TaggedValue::fixnum(10_000 + i), TaggedValue::fixnum(0));
+            children.push(child);
+            let b = heap.alloc_record(record_items(i, child, 4));
+            records.push(b);
+            list = heap.alloc_cons(b, list);
+        }
+        let garbage = heap.alloc_record(record_items(-1, TaggedValue::NIL, 4));
+        let garbage_ptr = rec_ptr(garbage);
+
+        heap.concurrent_begin();
+        heap.seed_root(spine);
+        heap.seed_root(list);
+        heap.launch_concurrent_mark();
+        while !heap.concurrent_mark_done() {
+            std::thread::yield_now();
+        }
+        heap.join_concurrent_mark();
+        let stats = heap.sweep_stats();
+        assert!(
+            stats.last_termination_kinds.record >= 300,
+            "every rooted record must reach the termination via `deferred` \
+             (got {})",
+            stats.last_termination_kinds.record,
+        );
+        heap.reseed_runtime_and_remembered_roots();
+        heap.seed_root(spine);
+        heap.seed_root(list);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+
+        for (i, b) in records.iter().enumerate() {
+            assert!(
+                heap.owns_non_cons_object(rec_ptr(*b)),
+                "deferred-then-resolved record {i} was swept while rooted",
+            );
+            assert_eq!(rec_slot(*b, 0).as_fixnum(), Some(i as i64));
+            assert_eq!(
+                unsafe { (*children[i].xcons_ptr()).load_car() }.as_fixnum(),
+                Some(10_000 + i as i64),
+                "record {i}'s slot child was swept while live",
+            );
+        }
+        assert!(!heap.owns_non_cons_object(garbage_ptr));
+        heap.assert_object_arenas_coherent();
+    }
+
+    #[test]
+    fn deferred_record_resolves_at_termination() {
+        deferred_record_resolves_at_termination_body(false);
+    }
+    #[test]
+    fn deferred_record_resolves_at_termination_verified() {
+        deferred_record_resolves_at_termination_body(true);
+    }
+
+    /// ALLOCATED-BIT-FIRST under adversarial staleness (payload class).
+    fn record_freed_slot_garbage_never_read_body(verify: bool) {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        if verify {
+            arm_partition(&mut heap, true);
+            heap.collect_exact(std::iter::empty());
+        }
+
+        let mut records = Vec::new();
+        for i in 0..100 {
+            records.push(heap.alloc_record(record_items(i, TaggedValue::NIL, 4)));
+        }
+        let keep: Vec<TaggedValue> = records.iter().copied().step_by(2).collect();
+        let dead_ptrs: Vec<*mut RecordObj> = records
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| i % 2 == 1)
+            .map(|(_, v)| v.as_veclike_ptr().unwrap() as *mut RecordObj)
+            .collect();
+
+        heap.collect_exact(keep.iter().copied());
+        for &p in &dead_ptrs {
+            assert!(!heap.owns_non_cons_object(p as *const u8));
+        }
+        for &p in &dead_ptrs {
+            unsafe { std::ptr::write_bytes(p as *mut u8, 0xFF, size_of::<RecordObj>()) };
+        }
+        heap.assert_object_arenas_coherent();
+
+        heap.collect_exact(keep.iter().copied());
+        for (i, k) in keep.iter().enumerate() {
+            assert_eq!(rec_slot(*k, 0).as_fixnum(), Some(2 * i as i64));
+        }
+
+        let mut reused = Vec::new();
+        for i in 0..dead_ptrs.len() {
+            reused.push(heap.alloc_record(record_items(500 + i as i64, TaggedValue::NIL, 6)));
+        }
+        let dead_addrs: std::collections::HashSet<usize> =
+            dead_ptrs.iter().map(|&p| p as usize).collect();
+        for (i, r) in reused.iter().enumerate() {
+            let ptr = r.as_veclike_ptr().unwrap() as *const RecordObj;
+            assert!(dead_addrs.contains(&(ptr as usize)));
+            unsafe {
+                assert_eq!((*ptr).header.gc.kind, HeapObjectKind::VecLike);
+                assert_eq!((*ptr).header.type_tag, VecLikeType::Record);
+                assert!(!(*ptr).header.gc.tenured, "stale tenured byte must be rewritten");
+                assert!((*ptr).header.gc.next.is_null(), "stale next ptr must be rewritten");
+            }
+            assert_eq!(rec_slot(*r, 0).as_fixnum(), Some(500 + i as i64));
+        }
+        heap.assert_object_arenas_coherent();
+
+        let mut roots: Vec<TaggedValue> = keep.clone();
+        roots.extend(reused.iter().copied());
+        heap.collect_exact(roots.iter().copied());
+        heap.collect_exact(keep.iter().copied());
+        for r in &reused {
+            assert!(!heap.owns_non_cons_object(rec_ptr(*r)));
+        }
+        heap.assert_object_arenas_coherent();
+    }
+
+    #[test]
+    fn record_freed_slot_garbage_never_read() {
+        record_freed_slot_garbage_never_read_body(false);
+    }
+    #[test]
+    fn record_freed_slot_garbage_never_read_verified() {
+        record_freed_slot_garbage_never_read_body(true);
+    }
+
+    /// Mid-sweep cooperative-window slot reuse (payload class).
+    #[test]
+    fn record_reuse_within_one_cooperative_sweep_window() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let n = 3 * RECORD_PAGE_SLOTS;
+        let mut records = Vec::with_capacity(n);
+        for i in 0..n {
+            records.push(heap.alloc_record(record_items(i as i64, TaggedValue::NIL, 2)));
+        }
+        assert_eq!(heap.record_arena.pages.len(), 3);
+
+        let keep: Vec<TaggedValue> = records.iter().copied().step_by(2).collect();
+        let dead_addrs: std::collections::HashSet<usize> = records
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| i % 2 == 1)
+            .map(|(_, v)| rec_ptr(*v) as usize)
+            .collect();
+        let page0_base = heap.record_arena.pages[0].base_addr();
+
+        heap.begin_collection();
+        for &k in &keep {
+            heap.seed_root(k);
+        }
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        assert!(heap.sweep_in_progress());
+        assert!(!heap.incremental_sweep_slice(1), "3 pages need >1 slice");
+
+        let mut reused = Vec::new();
+        for i in 0..32 {
+            reused.push(heap.alloc_record(record_items(1_000 + i, TaggedValue::NIL, 2)));
+        }
+        for r in &reused {
+            let ptr = r.as_veclike_ptr().unwrap() as *const RecordObj;
+            assert_eq!(ObjectPage::<RecordObj>::page_base_for_ptr(ptr), page0_base);
+            assert!(dead_addrs.contains(&(ptr as usize)));
+        }
+        heap.assert_object_arenas_coherent();
+
+        while !heap.incremental_sweep_slice(1) {}
+        assert!(!heap.sweep_in_progress());
+        for (i, r) in reused.iter().enumerate() {
+            assert!(heap.owns_non_cons_object(rec_ptr(*r)));
+            assert_eq!(rec_slot(*r, 0).as_fixnum(), Some(1_000 + i as i64));
+        }
+    }
+
+    /// (c) VARIABLE-size live-bytes on BOTH recompute sites.
+    #[test]
+    fn record_sweep_live_bytes_track_variable_payload_sizes() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let r_big = heap.alloc_record(record_items(7, TaggedValue::NIL, 2_000));
+        let r_small = heap.alloc_record(record_items(1, TaggedValue::NIL, 2));
+        let _dead = heap.alloc_record(record_items(0, TaggedValue::NIL, 4_000));
+        let mut root = TaggedValue::fixnum(0);
+        let mut cons_count = 0usize;
+        for val in [r_big, r_small] {
+            root = heap.alloc_cons(val, root);
+            cons_count += 1;
+        }
+
+        let expected_objects: usize = [r_big, r_small]
+            .iter()
+            .map(|b| {
+                TaggedHeap::object_bytes_from_header(b.as_veclike_ptr().unwrap() as *const GcHeader)
+            })
+            .sum::<usize>();
+        let expected = expected_objects + cons_count * size_of::<ConsCell>();
+        assert!(expected_objects > 2 * size_of::<RecordObj>() + 2_000 * size_of::<TaggedValue>());
+
+        heap.collect_exact(std::iter::once(root));
+        assert_eq!(heap.live_bytes(), expected, "eager site");
+
+        heap.begin_collection();
+        heap.seed_root(root);
+        let bytes_before = heap.live_bytes();
+        heap.incremental_drain_all();
+        heap.incremental_finish(bytes_before, std::time::Instant::now());
+        heap.finish_incremental_sweep_now();
+        assert_eq!(heap.live_bytes(), expected, "incremental site");
+    }
+
+    /// (d) LOADUP-SHAPED tenure + FULL-page retirement (C1).
+    fn record_survivors_tenure_and_full_pages_retire_body(verify: bool) {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        arm_partition(&mut heap, verify);
+
+        let mut root = TaggedValue::fixnum(0);
+        let mut records = Vec::with_capacity(RECORD_PAGE_SLOTS + 2);
+        for i in 0..(RECORD_PAGE_SLOTS + 2) {
+            let b = heap.alloc_record(record_items(i as i64, TaggedValue::NIL, 4));
+            records.push(b);
+            root = heap.alloc_cons(b, root);
+        }
+        assert_eq!(heap.record_arena.pages.len(), 2);
+        assert_eq!(heap.record_arena.pages[0].allocated, RECORD_PAGE_SLOTS);
+
+        heap.collect_exact(std::iter::once(root));
+        assert!(heap.dump_blackened);
+        for b in &records {
+            assert!(unsafe { (*b.as_veclike_ptr().unwrap()).gc.tenured });
+        }
+        assert!(heap.record_arena.pages[0].retired, "full page must retire");
+        assert!(!heap.record_arena.pages[1].retired);
+        assert!(heap.owns_non_cons_object(rec_ptr(records[0])));
+        heap.assert_object_arenas_coherent();
+
+        let retired_base = heap.record_arena.pages[0].base_addr();
+        let fresh = heap.alloc_record(record_items(-5, TaggedValue::NIL, 2));
+        assert_ne!(
+            ObjectPage::<RecordObj>::page_base_for_ptr(
+                fresh.as_veclike_ptr().unwrap() as *const RecordObj
+            ),
+            retired_base,
+        );
+
+        for cycle in 0..2 {
+            heap.collect_exact(std::iter::once(root));
+            for (i, b) in records.iter().enumerate() {
+                assert!(
+                    heap.owns_non_cons_object(rec_ptr(*b)),
+                    "tenured page record #{i} lost on cycle {cycle}",
+                );
+                assert_eq!(rec_slot(*b, 0).as_fixnum(), Some(i as i64));
+            }
+            assert_eq!(heap.record_arena.pages[0].allocated, RECORD_PAGE_SLOTS);
+            heap.assert_object_arenas_coherent();
+        }
+    }
+
+    #[test]
+    fn record_survivors_tenure_and_full_pages_retire() {
+        record_survivors_tenure_and_full_pages_retire_body(false);
+    }
+    #[test]
+    fn record_survivors_tenure_and_full_pages_retire_verified() {
+        record_survivors_tenure_and_full_pages_retire_body(true);
+    }
+
+    /// (d, mixed) Tenured + young slots share a record page across parities.
+    fn record_mixed_page_tenured_survive_alternating_parities_body(verify: bool) {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        arm_partition(&mut heap, verify);
+
+        let mut keep = Vec::new();
+        let mut root = TaggedValue::fixnum(0);
+        for i in 0..10 {
+            let b = heap.alloc_record(record_items(i as i64, TaggedValue::NIL, 4));
+            if i % 2 == 0 {
+                keep.push(b);
+                root = heap.alloc_cons(b, root);
+            }
+        }
+        heap.collect_exact(std::iter::once(root));
+        assert!(heap.dump_blackened);
+        assert!(!heap.record_arena.pages[0].retired);
+
+        for cycle in 0..2 {
+            for i in 0..5 {
+                let _ = heap.alloc_record(record_items(-(i as i64), TaggedValue::NIL, 4));
+            }
+            heap.collect_exact(std::iter::once(root));
+            for (i, b) in keep.iter().enumerate() {
+                assert!(
+                    heap.owns_non_cons_object(rec_ptr(*b)),
+                    "tenured record #{i} freed on parity cycle {cycle}",
+                );
+                assert_eq!(rec_slot(*b, 0).as_fixnum(), Some(2 * i as i64));
+            }
+            heap.assert_object_arenas_coherent();
+        }
+    }
+
+    #[test]
+    fn record_mixed_page_tenured_survive_alternating_parities() {
+        record_mixed_page_tenured_survive_alternating_parities_body(false);
+    }
+    #[test]
+    fn record_mixed_page_tenured_survive_alternating_parities_verified() {
+        record_mixed_page_tenured_survive_alternating_parities_body(true);
+    }
+
+    /// (e) Payload-bearing teardown counters + sweep-time drop_in_place.
+    fn record_payload_pages_freed_at_heap_drop_body(mid_mark: bool) {
+        crate::test_utils::init_test_tracing();
+        let before = LIVE_RECORD_PAGES.load(Ordering::Relaxed);
+        {
+            let mut heap = TaggedHeap::new();
+            set_tagged_heap(&mut heap);
+            heap.extend_dump_span(4096, 16);
+
+            let mut root = TaggedValue::fixnum(0);
+            for i in 0..3_000 {
+                let b = heap.alloc_record(record_items(i, TaggedValue::NIL, 16));
+                if i % 2 == 0 {
+                    root = heap.alloc_cons(b, root);
+                }
+            }
+            assert!(LIVE_RECORD_PAGES.load(Ordering::Relaxed) > before);
+
+            heap.collect_exact(std::iter::once(root));
+            assert!(heap.dump_blackened);
+            heap.assert_object_arenas_coherent();
+
+            if mid_mark {
+                heap.concurrent_begin();
+                heap.seed_root(root);
+                heap.launch_concurrent_mark();
+                assert!(heap.concurrent_mark_running());
+            }
+            drop(heap);
+        }
+        assert_eq!(
+            LIVE_RECORD_PAGES.load(Ordering::Relaxed),
+            before,
+            "record pages leaked or double-freed at teardown",
+        );
+    }
+
+    #[test]
+    fn record_payload_pages_freed_at_heap_drop() {
+        record_payload_pages_freed_at_heap_drop_body(false);
+    }
+    #[test]
+    fn record_payload_pages_freed_at_heap_drop_mid_concurrent_mark() {
+        record_payload_pages_freed_at_heap_drop_body(true);
+    }
+
+    /// Promotion-scan coverage: a tenured page record whose slot holds a
+    /// young cons child keeps it alive across both parities.
+    fn tenured_page_record_keeps_young_cons_child_alive_body(verify: bool) {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+        arm_partition(&mut heap, verify);
+
+        let y = heap.alloc_cons(TaggedValue::fixnum(999), TaggedValue::fixnum(0));
+        let b = heap.alloc_record(record_items(1, y, 4));
+        let root = heap.alloc_cons(b, TaggedValue::fixnum(0));
+
+        heap.collect_exact(std::iter::once(root));
+        assert!(heap.dump_blackened);
+        assert!(unsafe { (*b.as_veclike_ptr().unwrap()).gc.tenured });
+
+        for cycle in 0..2 {
+            heap.collect_exact(std::iter::once(root));
+            assert_eq!(
+                unsafe { (*y.xcons_ptr()).load_car() }.as_fixnum(),
+                Some(999),
+                "tenured page record's young cons child lost on cycle {cycle}",
+            );
+        }
+        heap.assert_object_arenas_coherent();
+    }
+
+    #[test]
+    fn tenured_page_record_keeps_young_cons_child_alive() {
+        tenured_page_record_keeps_young_cons_child_alive_body(false);
+    }
+    #[test]
+    fn tenured_page_record_keeps_young_cons_child_alive_verified() {
+        tenured_page_record_keeps_young_cons_child_alive_body(true);
+    }
+
+    /// WindowConfiguration shares the record arena (same `RecordObj`, distinct
+    /// tag): page-owned, coherent (the type-tag check accepts the tag), and
+    /// survives a GC alongside plain records.
+    #[test]
+    fn window_configuration_shares_record_arena() {
+        crate::test_utils::init_test_tracing();
+        let mut heap = TaggedHeap::new();
+        set_tagged_heap(&mut heap);
+
+        let wc = heap.alloc_window_configuration(record_items(42, TaggedValue::NIL, 4));
+        let rec = heap.alloc_record(record_items(7, TaggedValue::NIL, 4));
+        assert_eq!(
+            wc.veclike_type(),
+            Some(VecLikeType::WindowConfiguration),
+            "tag must be WindowConfiguration",
+        );
+        assert!(
+            heap.record_arena.owns(rec_ptr(wc)),
+            "window-configuration must live on the record arena pages",
+        );
+        assert!(heap.owns_veclike_object(rec_ptr(wc)));
+        assert_eq!(heap.non_cons_object_addrs.len(), 0);
+        heap.assert_object_arenas_coherent();
+
+        let tail = heap.alloc_cons(rec, TaggedValue::fixnum(0));
+        let root = heap.alloc_cons(wc, tail);
+        heap.collect_exact(std::iter::once(root));
+        assert!(heap.owns_non_cons_object(rec_ptr(wc)));
+        assert!(heap.owns_non_cons_object(rec_ptr(rec)));
+        assert_eq!(rec_slot(wc, 0).as_fixnum(), Some(42));
+        assert_eq!(
+            wc.veclike_type(),
+            Some(VecLikeType::WindowConfiguration),
+            "tag survives the arena round-trip",
+        );
+
+        // A dead window-configuration is reclaimed via the record page sweep.
+        let dead_wc = heap.alloc_window_configuration(record_items(-1, TaggedValue::NIL, 4));
+        let dead_ptr = rec_ptr(dead_wc);
+        heap.collect_exact(std::iter::once(root));
+        assert!(!heap.owns_non_cons_object(dead_ptr));
+        heap.assert_object_arenas_coherent();
     }
 }
 
