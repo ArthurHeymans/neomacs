@@ -2189,6 +2189,13 @@ impl Obarray {
     /// signal, which JIT call speculation relies on for validity.
     pub(crate) fn bump_function_epoch(&mut self) {
         self.function_epoch = self.function_epoch.wrapping_add(1);
+        // u64::MAX is RESERVED as the JIT/AOT spec DISARMED sentinel
+        // (jit::compile::SPEC_EPOCH_DISARMED); a live epoch must never equal it or
+        // a legitimately-armed spec slot would read as disarmed. Skip it on the
+        // (astronomically unreachable) wrap.
+        if self.function_epoch == u64::MAX {
+            self.function_epoch = 0;
+        }
     }
 
     /// A specific function `id` was redefined (cell write / fmakunbound): bump the
@@ -2199,6 +2206,13 @@ impl Obarray {
     /// jit::cache::evict_inline_dependents.
     fn note_function_redefined(&mut self, _id: SymId) {
         self.function_epoch = self.function_epoch.wrapping_add(1);
+        // u64::MAX is RESERVED as the JIT/AOT spec DISARMED sentinel
+        // (jit::compile::SPEC_EPOCH_DISARMED); a live epoch must never equal it or
+        // a legitimately-armed spec slot would read as disarmed. Skip it on the
+        // (astronomically unreachable) wrap.
+        if self.function_epoch == u64::MAX {
+            self.function_epoch = 0;
+        }
         #[cfg(feature = "jit")]
         crate::emacs_core::jit::cache::evict_inline_dependents(_id);
     }

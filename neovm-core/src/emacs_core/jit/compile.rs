@@ -901,6 +901,19 @@ pub extern "C" fn neovm_jit_save_window_excursion(ctx: *mut u8, body: i64, out: 
     status
 }
 
+/// Sentinel `SpecSlot::epoch` value marking a site the AOT LOADER left DISARMED
+/// because its live-obarray re-classification disagreed with the kind baked into
+/// the generated code (see `CompiledLeaf::from_aot`'s arming). A disarmed site
+/// must NEVER re-arm: the shims' fast paths are keyed on the BAKED kind (e.g.
+/// `neovm_jit_pred_spec`'s hardcoded `is_record` tag test), so re-arming against a
+/// now-different binding would run the WRONG op. Both `neovm_jit_call_spec` and
+/// `subr_spec_armed` short-circuit to their not-armed (generic / strict-symbol)
+/// path on this value BEFORE any re-validate/re-arm. `u64::MAX` is RESERVED: the
+/// live obarray `function_epoch` skips it on wrap (`advance_function_epoch`), so a
+/// legitimately-armed slot never collides with it. JIT leaves never store it, so
+/// the extra compare is a perfectly-predicted never-taken branch there (~0 tax).
+pub(crate) const SPEC_EPOCH_DISARMED: u64 = u64::MAX;
+
 /// Speculated direct call (`Op::Call` whose callee slot provably holds a
 /// constant symbol that was fbound to a bytecode object at compile time).
 /// Quit poll FIRST (the interpreter's Op::Call order — quit processing can run
@@ -955,22 +968,33 @@ pub extern "C" fn neovm_jit_call_spec(
         Ok(()) => {
             // SAFETY: slot points into the executing leaf's spec_slots.
             let slot = unsafe { &*(slot as *const SpecSlot) };
-            let epoch = ctx.obarray.function_epoch();
-            // NEOVM_JIT_FORCE_SLOW_SPEC pretends the armed epoch is stale so
-            // every call exercises the re-validate/re-arm branch.
-            let armed = (!jit_force_slow_spec() && slot.epoch.load(Ordering::Relaxed) == epoch)
-                || {
-                    let cur = ctx.obarray.symbol_function_id(SymId(sym as u32));
-                    if cur.is_some_and(|v| v.bits() as i64 == expected) {
-                        slot.epoch.store(epoch, Ordering::Relaxed);
-                        true
-                    } else {
-                        // The binding changed: drop any cached callee leaf so a
-                        // later re-arm can't reuse a stale callee.
-                        slot.leaf.store(0, Ordering::Relaxed);
-                        false
+            let slot_epoch = slot.epoch.load(Ordering::Relaxed);
+            // A loader-DISARMED site (epoch == SPEC_EPOCH_DISARMED) is
+            // permanently not-armed: its baked callee/kind disagreed with the
+            // live obarray at load, so re-validating could re-arm the WRONG
+            // binding. Check it FIRST (before the epoch load / re-validate) and
+            // fall to the strict-symbol-call path. JIT never sets DISARMED, so
+            // this compare is perfectly-predicted never-taken there.
+            let armed = if slot_epoch == SPEC_EPOCH_DISARMED {
+                false
+            } else {
+                let epoch = ctx.obarray.function_epoch();
+                // NEOVM_JIT_FORCE_SLOW_SPEC pretends the armed epoch is stale so
+                // every call exercises the re-validate/re-arm branch.
+                (!jit_force_slow_spec() && slot_epoch == epoch)
+                    || {
+                        let cur = ctx.obarray.symbol_function_id(SymId(sym as u32));
+                        if cur.is_some_and(|v| v.bits() as i64 == expected) {
+                            slot.epoch.store(epoch, Ordering::Relaxed);
+                            true
+                        } else {
+                            // The binding changed: drop any cached callee leaf so
+                            // a later re-arm can't reuse a stale callee.
+                            slot.leaf.store(0, Ordering::Relaxed);
+                            false
+                        }
                     }
-                };
+            };
             // Armed: the symbol still names the compile-time bytecode object.
             // Try the fast path (cached leaf, native-to-native pass-through when
             // the callee is a pure fixed-arity match — no arg marshaling at
@@ -1027,13 +1051,21 @@ pub(crate) const PRED_KIND_SYMBOL_WITH_POS_P: i64 = 1;
 /// too. Never allocates, never runs lisp — callers rely on this being GC-free.
 #[inline]
 fn subr_spec_armed(ctx: &Context, sym: i64, expected: i64, slot: &SpecSlot) -> bool {
+    let slot_epoch = slot.epoch.load(Ordering::Relaxed);
+    // A loader-DISARMED site never re-arms (see SPEC_EPOCH_DISARMED /
+    // neovm_jit_call_spec): the pred/eq shims' fast paths are keyed on the BAKED
+    // kind, so re-arming a now-different binding would run the WRONG op. Check it
+    // FIRST; JIT never sets DISARMED (perfectly-predicted here).
+    if slot_epoch == SPEC_EPOCH_DISARMED {
+        return false;
+    }
     if ctx.compiler_function_overrides_active() {
         return false;
     }
     let epoch = ctx.obarray.function_epoch();
     // NEOVM_JIT_FORCE_SLOW_SPEC pretends the armed epoch is stale so every
     // call exercises the re-validate/re-arm branch.
-    (!jit_force_slow_spec() && slot.epoch.load(Ordering::Relaxed) == epoch) || {
+    (!jit_force_slow_spec() && slot_epoch == epoch) || {
         let cur = ctx.obarray.symbol_function_id(SymId(sym as u32));
         if cur.is_some_and(|v| v.bits() as i64 == expected) {
             slot.epoch.store(epoch, Ordering::Relaxed);
@@ -11870,6 +11902,78 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    /// B1 (C1): a slot the AOT loader DISARMED (`epoch == SPEC_EPOCH_DISARMED`)
+    /// reports NOT-armed and NEVER re-arms — even when the live binding would
+    /// otherwise re-validate. Proves the shared subr/pred/eq arming helper
+    /// short-circuits on the sentinel BEFORE any obarray re-validation, so a
+    /// mis-baked kind can never run the wrong op. (JIT never sets DISARMED; this
+    /// path is reached only by loader-armed AOT leaves — see the x-session tests.)
+    #[test]
+    fn disarmed_spec_slot_never_arms_and_does_not_rearm() {
+        use crate::emacs_core::eval::Context;
+        let ev = Context::new();
+        // Control precondition: no compiler function overrides active (else the
+        // helper returns false regardless — the assumption the control relies on).
+        assert!(
+            !ev.compiler_function_overrides_active(),
+            "test assumes no active compiler function overrides"
+        );
+        // `car` is a canonical builtin fbound in every obarray; use its real
+        // binding as the (would-be) callee VALUE so the helper COULD re-validate.
+        let car = match Value::symbol("car").kind() {
+            crate::emacs_core::value::ValueKind::Symbol(id) => id,
+            _ => panic!("symbol"),
+        };
+        let expected = ev
+            .obarray
+            .symbol_function_id(car)
+            .expect("car fbound")
+            .bits() as i64;
+        let disarmed = SpecSlot {
+            epoch: AtomicU64::new(SPEC_EPOCH_DISARMED),
+            leaf: AtomicU64::new(0),
+        };
+        // Even though (sym, expected) MATCHES the live binding, the DISARMED
+        // sentinel forces `false` and leaves the epoch untouched (no re-arm).
+        assert!(
+            !subr_spec_armed(&ev, car.0 as i64, expected, &disarmed),
+            "a DISARMED slot must report not-armed"
+        );
+        assert_eq!(
+            disarmed.epoch.load(Ordering::Relaxed),
+            SPEC_EPOCH_DISARMED,
+            "a DISARMED slot must not re-arm (epoch unchanged)"
+        );
+        // Control: the SAME (sym, expected) on a fresh slot DOES arm via the
+        // re-validate path — so the assertion above proves the guard, not a dead
+        // binding. (A fresh epoch of 0 forces the re-validate branch, which stores
+        // the live epoch and returns true because `expected` matches the cell.)
+        let fresh = SpecSlot {
+            epoch: AtomicU64::new(0),
+            leaf: AtomicU64::new(0),
+        };
+        assert!(
+            subr_spec_armed(&ev, car.0 as i64, expected, &fresh),
+            "control: a matching live binding arms a non-disarmed slot"
+        );
+    }
+
+    /// B1 (C2): `SPEC_EPOCH_DISARMED` is the reserved `u64::MAX`, and the obarray
+    /// never hands out a live `function_epoch` equal to it (the bump skips it).
+    #[test]
+    fn function_epoch_never_equals_disarmed_sentinel() {
+        assert_eq!(SPEC_EPOCH_DISARMED, u64::MAX);
+        let mut ev = crate::emacs_core::eval::Context::new();
+        for _ in 0..8 {
+            ev.obarray.bump_function_epoch();
+            assert_ne!(
+                ev.obarray.function_epoch(),
+                SPEC_EPOCH_DISARMED,
+                "a live function_epoch must never equal the DISARMED sentinel"
+            );
         }
     }
 
