@@ -67,7 +67,19 @@ pub(crate) const ABI_TAG: u32 = compute_abi_tag();
 /// `neovm_jit_cbsym_*` shims (auto-salted via the grown `MIR_SHIM_NAMES`) and bake
 /// the Tier-A `CBSYM_A_*` `which` discriminants as iconsts, so the discriminant
 /// set is salted explicitly (see [`compute_abi_tag`]) — a renumber/swap re-tags.
-const ABI_TAG_VERSION: u32 = 3;
+/// v4: R2 increment B2 (Op::Call spec-in-AOT) — AOT baseline leaves now bake
+/// `Op::Call` subr/bytecode speculation sites (per-site `SpecSlot`/expected loaded
+/// from the sidecar, armed by the loader against the live obarray), import the
+/// three round-1 spec shims (auto-salted via `MIR_SHIM_NAMES`), and carry a
+/// descriptor spec-section. The [`SPEC_ENCODING_VERSION`], `SpecSlot` size, and
+/// `SpecCalleeKind::DISC_COUNT` are salted (see [`compute_abi_tag`]).
+const ABI_TAG_VERSION: u32 = 4;
+
+/// Format version of the AOT descriptor spec-section + the runtime spec ABI
+/// (`SpecSlot`/`spec_expected` sidecar bases, the loader re-classify+arm protocol).
+/// Bump on ANY change to the spec encoding or the arm/disarm contract; salted into
+/// [`ABI_TAG`] so a stale `.so` with a different spec ABI is refused.
+const SPEC_ENCODING_VERSION: u32 = 1;
 
 // The FULL set of `neovm_jit_*` runtime shims an AOT `.so` may import (resolved
 // against the host at `dlopen`). This is the complete `declare_rt_refs` set —
@@ -159,6 +171,13 @@ const fn compute_abi_tag() -> u32 {
     mix_u64!(super::compile::CBSYM_A_CURRENT_BUFFER as u64);
     mix_u64!(super::compile::CBSYM_A_MATCH_BEGINNING as u64);
     mix_u64!(super::compile::CBSYM_A_MATCH_END as u64);
+    // R2 increment B2 (Op::Call spec-in-AOT): the descriptor spec-section format +
+    // the runtime spec ABI. A `SpecSlot` layout change, a `SpecCalleeKind`
+    // discriminant renumber/count change, or a spec-encoding bump MUST re-tag stale
+    // `.so`s (their baked slot arithmetic / kind discriminants would mismatch).
+    mix_u64!(SPEC_ENCODING_VERSION as u64);
+    mix_u64!(core::mem::size_of::<super::compile::SpecSlot>() as u64);
+    mix_u64!(super::compile::SpecCalleeKind::DISC_COUNT as u64);
     h
 }
 
@@ -533,7 +552,47 @@ pub(crate) fn leaf_content_hash(ops: &[Op], constants: &[Value], arity: usize) -
 /// truncated/foreign blob and a format change can be detected. The ABI_TAG also
 /// rides along (a second interlock besides the entry-symbol tag).
 const DESC_MAGIC: u32 = 0x4e41_4f54; // "NAOT"
-const DESC_VERSION: u32 = 1;
+/// v2 (R2 increment B2): the fixed header gains a `spec_count:u32` (right before
+/// `recipe_len`) and the blob gains a spec-section (`spec_count` × [`AotSpecSite`],
+/// [`SPEC_SITE_BYTES`] each) appended AFTER the recipe. A v1 loader/`.so` mismatch
+/// is refused by the version check (and the ABI_TAG changed anyway).
+const DESC_VERSION: u32 = 2;
+
+/// One `Op::Call` speculation site baked into an AOT baseline leaf, recorded so the
+/// LOADER can RE-CLASSIFY it against the live obarray and arm/disarm the runtime
+/// `SpecSlot`. NO baked address/epoch (those are session-specific — the loader
+/// derives `expected` from the live cell + `epoch` from `ob.function_epoch()`):
+/// only the callee's reloc index (to recover its SymId at load), the baked
+/// `kind_disc` (to require an exact live re-classification match), and the site's
+/// `nargs` (so the loader re-runs `subr_spec_kind` with the same arity).
+///
+/// Emitted in SLOT ORDER: the loader's array position IS the codegen slot index
+/// (`spec_slot_base[idx]` / `spec_expected_base[idx]`). `repr(C)` + fixed 8-byte
+/// on-disk layout ([`SPEC_SITE_BYTES`]); the in-memory struct is decode-only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct AotSpecSite {
+    /// The baked [`SpecCalleeKind::to_spec_disc`] value (0..DISC_COUNT). The loader
+    /// arms ONLY when the live re-classification yields this same discriminant.
+    pub kind_disc: u8,
+    /// Reserved (0): a per-kind sub-discriminant for future variants (e.g. a
+    /// `PredKind` split). Currently unused; salted into the ABI via the format.
+    pub which: u8,
+    /// The site's `Op::Call(n)` argument count, replayed into the loader's
+    /// `subr_spec_kind(live_cell, sym, nargs)` re-classification.
+    pub nargs: u16,
+    /// Index into the leaf's reloc vector where the callee symbol lives; the loader
+    /// reads `reloc_data[callee_reloc_idx].as_symbol_id()` to recover the SymId.
+    pub callee_reloc_idx: u32,
+}
+
+/// On-disk byte width of one [`AotSpecSite`] (kind_disc:1 + which:1 + nargs:2 +
+/// callee_reloc_idx:4). Fixed so the loader can bound + slice the spec-section.
+const SPEC_SITE_BYTES: usize = 1 + 1 + 2 + 4;
+
+/// Max `Op::Call` spec sites a single leaf may carry — bounds a crafted/corrupt
+/// `spec_count` before it drives a huge allocation/over-read. Real leaves have a
+/// handful; the operand stack is a u16 so no honest body approaches this.
+const MAX_SPEC_SITES: u32 = 64 * 1024;
 
 /// The decoded descriptor: leaf metadata + the reloc rebuild recipe bytes.
 pub(crate) struct AotDescriptor {
@@ -542,15 +601,21 @@ pub(crate) struct AotDescriptor {
     pub reloc_recipe: Vec<u8>,
     /// Number of reloc slots (recipes) in `reloc_recipe`.
     pub reloc_count: u32,
+    /// R2 increment B2: the `Op::Call` spec sites, in slot order (empty for a MIR
+    /// leaf or a baseline leaf with no armed spec site).
+    pub spec_sites: Vec<AotSpecSite>,
 }
 
 /// Serialize an [`AotDescriptor`] to bytes (little-endian, fixed header + recipe
-/// tail). Layout: magic, version, ABI_TAG, then the meta fields, then
-/// reloc_count, then the concatenated recipe bytes.
+/// tail + spec-section tail). Layout: magic, version, ABI_TAG, the meta fields,
+/// reloc_count, `spec_count` (v2), recipe_len, the concatenated recipe bytes, then
+/// the spec-section (`spec_count` × [`SPEC_SITE_BYTES`], in slot order). `spec_count`
+/// sits RIGHT BEFORE recipe_len so the fixed header stays contiguous.
 pub(crate) fn encode_descriptor(
     meta: &super::compile::AotLeafMeta,
     reloc_recipe: &[u8],
     reloc_count: u32,
+    spec_sites: &[AotSpecSite],
 ) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(&DESC_MAGIC.to_le_bytes());
@@ -565,8 +630,17 @@ pub(crate) fn encode_descriptor(
     out.push(u8::from(meta.has_precise_deopt));
     out.extend_from_slice(&(meta.max_depth as u64).to_le_bytes());
     out.extend_from_slice(&reloc_count.to_le_bytes());
+    // v2: spec_count right before recipe_len (keeps the fixed header contiguous).
+    out.extend_from_slice(&(spec_sites.len() as u32).to_le_bytes());
     out.extend_from_slice(&(reloc_recipe.len() as u64).to_le_bytes());
     out.extend_from_slice(reloc_recipe);
+    // Spec-section, AFTER the recipe, in slot order (position == codegen slot idx).
+    for s in spec_sites {
+        out.push(s.kind_disc);
+        out.push(s.which);
+        out.extend_from_slice(&s.nargs.to_le_bytes());
+        out.extend_from_slice(&s.callee_reloc_idx.to_le_bytes());
+    }
     out
 }
 
@@ -607,11 +681,33 @@ pub(crate) fn decode_descriptor(bytes: &[u8]) -> Option<AotDescriptor> {
     let has_precise_deopt = rd_u8(bytes, &mut at)? != 0;
     let max_depth = rd_u64(bytes, &mut at)? as usize;
     let reloc_count = rd_u32(bytes, &mut at)?;
+    // v2: spec_count sits right before recipe_len.
+    let spec_count = rd_u32(bytes, &mut at)?;
+    if spec_count > MAX_SPEC_SITES {
+        return None; // crafted/corrupt count — fail closed.
+    }
     let recipe_len = rd_u64(bytes, &mut at)? as usize;
     // checked_add (audit minor): recipe_len is untrusted; match the file's
     // all-checked-slicing invariant so a crafted blob fails closed (None), never
     // debug-panics on overflow, even for a future direct caller of this fn.
-    let reloc_recipe = bytes.get(at..at.checked_add(recipe_len)?)?.to_vec();
+    let recipe_end = at.checked_add(recipe_len)?;
+    let reloc_recipe = bytes.get(at..recipe_end)?.to_vec();
+    // Spec-section AFTER the recipe: spec_count fixed-width records.
+    let mut at = recipe_end;
+    let mut spec_sites = Vec::with_capacity(spec_count as usize);
+    for _ in 0..spec_count {
+        let kind_disc = rd_u8(bytes, &mut at)?;
+        let which = rd_u8(bytes, &mut at)?;
+        let nargs = u16::from_le_bytes(bytes.get(at..at + 2)?.try_into().ok()?);
+        at += 2;
+        let callee_reloc_idx = rd_u32(bytes, &mut at)?;
+        spec_sites.push(AotSpecSite {
+            kind_disc,
+            which,
+            nargs,
+            callee_reloc_idx,
+        });
+    }
     Some(AotDescriptor {
         meta: super::compile::AotLeafMeta {
             arity,
@@ -625,6 +721,7 @@ pub(crate) fn decode_descriptor(bytes: &[u8]) -> Option<AotDescriptor> {
         },
         reloc_recipe,
         reloc_count,
+        spec_sites,
     })
 }
 
@@ -926,7 +1023,10 @@ fn prepare_leaf_emit(
         max_depth: if has_call { max_depth } else { 0 },
         has_precise_deopt: has_call,
     };
-    let desc_bytes = encode_descriptor(&meta, &recipe, reloc_consts.len() as u32);
+    // The MIR tier never bakes `Op::Call` subr/bytecode spec sites (that pass runs
+    // only under `Some(obarray)` at the baseline tier — increment B2), so it always
+    // emits an empty spec-section.
+    let desc_bytes = encode_descriptor(&meta, &recipe, reloc_consts.len() as u32, &[]);
     Ok(Some(PreparedLeaf {
         m,
         content_hash,
@@ -2165,7 +2265,7 @@ pub fn testkit_callbuiltinsym_aot_selftest(dir: &std::path::Path) -> Result<(), 
     let live_reloc = collect_baseline_aot_relocs(&ops, &constants)
         .ok_or("baseline relocs None at load")?
         .0;
-    let leaf = load_leaf_from_unit(&unit, content_hash, arity, &live_reloc)
+    let leaf = load_leaf_from_unit(&unit, content_hash, arity, &live_reloc, None)
         .ok_or("load_leaf_from_unit None (reloc count/recipe mismatch?)")?;
     let reloc_names: std::collections::HashSet<&str> = leaf
         .reloc_values()
@@ -2538,7 +2638,7 @@ pub fn testkit_baseline_op_symbol_reloc_selftest(dir: &std::path::Path) -> Resul
         let live_reloc = collect_baseline_aot_relocs(&b.ops, &b.constants)
             .ok_or(format!("{}: baseline relocs None at load", b.label))?
             .0;
-        let leaf = load_leaf_from_unit(&unit, content_hash, b.arity, &live_reloc)
+        let leaf = load_leaf_from_unit(&unit, content_hash, b.arity, &live_reloc, None)
             .ok_or(format!("{}: load_leaf_from_unit None (reloc/recipe mismatch?)", b.label))?;
         let reloc_names: std::collections::HashSet<String> = leaf
             .reloc_values()
@@ -2817,6 +2917,10 @@ pub(crate) fn try_load_leaf(
     ops: &[Op],
     constants: &[Value],
     arity: usize,
+    // R2 increment B2: the LIVE obarray, for RE-CLASSIFYING the descriptor's
+    // `Op::Call` spec sites at load. `None` (shim-free test bodies with a null
+    // ctx) leaves every spec site disarmed (the leaf still serves, just generic).
+    obarray: Option<&crate::emacs_core::symbol::Obarray>,
 ) -> Option<super::compile::CompiledLeaf> {
     if !aot_enabled() {
         return None;
@@ -2832,7 +2936,7 @@ pub(crate) fn try_load_leaf(
     // (the single source: `live_reloc_for_emit_tier`). `None` → non-recipe-able
     // baseline const → stay JIT-only.
     let live_reloc = live_reloc_for_emit_tier(ops, constants, arity)?;
-    load_leaf_from_unit(&unit, content_hash, arity, &live_reloc)
+    load_leaf_from_unit(&unit, content_hash, arity, &live_reloc, obarray)
 }
 
 /// The dlsym + descriptor-decode + verify + construct core, factored out of
@@ -2850,6 +2954,9 @@ pub(crate) fn load_leaf_from_unit(
     content_hash: u128,
     arity: usize,
     live_reloc: &[Value],
+    // R2 increment B2: the LIVE obarray for the loader's spec-site re-classify+arm
+    // (threaded through to `from_aot`). `None` leaves every spec site disarmed.
+    obarray: Option<&crate::emacs_core::symbol::Obarray>,
 ) -> Option<super::compile::CompiledLeaf> {
     let entry_name = aot_entry_symbol(content_hash);
     let desc_name = aot_descriptor_symbol(content_hash);
@@ -2870,7 +2977,10 @@ pub(crate) fn load_leaf_from_unit(
     // still over-read within the cap; that is acceptable for the in-process,
     // operator-controlled AOT dir — the cap bounds the damage and decode_descriptor
     // re-checks the recipe count.)
-    const HDR: usize = 4 + 4 + 4 + 8 + 8 + 5 + 8 + 4 + 8; // see encode_descriptor (=53)
+    // v2 (B2): the fixed header gained a `spec_count:u32` right before `recipe_len`,
+    // and the blob gained a spec-section (`spec_count` × SPEC_SITE_BYTES) AFTER the
+    // recipe — so HDR is 4 larger (=57) and `total` includes the spec-section.
+    const HDR: usize = 4 + 4 + 4 + 8 + 8 + 5 + 8 + 4 + 4 + 8; // encode_descriptor v2 (=57)
     // A generous cap: a leaf's reloc recipe is tiny in practice. Rejects an absurd
     // length before it drives a huge over-read.
     const MAX_RECIPE_LEN: usize = 1 << 20; // 1 MiB
@@ -2891,12 +3001,20 @@ pub(crate) fn load_leaf_from_unit(
         if magic != DESC_MAGIC || version != DESC_VERSION || tag != ABI_TAG {
             return None;
         }
-        // 3) recipe_len: bound it, then checked-add for the total size.
+        // 3) spec_count + recipe_len: bound BOTH, then checked-add the total size
+        //    (fixed header + recipe + spec-section). spec_count is at HDR-12..HDR-8.
+        let spec_count = u32::from_le_bytes(hdr[HDR - 12..HDR - 8].try_into().ok()?);
+        if spec_count > MAX_SPEC_SITES {
+            return None;
+        }
         let recipe_len = u64::from_le_bytes(hdr[HDR - 8..HDR].try_into().ok()?) as usize;
         if recipe_len > MAX_RECIPE_LEN {
             return None;
         }
-        let total = HDR.checked_add(recipe_len)?;
+        let spec_bytes = (spec_count as usize).checked_mul(SPEC_SITE_BYTES)?;
+        let total = HDR
+            .checked_add(recipe_len)?
+            .checked_add(spec_bytes)?;
         let all = std::slice::from_raw_parts(desc_ptr, total).to_vec();
         (entry_ptr, all)
     };
@@ -2947,6 +3065,11 @@ pub(crate) fn load_leaf_from_unit(
             std::sync::Arc::clone(unit),
             desc.meta,
             reloc_data,
+            // R2 increment B2: RE-CLASSIFY the descriptor's spec sites against the
+            // LIVE obarray cell and arm/disarm each runtime SpecSlot. `None`
+            // (test/testkit load without a live obarray) leaves every site disarmed.
+            &desc.spec_sites,
+            obarray,
         )
     };
     Some(leaf)
@@ -3135,7 +3258,11 @@ pub fn prepopulate_aot_from_preload(
     // borrow, then hand them to the cache for the sync-first-insert-after step.
     let mut leaves: Vec<(u64, super::compile::CompiledLeaf)> = Vec::new();
     for p in &preps {
-        match load_leaf_from_unit(&unit, p.content_hash, p.arity, &p.live_reloc) {
+        // B2 fast-from-call-1: RE-CLASSIFY each leaf's spec sites against the LIVE
+        // obarray (post-loadup) so a pred/subr-class body serves the armed FAST shim
+        // from call 1 — no JIT warmup, no first-call re-arm.
+        match load_leaf_from_unit(&unit, p.content_hash, p.arity, &p.live_reloc, Some(&ctx.obarray))
+        {
             Some(leaf) => leaves.push((p.compiled_id, leaf)),
             None => stats.missed += 1,
         }
@@ -3369,7 +3496,10 @@ fn define_baseline_leaf_into_module(
         max_depth: bmeta.max_depth,
         has_precise_deopt: true,
     };
-    let desc_bytes = encode_descriptor(&meta, &recipe, reloc_data.len() as u32);
+    // Baseline leaves emit an empty spec-section until the emit path threads the
+    // obarray (increment B2 emit wiring) — `build_baseline_leaf_object` still runs
+    // the obarray-free `find_cbsym_spec_sites` (no `Op::Call` subr/bytecode spec).
+    let desc_bytes = encode_descriptor(&meta, &recipe, reloc_data.len() as u32, &[]);
     let data_id = module
         .declare_data(desc_name, Linkage::Export, /*writable=*/ false, /*tls=*/ false)
         .map_err(|e| module_init_err(e.to_string()))?;
@@ -3827,7 +3957,7 @@ mod tests {
         let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
         let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
         let aot_leaf =
-            load_leaf_from_unit(&unit, content_hash, nargs, &live_reloc_for(ops, constants, nargs))
+            load_leaf_from_unit(&unit, content_hash, nargs, &live_reloc_for(ops, constants, nargs), None)
                 .expect("load leaf from unit");
 
         // Reference: JIT leaf for the same MIR.
@@ -3989,7 +4119,7 @@ mod tests {
         let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
         let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
         let aot_leaf =
-            load_leaf_from_unit(&unit, content_hash, arity, &live_reloc_for(&ops, &constants, arity))
+            load_leaf_from_unit(&unit, content_hash, arity, &live_reloc_for(&ops, &constants, arity), None)
                 .expect("load");
 
         // PROOF OF #16 FIX: both symbols are in the reloc set (the func's own
@@ -4102,7 +4232,7 @@ mod tests {
         let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
         let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
         let aot_leaf =
-            load_leaf_from_unit(&unit, content_hash, arity, &live_reloc_for(&ops, &constants, arity))
+            load_leaf_from_unit(&unit, content_hash, arity, &live_reloc_for(&ops, &constants, arity), None)
                 .expect("load reloc leaf");
 
         // The reloc Vec holds the FUNCTION'S OWN "hello" object (audit #A:
@@ -4168,7 +4298,7 @@ mod tests {
         let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
         let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
         let aot_leaf =
-            load_leaf_from_unit(&unit, content_hash, arity, &live_reloc_for(&ops, &constants, arity))
+            load_leaf_from_unit(&unit, content_hash, arity, &live_reloc_for(&ops, &constants, arity), None)
                 .expect("load");
 
         // reloc_values must be ["first","second"] in that order.
@@ -4303,13 +4433,13 @@ mod tests {
         let live = live_reloc_for(&ops, &constants, arity); // empty (fixnum body)
         // Right hash, WRONG arity → the descriptor arity check bails.
         assert!(
-            load_leaf_from_unit(&unit, content_hash, /*arity=*/ 2, &live).is_none(),
+            load_leaf_from_unit(&unit, content_hash, /*arity=*/ 2, &live, None).is_none(),
             "arity mismatch must miss"
         );
         // A foreign content hash → the entry/descriptor symbols don't exist →
         // dlsym miss → None.
         assert!(
-            load_leaf_from_unit(&unit, content_hash ^ 0xdead_beef, arity, &live).is_none(),
+            load_leaf_from_unit(&unit, content_hash ^ 0xdead_beef, arity, &live, None).is_none(),
             "foreign hash must miss"
         );
     }

@@ -24,6 +24,11 @@ const NEOVM_JIT_SHIM_NAMES: &[&str] = &[
     "neovm_jit_builtin_slice",
     "neovm_jit_call",
     "neovm_jit_call_spec",
+    // R2 increment B2 (Op::Call spec-in-AOT): the three round-1 subr-speculation
+    // shims are now emitted by AOT baseline leaves (find_spec_sites' Op::Call pass
+    // runs at emit under Some(obarray)), so an AOT `.so` may import them — they
+    // MUST be host-exported + salted (were JIT-only through increment A).
+    "neovm_jit_call_subr_spec",
     // R2 increment A (CBSym-in-AOT): the two CallBuiltinSym intrinsic shims are now
     // emitted by AOT baseline leaves too (their classification is name-canonical +
     // obarray-free), so an AOT `.so` may import them — they MUST be in the exported
@@ -31,6 +36,7 @@ const NEOVM_JIT_SHIM_NAMES: &[&str] = &[
     "neovm_jit_cbsym_read",
     "neovm_jit_cbsym_spec",
     "neovm_jit_cons",
+    "neovm_jit_eq_incl_props_spec",
     "neovm_jit_eq_slow",
     "neovm_jit_gc_push",
     "neovm_jit_gc_restore",
@@ -41,6 +47,7 @@ const NEOVM_JIT_SHIM_NAMES: &[&str] = &[
     "neovm_jit_named_builtin",
     "neovm_jit_numberp_slow",
     "neovm_jit_pop_handler",
+    "neovm_jit_pred_spec",
     "neovm_jit_push_catch",
     "neovm_jit_push_cc",
     "neovm_jit_push_cc_raw",

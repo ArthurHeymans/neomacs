@@ -380,7 +380,7 @@ pub fn try_run_compiled(
             {
                 let native_arity = func.params.required.len();
                 if let Some(leaf) =
-                    super::aot::try_load_leaf(&func.ops, &func.constants, native_arity)
+                    super::aot::try_load_leaf(&func.ops, &func.constants, native_arity, obarray)
                 {
                     // AOT leaves never inline → no inline deps to register. Their
                     // reloc consts are rooted via the COMPILED walk (R1c-8).

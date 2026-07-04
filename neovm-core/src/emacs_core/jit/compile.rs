@@ -373,7 +373,7 @@ struct ShimAddr(*const ());
 unsafe impl Sync for ShimAddr {}
 
 #[used]
-static JIT_SHIM_ANCHOR: [ShimAddr; 37] = [
+static JIT_SHIM_ANCHOR: [ShimAddr; 40] = [
     ShimAddr(neovm_jit_apply as *const ()),
     ShimAddr(neovm_jit_backedge as *const ()),
     ShimAddr(neovm_jit_builtin1 as *const ()),
@@ -382,11 +382,16 @@ static JIT_SHIM_ANCHOR: [ShimAddr; 37] = [
     ShimAddr(neovm_jit_builtin_slice as *const ()),
     ShimAddr(neovm_jit_call as *const ()),
     ShimAddr(neovm_jit_call_spec as *const ()),
+    // R2 increment B2 (Op::Call spec-in-AOT): the three round-1 subr-speculation
+    // shims are now AOT-importable, so they must survive `--gc-sections` for
+    // `--export-dynamic-symbol` to promote them into the host's dynamic table.
+    ShimAddr(neovm_jit_call_subr_spec as *const ()),
     // R2 increment A: the two CBSym intrinsic shims are now AOT-importable, so
     // they must survive `--gc-sections` for `--export-dynamic-symbol` to promote.
     ShimAddr(neovm_jit_cbsym_read as *const ()),
     ShimAddr(neovm_jit_cbsym_spec as *const ()),
     ShimAddr(neovm_jit_cons as *const ()),
+    ShimAddr(neovm_jit_eq_incl_props_spec as *const ()),
     ShimAddr(neovm_jit_eq_slow as *const ()),
     ShimAddr(neovm_jit_gc_push as *const ()),
     ShimAddr(neovm_jit_gc_restore as *const ()),
@@ -397,6 +402,7 @@ static JIT_SHIM_ANCHOR: [ShimAddr; 37] = [
     ShimAddr(neovm_jit_named_builtin as *const ()),
     ShimAddr(neovm_jit_numberp_slow as *const ()),
     ShimAddr(neovm_jit_pop_handler as *const ()),
+    ShimAddr(neovm_jit_pred_spec as *const ()),
     ShimAddr(neovm_jit_push_catch as *const ()),
     ShimAddr(neovm_jit_push_cc as *const ()),
     ShimAddr(neovm_jit_push_cc_raw as *const ()),
@@ -1104,11 +1110,16 @@ fn subr_spec_armed(ctx: &Context, sym: i64, expected: i64, slot: &SpecSlot) -> b
 /// SAFETY: same vmctx contract as [`neovm_jit_call`]; `slot` points into the
 /// owning CompiledLeaf's spec_slots (alive whenever its code runs).
 ///
-/// JIT-only by construction (NOT in `shim_names.rs`/`MIR_SHIM_NAMES`): subr
-/// spec sites exist only when compiling with `Some(obarray)`, and AOT compiles
-/// at `None` (`build_baseline_leaf_object` D0), so no AOT object can reference
-/// this symbol — `assert_aot_imports_exported` would refuse one that did.
-extern "C" fn neovm_jit_call_subr_spec(
+/// AOT-importable (increment B2): the `Op::Call` subr spec sites are now emitted
+/// by the AOT baseline tier too (`build_baseline_leaf_object` with `Some(obarray)`),
+/// so an AOT `.so` may import this symbol. It is therefore host-exported
+/// (`#[unsafe(no_mangle)] pub`) + in `shim_names.rs`/`MIR_SHIM_NAMES` (salted into
+/// `ABI_TAG`) + anchored by `JIT_SHIM_ANCHOR`. Cross-session soundness rides on the
+/// per-site epoch guard + the loader's DISARM sentinel (`SPEC_EPOCH_DISARMED`), not
+/// on any baked address — the shim re-reads the live entry every call.
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_call_subr_spec(
     ctx: *mut u8,
     sym: i64,
     expected: i64,
@@ -1182,8 +1193,10 @@ extern "C" fn neovm_jit_call_subr_spec(
 /// check on an immediate/heap header. The skipped backtrace frame is
 /// unobservable: the armed path cannot signal, GC, or run lisp between frame
 /// push and pop.
-/// SAFETY + JIT-only status: same as [`neovm_jit_call_subr_spec`].
-extern "C" fn neovm_jit_pred_spec(
+/// SAFETY + AOT-importable status: same as [`neovm_jit_call_subr_spec`].
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_pred_spec(
     ctx: *mut u8,
     kind: i64,
     sym: i64,
@@ -1240,8 +1253,10 @@ extern "C" fn neovm_jit_pred_spec(
 /// cost is one epoch check + bit compare on top of a deep structural
 /// comparison, i.e. noise. This keeps the same GC-FREE INVARIANT as
 /// [`neovm_jit_pred_spec`] (no allocation / no lisp on ANY path here).
-/// SAFETY + JIT-only status: same as [`neovm_jit_call_subr_spec`].
-extern "C" fn neovm_jit_eq_incl_props_spec(
+/// SAFETY + AOT-importable status: same as [`neovm_jit_call_subr_spec`].
+#[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
+#[unsafe(no_mangle)]
+pub extern "C" fn neovm_jit_eq_incl_props_spec(
     ctx: *mut u8,
     sym: i64,
     expected: i64,
@@ -2047,6 +2062,15 @@ pub(crate) struct LeafSidecar {
     meta_depth: *const core::cell::Cell<i64>,
     /// Address of the `handlers` deopt cell.
     meta_handlers: *const core::cell::Cell<i64>,
+    /// R2 increment B2: base of the per-(thread,leaf) `SpecSlot` array the AOT
+    /// `Op::Call` spec sites index (`spec_slot_base[slot_idx]`). Null when the leaf
+    /// has no armed spec site. Built + armed by [`CompiledLeaf::from_aot`].
+    spec_slot_base: *const SpecSlot,
+    /// R2 increment B2: base of the per-(thread,leaf) `expected` (subr/bytecode
+    /// VALUE bits) array, parallel to `spec_slot_base`. The AOT spec sites load
+    /// `spec_expected_base[slot_idx]` instead of baking the session-specific bits.
+    /// Null when the leaf has no armed spec site.
+    spec_expected_base: *const u64,
 }
 
 impl LeafSidecar {
@@ -2057,17 +2081,27 @@ impl LeafSidecar {
     pub(crate) const OFF_META_PC: i32 = 16;
     pub(crate) const OFF_META_DEPTH: i32 = 24;
     pub(crate) const OFF_META_HANDLERS: i32 = 32;
+    pub(crate) const OFF_SPEC_SLOT_BASE: i32 = 40;
+    pub(crate) const OFF_SPEC_EXPECTED_BASE: i32 = 48;
 }
 
 // Compile-time assertion that the hand-written offsets match the actual layout.
 const _: () = {
-    assert!(core::mem::size_of::<LeafSidecar>() == 40);
+    assert!(core::mem::size_of::<LeafSidecar>() == 56);
     assert!(core::mem::offset_of!(LeafSidecar, reloc_base) == LeafSidecar::OFF_RELOC_BASE as usize);
     assert!(core::mem::offset_of!(LeafSidecar, spill_base) == LeafSidecar::OFF_SPILL_BASE as usize);
     assert!(core::mem::offset_of!(LeafSidecar, meta_pc) == LeafSidecar::OFF_META_PC as usize);
     assert!(core::mem::offset_of!(LeafSidecar, meta_depth) == LeafSidecar::OFF_META_DEPTH as usize);
     assert!(
         core::mem::offset_of!(LeafSidecar, meta_handlers) == LeafSidecar::OFF_META_HANDLERS as usize
+    );
+    assert!(
+        core::mem::offset_of!(LeafSidecar, spec_slot_base)
+            == LeafSidecar::OFF_SPEC_SLOT_BASE as usize
+    );
+    assert!(
+        core::mem::offset_of!(LeafSidecar, spec_expected_base)
+            == LeafSidecar::OFF_SPEC_EXPECTED_BASE as usize
     );
 };
 
@@ -2192,6 +2226,14 @@ pub struct CompiledLeaf {
     /// into this Box (stable: boxed slice, owned here, code only runs under a
     /// live Rc of this leaf).
     spec_slots: Box<[SpecSlot]>,
+    /// R2 increment B2 (AOT only): the per-site `expected` (subr/bytecode VALUE
+    /// bits) array parallel to `spec_slots`, one entry per `Op::Call` spec site in
+    /// slot order. AOT code loads `spec_expected_base[slot_idx]` from the sidecar
+    /// instead of baking the session-specific bits; the loader ([`from_aot`]) fills
+    /// it from the LIVE cell at load. Empty for JIT leaves (they bake `expected` as
+    /// an `iconst`) and for AOT leaves with no armed spec site. Address-stable (a
+    /// boxed slice, the sidecar's `spec_expected_base` points into it).
+    spec_expected: Box<[u64]>,
     /// Whether the body registers handler frames (`condition-case`/`catch`).
     /// When set, [`call`](Self::call) truncates `ctx.condition_stack` back to
     /// the entry depth on every exit (before the specpdl unwind, exactly like
@@ -2310,11 +2352,24 @@ impl CompiledLeaf {
     /// `backing`'s loaded library, and `backing` must outlive every call — both
     /// guaranteed by the loader (`aot::try_load_leaf`), which verifies the
     /// ABI_TAG and dlsym's `entry` out of the same unit it stores in `backing`.
+    ///
+    /// R2 increment B2 — `spec_sites` (from the descriptor's spec-section, in slot
+    /// order) is RE-CLASSIFIED against `obarray` (the LIVE cell at load): a site is
+    /// ARMED only when re-running the same classification (`get_bytecode_data` for
+    /// Bytecode, else `subr_spec_kind`) on the live binding yields the SAME
+    /// discriminant baked into the code (`site.kind_disc`); otherwise it is left
+    /// DISARMED (`SPEC_EPOCH_DISARMED`), so the shims' baked-kind fast paths never
+    /// run against a re-aliased callee. `expected` comes from the live cell (never
+    /// encoded); redefinition is handled at run time by the per-site epoch guard
+    /// exactly like a fresh JIT compile. A `None` obarray (test/testkit load) leaves
+    /// every site DISARMED.
     pub(crate) unsafe fn from_aot(
         entry: *const u8,
         backing: std::sync::Arc<LoadedUnit>,
         meta: AotLeafMeta,
         reloc_data: Box<[Value]>,
+        spec_sites: &[super::aot::AotSpecSite],
+        obarray: Option<&Obarray>,
     ) -> Self {
         let deopt_spill: Box<[core::cell::Cell<i64>]> = if meta.has_precise_deopt {
             (0..meta.max_depth).map(|_| core::cell::Cell::new(0)).collect()
@@ -2326,13 +2381,66 @@ impl CompiledLeaf {
             depth: core::cell::Cell::new(0),
             handlers: core::cell::Cell::new(0),
         });
+        // RE-CLASSIFY each `Op::Call` spec site against the LIVE obarray cell and
+        // ARM (epoch = live function_epoch, expected = live cell bits) ONLY when the
+        // live re-classification matches the baked discriminant; else DISARM. This
+        // is the cross-session-soundness crux — a callee re-aliased to a different
+        // kind (e.g. `recordp` rebound off `PredRecordp`) DISARMS rather than running
+        // the wrong baked op. Built BEFORE the sidecar so the bases point at the
+        // FINAL boxes (move-stable, like reloc_data / deopt_spill).
+        let n_spec = spec_sites.len();
+        let mut spec_slots_vec: Vec<SpecSlot> = Vec::with_capacity(n_spec);
+        let mut spec_expected_vec: Vec<u64> = Vec::with_capacity(n_spec);
+        for site in spec_sites {
+            let (epoch, expected) = 'arm: {
+                // No live obarray (test/testkit) → can't re-classify → DISARM.
+                let Some(ob) = obarray else {
+                    break 'arm (SPEC_EPOCH_DISARMED, 0);
+                };
+                // Recover the callee SymId from the leaf's OWN reloc vector (the same
+                // symbol the code loads via `materialize_op_sym_id`).
+                let Some(sym_id) = reloc_data
+                    .get(site.callee_reloc_idx as usize)
+                    .and_then(|v| v.as_symbol_id())
+                else {
+                    break 'arm (SPEC_EPOCH_DISARMED, 0);
+                };
+                // The LIVE binding at load. A now-unbound symbol → DISARM.
+                let Some(cell) = ob.symbol_function_id(sym_id) else {
+                    break 'arm (SPEC_EPOCH_DISARMED, 0);
+                };
+                // RE-CLASSIFY exactly as `find_spec_sites` did (Bytecode fast-path,
+                // else the fixed-arity/Many subr classifier at the SAME nargs).
+                let live_disc = if cell.get_bytecode_data().is_some() {
+                    SpecCalleeKind::Bytecode.to_spec_disc()
+                } else {
+                    subr_spec_kind(cell, sym_id, site.nargs as usize)
+                        .and_then(|k| k.to_spec_disc())
+                };
+                // ARM only on an EXACT discriminant match (never "builtin+arity").
+                if live_disc == Some(site.kind_disc) {
+                    (ob.function_epoch(), cell.bits() as u64)
+                } else {
+                    (SPEC_EPOCH_DISARMED, 0)
+                }
+            };
+            spec_slots_vec.push(SpecSlot {
+                epoch: AtomicU64::new(epoch),
+                leaf: AtomicU64::new(0),
+            });
+            spec_expected_vec.push(expected);
+        }
+        let spec_slots: Box<[SpecSlot]> = spec_slots_vec.into_boxed_slice();
+        let spec_expected: Box<[u64]> = spec_expected_vec.into_boxed_slice();
         // Build the sidecar from the FINAL boxes (move-stability: a Box's heap
         // pointee does not move when the owning CompiledLeaf moves into Rc::new,
         // and these boxes are never reallocated for the leaf's life — only the
         // Cells inside are mutated in place). The AOT code reads its bases from
         // here via the 4th entry arg. `reloc_base` is null when there are no heap
         // consts (empty box); the lowering only emits a reloc load when the body
-        // has a heap Const, so a null base is never dereferenced.
+        // has a heap Const, so a null base is never dereferenced. The two spec
+        // bases are null when the leaf has no armed spec site (empty box); the
+        // lowering only emits a spec-array load at an `Op::Call` spec site.
         let sidecar = Box::new(LeafSidecar {
             reloc_base: if reloc_data.is_empty() {
                 core::ptr::null()
@@ -2343,6 +2451,16 @@ impl CompiledLeaf {
             meta_pc: &deopt_meta.pc as *const core::cell::Cell<i64>,
             meta_depth: &deopt_meta.depth as *const core::cell::Cell<i64>,
             meta_handlers: &deopt_meta.handlers as *const core::cell::Cell<i64>,
+            spec_slot_base: if spec_slots.is_empty() {
+                core::ptr::null()
+            } else {
+                spec_slots.as_ptr()
+            },
+            spec_expected_base: if spec_expected.is_empty() {
+                core::ptr::null()
+            } else {
+                spec_expected.as_ptr()
+            },
         });
         CompiledLeaf {
             arity: meta.arity,
@@ -2354,7 +2472,8 @@ impl CompiledLeaf {
             inline_epoch: None,
             has_side_effects: meta.has_side_effects,
             inline_deps: Box::from([]),
-            spec_slots: Box::from([]),
+            spec_slots,
+            spec_expected,
             deopt_spill,
             deopt_meta,
             reloc_data,
@@ -2670,6 +2789,49 @@ fn materialize_op_sym_id(
             fb.ins().ushr_imm(sym_bits, TAG_BITS as i64)
         }
         None => fb.ins().iconst(types::I64, sym as i64),
+    }
+}
+
+/// Materialize an `Op::Call` spec site's `expected` (subr/bytecode VALUE bits) for
+/// the shim call. JIT (`aot=false`) bakes it as an `iconst` (valid same-session);
+/// AOT (`aot=true`) loads it from `spec_expected_base[slot_idx]` — the per-thread
+/// array the loader (`from_aot`) fills from the LIVE cell (the bits are
+/// session-specific, so they must never be baked). Keyed on `aot`, NOT presence, so
+/// the JIT stays byte-identical to before B2.
+fn materialize_spec_expected(
+    fb: &mut FunctionBuilder,
+    aot: bool,
+    spec_expected_base: Option<ClifValue>,
+    expected: u64,
+    slot_idx: usize,
+) -> ClifValue {
+    if aot {
+        let base = spec_expected_base.expect("AOT sets spec_expected_base at an Op::Call spec site");
+        fb.ins()
+            .load(types::I64, MemFlags::trusted(), base, (slot_idx * 8) as i32)
+    } else {
+        fb.ins().iconst(types::I64, expected as i64)
+    }
+}
+
+/// Materialize an `Op::Call` spec site's `SpecSlot` pointer for the shim call. JIT
+/// (`aot=false`) bakes the slot address as an `iconst`; AOT (`aot=true`) computes
+/// `spec_slot_base + slot_idx * size_of::<SpecSlot>()` off the per-thread base the
+/// loader put in the sidecar (the address is session-specific). Byte-identical to
+/// before B2 for the JIT.
+fn materialize_spec_slot(
+    fb: &mut FunctionBuilder,
+    aot: bool,
+    spec_slot_base: Option<ClifValue>,
+    slot_ptr: i64,
+    slot_idx: usize,
+) -> ClifValue {
+    if aot {
+        let base = spec_slot_base.expect("AOT sets spec_slot_base at an Op::Call spec site");
+        fb.ins()
+            .iadd_imm(base, (slot_idx * core::mem::size_of::<SpecSlot>()) as i64)
+    } else {
+        fb.ins().iconst(types::I64, slot_ptr)
     }
 }
 
@@ -3818,6 +3980,7 @@ pub(crate) fn lower_mir_pure(m: &mir::MirFunction) -> Result<CompiledLeaf, Compi
         // actual inlined-callee SymIds after the inline pass.
         inline_deps: Box::from([]),
         spec_slots: Box::from([]),
+        spec_expected: Box::from([]),
         deopt_spill,
         deopt_meta,
         reloc_data,
@@ -5162,7 +5325,10 @@ fn lower_simple_op(
     rt: Option<&RtCtx>,
     handlers: &[HandlerStatic],
     pending: &mut Vec<PendingDispatch>,
-    spec: Option<(u32, u64, i64, SpecCalleeKind)>,
+    // R2 increment B2: an `Op::Call` spec site carries `(sym, expected, slot_ptr,
+    // slot_idx, kind)`. `slot_ptr` is the baked `SpecSlot*` (JIT); `slot_idx` indexes
+    // the AOT sidecar's `spec_slot_base`/`spec_expected_base` arrays.
+    spec: Option<(u32, u64, i64, usize, SpecCalleeKind)>,
     op: &Op,
     // Cross-block known-fixnum operand values at this block (seeded by
     // `lower_leaf_full` from `compute_known_fixnum_slots`); `guard_fixnum` elides
@@ -5172,6 +5338,13 @@ fn lower_simple_op(
     // `Op::Constant` loads a heap object from reloc_base[idx] instead of baking it.
     reloc_base: Option<ClifValue>,
     reloc_index: &std::collections::HashMap<usize, u32>,
+    // R2 increment B2: false → JIT (spec `expected`/`slot` baked as `iconst`,
+    // byte-identical); true → AOT (loaded from the sidecar's `spec_expected_base`/
+    // `spec_slot_base` at `slot_idx`). The two bases are `Some` only in AOT mode at a
+    // body with an `Op::Call` spec site (loaded once in the entry block).
+    aot: bool,
+    spec_slot_base: Option<ClifValue>,
+    spec_expected_base: Option<ClifValue>,
 ) -> Result<(), CompileError> {
     // Non-unboxing ops must see only tagged Values: force-tag the whole stack so
     // their gc_push / signal snapshot / shim args never observe a raw slot (closes
@@ -5578,7 +5751,7 @@ fn lower_simple_op(
             // path (no spill; their fallback block spills for itself). Every
             // other shape spills the args into the call buffer for its shim.
             let reg_args: Option<SmallVec<[ClifValue; 2]>> = match spec {
-                Some((_, _, _, kind)) if kind.is_reg_args() => {
+                Some((_, _, _, _, kind)) if kind.is_reg_args() => {
                     Some(stack[args_at..].iter().copied().collect())
                 }
                 _ => {
@@ -5616,20 +5789,24 @@ fn lower_simple_op(
             // protocol. `None` = no NEED_GENERIC possible.
             let mut generic_fallback: Option<Block> = None;
             let call = match spec {
-                Some((sym, expected, slot_ptr, SpecCalleeKind::Bytecode)) => {
-                    let sym_v = fb.ins().iconst(types::I64, sym as i64);
-                    let exp_v = fb.ins().iconst(types::I64, expected as i64);
-                    let slot_v = fb.ins().iconst(types::I64, slot_ptr);
+                Some((sym, expected, slot_ptr, slot_idx, SpecCalleeKind::Bytecode)) => {
+                    let sym_v = materialize_op_sym_id(fb, reloc_base, reloc_index, sym);
+                    let exp_v =
+                        materialize_spec_expected(fb, aot, spec_expected_base, expected, slot_idx);
+                    let slot_v = materialize_spec_slot(fb, aot, spec_slot_base, slot_ptr, slot_idx);
                     fb.ins().call(
                         rt.refs.call_spec,
                         &[vmctx, sym_v, exp_v, slot_v, args_addr, n_val, out_addr],
                     )
                 }
-                Some((sym, expected, slot_ptr, kind)) => {
+                Some((sym, expected, slot_ptr, slot_idx, kind)) => {
+                    // PRESERVE emission order: create the generic-fallback block
+                    // FIRST (byte-identical to before B2), then the operands.
                     generic_fallback = Some(fb.create_block());
-                    let sym_v = fb.ins().iconst(types::I64, sym as i64);
-                    let exp_v = fb.ins().iconst(types::I64, expected as i64);
-                    let slot_v = fb.ins().iconst(types::I64, slot_ptr);
+                    let sym_v = materialize_op_sym_id(fb, reloc_base, reloc_index, sym);
+                    let exp_v =
+                        materialize_spec_expected(fb, aot, spec_expected_base, expected, slot_idx);
+                    let slot_v = materialize_spec_slot(fb, aot, spec_slot_base, slot_ptr, slot_idx);
                     // The refs are Some whenever a subr-kind site exists (the
                     // declare is keyed on exactly that condition).
                     match (kind, &reg_args) {
@@ -5896,7 +6073,7 @@ fn lower_simple_op(
             // materialize below is AOT-reloc-aware, so the baked shim call reloads
             // the SymId by name under AOT and iconsts it under JIT (byte-identical).
             let cbsym_spec_b = matches!(op, Op::CallBuiltinSym(..))
-                && matches!(spec, Some((_, _, _, SpecCalleeKind::CbsymTierB)));
+                && matches!(spec, Some((_, _, _, _, SpecCalleeKind::CbsymTierB)));
             // Tier-A GC-free read (`neovm_jit_cbsym_read`): its OK path returns an
             // IMMEDIATE and never allocates, so the fast path skips residual-stack
             // rooting entirely (like the round-1 predicate shims). `which` is the
@@ -5904,7 +6081,7 @@ fn lower_simple_op(
             // fallback (which DOES root, since it can allocate).
             let cbsym_a_which: Option<u8> = if matches!(op, Op::CallBuiltinSym(..)) {
                 match spec {
-                    Some((_, _, _, SpecCalleeKind::CbsymTierA { which })) => Some(which),
+                    Some((_, _, _, _, SpecCalleeKind::CbsymTierA { which })) => Some(which),
                     _ => None,
                 }
             } else {
@@ -6237,7 +6414,7 @@ type HandlerStatic = (usize, usize);
 /// What kind of callee a speculation site validated at compile time — decides
 /// which shim the armed site calls and how its lowering roots/falls back.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SpecCalleeKind {
+pub(crate) enum SpecCalleeKind {
     /// A BYTECODE object: `neovm_jit_call_spec` (epoch logic inside the shim,
     /// V3 native-to-native fast path, strict-symbol fallback inside the shim).
     Bytecode,
@@ -6326,6 +6503,32 @@ impl SpecCalleeKind {
             SpecCalleeKind::CbsymTierA { .. } | SpecCalleeKind::CbsymTierB
         )
     }
+
+    /// R2 increment B2: the AOT descriptor discriminant for an `Op::Call` spec
+    /// site's baked kind, or `None` for a CBSym kind (name-canonical, epochless —
+    /// carries no per-site descriptor entry). The loader RE-CLASSIFIES the live
+    /// binding and arms a site ONLY when the fresh `to_spec_disc()` matches the
+    /// `kind_disc` baked here — so a re-aliased callee (e.g. `recordp` rebound to a
+    /// non-`PredRecordp` subr) DISARMS instead of running the wrong baked op.
+    ///
+    /// EXHAUSTIVE match (no `_`): a new `SpecCalleeKind` variant is compile-forced
+    /// to choose a discriminant (and bump [`DISC_COUNT`](Self::DISC_COUNT), salted
+    /// into `ABI_TAG`) rather than silently defaulting.
+    pub(crate) fn to_spec_disc(self) -> Option<u8> {
+        match self {
+            SpecCalleeKind::Bytecode => Some(0),
+            SpecCalleeKind::SubrGeneral => Some(1),
+            SpecCalleeKind::PredRecordp => Some(2),
+            SpecCalleeKind::PredSymbolWithPos => Some(3),
+            SpecCalleeKind::EqInclProps => Some(4),
+            SpecCalleeKind::CbsymTierA { .. } | SpecCalleeKind::CbsymTierB => None,
+        }
+    }
+
+    /// Number of distinct `Op::Call` spec discriminants [`to_spec_disc`](Self::to_spec_disc)
+    /// assigns (0..DISC_COUNT). Salted into `ABI_TAG` so a renumber/count change
+    /// re-tags stale `.so`s.
+    pub(crate) const DISC_COUNT: u8 = 5;
 }
 
 /// A speculated direct-call site: an `Op::Call` whose callee slot provably
@@ -7772,6 +7975,8 @@ pub fn lower_leaf_full(
             )
         }),
         spec_slots,
+        // JIT bakes each site's `expected` as an iconst; no sidecar array needed.
+        spec_expected: Box::from([]),
         deopt_spill,
         deopt_meta,
         reloc_data,
@@ -8069,6 +8274,36 @@ fn build_leaf_fn<M: Module>(
             )
         } else {
             Some(fb.ins().iconst(ptr_ty, reloc_data.as_ptr() as i64))
+        };
+        // R2 increment B2: the AOT sidecar's spec-slot / spec-expected array bases,
+        // loaded ONCE here (the entry block dominates every block, incl. cold deopt)
+        // iff this is an AOT body with at least one `Op::Call` subr/bytecode spec
+        // site (CBSym sites are slotless — they read neither base). JIT
+        // (`aot=false`) emits NOTHING here (bases stay `None`; each site bakes its
+        // slot/expected as `iconst`), so the JIT lowering is byte-identical to
+        // pre-B2. `None` when the leaf has no such site, so a null sidecar base is
+        // never loaded/indexed.
+        let has_op_call_spec = spec_sites
+            .values()
+            .any(|s| s.kind.to_spec_disc().is_some());
+        let (spec_slot_base, spec_expected_base) = if aot && has_op_call_spec {
+            let sc = sidecar_param.expect("AOT sets sidecar_param");
+            (
+                Some(fb.ins().load(
+                    ptr_ty,
+                    MemFlags::trusted(),
+                    sc,
+                    LeafSidecar::OFF_SPEC_SLOT_BASE,
+                )),
+                Some(fb.ins().load(
+                    ptr_ty,
+                    MemFlags::trusted(),
+                    sc,
+                    LeafSidecar::OFF_SPEC_EXPECTED_BASE,
+                )),
+            )
+        } else {
+            (None, None)
         };
         // Deopt-buffer bases as entry-block values: JIT (`aot=false`) → the `iconst`
         // form (deferred to the cold deopt blocks, byte-identical to pre-R2-E); AOT
@@ -8440,6 +8675,9 @@ fn build_leaf_fn<M: Module>(
                                 site.sym,
                                 site.expected_bits,
                                 &spec_slots[site.slot] as *const SpecSlot as i64,
+                                // R2 increment B2: the slot index the AOT sidecar's
+                                // spec-slot / spec-expected arrays are keyed by.
+                                site.slot,
                                 site.kind,
                             )
                         });
@@ -8459,6 +8697,9 @@ fn build_leaf_fn<M: Module>(
                             &known_fixnum,
                             reloc_base,
                             reloc_index,
+                            aot,
+                            spec_slot_base,
+                            spec_expected_base,
                         )?;
                         // Re-sync the raw mask after the op: raw-preserving ops keep
                         // it in lockstep (assert); every other op force-tagged the
