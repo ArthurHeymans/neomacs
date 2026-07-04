@@ -13939,6 +13939,76 @@ fn jit_cbsym_spec_tierb_engages_and_matches() {
     }
 }
 
+/// R2 COMMIT 3 end-to-end: a buffer-op loop (goto-char / current-column / widen,
+/// 3 intrinsifiable CBSym ops vs 2 arith) that `body_is_jit_profitable` USED to
+/// reject (3 > 2 -> NotProfitable, so the intrinsic could never engage) now
+/// TIERS with the profitability gate ON (no override) — the Tier-B fast path
+/// fires and the result matches the interpreter.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_cbsym_buffer_loop_tiers_with_profit_gate_on() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    // Gate ON (production default) — do NOT disable it; the re-weight must carry.
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(true);
+    let mk = |hot: bool| {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: vec![crate::emacs_core::intern::SymId(1)],
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.lexical = true;
+        f.ops = vec![
+            Op::StackRef(0),                                          // 0  [n n]
+            Op::Constant(0),                                          // 1  [n n 0]
+            Op::Gtr,                                                  // 2  [n c]   arith
+            Op::GotoIfNil(15),                                        // 3  [n]
+            Op::Constant(1),                                          // 4  [n 1]
+            Op::CallBuiltinSym(crate::emacs_core::intern::intern("goto-char"), 1), // 5 [n pos]
+            Op::Pop,                                                  // 6  [n]
+            Op::CallBuiltinSym(crate::emacs_core::intern::intern("current-column"), 0), // 7 [n col]
+            Op::Pop,                                                  // 8  [n]
+            Op::CallBuiltinSym(crate::emacs_core::intern::intern("widen"), 0), // 9 [n nil]
+            Op::Pop,                                                  // 10 [n]
+            Op::StackRef(0),                                          // 11 [n n]
+            Op::Sub1,                                                 // 12 [n n-1] arith
+            Op::StackSet(1),                                          // 13 [n-1]
+            Op::Goto(0),                                              // 14 backedge
+            Op::StackRef(0),                                          // 15 [n n]   exit
+            Op::Return,                                               // 16
+        ];
+        f.constants = vec![Value::make_int(0), Value::make_int(1)];
+        f.max_stack = 16;
+        if hot {
+            f.runtime.set_hot_for_test();
+        }
+        Value::make_bytecode(f)
+    };
+    let mut ev = Context::new();
+    ev.eval_str("(insert \"abcdef\")").expect("buffer setup");
+    #[cfg(debug_assertions)]
+    let (_, fast0, _) = jit_cbsym_spec_counters();
+    let native = ev
+        .funcall_general_untraced(mk(true), vec![Value::make_int(4)])
+        .expect("hot buffer loop runs");
+    let interp = ev
+        .funcall_general_untraced(mk(false), vec![Value::make_int(4)])
+        .expect("interp buffer loop runs");
+    assert_eq!(native.bits(), interp.bits(), "buffer-op loop parity hot vs cold");
+    assert_eq!(native, Value::make_int(0), "loop counts down to 0");
+    #[cfg(debug_assertions)]
+    {
+        let (_, fast1, _) = jit_cbsym_spec_counters();
+        assert!(
+            fast1 > fast0,
+            "the buffer loop TIERED (gate ON) and the Tier-B fast path fired — \
+             the CBSym re-weight let a formerly-NotProfitable body compile"
+        );
+    }
+}
+
 /// End-to-end: the classic hot shapes the poisoning analysis used to BAIL on
 /// now compile — recursive fib (arithmetic after recursive calls) and a
 /// while-loop mixing a call with arithmetic (guards at the loop join). Both

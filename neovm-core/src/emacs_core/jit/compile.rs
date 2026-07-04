@@ -2717,7 +2717,20 @@ fn body_is_jit_profitable(ops: &[Op]) -> bool {
             | Op::Gtr
             | Op::Leq
             | Op::Geq => arith += 1,
-            Op::Call(_) | Op::Apply(_) | Op::CallBuiltin(..) | Op::CallBuiltinSym(..) => calls += 1,
+            Op::Call(_) | Op::Apply(_) | Op::CallBuiltin(..) => calls += 1,
+            // R2: a CallBuiltinSym that WILL be intrinsified (Tier-A GC-free read
+            // or Tier-B dispatch-skip) costs ~an arith op, not a full
+            // call+dispatch — so it must NOT veto a buffer-op-heavy loop (point/
+            // insert/goto-char/... loops were `calls > arith` -> NotProfitable ->
+            // the intrinsic could never engage). Drop those from the call count
+            // via the classifier's OWN predicate, so the gate agrees exactly with
+            // what tiers. Non-intrinsifiable CBSym ops still count as calls, so a
+            // genuinely call-dominated non-spec body stays protected.
+            Op::CallBuiltinSym(sym, n) => {
+                if cbsym_spec_kind(*sym, *n as usize).is_none() {
+                    calls += 1;
+                }
+            }
             _ => {}
         }
     }
@@ -10086,6 +10099,36 @@ mod tests {
                 "excluded name {name:?} (1-arg) must never classify"
             );
         }
+    }
+
+    #[test]
+    fn cbsym_intrinsic_ops_no_longer_veto_profitability() {
+        // R2 COMMIT 3: an intrinsifiable CallBuiltinSym op no longer counts as a
+        // call in `body_is_jit_profitable`, so a buffer-op-heavy loop that USED
+        // to be NotProfitable (calls > arith) now tiers. A genuine call still
+        // vetoes; a non-shipped CBSym still counts.
+        use crate::emacs_core::eval::Context;
+        use crate::emacs_core::intern::intern;
+        let _ev = Context::new(); // populate the subr table for cbsym_spec_kind
+        force_profit_gate_for_test(true);
+        let point = Op::CallBuiltinSym(intern("point"), 0); // Tier-A eligible
+        let goto = Op::CallBuiltinSym(intern("goto-char"), 1); // Tier-B eligible
+        // Before the re-weight: calls=2 arith=0 -> NotProfitable. Now the two
+        // intrinsifiable CBSym ops drop out of the call count -> profitable.
+        assert!(
+            body_is_jit_profitable(&[point, Op::Pop, goto, Op::Return]),
+            "an intrinsifiable buffer-op body now tiers"
+        );
+        // A genuine Op::Call (no arithmetic) still vetoes.
+        assert!(
+            !body_is_jit_profitable(&[Op::Constant(0), Op::Call(0), Op::Return]),
+            "a real call-dominated body still declines"
+        );
+        // A non-shipped CBSym (`car`) is NOT intrinsified, so it still counts.
+        assert!(
+            !body_is_jit_profitable(&[Op::CallBuiltinSym(intern("car"), 1), Op::Return]),
+            "a non-intrinsifiable CBSym still counts as a call"
+        );
     }
 
     #[test]
