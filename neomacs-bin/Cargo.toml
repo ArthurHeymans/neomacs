@@ -21,6 +21,13 @@ mimalloc = ["dep:mimalloc"]
 # dispatch cut ~60%), so it ships on by default. Build `--no-default-features`
 # (plus the features you want) to get the interpreter-only binary.
 jit = ["neovm-core/jit"]
+# Diagnostics-only: thread neovm-core's `vm-profile` feature (execution-weighted
+# OP-MIX + per-builtin SUBR-MIX with the Op::Call-vs-CallBuiltinSym entry split)
+# into the binary, and expose the `neovm--vm-profile-reset` / `-dump` debug
+# subrs so a batch editing session can be profiled. Off by default; adds a
+# thread-local histogram bump per dispatched op/call (real cost — profiling
+# builds only). Run profiling sessions with `NEOVM_JIT=0`.
+vm-profile = ["neovm-core/vm-profile"]
 neo-term = ["neomacs-display-runtime/neo-term"]
 video = ["neomacs-display-runtime/video"]
 wpe-webkit = ["neomacs-display-runtime/wpe-webkit"]

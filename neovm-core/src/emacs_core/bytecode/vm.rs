@@ -37,10 +37,28 @@ pub(crate) mod vm_profile {
     use crate::emacs_core::intern::SymId;
     use std::cell::RefCell;
     use std::collections::HashMap;
+    use std::fmt::Write as _;
+
+    /// Entry-kind tags for the bytecode call-op that dispatched a builtin.
+    /// Round-2 intrinsics enter the JIT through DIFFERENT lowerings, so the
+    /// adjudication needs to know, per builtin, which op population it comes
+    /// from: `Op::Call` (generic funcall — the `find_spec_sites` speculation
+    /// path from round 1) vs `Op::CallBuiltinSym` (buffer/point ops, the
+    /// `neovm_jit_named_builtin` lowering that would need a NEW spec-site
+    /// extension) vs `Op::CallBuiltin` (name-based, override-aware).
+    pub(crate) const ENTRY_CALL: u8 = 1;
+    pub(crate) const ENTRY_CALLBUILTINSYM: u8 = 2;
+    pub(crate) const ENTRY_CALLBUILTIN: u8 = 3;
 
     thread_local! {
         static OP_COUNTS: RefCell<HashMap<String, u64>> = RefCell::new(HashMap::new());
         static SUBR_COUNTS: RefCell<HashMap<SymId, u64>> = RefCell::new(HashMap::new());
+        /// (callee SymId, ENTRY_* tag) -> count of bytecode call-ops that
+        /// dispatched that callee through that op. Populated at the run_loop
+        /// call arms (not `subr_entry_from_value`), so each count attributes to
+        /// the STATIC callee symbol of the exact op that issued the call — the
+        /// Op::Call-vs-CallBuiltinSym entry split the round-2 report needs.
+        static ENTRY_COUNTS: RefCell<HashMap<(u32, u8), u64>> = RefCell::new(HashMap::new());
     }
 
     /// Bump the per-builtin call histogram. Hooked at `subr_entry_from_value`
@@ -52,6 +70,23 @@ pub(crate) mod vm_profile {
     pub(crate) fn bump_subr(id: SymId) {
         SUBR_COUNTS.with(|c| {
             *c.borrow_mut().entry(id).or_insert(0) += 1;
+        });
+    }
+
+    /// Record a bytecode call-op targeting `sym`, split by the dispatching op
+    /// (`ENTRY_*`). Hooked in `run_loop`'s `Op::Call`/`Op::CallBuiltin`/
+    /// `Op::CallBuiltinSym` arms so the round-2 report can show, per builtin,
+    /// the Op::Call-vs-CallBuiltinSym entry split (the two lowerings).
+    ///
+    /// This is a superset denominator of `bump_subr`: an `Op::Call` whose
+    /// callee is a bytecode object (not a subr) also lands here, but such rows
+    /// are filtered out of the ranking, which is keyed by the SUBR-MIX totals.
+    /// Conversely, calls that never traverse `run_loop` (tree-walked eval,
+    /// direct `funcall`/`apply`) are counted only in the SUBR-MIX total and
+    /// show up as the report's "other" column.
+    pub(crate) fn bump_entry(sym: SymId, kind: u8) {
+        ENTRY_COUNTS.with(|c| {
+            *c.borrow_mut().entry((sym.0, kind)).or_insert(0) += 1;
         });
     }
 
@@ -74,35 +109,64 @@ pub(crate) mod vm_profile {
     pub(crate) fn reset() {
         OP_COUNTS.with(|c| c.borrow_mut().clear());
         SUBR_COUNTS.with(|c| c.borrow_mut().clear());
+        ENTRY_COUNTS.with(|c| c.borrow_mut().clear());
     }
 
-    /// Print the histogram, descending by count, with each op's execution share.
-    pub(crate) fn dump(label: &str) {
+    /// Format the OP-MIX + SUBR-MIX (with the per-builtin entry split) into a
+    /// String. Shared by [`dump`] and the `neovm--vm-profile-dump` debug subr.
+    pub(crate) fn report(label: &str) -> String {
+        let mut out = String::new();
         let mut rows: Vec<(String, u64)> =
             OP_COUNTS.with(|c| c.borrow().iter().map(|(k, v)| (k.clone(), *v)).collect());
         rows.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
         let total: u64 = rows.iter().map(|r| r.1).sum();
-        eprintln!(
+        let _ = writeln!(
+            out,
             "=== OP-MIX [{label}]: {total} ops executed, {} distinct ===",
             rows.len()
         );
         for (name, count) in &rows {
             let pct = 100.0 * *count as f64 / total.max(1) as f64;
-            eprintln!("  {name:<16} {count:>12}  {pct:5.2}%");
+            let _ = writeln!(out, "  {name:<16} {count:>12}  {pct:5.2}%");
         }
+
+        let entry: HashMap<(u32, u8), u64> = ENTRY_COUNTS.with(|c| c.borrow().clone());
         let mut subr_rows: Vec<(SymId, u64)> =
             SUBR_COUNTS.with(|c| c.borrow().iter().map(|(k, v)| (*k, *v)).collect());
         subr_rows.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.0.cmp(&b.0.0)));
         let subr_total: u64 = subr_rows.iter().map(|r| r.1).sum();
-        eprintln!(
+        let _ = writeln!(
+            out,
             "=== SUBR-MIX [{label}]: {subr_total} builtin calls, {} distinct ===",
             subr_rows.len()
         );
-        for (id, count) in subr_rows.iter().take(60) {
+        let _ = writeln!(
+            out,
+            "  (entry split: Op::Call | CBSym=CallBuiltinSym | CBtin=CallBuiltin | other=tree-walk/funcall)"
+        );
+        let _ = writeln!(
+            out,
+            "  {:<28} {:>12} {:>6}  {:>11} {:>11} {:>8} {:>11}",
+            "builtin", "calls", "%", "Op::Call", "CBSym", "CBtin", "other"
+        );
+        for (id, count) in subr_rows.iter().take(120) {
             let name = crate::emacs_core::intern::resolve_sym(*id);
             let pct = 100.0 * *count as f64 / subr_total.max(1) as f64;
-            eprintln!("  {name:<28} {count:>12}  {pct:5.2}%");
+            let opcall = entry.get(&(id.0, ENTRY_CALL)).copied().unwrap_or(0);
+            let cbsym = entry.get(&(id.0, ENTRY_CALLBUILTINSYM)).copied().unwrap_or(0);
+            let cbtin = entry.get(&(id.0, ENTRY_CALLBUILTIN)).copied().unwrap_or(0);
+            let other = count.saturating_sub(opcall + cbsym + cbtin);
+            let _ = writeln!(
+                out,
+                "  {name:<28} {count:>12} {pct:5.2}%  {opcall:>11} {cbsym:>11} {cbtin:>8} {other:>11}"
+            );
         }
+        out
+    }
+
+    /// Print the OP-MIX + SUBR-MIX (with entry split) to stderr.
+    pub(crate) fn dump(label: &str) {
+        eprint!("{}", report(label));
     }
 }
 
@@ -1201,6 +1265,17 @@ impl<'a> Vm<'a> {
                     if let ValueKind::Symbol(id) = func_val.kind() {
                         func.runtime.record_call(pc_local - 1, ops_len, id);
                     }
+                    // Round-2 profiling: attribute this Op::Call to its callee
+                    // symbol (the find_spec_sites entry population). Resolve a
+                    // subr-object callee to its SymId so both `(f x)` (symbol
+                    // callee) and a spilled subr value count the same builtin.
+                    #[cfg(feature = "vm-profile")]
+                    if let Some(id) = match func_val.kind() {
+                        ValueKind::Symbol(id) => Some(id),
+                        _ => func_val.as_subr_id(),
+                    } {
+                        vm_profile::bump_entry(id, vm_profile::ENTRY_CALL);
+                    }
                     // GNU `bytecode.c:Bcall` polls `maybe_quit` before
                     // entering the callee. This is observable when bytecode
                     // sets `quit-flag` immediately before a call: the callee
@@ -2259,6 +2334,8 @@ impl<'a> Vm<'a> {
                 Op::CallBuiltin(name_idx, n) => {
                     let name_id = sym_id_at(constants, *name_idx);
                     let name = resolve_sym(name_id);
+                    #[cfg(feature = "vm-profile")]
+                    vm_profile::bump_entry(name_id, vm_profile::ENTRY_CALLBUILTIN);
                     let n = *n as usize;
                     let args_start = stk!().len().saturating_sub(n);
                     let args: LispArgVec = stk!()[args_start..].iter().copied().collect();
@@ -2298,6 +2375,8 @@ impl<'a> Vm<'a> {
                 // op, no constants-pool lookup.
                 Op::CallBuiltinSym(sym, n) => {
                     let name = crate::emacs_core::intern::resolve_sym(*sym);
+                    #[cfg(feature = "vm-profile")]
+                    vm_profile::bump_entry(*sym, vm_profile::ENTRY_CALLBUILTINSYM);
                     let n = *n as usize;
                     let args_start = stk!().len().saturating_sub(n);
                     let args: LispArgVec = stk!()[args_start..].iter().copied().collect();

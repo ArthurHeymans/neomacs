@@ -14807,6 +14807,157 @@ fn vm_subr_mix_byte_compile() {
     panic!("SUBR-MIX dumped above (profiling aid, not a failure)");
 }
 
+/// Round-2 profiling aid (task 02): the SUBR-MIX of a font-lock / interactive
+/// editing workload — the population round 2 must intrinsify (round 1 profiled
+/// the byte-compiler, a different mix). Two sub-workloads over the same 256 KiB
+/// real-elisp buffer (`lisp/subr.el`, the regex fontlock-bench haystack), both
+/// with `NEOVM_JIT=0` so every call stays in the interpreter and is counted:
+///
+///   B1. REAL `font-lock-fontify-region` chunk-by-chunk (jit-lock style), IF
+///       font-lock loads in the runtime-startup context. This is the highest
+///       fidelity: it runs font-lock's actual keyword + syntactic machinery.
+///   B2. A byte-compiled editing + keyword-matcher loop (always runs). It
+///       exercises BOTH JIT lowerings on purpose: buffer/point motion
+///       (forward-line/point/bolp/eolp/following-char/current-column/…) lowers
+///       to `Op::CallBuiltinSym`; re-search-forward + match-beginning/-end +
+///       get/put-text-property arrive as generic `Op::Call`. The dump's entry
+///       split (Op::Call vs CBSym) validates the round-2 instrumentation.
+///
+/// Run:
+///   cargo nextest run -p neovm-core --features vm-profile --release \
+///     --run-ignored ignored-only --no-capture vm_subr_mix_fontlock
+#[cfg(feature = "vm-profile")]
+#[test]
+#[ignore = "profiling aid; run explicitly with --features vm-profile --no-capture"]
+fn vm_subr_mix_fontlock() {
+    use crate::emacs_core::bytecode::vm::vm_profile;
+    crate::test_utils::init_test_tracing();
+    // SAFETY: nextest runs each test in its own process; this write happens
+    // before the VM reads the JIT gate. Pins bodies in run_loop so vm_profile
+    // counts every call + entry (a tiered-to-native body bumps nothing).
+    unsafe { std::env::set_var("NEOVM_JIT", "0") };
+    let mut ev = crate::test_utils::runtime_startup_context();
+
+    // 256 KiB of real elisp, cut at a char boundary (same as the regex benches).
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../lisp/subr.el");
+    let text = std::fs::read_to_string(path).expect("read lisp/subr.el haystack");
+    let mut cut = text.len().min(256 * 1024);
+    while !text.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    let mut escaped = String::with_capacity(cut + 1024);
+    for ch in text[..cut].chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            _ => escaped.push(ch),
+        }
+    }
+    let kib = cut as f64 / 1024.0;
+    ev.eval_str(&format!(
+        "(progn (insert \"{escaped}\") (goto-char (point-min)) nil)"
+    ))
+    .expect("insert haystack");
+
+    // --- B1: real font-lock-fontify-region, chunk-by-chunk (best effort). ---
+    let setup = ev.eval_str(
+        r#"(condition-case e
+             (progn
+               (require 'font-lock)
+               (setq-local font-lock-defaults
+                 '(("\\_<\\(defun\\|defvar\\|defmacro\\|defcustom\\|defconst\\|lambda\\|let\\*?\\|when\\|unless\\|if\\|cond\\|while\\|setq\\|dolist\\|dotimes\\|save-excursion\\)\\_>"
+                    (0 font-lock-keyword-face))))
+               (font-lock-set-defaults)
+               t)
+           (error (list 'font-lock-unavailable (error-message-string e))))"#,
+    );
+    if format_eval_result(&setup) == "OK t" {
+        vm_profile::reset();
+        let r = ev.eval_str(
+            r#"(let ((pos (point-min)) (end (point-max)) (chunk 1500) (n 0))
+                 (while (< pos end)
+                   (let ((to (min end (+ pos chunk))))
+                     (font-lock-fontify-region pos to)
+                     (setq pos to n (1+ n))))
+                 n)"#,
+        );
+        if format_eval_result(&r).starts_with("OK") {
+            vm_profile::dump(&format!("B1 fontlock-real chunked(1500) over {kib:.0}KiB"));
+        } else {
+            // Best effort: real font-lock's internals are fragile in the bare
+            // runtime-startup context (observed: invalid-function inside the
+            // syntactic/keyword machinery). Not a harness failure — B2 + the
+            // batch workload (task 02 (a), full lisp) cover real font-lock.
+            eprintln!(
+                "NOTE[B1]: chunked font-lock-fontify-region failed ({}); \
+                 skipping B1 dump, continuing to B2.",
+                format_eval_result(&r)
+            );
+        }
+    } else {
+        eprintln!(
+            "NOTE[B1]: real font-lock unavailable in runtime_startup_context ({}); \
+             relying on B2 + the batch workload (task 02 (a)) for real font-lock.",
+            format_eval_result(&setup)
+        );
+    }
+
+    // --- B2: byte-compiled editing + keyword-matcher loop (always runs). ---
+    ev.eval_str(
+        r#"(progn
+             (defun t2-fl-emul (chunk)
+               (let ((pos (point-min)) (end (point-max)) (hits 0))
+                 (while (< pos end)
+                   (let ((to (min end (+ pos chunk))))
+                     (goto-char pos)
+                     (while (re-search-forward
+                             "(\\(def[a-z]+\\|let\\*?\\|if\\|when\\|unless\\|cond\\|while\\|setq\\|dolist\\|dotimes\\|lambda\\|save-excursion\\)\\_>" to t)
+                       (let ((b (match-beginning 1)) (e (match-end 1)))
+                         (put-text-property b e 'face 'font-lock-keyword-face)
+                         (setq hits (1+ hits))))
+                     (goto-char pos)
+                     (while (re-search-forward "\\_<\\([a-z][a-z0-9-]+\\)\\_>" to t)
+                       (let ((b (match-beginning 1)) (e (match-end 1)))
+                         (when (eq (get-text-property b 'face) 'font-lock-keyword-face)
+                           (setq hits (1+ hits)))
+                         (put-text-property b e 'face 'font-lock-variable-name-face)))
+                     (setq pos to)))
+                 hits))
+             (defun t2-edit (n)
+               (goto-char (point-min))
+               (let ((acc 0))
+                 (dotimes (_ n)
+                   (forward-line 1)
+                   (end-of-line)
+                   (when (bolp) (setq acc (1+ acc)))
+                   (when (eolp) (setq acc (1+ acc)))
+                   (setq acc (+ acc (following-char) (preceding-char)
+                                (current-column) (point)))
+                   (goto-char (max (point-min) (- (point) 3)))
+                   (forward-char 1))
+                 acc))
+             (byte-compile 't2-fl-emul)
+             (byte-compile 't2-edit)
+             t)"#,
+    )
+    .expect("define + byte-compile emulation");
+    assert_eq!(
+        format_eval_result(&ev.eval_str("(and (byte-code-function-p (symbol-function 't2-fl-emul)) (byte-code-function-p (symbol-function 't2-edit)))")),
+        "OK t",
+        "emulation must be byte-compiled (else it tree-walks and misses run_loop entry hooks)"
+    );
+    vm_profile::reset();
+    let r = ev.eval_str(
+        "(progn (set-text-properties (point-min) (point-max) nil) \
+                (t2-fl-emul 1500) (t2-edit 6000) t)",
+    );
+    assert_eq!(format_eval_result(&r), "OK t", "B2 emulation run");
+    vm_profile::dump(&format!(
+        "B2 editing+fontlock-matcher emulation (byte-compiled) over {kib:.0}KiB"
+    ));
+    panic!("SUBR-MIX dumped above (profiling aid, not a failure)");
+}
+
 /// Profiling aid (NOT a pass/fail test): measure the synchronous compile stall
 /// the JIT pays at each first hot call, over a corpus of byte-compiled defuns
 /// (the runtime_startup_context + byte-compile recipe from vm_op_mix_real_elisp
