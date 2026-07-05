@@ -2427,14 +2427,24 @@ fn build_font_entity_for_spec_match(matched: &super::eval::ResolvedFontSpecMatch
             Value::from_sym_id(intern(registry.as_utf8_str().unwrap_or_default())),
         );
     }
+    // Style symbols use GNU's canonical (first) style-table name —
+    // font-get on a GNU entity reports e.g. `ultra-light`, never the
+    // `extralight` alias; the XLFD's dashless spelling falls out of
+    // `sanitize_style_field` stripping the dash.
     if let Some(weight) = matched.weight {
-        push_field("weight", Value::symbol(font_weight_symbol(weight)));
+        let name = font_weight_symbol(weight);
+        let name = gnu_style_first_name(GNU_WEIGHT_TABLE, name).unwrap_or(name);
+        push_field("weight", Value::symbol(name));
     }
     if let Some(slant) = matched.slant {
-        push_field("slant", Value::symbol(slant.symbol_name()));
+        let name = slant.symbol_name();
+        let name = gnu_style_first_name(GNU_SLANT_TABLE, name).unwrap_or(name);
+        push_field("slant", Value::symbol(name));
     }
     if let Some(width) = matched.width {
-        push_field("width", Value::symbol(width.symbol_name()));
+        let name = width.symbol_name();
+        let name = gnu_style_first_name(GNU_WIDTH_TABLE, name).unwrap_or(name);
+        push_field("width", Value::symbol(name));
     }
     if let Some(spacing) = matched.spacing {
         push_field("spacing", Value::fixnum(spacing as i64));
