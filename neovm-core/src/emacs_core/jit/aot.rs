@@ -3572,6 +3572,35 @@ pub(crate) fn load_preload() -> Option<std::sync::Arc<super::compile::LoadedUnit
     resolved
 }
 
+// Open the emitted preload library. On unix we want RTLD_NOW|RTLD_LOCAL
+// (#32-audit fix): resolve all imports up front so an unresolvable shim
+// fails the open → skip→JIT, not an abort on first call. Windows LoadLibrary
+// binds imports eagerly at load time, matching that intent; the preload is a
+// Linux `.so` artifact that never exists beside a Windows image (the
+// `so_path.exists()` guard skips this path there), but it must still compile.
+std::cfg_select! {
+    unix => {
+        unsafe fn dlopen_preload(
+            so_path: &std::path::Path,
+        ) -> Result<libloading::Library, libloading::Error> {
+            unsafe {
+                libloading::os::unix::Library::open(
+                    Some(so_path),
+                    libloading::os::unix::RTLD_NOW | libloading::os::unix::RTLD_LOCAL,
+                )
+            }
+            .map(libloading::Library::from)
+        }
+    }
+    _ => {
+        unsafe fn dlopen_preload(
+            so_path: &std::path::Path,
+        ) -> Result<libloading::Library, libloading::Error> {
+            unsafe { libloading::Library::new(so_path) }
+        }
+    }
+}
+
 /// The uncached resolve + validate + dlopen core of [`load_preload`].
 fn load_preload_uncached() -> Option<std::sync::Arc<super::compile::LoadedUnit>> {
     let exe = std::env::current_exe().ok()?;
@@ -3583,25 +3612,20 @@ fn load_preload_uncached() -> Option<std::sync::Arc<super::compile::LoadedUnit>>
     if !preload_manifest_matches(&manifest_path) {
         return None; // stale/foreign/ABI-mismatch — skip→JIT (never mis-serve).
     }
-    // dlopen RTLD_NOW|RTLD_LOCAL (#32-audit fix): resolve all imports up front so
-    // an unresolvable shim fails the open → skip→JIT, not an abort on first call.
+    // dlopen with eager import resolution (see `dlopen_preload`): an
+    // unresolvable shim fails the open → skip→JIT, not an abort on first call.
     // SAFETY: a `.so` we emitted; its undefined imports are the `neovm_jit_*`
     // shims, bound against the -rdynamic host. The Arc keeps it mapped for the
     // lifetime of every leaf it backs.
-    let lib = unsafe {
-        libloading::os::unix::Library::open(
-            Some(&so_path),
-            libloading::os::unix::RTLD_NOW | libloading::os::unix::RTLD_LOCAL,
-        )
-    }
-    .map_err(|e| {
-        tracing::warn!(
-            "aot-preload: dlopen {} failed ({e}); skip→JIT",
-            so_path.display()
-        );
-        e
-    })
-    .ok()?;
+    let lib = unsafe { dlopen_preload(&so_path) }
+        .map_err(|e| {
+            tracing::warn!(
+                "aot-preload: dlopen {} failed ({e}); skip→JIT",
+                so_path.display()
+            );
+            e
+        })
+        .ok()?;
     let unit = std::sync::Arc::new(super::compile::LoadedUnit::new(lib.into()));
     tracing::debug!("aot-preload: loaded {}", so_path.display());
     Some(unit)
