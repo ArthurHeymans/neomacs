@@ -18,6 +18,11 @@ pub(crate) struct BufferWindowGeometryRequest {
     text_height: f32,
     vscroll: f32,
     kind: WindowKind,
+    /// GUI (window-system) frame.  The GNU vscroll content-up shift is a
+    /// graphical, sub-pixel concept; TTY frames are a char-cell grid and keep
+    /// the historical behavior (vscroll shrinks the visible area, if set at all),
+    /// so the shift is applied only when this is true.
+    window_system: bool,
     top_chrome_rows: usize,
     bottom_chrome_rows: usize,
     char_width: f32,
@@ -108,15 +113,17 @@ impl BufferWindowGeometryRequest {
 
         // In Emacs, w->vscroll is negative when content is shifted up.
         let vscroll = (-params.vscroll).max(0) as f32;
+        // GNU vscroll content-up shift applies to ordinary GUI windows only.
         // Minibuffer windows repurpose vscroll to *hide* content by shrinking the
-        // visible area (e.g. vertico-posframe); keep that historical shrink. An
-        // ordinary window uses GNU vscroll semantics: the content is shifted UP by
-        // `vscroll` pixels while the text area keeps its full height (the offset is
-        // applied to the row-walk origin in `into_geometry`, not by shrinking).
-        let text_height = if params.kind.is_minibuffer() {
-            (text_height - vscroll).max(0.0)
-        } else {
+        // visible area (e.g. vertico-posframe), and TTY frames are a char-cell
+        // grid; both keep the historical shrink. Ordinary GUI windows shift the
+        // content UP by `vscroll` pixels while retaining the full text height (the
+        // offset is applied to the row-walk origin in `into_geometry`).
+        let uses_shift = params.window_system && !params.kind.is_minibuffer();
+        let text_height = if uses_shift {
             text_height
+        } else {
+            (text_height - vscroll).max(0.0)
         };
 
         Self {
@@ -126,6 +133,7 @@ impl BufferWindowGeometryRequest {
             text_height,
             vscroll,
             kind: params.kind,
+            window_system: params.window_system,
             top_chrome_rows: usize::from(tab_line_height > 0.0)
                 + usize::from(header_line_height > 0.0),
             bottom_chrome_rows: usize::from(mode_line_height > 0.0),
@@ -133,6 +141,13 @@ impl BufferWindowGeometryRequest {
             char_height,
             max_mini_window_rows: None,
         }
+    }
+
+    /// Whether this window applies the GNU vscroll content-up shift (the fix for
+    /// task #64): ordinary GUI windows with an active vscroll.  Minibuffers and
+    /// TTY frames keep the historical shrink-based behavior.
+    fn uses_vscroll_shift(self) -> bool {
+        self.window_system && !self.kind.is_minibuffer() && self.vscroll > 0.0
     }
 
     /// Record the `max-mini-window-height` ceiling (in display rows) so the
@@ -167,13 +182,13 @@ impl BufferWindowGeometryRequest {
         let cols = width_policy.columns_for_width(self.text_width - line_number_pixel_width);
         let content_x = self.text_x + line_number_pixel_width;
 
-        // Content-up shift applied to the body row-walk origin. Minibuffers keep
-        // vscroll baked into `text_height` (the shrink above), so their origin is
-        // not shifted; ordinary windows shift the origin up by `vscroll`.
-        let row_shift = if self.kind.is_minibuffer() {
-            0.0
-        } else {
+        // Content-up shift applied to the body row-walk origin. Minibuffers and
+        // TTY frames keep vscroll baked into `text_height` (the shrink above), so
+        // their origin is not shifted; ordinary GUI windows shift up by `vscroll`.
+        let row_shift = if self.uses_vscroll_shift() {
             self.vscroll
+        } else {
+            0.0
         };
 
         // For a minibuffer measured with the GNU `move_it_to(ZV)` policy, lift
@@ -226,18 +241,20 @@ impl BufferWindowGeometryRequest {
         // physically fit the current, often one-row, window).  vscroll != 0
         // means content is intentionally hidden (e.g. vertico-posframe), so
         // fall back to the physical row count there.
-        if self.kind.is_minibuffer() && self.vscroll == 0.0 && self.text_height > 0.0 {
-            if let Some(ceiling) = self.max_mini_window_rows {
-                return ceiling.max(1);
-            }
+        if self.kind.is_minibuffer()
+            && self.vscroll == 0.0
+            && self.text_height > 0.0
+            && let Some(ceiling) = self.max_mini_window_rows
+        {
+            return ceiling.max(1);
         }
 
-        // Ordinary window with an active vscroll: GNU shifts the content UP by
+        // Ordinary GUI window with an active vscroll: GNU shifts the content UP by
         // `vscroll` pixels, top-clipping the first row and exposing one more
         // partially-visible row at the bottom.  Walk enough rows to cover the
         // shifted span `[vscroll, vscroll + text_height]` — `base_max_rows + 1`
         // for a sub-line vscroll, more when vscroll exceeds a row.
-        if !self.kind.is_minibuffer() && self.vscroll > 0.0 && self.text_height > 0.0 {
+        if self.uses_vscroll_shift() && self.text_height > 0.0 {
             return ((self.vscroll + self.text_height) / self.char_height).ceil() as usize;
         }
 

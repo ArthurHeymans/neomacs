@@ -225,6 +225,26 @@ fn minibuffer_vscroll_preserves_shrink_and_unshifted_origin() {
 }
 
 #[test]
+fn tty_window_vscroll_keeps_historical_shrink_not_shift() {
+    // The GNU content-up shift is a graphical concept; a TTY (non-window-system)
+    // frame is a char-cell grid and must keep the historical behavior (vscroll
+    // shrinks text_height, origin unshifted) -- byte-identical to pre-fix, so
+    // "do NOT change TTY".
+    let mut params = window_params();
+    params.window_system = false;
+    params.vscroll = -8;
+    let geometry =
+        BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 8.0, 0.0, 0.0).into_geometry(0);
+
+    // Shrunk like before (112 - 8 = 104); NO origin shift; physical row count.
+    assert_eq!(geometry.text_height, 104.0);
+    assert_eq!(geometry.vscroll, 0.0);
+    assert_eq!(geometry.row_origin_y(), geometry.text_y);
+    assert_eq!(geometry.max_rows, 6);
+    assert_eq!(geometry.visibility_bottom_y, geometry.text_y + 104.0);
+}
+
+#[test]
 fn ordinary_window_zero_vscroll_is_unchanged() {
     // vscroll == 0 must be byte-identical to the pre-fix behavior: no shift, no
     // extra row, visibility bottom at the physical text-area bottom.

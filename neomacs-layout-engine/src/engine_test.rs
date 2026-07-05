@@ -2966,36 +2966,65 @@ fn layout_frame_rust_lays_out_complex_text() {
 
 #[test]
 fn layout_frame_rust_vscroll_shifts_body_rows_up_and_exposes_extra_row() {
-    // GNU `w->vscroll` (task #64): an ordinary window's contents are scrolled UP
-    // by the vscroll pixels.  Byte-exact RowTrace pixel_y snapshot — baseline
-    // (vscroll 0) vs a sub-line vscroll of 5px:
+    // GNU `w->vscroll` (task #64): an ordinary GUI window's contents are scrolled
+    // UP by the vscroll pixels.  Byte-exact RowTrace pixel_y snapshot — baseline
+    // (vscroll 0) vs a sub-line vscroll (the buffer over-fills the window so the
+    // bottom exposes a NEW row):
     //   * every body row's pixel_y drops by EXACTLY `vscroll`,
     //   * the first row moves ABOVE the (unchanged) text-area top (top-clipped),
     //   * one extra partially-visible row is exposed at the bottom, continuing
     //     the row grid,
     //   * the cursor's y follows the (fully visible) row it sits on.
-    // `w->vscroll` is stored negative; the harness pins window_start at line 1.
-    let text = "vscroll body line\n".repeat(40);
-    const VSCROLL_PX: i64 = 5;
+    // `w->vscroll` is stored negative; window_start is pinned at line 1.
+    let text = "vscroll body line\n".repeat(200);
+    const VSCROLL_PX: i64 = 1;
 
     let layout = |vscroll: i32| -> (Vec<f32>, Option<i64>) {
-        let trace = backend_layout_trace_with_buffer_and_window_setup(
-            BufferTextBackendKind::GapBuffer,
-            "layout-vscroll-body-shift",
-            &text,
-            300,
-            200,
+        // A GUI (window-system) frame: the vscroll content-up shift is graphical
+        // (a TTY frame keeps the historical shrink -- see the geometry unit test).
+        let mut eval = Context::new();
+        convert_current_buffer_text_backend(&mut eval, BufferTextBackendKind::GapBuffer);
+        let buf_id = eval
+            .buffer_manager()
+            .current_buffer()
+            .expect("current buffer")
+            .id();
+        insert_fragmented_current_buffer_text(&mut eval, &text);
+        {
             // Point on the second line: the cursor lands on a fully-visible row,
             // not the top-clipped first row.
-            |buffer, _buf_id, _text| {
-                buffer.goto_emacs_byte_pos(EmacsBytePos::new(20));
-            },
-            move |window| {
-                if let neovm_core::window::Window::Leaf { vscroll: vs, .. } = window {
-                    *vs = vscroll;
-                }
-            },
-        );
+            let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+            buffer.goto_emacs_byte_pos(EmacsBytePos::new(20));
+        }
+        let frame_id =
+            eval.frame_manager_mut()
+                .create_frame("layout-vscroll-body-shift", 300, 200, buf_id);
+        if let Some(frame) = eval.frame_manager_mut().get_mut(frame_id) {
+            frame.set_window_system(Some(Value::symbol("neo")));
+        }
+        let selected_window = eval
+            .frame_manager()
+            .get(frame_id)
+            .expect("frame")
+            .selected_window;
+        {
+            let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+            let window = frame
+                .find_window_mut(selected_window)
+                .expect("selected window");
+            if let neovm_core::window::Window::Leaf {
+                window_start,
+                vscroll: vs,
+                ..
+            } = window
+            {
+                *window_start = LispCharPos1::ONE;
+                *vs = vscroll;
+            }
+        }
+        let mut engine = LayoutEngine::new();
+        engine.layout_frame_rust(&mut eval, frame_id);
+        let trace = selected_window_layout_trace(&eval, &engine, frame_id);
         let body_ys = trace
             .matrix_rows
             .iter()
