@@ -300,10 +300,24 @@ impl DisplayTextRunMeasurementPlan {
                 let measured = cluster_advances.advance_at(byte_offset)?;
                 let columns = crate::composition::base_width_cols(ch);
                 let columns = columns.max(1);
-                let minimum =
-                    DisplayRowCharWidthPolicy::new(face_char_width_px).advance_for_columns(columns);
-                let fallback = DisplayRowCharWidthPolicy::new(fallback_char_width_px)
-                    .advance_for_columns(columns);
+                // Complex-script (composed) runs take the shaped advance
+                // as-is: GNU measures compositions by the shaped gstring
+                // width, and joined forms are legitimately narrower than a
+                // character cell. Clamping them up to the cell re-inflates
+                // the cluster to its isolated-forms sum. Standalone chars
+                // keep the cell floor (the monospace column model).
+                let cell_floor = crate::composition::complex_script(ch).is_none();
+                let minimum = if cell_floor {
+                    DisplayRowCharWidthPolicy::new(face_char_width_px).advance_for_columns(columns)
+                } else {
+                    1.0
+                };
+                let fallback = if cell_floor {
+                    DisplayRowCharWidthPolicy::new(fallback_char_width_px)
+                        .advance_for_columns(columns)
+                } else {
+                    1.0
+                };
                 Some(DisplayTextRunAdvance::new(
                     char_offset,
                     byte_offset,

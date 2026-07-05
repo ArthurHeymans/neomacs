@@ -3444,3 +3444,48 @@ fn measured_display_row_content_policy_ignores_allocated_row_height() {
     assert_eq!(measured.bounds().height, 24.0);
     assert_eq!(measured.row_height(), 24.0);
 }
+
+/// Complex-script (composed) runs must take the shaped advance as-is: GNU
+/// measures compositions by the shaped gstring width, and joined Arabic
+/// forms are legitimately narrower than a monospace cell. Clamping them up
+/// to the cell re-inflated a Composite cluster to its isolated-forms sum
+/// (e.g. السلام 54px measured vs 34px shaped/drawn).
+#[test]
+fn shaped_complex_script_advances_are_not_cell_clamped() {
+    fn shaped(cluster_start: usize, x_advance: f32) -> crate::font_metrics::ShapedGlyph {
+        crate::font_metrics::ShapedGlyph {
+            font_id: fontdb::ID::dummy(),
+            glyph_id: 1,
+            x: 0.0,
+            y: 0.0,
+            x_advance,
+            cluster_start,
+            cluster_end: cluster_start + 2,
+        }
+    }
+
+    // "سلا" — three Arabic letters, 2 bytes each; joined forms narrower
+    // than the 8.4px cell.
+    let measurement =
+        crate::display_text_run_measurement::DisplayTextRunMeasurementPlan::from_shaped_glyphs(
+            "سلا",
+            [shaped(0, 5.0), shaped(2, 3.5), shaped(4, 6.0)],
+            8.4,
+            8.4,
+            GlyphAdvanceQuantization::PreserveLogicalPixels,
+        );
+
+    let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
+        measurement
+    else {
+        panic!("shaped glyphs should produce measured text-run advances");
+    };
+    assert_eq!(
+        advances
+            .iter()
+            .map(|advance| advance.advance_px)
+            .collect::<Vec<_>>(),
+        vec![5.0, 3.5, 6.0],
+        "joined complex-script advances must pass through unclamped"
+    );
+}
