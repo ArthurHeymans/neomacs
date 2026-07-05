@@ -1,0 +1,41 @@
+name: tmp macOS fresh build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fresh-build:
+    name: cargo xtask fresh-build --release
+    runs-on: macos-latest
+    timeout-minutes: 120
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_BACKTRACE: 1
+      RUST_LOG: info
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install system dependencies (brew)
+        run: brew install pkg-config gstreamer
+
+      - name: Install Rust toolchain (from rust-toolchain.toml)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          targets: aarch64-apple-darwin
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: macos-aarch64
+          cache-bin: false
+          cache-on-failure: true
+
+      - name: Run fresh build
+        run: cargo xtask fresh-build --release
