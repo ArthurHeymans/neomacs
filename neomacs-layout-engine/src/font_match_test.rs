@@ -37,20 +37,40 @@ fn nearest_weight_prefers_closest_match() {
 }
 
 #[test]
-fn variable_font_preserves_requested_weight_within_range() {
+fn variable_font_without_named_instances_clamps_within_range() {
     let info = FamilyWeightInfo {
         discrete_weights: vec![400],
         variable_weight_range: Some((100, 900)),
+        named_instance_weights: vec![],
     };
     assert_eq!(resolve_requested_weight(&info, 700), 700);
 }
 
 #[test]
-fn variable_font_clamps_only_to_axis_bounds() {
+fn variable_font_clamps_only_to_axis_bounds_without_named_instances() {
     let info = FamilyWeightInfo {
         discrete_weights: vec![400],
         variable_weight_range: Some((200, 750)),
+        named_instance_weights: vec![],
     };
     assert_eq!(resolve_requested_weight(&info, 150), 200);
     assert_eq!(resolve_requested_weight(&info, 900), 750);
+}
+
+#[test]
+fn variable_font_snaps_request_to_nearest_named_instance() {
+    // Noto Sans: named instances thin..black (100..900), no 350/950.
+    // GNU/fontconfig open the nearest instance (verified vs GNU 31.0.50).
+    let info = FamilyWeightInfo {
+        discrete_weights: vec![400],
+        variable_weight_range: Some((100, 900)),
+        named_instance_weights: vec![100, 200, 300, 400, 500, 600, 700, 800, 900],
+    };
+    // semi-light 350 -> light 300 (tie 300/400 broken toward lower).
+    assert_eq!(resolve_requested_weight(&info, 350), 300);
+    // ultra-heavy 950 -> black 900 (nothing higher available).
+    assert_eq!(resolve_requested_weight(&info, 950), 900);
+    // exact instances pass through.
+    assert_eq!(resolve_requested_weight(&info, 700), 700);
+    assert_eq!(resolve_requested_weight(&info, 100), 100);
 }

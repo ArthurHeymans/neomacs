@@ -67,3 +67,23 @@ fn gnu_parity_dejavu_sans_mono_px1() {
         },
     );
 }
+
+#[test]
+fn noto_sans_named_instances_cover_thin_to_black() {
+    let file = "/nix/store/7lrhms8rphrd8ywphjbvjyll57pkim64-noto-fonts-2025.11.01/share/fonts/noto/NotoSans[wdth,wght].ttf";
+    if !std::path::Path::new(file).exists() {
+        eprintln!("skipping: {file} not present");
+        return;
+    }
+    let weights = named_instance_wght_values(file, 0);
+    // GNU/fontconfig snap requests to these; the fvar table must expose the
+    // standard weight ladder (no synthesized 350/950).
+    for w in [100u16, 200, 300, 400, 500, 600, 700, 800, 900] {
+        assert!(
+            weights.contains(&w),
+            "expected instance weight {w} in {weights:?}"
+        );
+    }
+    assert!(!weights.contains(&350), "350 is not a named instance");
+    assert!(!weights.contains(&950), "950 is not a named instance");
+}

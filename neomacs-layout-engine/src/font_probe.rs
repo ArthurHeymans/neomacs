@@ -66,6 +66,50 @@ pub fn probe_font_px_metrics(
     None
 }
 
+/// The `wght` design-axis values of a variable font's fvar NAMED INSTANCES
+/// (OT axis units == CSS weight), sorted ascending and deduped. Empty for a
+/// non-variable font or one whose instances omit a `wght` axis.
+///
+/// GNU/fontconfig expose named instances as separate font entities, so
+/// weight resolution snaps a request to the nearest instance rather than
+/// synthesizing an arbitrary axis value (font_match::resolve_requested_weight).
+pub fn named_instance_wght_values(file: &str, face_index: u32) -> Vec<u16> {
+    use freetype::freetype_sys as ft;
+    let Ok(library) = Library::init() else {
+        return Vec::new();
+    };
+    let Ok(face) = library.new_face(file, face_index as isize) else {
+        return Vec::new();
+    };
+    let mut weights = Vec::new();
+    unsafe {
+        let raw = face.raw() as *const ft::FT_FaceRec as *mut ft::FT_FaceRec;
+        let mut mm: *mut ft::FT_MM_Var = std::ptr::null_mut();
+        if ft::FT_Get_MM_Var(raw, &mut mm) != 0 || mm.is_null() {
+            return Vec::new();
+        }
+        let axis_count = (*mm).num_axis as usize;
+        let axes = std::slice::from_raw_parts((*mm).axis, axis_count);
+        let wght_tag = u32::from_be_bytes(*b"wght") as ft::FT_ULong;
+        if let Some(wght_index) = axes.iter().position(|axis| axis.tag == wght_tag) {
+            let n = (*mm).num_namedstyles as usize;
+            let styles = std::slice::from_raw_parts((*mm).namedstyle, n);
+            for style in styles {
+                let coords = std::slice::from_raw_parts(style.coords, axis_count);
+                // FT_Fixed 16.16 → integer CSS weight.
+                let value = (coords[wght_index] as f64 / 65536.0).round();
+                if (1.0..=1000.0).contains(&value) {
+                    weights.push(value as u16);
+                }
+            }
+        }
+        ft::FT_Done_MM_Var(library.raw(), mm);
+    }
+    weights.sort_unstable();
+    weights.dedup();
+    weights
+}
+
 /// Set the `wght` design axis (OT axis units == CSS weight), leaving all
 /// other axes at their defaults. No-op for non-variable fonts.
 fn apply_wght_axis(library: &Library, face: &mut freetype::Face, wght: f32) {

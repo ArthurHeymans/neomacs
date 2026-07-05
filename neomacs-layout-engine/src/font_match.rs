@@ -13,6 +13,8 @@ use ttf_parser::{Face as TtfFace, Tag};
 struct FamilyWeightInfo {
     discrete_weights: Vec<u16>,
     variable_weight_range: Option<(u16, u16)>,
+    /// `wght` values of the family's variable fonts' fvar named instances.
+    named_instance_weights: Vec<u16>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -133,9 +135,21 @@ pub fn select_cosmic_family<'a>(
 }
 
 fn resolve_requested_weight(info: &FamilyWeightInfo, requested_weight: u16) -> u16 {
+    if !info.named_instance_weights.is_empty() {
+        // GNU/fontconfig expose a variable font's fvar named instances as
+        // concrete font entities and match a request to the nearest one, so
+        // the opened weight is always a real instance (e.g. semi-light 350
+        // opens Light 300), never a synthesized off-instance value. Snap to
+        // the union of named instances and any static sibling faces.
+        let mut candidates = info.named_instance_weights.clone();
+        candidates.extend_from_slice(&info.discrete_weights);
+        candidates.sort_unstable();
+        candidates.dedup();
+        return pick_nearest_css_weight(&candidates, requested_weight);
+    }
     if let Some((min_w, max_w)) = info.variable_weight_range {
-        // Variable fonts can synthesize intermediate weights; keep caller intent and
-        // only clamp to the axis range.
+        // Variable font without enumerable named instances: clamp to the
+        // axis range (synthesize intermediate weights).
         return requested_weight.clamp(min_w, max_w);
     }
     if info.discrete_weights.is_empty() {
@@ -172,22 +186,39 @@ fn family_weight_info_for_style(db: &Database, family: &str, style: DbStyle) -> 
         discrete_weights.dedup();
 
         let mut variable_weight_range: Option<(u16, u16)> = None;
+        let mut named_instance_weights: Vec<u16> = Vec::new();
         for face in matching_faces {
             if let Some((min_w, max_w)) = face_weight_axis_range(db, face.id) {
                 variable_weight_range = Some(match variable_weight_range {
                     None => (min_w, max_w),
                     Some((cur_min, cur_max)) => (cur_min.min(min_w), cur_max.max(max_w)),
                 });
+                if let Some((file, index)) = face_file_and_index(face) {
+                    named_instance_weights
+                        .extend(crate::font_probe::named_instance_wght_values(&file, index));
+                }
             }
         }
+        named_instance_weights.sort_unstable();
+        named_instance_weights.dedup();
 
         return FamilyWeightInfo {
             discrete_weights,
             variable_weight_range,
+            named_instance_weights,
         };
     }
 
     FamilyWeightInfo::default()
+}
+
+fn face_file_and_index(face: &fontdb::FaceInfo) -> Option<(String, u32)> {
+    match &face.source {
+        fontdb::Source::File(path) | fontdb::Source::SharedFile(path, _) => {
+            Some((path.display().to_string(), face.index))
+        }
+        fontdb::Source::Binary(_) => None,
+    }
 }
 
 fn face_weight_axis_range(db: &Database, id: fontdb::ID) -> Option<(u16, u16)> {

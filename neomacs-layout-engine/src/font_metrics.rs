@@ -1035,9 +1035,19 @@ impl FontMetricsService {
         };
         if ch.is_ascii() {
             let resolved_family = self.resolve_family(&self.backend.resolve_family(family), None);
+            // Snap to the family's available/instance weight, matching the
+            // font actually opened (and what `build_attrs` renders with), so
+            // `font-at` reports the opened instance's weight like GNU — e.g.
+            // a semi-light request on variable Noto Sans reports light.
+            let resolved_weight = crate::font_match::resolve_weight_in_family(
+                &self.font_system,
+                &resolved_family,
+                weight,
+                italic,
+            );
             return ResolvedCharFont {
                 family: resolved_family,
-                weight,
+                weight: resolved_weight,
                 slant: requested_slant,
             };
         }
