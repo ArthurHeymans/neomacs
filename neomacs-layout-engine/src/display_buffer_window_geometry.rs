@@ -37,6 +37,14 @@ pub(crate) struct BufferWindowGeometry {
     pub(crate) text_y: f32,
     pub(crate) text_width: f32,
     pub(crate) text_height: f32,
+    /// Applied content-up shift (pixels) for the body row-walk origin. GNU
+    /// `w->vscroll` scrolls the window's contents up by this many pixels: the
+    /// first body row is drawn at `text_y - vscroll` (top-clipped) and one extra
+    /// partially-visible row is exposed at the bottom, while the text area keeps
+    /// its full height and the render is clipped to `text_y .. text_y +
+    /// text_height`. Zero for minibuffer windows, where vscroll instead *shrinks*
+    /// the visible area (vertico-posframe) via `text_height`.
+    pub(crate) vscroll: f32,
     pub(crate) char_width: f32,
     pub(crate) char_height: f32,
     pub(crate) max_rows: usize,
@@ -59,6 +67,17 @@ pub(crate) struct BufferWindowGeometry {
 pub(crate) struct BufferWindowGeometryPlan {
     pub(crate) geometry: BufferWindowGeometry,
     pub(crate) line_number_columns: i32,
+}
+
+impl BufferWindowGeometry {
+    /// Absolute frame Y at which the body row-walk begins.  For an ordinary
+    /// window with an active vscroll this is `text_y - vscroll` (GNU: the
+    /// window's contents are scrolled up, so the first row starts above the text
+    /// area and is top-clipped); it equals `text_y` otherwise.  The visible/clip
+    /// area is always `text_y .. text_y + text_height`, independent of this.
+    pub(crate) fn row_origin_y(&self) -> f32 {
+        self.text_y - self.vscroll
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -89,7 +108,16 @@ impl BufferWindowGeometryRequest {
 
         // In Emacs, w->vscroll is negative when content is shifted up.
         let vscroll = (-params.vscroll).max(0) as f32;
-        let text_height = (text_height - vscroll).max(0.0);
+        // Minibuffer windows repurpose vscroll to *hide* content by shrinking the
+        // visible area (e.g. vertico-posframe); keep that historical shrink. An
+        // ordinary window uses GNU vscroll semantics: the content is shifted UP by
+        // `vscroll` pixels while the text area keeps its full height (the offset is
+        // applied to the row-walk origin in `into_geometry`, not by shrinking).
+        let text_height = if params.kind.is_minibuffer() {
+            (text_height - vscroll).max(0.0)
+        } else {
+            text_height
+        };
 
         Self {
             text_x,
@@ -139,14 +167,29 @@ impl BufferWindowGeometryRequest {
         let cols = width_policy.columns_for_width(self.text_width - line_number_pixel_width);
         let content_x = self.text_x + line_number_pixel_width;
 
+        // Content-up shift applied to the body row-walk origin. Minibuffers keep
+        // vscroll baked into `text_height` (the shrink above), so their origin is
+        // not shifted; ordinary windows shift the origin up by `vscroll`.
+        let row_shift = if self.kind.is_minibuffer() {
+            0.0
+        } else {
+            self.vscroll
+        };
+
         // For a minibuffer measured with the GNU `move_it_to(ZV)` policy, lift
         // the visibility bottom to span `max_rows` so the walk can emit content
         // rows past the window's current physical height; `max_rows` (the
-        // ceiling) still hard caps the count.  Ordinary windows keep the
-        // physical text-area bottom.
+        // ceiling) still hard caps the count.  An ordinary window with an active
+        // vscroll walks from the shifted origin (`text_y - vscroll`) and must be
+        // allowed to emit the extra, partially-visible bottom row, so lift its
+        // walk bottom to that shifted last-row edge; the render is still clipped
+        // to the real text area (`text_y .. text_y + text_height`).  Otherwise the
+        // physical text-area bottom is the limit.
         let physical_bottom_y = self.text_y + self.text_height;
         let visibility_bottom_y = if self.kind.is_minibuffer() {
             physical_bottom_y.max(self.text_y + max_rows as f32 * self.char_height)
+        } else if row_shift > 0.0 {
+            (self.text_y - row_shift) + max_rows as f32 * self.char_height
         } else {
             physical_bottom_y
         };
@@ -156,6 +199,7 @@ impl BufferWindowGeometryRequest {
             text_y: self.text_y,
             text_width: self.text_width,
             text_height: self.text_height,
+            vscroll: row_shift,
             char_width: self.char_width,
             char_height: self.char_height,
             max_rows,
@@ -186,6 +230,15 @@ impl BufferWindowGeometryRequest {
             if let Some(ceiling) = self.max_mini_window_rows {
                 return ceiling.max(1);
             }
+        }
+
+        // Ordinary window with an active vscroll: GNU shifts the content UP by
+        // `vscroll` pixels, top-clipping the first row and exposing one more
+        // partially-visible row at the bottom.  Walk enough rows to cover the
+        // shifted span `[vscroll, vscroll + text_height]` — `base_max_rows + 1`
+        // for a sub-line vscroll, more when vscroll exceeds a row.
+        if !self.kind.is_minibuffer() && self.vscroll > 0.0 && self.text_height > 0.0 {
+            return ((self.vscroll + self.text_height) / self.char_height).ceil() as usize;
         }
 
         let max_rows = self.base_max_rows();

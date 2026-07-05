@@ -182,7 +182,11 @@ impl<'a> BufferSourceWalkSetupRequest<'a> {
             geometry.content_x,
             geometry.text_x,
             geometry.text_width,
-            geometry.text_y,
+            // Body row-walk origin. An ordinary window with an active vscroll walks
+            // from `text_y - vscroll` (content scrolled up, GNU semantics); equals
+            // `text_y` otherwise. The visible/clip band stays `text_y ..
+            // text_y + text_height`.
+            geometry.row_origin_y(),
             params.bounds.y,
             geometry.line_number_pixel_width,
             geometry.max_rows,

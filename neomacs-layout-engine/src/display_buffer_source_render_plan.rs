@@ -317,7 +317,9 @@ impl BufferSourceOutputSetup {
             output_window_id,
             append_surface,
             default_face.row_metrics_for_default_width(geometry.char_height),
-            geometry.text_y,
+            // Overlay-string rows share the body row grid, so they start from the
+            // same vscroll-shifted origin (`text_y - vscroll`) as the buffer walk.
+            geometry.row_origin_y(),
             self.body_install_context.display_text_row_base(),
             geometry.max_rows,
         );

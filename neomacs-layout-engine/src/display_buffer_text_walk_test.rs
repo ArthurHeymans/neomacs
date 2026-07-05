@@ -175,6 +175,71 @@ fn geometry_request_does_not_apply_max_mini_window_rows_to_ordinary_windows() {
 }
 
 #[test]
+fn ordinary_window_vscroll_shifts_row_origin_and_keeps_full_height() {
+    // GNU `w->vscroll` scrolls an ordinary window's contents UP by `vscroll`
+    // pixels: the text area keeps its full height, the row-walk origin moves up
+    // to `text_y - vscroll` (top-clipped first row), and one extra partially
+    // visible row is exposed at the bottom.  `w->vscroll` is stored negative.
+    let mut params = window_params();
+    // vscroll of 8px (half a 16px row).
+    params.vscroll = -8;
+    // mode-line only (no header/tab) => text_height is a clean multiple of the
+    // row height: 120 - 8 = 112 = 7 rows.
+    let request = BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 8.0, 0.0, 0.0);
+    let geometry = request.into_geometry(0);
+
+    // Full height is retained (NOT shrunk by vscroll) for an ordinary window.
+    assert_eq!(geometry.text_y, 32.0);
+    assert_eq!(geometry.text_height, 112.0);
+    // The applied content-up shift and the shifted walk origin.
+    assert_eq!(geometry.vscroll, 8.0);
+    assert_eq!(geometry.row_origin_y(), 24.0);
+    // base rows (7) + one exposed bottom row = 8.
+    assert_eq!(geometry.max_rows, 8);
+    assert_eq!(geometry.display_text_rows, 8);
+    // Walk bottom lifted to the shifted last-row edge so the extra bottom row is
+    // emitted; the visible/clip band still ends at text_y + text_height = 144.
+    assert_eq!(geometry.visibility_bottom_y, 152.0);
+    assert_eq!(geometry.row_origin_y() + geometry.max_rows as f32 * 16.0, 152.0);
+}
+
+#[test]
+fn minibuffer_vscroll_preserves_shrink_and_unshifted_origin() {
+    // A minibuffer repurposes vscroll to HIDE content by shrinking the visible
+    // area (vertico-posframe): the historical shrink is preserved and the origin
+    // is NOT shifted (row_origin_y == text_y).
+    let mut params = window_params();
+    params.kind = WindowKind::Minibuffer;
+    params.vscroll = -8;
+    let request = BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 8.0, 0.0, 0.0);
+    let geometry = request.into_geometry(0);
+
+    // Height IS shrunk by vscroll for a minibuffer: 112 - 8 = 104.
+    assert_eq!(geometry.text_y, 32.0);
+    assert_eq!(geometry.text_height, 104.0);
+    // No content-up shift applied to the origin.
+    assert_eq!(geometry.vscroll, 0.0);
+    assert_eq!(geometry.row_origin_y(), 32.0);
+    // floor(104 / 16) = 6 physical rows.
+    assert_eq!(geometry.max_rows, 6);
+}
+
+#[test]
+fn ordinary_window_zero_vscroll_is_unchanged() {
+    // vscroll == 0 must be byte-identical to the pre-fix behavior: no shift, no
+    // extra row, visibility bottom at the physical text-area bottom.
+    let params = window_params();
+    assert_eq!(params.vscroll, 0);
+    let geometry = BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 8.0, 0.0, 0.0).into_geometry(0);
+
+    assert_eq!(geometry.vscroll, 0.0);
+    assert_eq!(geometry.text_height, 112.0);
+    assert_eq!(geometry.row_origin_y(), geometry.text_y);
+    assert_eq!(geometry.max_rows, 7);
+    assert_eq!(geometry.visibility_bottom_y, geometry.text_y + geometry.text_height);
+}
+
+#[test]
 fn walk_setup_initializes_source_position_and_geometry_state() {
     let setup = setup_request().into_setup();
 

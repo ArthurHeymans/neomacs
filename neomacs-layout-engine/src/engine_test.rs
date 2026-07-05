@@ -2964,6 +2964,99 @@ fn layout_frame_rust_lays_out_complex_text() {
     assert!(!trace.matrix_rows.is_empty());
 }
 
+#[test]
+fn layout_frame_rust_vscroll_shifts_body_rows_up_and_exposes_extra_row() {
+    // GNU `w->vscroll` (task #64): an ordinary window's contents are scrolled UP
+    // by the vscroll pixels.  Byte-exact RowTrace pixel_y snapshot — baseline
+    // (vscroll 0) vs a sub-line vscroll of 5px:
+    //   * every body row's pixel_y drops by EXACTLY `vscroll`,
+    //   * the first row moves ABOVE the (unchanged) text-area top (top-clipped),
+    //   * one extra partially-visible row is exposed at the bottom, continuing
+    //     the row grid,
+    //   * the cursor's y follows the (fully visible) row it sits on.
+    // `w->vscroll` is stored negative; the harness pins window_start at line 1.
+    let text = "vscroll body line\n".repeat(40);
+    const VSCROLL_PX: i64 = 5;
+
+    let layout = |vscroll: i32| -> (Vec<f32>, Option<i64>) {
+        let trace = backend_layout_trace_with_buffer_and_window_setup(
+            BufferTextBackendKind::GapBuffer,
+            "layout-vscroll-body-shift",
+            &text,
+            300,
+            200,
+            // Point on the second line: the cursor lands on a fully-visible row,
+            // not the top-clipped first row.
+            |buffer, _buf_id, _text| {
+                buffer.goto_emacs_byte_pos(EmacsBytePos::new(20));
+            },
+            move |window| {
+                if let neovm_core::window::Window::Leaf { vscroll: vs, .. } = window {
+                    *vs = vscroll;
+                }
+            },
+        );
+        let body_ys = trace
+            .matrix_rows
+            .iter()
+            .filter(|row| row.role == GlyphRowRole::Text && row.displays_text)
+            .map(|row| f32::from_bits(row.pixel_y_bits))
+            .collect();
+        let cursor_y = trace.phys_cursor.as_ref().map(|cursor| cursor.y);
+        (body_ys, cursor_y)
+    };
+
+    let (baseline, base_cursor) = layout(0);
+    let (scrolled, scrolled_cursor) = layout(-(VSCROLL_PX as i32));
+    let vscroll_px = VSCROLL_PX as f32;
+
+    assert!(
+        baseline.len() >= 3,
+        "need several visible body rows: {baseline:?}"
+    );
+    let char_height = baseline[1] - baseline[0];
+    assert!(
+        char_height > vscroll_px,
+        "sub-line vscroll requires char_height ({char_height}) > vscroll ({vscroll_px})"
+    );
+
+    // Every overlapping row shifts up by EXACTLY vscroll (byte-exact f32).
+    for (k, &base_y) in baseline.iter().enumerate() {
+        assert_eq!(
+            scrolled[k],
+            base_y - vscroll_px,
+            "row {k}: vscroll'd pixel_y must be baseline ({base_y}) - vscroll ({vscroll_px})"
+        );
+    }
+    // The first row is lifted above the (unchanged) text-area top.
+    assert!(
+        scrolled[0] < baseline[0],
+        "first row must move above the text-area top: {} !< {}",
+        scrolled[0],
+        baseline[0]
+    );
+    // Exactly one extra row is exposed at the bottom, continuing the grid.
+    assert_eq!(
+        scrolled.len(),
+        baseline.len() + 1,
+        "a {vscroll_px}px vscroll (< one {char_height}px row) exposes one extra bottom row"
+    );
+    assert_eq!(
+        *scrolled.last().unwrap(),
+        scrolled[scrolled.len() - 2] + char_height,
+        "the exposed bottom row continues the uniform row grid"
+    );
+
+    // The cursor follows the row it sits on: same downward shift.
+    let base_cursor = base_cursor.expect("baseline cursor should be visible");
+    let scrolled_cursor = scrolled_cursor.expect("scrolled cursor should be visible");
+    assert_eq!(
+        scrolled_cursor,
+        base_cursor - VSCROLL_PX,
+        "cursor y must follow its row's downward shift"
+    );
+}
+
 fn backend_layout_trace(kind: BufferTextBackendKind) -> BackendLayoutTrace {
     let text = "abé\tz\n日本x\nlast Ω line\n";
     backend_layout_trace_with_buffer_setup(
