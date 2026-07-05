@@ -198,15 +198,14 @@ where
         // window_start to point — which then PERSISTS and corrupts the real (tall)
         // window. Pairs with the forward-scroll guard in
         // `BufferWindowSourceRequest::should_forward_scroll_without_layout`.
-        let remaining_visibility_retries = if scroll.is_some()
-            || (geometry.max_rows <= 1 && !params.is_minibuffer())
-        {
-            // Phase 2 consumes the authoritative post-scroll window_start; never
-            // re-derive scrolling via a visibility retry.
-            0
-        } else {
-            remaining_visibility_retries
-        };
+        let remaining_visibility_retries =
+            if scroll.is_some() || (geometry.max_rows <= 1 && !params.is_minibuffer()) {
+                // Phase 2 consumes the authoritative post-scroll window_start; never
+                // re-derive scrolling via a visibility retry.
+                0
+            } else {
+                remaining_visibility_retries
+            };
 
         let reserve_right_special_col =
             !frame_params.window_system && params.right_fringe_width == 0.0;

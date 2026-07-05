@@ -167,9 +167,11 @@ fn linux_x11_plan_sets_backend_and_readback_environment() {
     );
     assert!(command.args.contains(&"-Q".into()));
     assert!(command.args.contains(&"-l".into()));
-    assert!(command
-        .args
-        .contains(&"test/neomacs/neomacs-face-test.el".into()));
+    assert!(
+        command
+            .args
+            .contains(&"test/neomacs/neomacs-face-test.el".into())
+    );
     assert_eq!(command.env_value("WINIT_UNIX_BACKEND"), Some("x11"));
     assert_eq!(
         command.env_value("NEOMACS_DEBUG_FIRST_FRAME_READBACK"),

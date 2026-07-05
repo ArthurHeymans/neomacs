@@ -14,20 +14,20 @@ use crate::display_buffer_source_tail_render::{
 };
 use crate::display_buffer_window_geometry::{BufferWindowGeometry, BufferWindowLocalDisplayPolicy};
 use crate::display_buffer_window_source::BufferWindowSource;
+use crate::display_cursor::CursorVisualColumnResolutionRequest;
 use crate::display_face_id::FrameFaceIdAllocator;
+use crate::display_output_install_request::OutputFrameArtifactInstallRequest;
+use crate::display_output_row_request::OutputRowLifecycleRequest;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_face_state::{DisplayRowActiveFaceState, DisplayRowMeasurementPolicy};
 use crate::display_row_geometry::{DisplayRowLimit, DisplayRowVisibilityLimit};
 use crate::display_row_metrics::DisplayRowFallbackMetrics;
 use crate::display_row_overlay_string::BufferOverlayStringTextRowRenderContext;
 use crate::display_row_walk_state::FaceScanCheckpoint;
-use crate::display_cursor::CursorVisualColumnResolutionRequest;
-use crate::display_output_install_request::OutputFrameArtifactInstallRequest;
-use crate::display_output_row_request::OutputRowLifecycleRequest;
 use crate::display_status_line::{ChromeRowRenderServices, WindowChromeRowsRenderRequest};
-use crate::hit_test::HitRow;
 use crate::display_text_window_row_lifecycle::{TextWindowBeginRequest, TextWindowFinishState};
 use crate::font_metrics::FontMetricsService;
+use crate::hit_test::HitRow;
 use crate::incremental_layout::{CursorOnlyReplay, ScrollReplay};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess};
 use crate::types::WindowParams;
@@ -35,7 +35,9 @@ use crate::window_output::{
     TextWindowOutputTarget, TextWindowRedisplayPositions, WindowOutputEmitter,
     record_text_window_display_range, render_window_chrome_rows,
 };
-use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor};
+use neomacs_display_protocol::frame_glyphs::{
+    CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
+};
 use neomacs_display_protocol::glyph_matrix::{FaceFillItem, GlyphArea};
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::buffer::BufferId;
@@ -635,13 +637,13 @@ impl BufferSourceOutputSetup {
             output
                 .builder()
                 .install_output_row_lifecycle(OutputRowLifecycleRequest::cursor(
-                    cursor.row, cursor.col, cursor.style,
+                    cursor.row,
+                    cursor.col,
+                    cursor.style,
                 ));
-            output
-                .builder()
-                .install_output_frame_artifact(OutputFrameArtifactInstallRequest::phys_cursor(
-                    cursor,
-                ));
+            output.builder().install_output_frame_artifact(
+                OutputFrameArtifactInstallRequest::phys_cursor(cursor),
+            );
 
             // Chrome is always re-walked (mode/header/tab lines are point-dependent).
             let measured_chrome_heights = render_window_chrome_rows(
@@ -753,7 +755,9 @@ impl BufferSourceOutputSetup {
             // their snapshots/points into the emitter.
             let reused_count = scroll.reused_rows.len();
             for (idx, row) in &scroll.reused_rows {
-                output.builder().install_finalized_output_row(*idx, row.clone());
+                output
+                    .builder()
+                    .install_finalized_output_row(*idx, row.clone());
             }
             output_emitter.push_reused_body(scroll.reused_row_snapshots, scroll.reused_points);
             output_emitter.normalize_body_start_cols();

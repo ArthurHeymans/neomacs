@@ -200,7 +200,10 @@ fn ordinary_window_vscroll_shifts_row_origin_and_keeps_full_height() {
     // Walk bottom lifted to the shifted last-row edge so the extra bottom row is
     // emitted; the visible/clip band still ends at text_y + text_height = 144.
     assert_eq!(geometry.visibility_bottom_y, 152.0);
-    assert_eq!(geometry.row_origin_y() + geometry.max_rows as f32 * 16.0, 152.0);
+    assert_eq!(
+        geometry.row_origin_y() + geometry.max_rows as f32 * 16.0,
+        152.0
+    );
 }
 
 #[test]
@@ -250,13 +253,17 @@ fn ordinary_window_zero_vscroll_is_unchanged() {
     // extra row, visibility bottom at the physical text-area bottom.
     let params = window_params();
     assert_eq!(params.vscroll, 0);
-    let geometry = BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 8.0, 0.0, 0.0).into_geometry(0);
+    let geometry =
+        BufferWindowGeometryRequest::new(&params, 8.0, 16.0, 8.0, 0.0, 0.0).into_geometry(0);
 
     assert_eq!(geometry.vscroll, 0.0);
     assert_eq!(geometry.text_height, 112.0);
     assert_eq!(geometry.row_origin_y(), geometry.text_y);
     assert_eq!(geometry.max_rows, 7);
-    assert_eq!(geometry.visibility_bottom_y, geometry.text_y + geometry.text_height);
+    assert_eq!(
+        geometry.visibility_bottom_y,
+        geometry.text_y + geometry.text_height
+    );
 }
 
 #[test]
