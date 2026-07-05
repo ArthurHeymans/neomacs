@@ -1,6 +1,7 @@
 use super::{
     FontconfigSubpixelOrder, GlyphAtlasError, GlyphKey, RasterizeResult, SubpixelBin,
-    WgpuGlyphAtlas, effective_font_size, key_uses_default_font_metrics, normalize_subpixel_mask,
+    WgpuGlyphAtlas, effective_font_size, glyph_font_identity, key_uses_default_font_metrics,
+    normalize_subpixel_mask,
 };
 
 #[test]
@@ -114,4 +115,27 @@ fn rasterize_result_to_pixels_rejects_zero_size() {
 
     let err = WgpuGlyphAtlas::rasterize_result_to_pixels(&result).unwrap_err();
     assert_eq!(err, GlyphAtlasError::ZeroSize);
+}
+
+#[test]
+fn glyph_font_identity_discriminates_resolved_font_id() {
+    use neomacs_display_protocol::face::Face;
+    use neomacs_display_protocol::font::ResolvedFontId;
+
+    let mut a = Face::new(5);
+    a.font_family = "Mono".to_string();
+    let mut b = a.clone();
+
+    // Same request fields, different realized fonts -> different identity.
+    a.default_resolved_font_id = Some(ResolvedFontId(1));
+    b.default_resolved_font_id = Some(ResolvedFontId(2));
+    assert_ne!(glyph_font_identity(Some(&a)), glyph_font_identity(Some(&b)));
+
+    // Same realized font -> same identity.
+    b.default_resolved_font_id = Some(ResolvedFontId(1));
+    assert_eq!(glyph_font_identity(Some(&a)), glyph_font_identity(Some(&b)));
+
+    // Unresolved differs from resolved.
+    b.default_resolved_font_id = None;
+    assert_ne!(glyph_font_identity(Some(&a)), glyph_font_identity(Some(&b)));
 }

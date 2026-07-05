@@ -18,6 +18,7 @@ use cosmic_text::{
 };
 
 use neomacs_display_protocol::face::Face;
+use neomacs_display_protocol::font::{ResolvedFont, ResolvedFontTable};
 use neomacs_layout_engine::font_loader::FontFileCache;
 use neomacs_layout_engine::fontconfig::{FontconfigSubpixelOrder, default_subpixel_order};
 use swash::scale::{Render, ScaleContext, Source, StrikeWith};
@@ -75,6 +76,9 @@ pub fn glyph_font_identity(face: Option<&Face>) -> u64 {
     face.font_weight.hash(&mut hasher);
     face.font_size.to_bits().hash(&mut hasher);
     face.attributes.bits().hash(&mut hasher);
+    // Layout-resolved font identity: two faces with identical request
+    // fields but different realized fonts must not share cached glyphs.
+    face.default_resolved_font_id.hash(&mut hasher);
     hasher.finish()
 }
 
@@ -194,6 +198,19 @@ pub struct WgpuGlyphAtlas {
     pub(crate) cache_hits_this_frame: usize,
     pub(crate) cache_misses_this_frame: usize,
     pub(crate) page_evictions_this_frame: usize,
+    /// Layout-resolved font table for the frames this atlas draws, installed
+    /// per frame by the render pass. `Face::default_resolved_font_id` indexes
+    /// into it; the exact-font text path reads the answer from here instead
+    /// of re-running semantic selection.
+    frame_fonts: ResolvedFontTable,
+    /// Total GUI text lookups whose face had no layout-resolved font and no
+    /// font-file bridge — i.e. the renderer had to make a semantic font
+    /// decision on its own (design §10 "emergency fallback"). Must stay 0
+    /// for normal GUI text.
+    unresolved_face_text_total: u64,
+    /// Face ids already warned about, so the emergency path logs once per
+    /// face instead of per glyph.
+    unresolved_face_warned: HashSet<u32>,
 }
 
 impl WgpuGlyphAtlas {
@@ -254,6 +271,9 @@ impl WgpuGlyphAtlas {
             cached_font_ascent: None,
             font_file_cache: FontFileCache::new(),
             subpixel_order: default_subpixel_order(),
+            frame_fonts: ResolvedFontTable::new(),
+            unresolved_face_text_total: 0,
+            unresolved_face_warned: HashSet::new(),
             cache_hits_this_frame: 0,
             cache_misses_this_frame: 0,
             page_evictions_this_frame: 0,
@@ -723,6 +743,27 @@ impl WgpuGlyphAtlas {
         .render(&mut scaler, cache_key.glyph_id)
     }
 
+    /// Install a frame's layout-resolved font table before its text draws.
+    ///
+    /// Ids are interned by the layout-side resolver and stable across frames,
+    /// so entries are upserted (a re-sent id always carries the same
+    /// identity; overwriting also heals a hypothetical resolver restart).
+    pub fn install_frame_fonts(&mut self, fonts: &ResolvedFontTable) {
+        for (id, font) in fonts {
+            self.frame_fonts.insert(*id, font.clone());
+        }
+    }
+
+    /// Total emergency (unresolved-face) text lookups so far; see field doc.
+    pub fn unresolved_face_text_total(&self) -> u64 {
+        self.unresolved_face_text_total
+    }
+
+    fn face_resolved_font(&self, face: &Face) -> Option<&ResolvedFont> {
+        face.default_resolved_font_id
+            .and_then(|id| self.frame_fonts.get(&id))
+    }
+
     fn intern_family(&mut self, family: &str) -> &'static str {
         if let Some(&existing) = self.interned_families.get(family) {
             existing
@@ -740,15 +781,20 @@ impl WgpuGlyphAtlas {
             let requested_italic = f
                 .attributes
                 .contains(neomacs_display_protocol::face::FaceAttributes::ITALIC);
+            let resolved = self.face_resolved_font(f).cloned();
 
             // Prime the exact font file in fontdb, but keep the family name that
             // Fontconfig/Emacs already selected so TTC collections stay stable.
-            let mut effective_family = if let Some(ref path) = f.font_file_path {
+            // The layout-resolved identity wins; `font_file_path` is the C-FFI
+            // bridge for faces realized outside the Rust layout engine.
+            let prime_path = resolved
+                .as_ref()
+                .and_then(|font| font.identity.file_path.clone())
+                .or_else(|| f.font_file_path.clone());
+            if let Some(ref path) = prime_path {
                 let _ = self.font_file_cache.prime_file(&mut self.font_system, path);
-                f.font_family.clone()
-            } else {
-                f.font_family.clone()
-            };
+            }
+            let mut effective_family = f.font_family.clone();
             let effective_weight = f.font_weight;
             let effective_style = if requested_italic {
                 Some(Style::Italic)
@@ -780,6 +826,18 @@ impl WgpuGlyphAtlas {
                 })
             };
             if let Some(ch) = repr_char {
+                // Per-character coverage fallback (CJK/emoji/symbols). This
+                // stays a render-side decision until shaped runs carry
+                // glyph-level resolved fonts (design Phase 3); it mirrors the
+                // layout side's `resolve_font_for_char`, so both threads make
+                // the same call.
+                tracing::trace!(
+                    target: "font_boundary",
+                    face_id = f.id,
+                    family = %effective_family,
+                    ch = %ch,
+                    "render-side per-char font fallback"
+                );
                 let prefer_monospace =
                     neomacs_layout_engine::fontconfig::family_prefers_monospace(&effective_family);
                 if let Some(matched) = neomacs_layout_engine::fontconfig::match_font_for_char(
@@ -793,6 +851,57 @@ impl WgpuGlyphAtlas {
                         let _ = self.font_file_cache.prime_file(&mut self.font_system, path);
                     }
                     effective_family = matched.family;
+                }
+            } else if let Some(font) = resolved.as_ref() {
+                // Exact face-primary path: replay the layout resolver's
+                // realized answer verbatim — the same
+                // `select_cosmic_family` family mapping and the already
+                // effective weight it probed with — so cosmic-text picks
+                // the identical fontdb face the layout metrics came from.
+                // No fontconfig, no weight re-resolution: the render thread
+                // makes no semantic font decision here.
+                let family = font.family.clone();
+                let mut attrs = Attrs::new();
+                attrs = match neomacs_layout_engine::font_match::select_cosmic_family(
+                    &self.font_system,
+                    &family,
+                ) {
+                    neomacs_layout_engine::font_match::CosmicFamilySelection::Name(name) => {
+                        let interned = self.intern_family(name);
+                        attrs.family(Family::Name(interned))
+                    }
+                    neomacs_layout_engine::font_match::CosmicFamilySelection::Monospace => {
+                        attrs.family(Family::Monospace)
+                    }
+                    neomacs_layout_engine::font_match::CosmicFamilySelection::Serif => {
+                        attrs.family(Family::Serif)
+                    }
+                    neomacs_layout_engine::font_match::CosmicFamilySelection::SansSerif => {
+                        attrs.family(Family::SansSerif)
+                    }
+                };
+                attrs = attrs.weight(Weight(font.weight));
+                if let Some(style) = effective_style {
+                    attrs = attrs.style(style);
+                }
+                return attrs;
+            }
+
+            if resolved.is_none() && prime_path.is_none() {
+                // Emergency fallback: GUI text reached the render thread with
+                // no resolved font identity and no font-file bridge, so the
+                // semantic selection below is the renderer's own decision
+                // (design §10). Normal GUI text must never take this path.
+                self.unresolved_face_text_total += 1;
+                if self.unresolved_face_warned.insert(f.id) {
+                    tracing::warn!(
+                        target: "font_boundary",
+                        face_id = f.id,
+                        family = %f.font_family,
+                        weight = f.font_weight,
+                        lisp_name = f.lisp_name.as_deref().unwrap_or(""),
+                        "unresolved GUI text reached render thread; using emergency font fallback"
+                    );
                 }
             }
 

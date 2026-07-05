@@ -450,6 +450,16 @@ impl RenderApp {
             return None;
         };
         frame = drained_frame;
+        // Install the layout-resolved font tables before any text draws so
+        // the glyph atlas can rasterize the exact fonts layout measured with
+        // (font realization / render boundary design, Phase 2). Child frames
+        // share the same layout-side id interner, so merging is safe.
+        if let Some(atlas) = render.compositor.glyph_atlas.as_mut() {
+            atlas.install_frame_fonts(&frame.fonts);
+            for entry in render.compositor.child_frames.frames.values() {
+                atlas.install_frame_fonts(&entry.frame.fonts);
+            }
+        }
         if extra_line_spacing != 0.0 || extra_letter_spacing != 0.0 {
             Self::apply_extra_spacing(
                 &mut frame.glyphs,
