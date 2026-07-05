@@ -17,6 +17,10 @@ use cosmic_text::{Attrs, Buffer, Family, FontSystem, Style, Weight};
 fn safe_metrics(font_size: f32, line_height: f32) -> cosmic_text::Metrics {
     cosmic_text::Metrics::new(font_size.max(1.0), line_height.max(1.0))
 }
+use neomacs_display_protocol::font::{
+    FontBackendKind, FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId,
+    ResolvedFontIdentity,
+};
 use neovm_core::face::{FontSlant, FontWeight, FontWidth};
 use std::collections::HashMap;
 use ttf_parser::Face as TtfFace;
@@ -308,6 +312,15 @@ pub struct FontMetricsService {
     /// Number of actual cosmic-text shaping invocations (`shaped_run_cache`
     /// misses). Lets tests prove the measure/render double-shape is deduped.
     n_shape_calls: usize,
+    /// Cache: face attrs → the face's resolved primary font. Same generation
+    /// contract as the other caches: cleared by `clear_caches`.
+    resolved_face_font_cache: HashMap<MetricsCacheKey, Option<ResolvedFont>>,
+    /// Interner: exact font identity → stable [`ResolvedFontId`]. NOT cleared
+    /// by `clear_caches`: ids stay stable for the service's lifetime so
+    /// consecutive frame snapshots reference the same font by the same id.
+    /// Renderer caches key on the identity anyway, so a stale id can never
+    /// alias a glyph to the wrong font.
+    resolved_font_ids: HashMap<ResolvedFontIdentity, ResolvedFontId>,
 }
 
 impl FontMetricsService {
@@ -329,6 +342,8 @@ impl FontMetricsService {
             shaped_run_cache: HashMap::new(),
             shaped_run_cache_cap: SHAPED_RUN_CACHE_CAP,
             n_shape_calls: 0,
+            resolved_face_font_cache: HashMap::new(),
+            resolved_font_ids: HashMap::new(),
         }
     }
 
@@ -602,6 +617,107 @@ impl FontMetricsService {
             slant: font_slant_from_fontdb(face.style),
             width: font_width_from_stretch_number(face.stretch.to_number()),
         })
+    }
+
+    /// Resolve a face's primary font to an exact identity.
+    ///
+    /// This is the face-level half of the render-boundary design: the same
+    /// probe path that produces the face's layout metrics
+    /// (`selected_font_id_and_space_width`) yields the concrete fontdb face,
+    /// so the identity the renderer rasterizes is the font the metrics came
+    /// from by construction. GNU analog: `font_open_for_lface` filling the
+    /// realized `face->font` that both `font-at` and the draw path consume.
+    pub fn resolved_font_for_face(
+        &mut self,
+        family: &str,
+        weight: u16,
+        italic: bool,
+        font_size: f32,
+    ) -> Option<ResolvedFont> {
+        let key = MetricsCacheKey::new(family, weight, italic, font_size);
+        if let Some(cached) = self.resolved_face_font_cache.get(&key) {
+            return cached.clone();
+        }
+        let resolved = self.resolve_face_font_uncached(family, weight, italic, font_size);
+        self.resolved_face_font_cache.insert(key, resolved.clone());
+        resolved
+    }
+
+    fn resolve_face_font_uncached(
+        &mut self,
+        family: &str,
+        weight: u16,
+        italic: bool,
+        font_size: f32,
+    ) -> Option<ResolvedFont> {
+        // Same alias + probe-shape path as the ASCII metrics code
+        // (`resolve_font_for_char`), so identity == metrics font.
+        let resolved_family = self.resolve_family(crate::fontconfig::resolve_family(family), None);
+        let (font_id, _space_width) =
+            self.selected_font_id_and_space_width(&resolved_family, weight, italic, font_size);
+        let font_id = font_id?;
+        let effective_weight = crate::font_match::resolve_weight_in_family(
+            &self.font_system,
+            &resolved_family,
+            weight,
+            italic,
+        );
+        let vertical = self.font_metrics_from_selected_face(font_id, font_size);
+        let (file, face_index, postscript_name, style, stretch) = {
+            let face = self.font_system.db().face(font_id)?;
+            (
+                fontdb_face_file(face),
+                face.index,
+                Some(face.post_script_name.clone()).filter(|name| !name.is_empty()),
+                face.style,
+                face.stretch,
+            )
+        };
+        let identity = match file.as_deref() {
+            Some(path) => {
+                ResolvedFontIdentity::from_file(path, face_index, postscript_name.clone())
+            }
+            // fontdb Source::Binary faces have no path; key on the
+            // postscript name (or family) so the identity is still durable.
+            None => ResolvedFontIdentity {
+                backend: FontBackendKind::Fontconfig,
+                stable_key: format!(
+                    "mem:{}#{face_index}",
+                    postscript_name.as_deref().unwrap_or(&resolved_family)
+                ),
+                file_path: None,
+                face_index,
+                postscript_name: postscript_name.clone(),
+                variation_coords: Vec::new(),
+            },
+        };
+        let id = self.intern_resolved_font_id(&identity);
+        Some(ResolvedFont {
+            id,
+            identity,
+            family: resolved_family,
+            full_name: None,
+            postscript_name,
+            // Preserve the resolved CSS weight, not the container face's
+            // metadata weight (variable fonts; cf. `select_font_for_char`).
+            weight: effective_weight,
+            slant: font_slant_kind_from_fontdb(style),
+            width: stretch.to_number(),
+            pixel_size: font_size,
+            ascent_px: vertical.as_ref().map(|v| v.ascent).unwrap_or(0.0),
+            descent_px: vertical.as_ref().map(|v| v.descent).unwrap_or(0.0),
+            source: FontResolutionSource::FacePrimary,
+        })
+    }
+
+    fn intern_resolved_font_id(&mut self, identity: &ResolvedFontIdentity) -> ResolvedFontId {
+        if let Some(&id) = self.resolved_font_ids.get(identity) {
+            return id;
+        }
+        // Ids start at 1; 0 stays unused so an uninitialized id is visible.
+        let id = ResolvedFontId(self.resolved_font_ids.len() as u32 + 1);
+        self.resolved_font_ids.insert(identity.clone(), id);
+        id
     }
 
     /// Measure a single character's advance width using cosmic-text shaping.
@@ -938,11 +1054,14 @@ impl FontMetricsService {
     }
 
     /// Clear all caches. Call when fonts change (e.g., text-scale-adjust).
+    /// `resolved_font_ids` intentionally survives: identities are durable and
+    /// ids must stay stable across generations (see field doc).
     pub fn clear_caches(&mut self) {
         self.ascii_cache.clear();
         self.char_cache.clear();
         self.metrics_cache.clear();
         self.shaped_run_cache.clear();
+        self.resolved_face_font_cache.clear();
     }
 
     /// Number of times `shape_run` actually invoked cosmic-text shaping (i.e.
@@ -958,6 +1077,69 @@ impl FontMetricsService {
     #[cfg(test)]
     pub(crate) fn set_shaped_run_cache_cap(&mut self, cap: usize) {
         self.shaped_run_cache_cap = cap;
+    }
+}
+
+/// Realize resolved font identities for every face of a finished frame.
+///
+/// Runs at the engine's frame-output boundary (after all install paths have
+/// filled `state.faces`), so it covers every face regardless of which layout
+/// path produced it. For each face it resolves the primary font through the
+/// same `FontMetricsService` that produced the face's layout metrics, then
+/// publishes `Face::default_resolved_font_id`, the frame's font table, and
+/// the `font_file_path` bridge the renderer already primes.
+///
+/// No-op when `service` is `None` (TTY frames have no GUI font realization).
+pub fn realize_frame_fonts(
+    state: &mut neomacs_display_protocol::glyph_matrix::FrameDisplayState,
+    service: &mut Option<FontMetricsService>,
+) {
+    let Some(svc) = service.as_mut() else {
+        return;
+    };
+    // Deterministic interner allocation order across identical frames.
+    let mut face_ids: Vec<u32> = state.faces.keys().copied().collect();
+    face_ids.sort_unstable();
+    for face_id in face_ids {
+        let Some(face) = state.faces.get_mut(&face_id) else {
+            continue;
+        };
+        let family = if face.font_family.is_empty() {
+            "monospace"
+        } else {
+            face.font_family.as_str()
+        };
+        let italic = face.is_italic();
+        match svc.resolved_font_for_face(family, face.font_weight, italic, face.font_size.max(1.0))
+        {
+            Some(font) => {
+                face.default_resolved_font_id = Some(font.id);
+                if face.font_file_path.is_none() {
+                    face.font_file_path = font.identity.file_path.clone();
+                }
+                state.fonts.entry(font.id).or_insert(font);
+            }
+            None => {
+                // Phase 0 divergence instrumentation: this face will reach
+                // the render thread without a resolved identity and trigger
+                // its independent semantic fallback.
+                tracing::warn!(
+                    target: "font_boundary",
+                    face_id,
+                    family = %face.font_family,
+                    weight = face.font_weight,
+                    "GUI face has no resolvable primary font; renderer will re-select"
+                );
+            }
+        }
+    }
+}
+
+fn font_slant_kind_from_fontdb(style: Style) -> FontSlantKind {
+    match style {
+        Style::Normal => FontSlantKind::Normal,
+        Style::Italic => FontSlantKind::Italic,
+        Style::Oblique => FontSlantKind::Oblique,
     }
 }
 

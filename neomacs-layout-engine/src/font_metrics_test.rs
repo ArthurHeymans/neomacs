@@ -1502,3 +1502,115 @@ fn shape_run_empty_text_is_empty() {
     let mut svc = make_svc();
     assert!(svc.shape_run("", "monospace", 400, false, 16.0).is_empty());
 }
+
+// ---------------------------------------------------------------------------
+// resolved_font_for_face / realize_frame_fonts (render-boundary Phase 1)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn resolved_font_for_face_yields_exact_file_identity() {
+    let mut svc = make_svc();
+    let font = svc
+        .resolved_font_for_face("Monospace", 400, false, 24.0)
+        .expect("monospace face resolves to a concrete font");
+    let path = font
+        .identity
+        .file_path
+        .as_deref()
+        .expect("fontconfig faces carry a file path");
+    assert!(
+        std::path::Path::new(path).is_absolute(),
+        "font file path must be absolute: {path}"
+    );
+    assert_eq!(
+        font.identity.stable_key,
+        format!("{path}#{}", font.identity.face_index)
+    );
+    assert_eq!(
+        font.source,
+        neomacs_display_protocol::font::FontResolutionSource::FacePrimary
+    );
+    assert!(font.ascent_px > 0.0, "resolved font carries real metrics");
+}
+
+#[test]
+fn resolved_font_for_face_matches_char_selection_for_ascii() {
+    // The face-level identity must be the font the ASCII metrics/selection
+    // path uses — that agreement is the whole point of the boundary design.
+    let mut svc = make_svc();
+    let face_font = svc
+        .resolved_font_for_face("Monospace", 400, false, 24.0)
+        .expect("face font");
+    let char_font = svc
+        .select_font_for_char('A', "Monospace", 400, false, 24.0)
+        .expect("char font");
+    assert_eq!(face_font.identity.file_path, char_font.file);
+    assert_eq!(face_font.postscript_name, char_font.postscript_name);
+    assert_eq!(face_font.family, char_font.family);
+}
+
+#[test]
+fn resolved_font_ids_are_stable_across_cache_clear() {
+    let mut svc = make_svc();
+    let before = svc
+        .resolved_font_for_face("Monospace", 400, false, 24.0)
+        .expect("face font");
+    svc.clear_caches();
+    let after = svc
+        .resolved_font_for_face("Monospace", 400, false, 24.0)
+        .expect("face font after clear");
+    assert_eq!(before.id, after.id, "interned id survives clear_caches");
+    assert_eq!(before.identity, after.identity);
+
+    // A different instance (bold) gets a different identity only when the
+    // database actually has a distinct bold face; either way the regular
+    // id maps back to the same identity.
+    let again = svc
+        .resolved_font_for_face("Monospace", 400, false, 24.0)
+        .expect("face font repeat");
+    assert_eq!(again.id, before.id);
+}
+
+#[test]
+fn realize_frame_fonts_publishes_face_identity_and_table() {
+    use neomacs_display_protocol::face::Face;
+    use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
+
+    let mut state = FrameDisplayState::new(80, 24, 8.0, 16.0);
+    let mut default_face = Face::new(0);
+    default_face.font_family = "Monospace".to_string();
+    default_face.font_size = 24.0;
+    state.faces.insert(0, default_face);
+    let mut bold_face = Face::new(21);
+    bold_face.font_family = "Monospace".to_string();
+    bold_face.font_size = 24.0;
+    bold_face.font_weight = 700;
+    state.faces.insert(21, bold_face);
+
+    let mut service = Some(make_svc());
+    realize_frame_fonts(&mut state, &mut service);
+
+    for face_id in [0u32, 21] {
+        let face = &state.faces[&face_id];
+        let font_id = face
+            .default_resolved_font_id
+            .unwrap_or_else(|| panic!("face {face_id} got a resolved font id"));
+        let font = state
+            .fonts
+            .get(&font_id)
+            .unwrap_or_else(|| panic!("frame font table has face {face_id}'s font"));
+        assert_eq!(font.id, font_id);
+        assert_eq!(
+            face.font_file_path, font.identity.file_path,
+            "font_file_path bridge mirrors the resolved identity"
+        );
+    }
+
+    // TTY frames (no service) must stay untouched.
+    let mut tty_state = FrameDisplayState::new(80, 24, 1.0, 1.0);
+    tty_state.faces.insert(0, Face::new(0));
+    let mut no_service: Option<FontMetricsService> = None;
+    realize_frame_fonts(&mut tty_state, &mut no_service);
+    assert!(tty_state.fonts.is_empty());
+    assert_eq!(tty_state.faces[&0].default_resolved_font_id, None);
+}

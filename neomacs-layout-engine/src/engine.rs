@@ -249,7 +249,12 @@ impl LayoutEngine {
         &mut self,
         frame_params: &FrameParams,
     ) -> neomacs_display_protocol::glyph_matrix::FrameDisplayState {
-        self.frame_output.finish(frame_params)
+        let mut state = self.frame_output.finish(frame_params);
+        // Publish exact resolved font identities for every realized face so
+        // the render thread rasterizes the same fonts layout measured with
+        // (font realization / render boundary design, Phase 1).
+        crate::font_metrics::realize_frame_fonts(&mut state, &mut self.font_metrics);
+        state
     }
 
     fn render_window_output_decorations(
@@ -1105,7 +1110,8 @@ impl LayoutEngine {
                 if cursor_only {
                     // Body rows were reused verbatim (0 relaid); chrome re-walked.
                     self.layout_stats.reused_rows += enabled_body;
-                    self.layout_stats.record_window_class(LayoutClass::CursorOnly);
+                    self.layout_stats
+                        .record_window_class(LayoutClass::CursorOnly);
                 } else if let Some((reused, _dvpos)) = scroll_reused {
                     // Overlapping rows reused shifted; the rest were newly exposed
                     // and walked.
@@ -1274,9 +1280,7 @@ impl LayoutEngine {
             .rows
             .iter()
             .filter(|row| {
-                row.enabled
-                    && row.displays_text
-                    && !RetainedWindowMatrix::is_chrome_role(row.role)
+                row.enabled && row.displays_text && !RetainedWindowMatrix::is_chrome_role(row.role)
             })
             .map(|row| crate::pixel_scroll::ScrollRowMetric {
                 start_charpos: row.start_charpos as i64,
@@ -1407,7 +1411,10 @@ impl LayoutEngine {
         is_edit: bool,
     ) {
         let window_id = neovm_core::window::WindowId(params.window_id as u64);
-        let scroll_dvpos = scroll_replay.as_ref().map(|replay| replay.dvpos).unwrap_or(0.0);
+        let scroll_dvpos = scroll_replay
+            .as_ref()
+            .map(|replay| replay.dvpos)
+            .unwrap_or(0.0);
         // GNU `with_echo_area_buffer` (xdisp.c:12904): an inactive mini-window
         // displays the echo-area buffer (whose contents `set_message_1` mirrored
         // the current message into), NOT the ordinary buffer attached to the
