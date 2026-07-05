@@ -1195,14 +1195,24 @@ impl FrameDisplayState {
                 frame_row.row_index,
                 &frame_row.row,
                 frame_row.pixel_bounds,
+                frame_row.pixel_bounds,
                 self.char_width,
                 self.char_height,
                 &mut push,
             );
         }
         for entry in &self.window_matrices {
+            // Body (`Text`) rows clip to the text-area band so a vscroll's
+            // top-clipped first row / exposed bottom row do not bleed over the
+            // header/tab-line or mode-line; chrome rows keep the window bounds.
+            let text_area_clip = entry.text_area_clip_rect();
             for (row_idx, glyph_row) in entry.matrix.rows.iter().enumerate() {
                 let row_bounds = entry.row_pixel_bounds(glyph_row.role);
+                let row_clip = if glyph_row.role == GlyphRowRole::Text {
+                    text_area_clip
+                } else {
+                    row_bounds
+                };
                 let char_w = if entry.matrix.ncols > 0 {
                     row_bounds.width / entry.matrix.ncols as f32
                 } else {
@@ -1213,6 +1223,7 @@ impl FrameDisplayState {
                     row_idx as u32,
                     glyph_row,
                     row_bounds,
+                    row_clip,
                     char_w,
                     self.char_height,
                     &mut push,
@@ -1229,6 +1240,7 @@ impl FrameDisplayState {
         // right fringe path is parsed but not emitted yet.
         for entry in &self.window_matrices {
             let window_id = DisplayWindowId::new(entry.window_id as i64);
+            let text_area_clip = entry.text_area_clip_rect();
             for (row_idx, glyph_row) in entry.matrix.rows.iter().enumerate() {
                 if !glyph_row.enabled {
                     continue;
@@ -1248,7 +1260,21 @@ impl FrameDisplayState {
                 } else {
                     self.char_height
                 };
-                let clip_rect = Some(entry.pixel_bounds);
+                // Empty-line / truncation fringe bitmaps ride buffer-text rows,
+                // so a vscroll clips them to the same VERTICAL band as the body
+                // glyphs — but the fringe lives in the fringe column (left of the
+                // text area), so keep the full window HORIZONTAL extent. With no
+                // chrome rows this reproduces the historical `Some(pixel_bounds)`.
+                let clip_rect = if glyph_row.role == GlyphRowRole::Text {
+                    Some(Rect::new(
+                        entry.pixel_bounds.x,
+                        text_area_clip.y,
+                        entry.pixel_bounds.width,
+                        text_area_clip.height,
+                    ))
+                } else {
+                    Some(entry.pixel_bounds)
+                };
 
                 if let Some(info) = glyph_row.left_fringe_bitmap {
                     let x = entry.pixel_bounds.x;
@@ -1419,12 +1445,14 @@ impl FrameDisplayState {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn for_each_grid_row_glyph(
         &self,
         window_id: DisplayWindowId,
         row_index: u32,
         glyph_row: &GlyphRow,
         pixel_bounds: Rect,
+        row_clip: Rect,
         char_w: f32,
         char_h: f32,
         push: &mut impl FnMut(FrameGlyph),
@@ -1452,7 +1480,11 @@ impl FrameDisplayState {
         } else {
             row_height
         };
-        let clip_rect = Some(pixel_bounds);
+        // For `Text` rows this is the text-area band (narrower than the window
+        // when a vscroll shifts content past the header/mode-line); for chrome
+        // rows the caller passes the window bounds, matching the historical
+        // `Some(pixel_bounds)`.
+        let clip_rect = Some(row_clip);
         let mut col = 0usize;
         let mut x_cursor = win_x;
 
@@ -1716,6 +1748,45 @@ impl WindowMatrixEntry {
         } else {
             self.pixel_bounds
         }
+    }
+
+    /// Vertical clip band for buffer-text (`Text` role) rows: the window's text
+    /// area between the tab/header lines and the mode line.
+    ///
+    /// A `w->vscroll` scrolls a window's contents UP, so the first body row is
+    /// laid out above this band (top-clipped) and one extra, partially visible
+    /// row is exposed at the bottom (below the last full row).  The renderer
+    /// clips every glyph/background vertically to its `clip_rect`; clamping body
+    /// rows to this band keeps that vscroll overflow from bleeding over the
+    /// header/tab-line chrome above or the mode-line below.
+    ///
+    /// The band is derived from the chrome rows already present in the matrix
+    /// (the header/tab lines' bottoms and the mode line's top), which — unlike
+    /// the buffer rows — are NOT shifted by vscroll and so are stable anchors.
+    /// The horizontal extent keeps `text_pixel_bounds` (the text columns), so
+    /// with no chrome rows this reproduces `text_pixel_bounds` byte-for-byte —
+    /// the clip only narrows vertically, and only when chrome rows are present.
+    pub fn text_area_clip_rect(&self) -> Rect {
+        let win = self.pixel_bounds;
+        let text = self.text_pixel_bounds;
+        let mut top = win.y;
+        let mut bottom = win.y + win.height;
+        for row in &self.matrix.rows {
+            if !row.enabled || row.height_px <= 0.0 {
+                continue;
+            }
+            let row_top = win.y + row.pixel_y;
+            match row.role {
+                GlyphRowRole::TabLine | GlyphRowRole::HeaderLine => {
+                    top = top.max(row_top + row.height_px);
+                }
+                GlyphRowRole::ModeLine => {
+                    bottom = bottom.min(row_top);
+                }
+                _ => {}
+            }
+        }
+        Rect::new(text.x, top, text.width, (bottom - top).max(0.0))
     }
 }
 

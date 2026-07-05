@@ -1070,6 +1070,140 @@ fn materialize_text_rows_from_text_area_but_chrome_from_window_area() {
 }
 
 #[test]
+fn text_area_clip_rect_narrows_to_band_between_chrome_rows() {
+    // Window 32x100 with a 20px header line on top and a 20px mode line on the
+    // bottom: the buffer-text clip band is the 60px in between.  A vscroll shifts
+    // the buffer rows but NOT the chrome anchors, so the band stays put.
+    let mut matrix = GlyphMatrix::new(3, 4);
+    matrix.rows[0].enabled = true;
+    matrix.rows[0].role = GlyphRowRole::HeaderLine;
+    matrix.rows[0].pixel_y = 0.0;
+    matrix.rows[0].height_px = 20.0;
+    // A vscroll'd buffer row whose top pokes up into the header band.
+    matrix.rows[1].enabled = true;
+    matrix.rows[1].role = GlyphRowRole::Text;
+    matrix.rows[1].pixel_y = 15.0;
+    matrix.rows[1].height_px = 20.0;
+    matrix.rows[2].enabled = true;
+    matrix.rows[2].role = GlyphRowRole::ModeLine;
+    matrix.rows[2].pixel_y = 80.0;
+    matrix.rows[2].height_px = 20.0;
+
+    let entry = WindowMatrixEntry {
+        window_id: 1,
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 32.0, 100.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 32.0, 100.0),
+        selected: true,
+    };
+
+    // header bottom (20) .. mode-line top (80).
+    assert_eq!(entry.text_area_clip_rect(), Rect::new(0.0, 20.0, 32.0, 60.0));
+}
+
+#[test]
+fn text_area_clip_rect_equals_text_pixel_bounds_without_chrome() {
+    // With no header/tab/mode-line rows the band spans the full window height at
+    // the text-area's horizontal extent -- byte-identical to the historical
+    // `Some(text_pixel_bounds)` clip, so windows without chrome are unaffected.
+    let mut matrix = GlyphMatrix::new(1, 4);
+    matrix.rows[0].enabled = true;
+    matrix.rows[0].role = GlyphRowRole::Text;
+    matrix.rows[0].pixel_y = 0.0;
+    matrix.rows[0].height_px = 16.0;
+
+    // Production invariant: text_pixel_bounds spans the full window height with
+    // y == window top; only x/width are inset by fringes/margins.
+    let text_pixel_bounds = Rect::new(8.0, 0.0, 64.0, 32.0);
+    let entry = WindowMatrixEntry {
+        window_id: 1,
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 80.0, 32.0),
+        text_pixel_bounds,
+        selected: true,
+    };
+
+    assert_eq!(entry.text_area_clip_rect(), text_pixel_bounds);
+}
+
+#[test]
+fn materialize_clips_vscrolled_text_row_to_text_band() {
+    // End-to-end: a Text row shifted UP by a vscroll (its top pokes above the
+    // header line) is materialized with the text-area BAND as its clip_rect, so
+    // the renderer's per-glyph vertical clip hides the overflow instead of
+    // letting it bleed over the header/mode-line chrome.
+    let mut state = FrameDisplayState::new(32, 100, 8.0, 20.0);
+    state.faces.insert(0, Face::new(0));
+
+    let mut matrix = GlyphMatrix::new(3, 4);
+    matrix.rows[0].enabled = true;
+    matrix.rows[0].role = GlyphRowRole::HeaderLine;
+    matrix.rows[0].pixel_y = 0.0;
+    matrix.rows[0].height_px = 20.0;
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('h', 0, 0));
+    // vscroll'd buffer row: top at y=15, inside the header band (0..20).
+    matrix.rows[1].enabled = true;
+    matrix.rows[1].role = GlyphRowRole::Text;
+    matrix.rows[1].pixel_y = 15.0;
+    matrix.rows[1].height_px = 20.0;
+    matrix.rows[1].glyphs[GlyphArea::Text as usize].push(Glyph::char('x', 0, 0));
+    matrix.rows[2].enabled = true;
+    matrix.rows[2].role = GlyphRowRole::ModeLine;
+    matrix.rows[2].pixel_y = 80.0;
+    matrix.rows[2].height_px = 20.0;
+    matrix.rows[2].glyphs[GlyphArea::Text as usize].push(Glyph::char('m', 0, 0));
+
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: 1,
+        matrix,
+        pixel_bounds: Rect::new(0.0, 0.0, 32.0, 100.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 32.0, 100.0),
+        selected: true,
+    });
+
+    let buf = state.materialize();
+    let band = Rect::new(0.0, 20.0, 32.0, 60.0);
+
+    // The buffer glyph clips to the text-area band, and its top (y=15) sits
+    // ABOVE the band top (20): the renderer's vertical clip hides the 5px that
+    // would otherwise overlap the header line.
+    let (text_clip, text_y) = buf
+        .glyphs
+        .iter()
+        .find_map(|glyph| match glyph {
+            FrameGlyph::Char {
+                char: 'x',
+                clip_rect,
+                y,
+                ..
+            } => Some((*clip_rect, *y)),
+            _ => None,
+        })
+        .expect("text glyph 'x'");
+    assert_eq!(text_clip, Some(band));
+    assert!(
+        text_y < band.y,
+        "vscroll'd row top {text_y} must be above band top {}",
+        band.y
+    );
+
+    // Chrome glyphs keep the full window clip.
+    let header_clip = buf
+        .glyphs
+        .iter()
+        .find_map(|glyph| match glyph {
+            FrameGlyph::Char {
+                char: 'h',
+                clip_rect,
+                ..
+            } => Some(*clip_rect),
+            _ => None,
+        })
+        .expect("header glyph 'h'");
+    assert_eq!(header_clip, Some(Rect::new(0.0, 0.0, 32.0, 100.0)));
+}
+
+#[test]
 fn materialize_stretch_glyph() {
     let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
     state.faces.insert(0, Face::new(0));
