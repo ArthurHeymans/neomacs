@@ -1,8 +1,12 @@
 # Font Realization and Render Boundary Design
 
 Date: 2026-07-05
-Status: Phases 0–2 shipped; Phase 3a (per-char fallback identity) shipped;
-Phases 3b–6 open
+Status: Phases 0–4 shipped for composed clusters (face-primary, per-char
+fallback, and shaped-cluster exact-glyph rasterization all layout-resolved);
+Phase 5/6 seams in place (`FontBackend` + `TextShaper` traits, Linux/cosmic
+impls; dead second cosmic path deleted). Remaining: whole-run shaped output
+where GNU composes beyond `Composite` clusters, macOS/Windows backends, and
+a rustybuzz `TextShaper`.
 
 ## 0. Amendments from implementation (2026-07-05)
 

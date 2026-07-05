@@ -312,6 +312,11 @@ pub struct FontMetricsService {
     /// Number of actual cosmic-text shaping invocations (`shaped_run_cache`
     /// misses). Lets tests prove the measure/render double-shape is deduped.
     n_shape_calls: usize,
+    /// Platform font backend: family alias resolution + per-char coverage
+    /// matching (design §7). Linux: fontconfig.
+    backend: Box<dyn crate::font_backend::FontBackend>,
+    /// Shaping engine behind the TextShaper seam (design §8).
+    shaper: Box<dyn crate::text_shaper::TextShaper>,
     /// Cache: face attrs → the face's resolved primary font. Same generation
     /// contract as the other caches: cleared by `clear_caches`.
     resolved_face_font_cache: HashMap<MetricsCacheKey, Option<ResolvedFont>>,
@@ -350,6 +355,8 @@ impl FontMetricsService {
             shaped_run_cache: HashMap::new(),
             shaped_run_cache_cap: SHAPED_RUN_CACHE_CAP,
             n_shape_calls: 0,
+            backend: crate::font_backend::default_font_backend(),
+            shaper: crate::text_shaper::default_text_shaper(),
             resolved_face_font_cache: HashMap::new(),
             resolved_font_ids: HashMap::new(),
             resolved_char_font_cache: HashMap::new(),
@@ -494,35 +501,13 @@ impl FontMetricsService {
                 FontSlant::Normal
             },
         );
-        let metrics = safe_metrics(font_size, font_size * 1.3);
-        let mut buffer = Buffer::new(&mut self.font_system, metrics);
-        // No width bound: lay the whole run out on a single line so shaping
-        // spans the entire run instead of wrapping mid-word.
-        buffer.set_size(&mut self.font_system, None, None);
-        buffer.set_text(
+        let glyphs = self.shaper.shape_run(
             &mut self.font_system,
             text,
             &attrs,
-            cosmic_text::Shaping::Advanced,
-            None,
+            font_size.max(1.0),
+            font_size.max(1.0) * 1.3,
         );
-        buffer.shape_until_scroll(&mut self.font_system, false);
-
-        let mut glyphs = Vec::new();
-        for run in buffer.layout_runs() {
-            for glyph in run.glyphs.iter() {
-                let phys = glyph.physical((0.0, 0.0), 1.0);
-                glyphs.push(ShapedGlyph {
-                    font_id: phys.cache_key.font_id,
-                    glyph_id: phys.cache_key.glyph_id,
-                    x: phys.x as f32,
-                    y: phys.y as f32,
-                    x_advance: glyph.w,
-                    cluster_start: glyph.start,
-                    cluster_end: glyph.end,
-                });
-            }
-        }
         if self.shaped_run_cache.len() >= self.shaped_run_cache_cap {
             self.shaped_run_cache.clear();
         }
@@ -662,7 +647,7 @@ impl FontMetricsService {
     ) -> Option<ResolvedFont> {
         // Same alias + probe-shape path as the ASCII metrics code
         // (`resolve_font_for_char`), so identity == metrics font.
-        let resolved_family = self.resolve_family(crate::fontconfig::resolve_family(family), None);
+        let resolved_family = self.resolve_family(&self.backend.resolve_family(family), None);
         let (font_id, _space_width) =
             self.selected_font_id_and_space_width(&resolved_family, weight, italic, font_size);
         let font_id = font_id?;
@@ -1044,8 +1029,7 @@ impl FontMetricsService {
             FontSlant::Normal
         };
         if ch.is_ascii() {
-            let resolved_family =
-                self.resolve_family(crate::fontconfig::resolve_family(family), None);
+            let resolved_family = self.resolve_family(&self.backend.resolve_family(family), None);
             return ResolvedCharFont {
                 family: resolved_family,
                 weight,
@@ -1053,9 +1037,10 @@ impl FontMetricsService {
             };
         }
 
-        let prefer_monospace = crate::fontconfig::family_prefers_monospace(family);
+        let prefer_monospace = self.backend.family_prefers_monospace(family);
         if let Some(matched) =
-            crate::fontconfig::match_font_for_char(family, ch, prefer_monospace, weight, italic)
+            self.backend
+                .match_font_for_char(family, ch, prefer_monospace, weight, italic)
         {
             let resolved_family = self.resolve_family(&matched.family, matched.file.as_deref());
             return ResolvedCharFont {
