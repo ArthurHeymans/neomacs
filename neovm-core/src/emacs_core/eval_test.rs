@@ -13897,6 +13897,65 @@ fn jit_subr_spec_many_re_search_forward_engages_and_matches() {
     }
 }
 
+/// Residual-coverage audit (task A PART 2): `get-text-property` — the READ
+/// sibling of the already-allowlisted `put-text-property`, and the hottest
+/// UNCOVERED `Op::Call` builtin in the font-lock SUBR-MIX (11.0%). A hot
+/// `(get-text-property POS PROP)` must engage a `Many` subr spec site, fire the
+/// armed fast path, and return the interpreter's EXACT value at a propertized
+/// position, a different property, and an unpropertized position.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_subr_spec_many_get_text_property_engages_and_matches() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    ev.eval_str(
+        "(progn (insert \"hello world\") \
+                (put-text-property 1 6 'face 'bold) \
+                (put-text-property 1 6 'depth 42))",
+    )
+    .expect("buffer + text properties");
+    #[cfg(debug_assertions)]
+    let (entries0, fast0, _) = jit_subr_spec_counters();
+    let hot = jit_subr_spec_caller("get-text-property", 2, true);
+    let cold = jit_subr_spec_caller("get-text-property", 2, false);
+    for (pos, prop, label) in [
+        (2i64, "face", "inside->symbol"),
+        (2, "depth", "inside->fixnum"),
+        (2, "absent", "inside->nil"),
+        (9, "face", "outside->nil"),
+    ] {
+        let args = || vec![Value::make_int(pos), Value::symbol(prop)];
+        let native = ev
+            .funcall_general_untraced(hot, args())
+            .unwrap_or_else(|e| panic!("native {label}: {e:?}"));
+        let interp = ev
+            .funcall_general_untraced(cold, args())
+            .unwrap_or_else(|e| panic!("interp {label}: {e:?}"));
+        assert_eq!(
+            native.bits(),
+            interp.bits(),
+            "get-text-property {label} parity hot vs cold"
+        );
+    }
+    // Anchor an absolute value so the test can't pass on a mutual bug.
+    assert_eq!(
+        format_eval_result(&ev.eval_str("(get-text-property 2 'face)")),
+        "OK bold"
+    );
+    #[cfg(debug_assertions)]
+    if std::env::var("NEOVM_JIT_FORCE_DEOPT").as_deref() != Ok("1")
+        && std::env::var("NEOVM_JIT_FORCE_SLOW_SPEC").as_deref() != Ok("1")
+    {
+        let (entries1, fast1, _) = jit_subr_spec_counters();
+        assert!(
+            entries1 > entries0,
+            "the get-text-property Many site routes through the subr spec shim"
+        );
+        assert!(fast1 > fast0, "the armed Many fast path must fire");
+    }
+}
+
 /// R2 phase 2 MUST-NAIL — SIDE-EFFECT goldens: the armed native dispatch of an
 /// allowlisted `SubrFn::Many` builtin performs byte-identical state mutations to
 /// the interpreter. Covers `looking-at` / `re-search-forward` match-state,
@@ -14305,6 +14364,48 @@ fn jit_cbsym_spec_tierb_engages_and_matches() {
             fast1 > fast0,
             "the Tier-B fast path must fire (not silently bounce to generic)"
         );
+    }
+}
+
+/// Residual-coverage audit (task A PART 2): `end-of-line` — a dedicated-opcode
+/// CBSym motion builtin (2.37% in the font-lock SUBR-MIX) added to Tier-B
+/// alongside its loop-siblings forward-line / forward-char / current-column. Its
+/// point-moving side effect (not a pure read) must be byte-identical hot vs cold:
+/// same return value AND same resulting `(point)`.
+#[cfg(feature = "jit")]
+#[test]
+fn jit_cbsym_spec_tierb_end_of_line_engages_and_matches() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
+    let mut ev = Context::new();
+    ev.eval_str("(insert \"line one\\nsecond line\\nthird\")")
+        .expect("multi-line buffer");
+    #[cfg(debug_assertions)]
+    let (count0, fast0, _) = jit_cbsym_spec_counters();
+    // `end-of-line` is emitted as CallBuiltinSym(end-of-line, 1) (GNU op 127);
+    // classify by name, exercise the 1-arg (N=nil) form.
+    let probe = |ev: &mut Context, hot: bool| -> (usize, String) {
+        ev.eval_str("(goto-char 4)").expect("point mid line 1");
+        let caller = jit_cbsym_spec_caller("end-of-line", 1, hot);
+        let r = ev
+            .funcall_general_untraced(caller, vec![Value::NIL])
+            .expect("end-of-line runs");
+        (r.bits(), format_eval_result(&ev.eval_str("(point)")))
+    };
+    let (nat_bits, nat_point) = probe(&mut ev, true);
+    let (int_bits, int_point) = probe(&mut ev, false);
+    assert_eq!(nat_bits, int_bits, "end-of-line return parity hot vs cold");
+    assert_eq!(nat_point, int_point, "end-of-line point-move parity");
+    // "line one" is 8 chars (pos 1..8), newline at 9 -> end-of-line lands on 9.
+    assert_eq!(nat_point, "OK 9", "end-of-line moved point to line-1 EOL");
+    #[cfg(debug_assertions)]
+    if !jit_cbsym_fastpath_suppressed_by_harness() {
+        let (count1, fast1, _) = jit_cbsym_spec_counters();
+        assert!(
+            count1 > count0,
+            "the end-of-line Tier-B site must route through neovm_jit_cbsym_spec"
+        );
+        assert!(fast1 > fast0, "the Tier-B fast path must fire");
     }
 }
 

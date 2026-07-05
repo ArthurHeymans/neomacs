@@ -6575,6 +6575,15 @@ const SUBR_MANY_ALLOWLIST: &[&str] = &[
     "syntax-table",
     "set-syntax-table",
     "put-text-property",
+    // Residual-coverage audit (task A PART 2): the font-lock SUBR-MIX
+    // (`vm_subr_mix_fontlock`) ranks `get-text-property` at 11.0% — the 6th
+    // hottest builtin and the READ sibling of the already-allowlisted
+    // `put-text-property` (11.6%), which #1 shipped WITHOUT its read pair. It is
+    // a plain `SubrFn::Many` read (registered `min=2`, `max=Some(3)`, so the
+    // Many arm caps `nargs<=3`), no writeback, no SWP-flag — so the exact-slice
+    // Many dispatch is byte-identical to generic exactly as `put-text-property`'s
+    // is (strictly SIMPLER, being a pure interval-tree read).
+    "get-text-property",
 ];
 
 /// Classify a compile-time function-cell binding for SUBR speculation at an
@@ -6761,6 +6770,14 @@ fn cbsym_spec_kind(sym: SymId, _nargs: usize) -> Option<SpecCalleeKind> {
             | "current-column"
             | "widen"
             | "indent-to"
+            // Residual-coverage audit (task A PART 2): `end-of-line` is a
+            // dedicated-opcode CBSym motion builtin (GNU op 127) at 2.37% in the
+            // font-lock SUBR-MIX — the ONLY member of its own loop's motion set
+            // (forward-line/forward-char/current-column, all already Tier-B) left
+            // on the generic path. Point-moving side effect (not a pure read ->
+            // NOT Tier-A); the Tier-B dispatch-skip reproduces the CBSym
+            // interpreter arm exactly, byte-identical, as its siblings do.
+            | "end-of-line"
     ) {
         return Some(SpecCalleeKind::CbsymTierB);
     }
