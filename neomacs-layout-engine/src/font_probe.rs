@@ -20,15 +20,10 @@
 //! the tests say so instead of the probe silently guessing.
 //!
 //! FreeType is only available on the fontconfig/FreeType platforms (Linux
-//! and other unix); Windows/macOS use their own font backends, so the
-//! FreeType-backed probes below have `cfg(not(unix))` stubs that return
-//! `None`/empty. The GSUB/GPOS `otf_capability` reader uses ttf-parser and
-//! is cross-platform.
-
-#[cfg(unix)]
-use freetype::Library;
-#[cfg(unix)]
-use freetype::face::LoadFlag;
+//! and other unix); Windows/macOS use their own font backends. The
+//! FreeType-backed probes live in a `cfg_select!` block with `None`/empty
+//! stubs for non-unix, so callers compile unchanged everywhere. The
+//! GSUB/GPOS `otf_capability` reader uses ttf-parser and is cross-platform.
 
 /// Metrics of one font file probed at an exact pixel size, shaped like the
 /// `font-info` elements GNU fills in `ftcrfont_open` + `font_open_entity`.
@@ -45,187 +40,198 @@ pub struct FontPxMetrics {
     pub average_width: i32,
 }
 
-/// Non-unix stub: no FreeType, so no px-metric probe.
-#[cfg(not(unix))]
-pub fn probe_font_px_metrics(
-    _file: &str,
-    _face_index: u32,
-    _pixel_size: u32,
-    _wght: Option<f32>,
-) -> Option<FontPxMetrics> {
-    None
-}
+// FreeType is only available on the fontconfig/FreeType platforms (Linux and
+// other unix); Windows/macOS use their own font backends and get the stubs.
+std::cfg_select! {
+    unix => {
+        use freetype::Library;
+        use freetype::face::LoadFlag;
 
-/// Non-unix stub: no FreeType, so no named-instance enumeration.
-#[cfg(not(unix))]
-pub fn named_instance_wght_values(_file: &str, _face_index: u32) -> Vec<u16> {
-    Vec::new()
-}
-
-/// Probe `file`[`face_index`] like GNU `font_open_entity`: try
-/// `pixel_size`, bumping upward (at most 15 times) until average width and
-/// height are positive.
-#[cfg(unix)]
-pub fn probe_font_px_metrics(
-    file: &str,
-    face_index: u32,
-    pixel_size: u32,
-    wght: Option<f32>,
-) -> Option<FontPxMetrics> {
-    let library = Library::init().ok()?;
-    let mut face = library.new_face(file, face_index as isize).ok()?;
-    // Variable fonts: GNU probes the MATCHED named instance (the cairo
-    // scaled font carries the fontconfig pattern's wght), not the default
-    // instance — thin/bold advances differ from regular at real sizes.
-    if let Some(wght) = wght {
-        apply_wght_axis(&library, &mut face, wght);
-    }
-    let start = pixel_size.max(1);
-    for psize in start..=start + 15 {
-        if let Some(metrics) = probe_at_exact_px(&face, psize)
-            && metrics.average_width > 0
-            && metrics.height > 0
-        {
-            return Some(metrics);
-        }
-    }
-    None
-}
-
-/// The `wght` design-axis values of a variable font's fvar NAMED INSTANCES
-/// (OT axis units == CSS weight), sorted ascending and deduped. Empty for a
-/// non-variable font or one whose instances omit a `wght` axis.
-///
-/// GNU/fontconfig expose named instances as separate font entities, so
-/// weight resolution snaps a request to the nearest instance rather than
-/// synthesizing an arbitrary axis value (font_match::resolve_requested_weight).
-#[cfg(unix)]
-pub fn named_instance_wght_values(file: &str, face_index: u32) -> Vec<u16> {
-    use freetype::freetype_sys as ft;
-    let Ok(library) = Library::init() else {
-        return Vec::new();
-    };
-    let Ok(face) = library.new_face(file, face_index as isize) else {
-        return Vec::new();
-    };
-    let mut weights = Vec::new();
-    unsafe {
-        let raw = face.raw() as *const ft::FT_FaceRec as *mut ft::FT_FaceRec;
-        let mut mm: *mut ft::FT_MM_Var = std::ptr::null_mut();
-        if ft::FT_Get_MM_Var(raw, &mut mm) != 0 || mm.is_null() {
-            return Vec::new();
-        }
-        let axis_count = (*mm).num_axis as usize;
-        let axes = std::slice::from_raw_parts((*mm).axis, axis_count);
-        let wght_tag = u32::from_be_bytes(*b"wght") as ft::FT_ULong;
-        if let Some(wght_index) = axes.iter().position(|axis| axis.tag == wght_tag) {
-            let n = (*mm).num_namedstyles as usize;
-            let styles = std::slice::from_raw_parts((*mm).namedstyle, n);
-            for style in styles {
-                let coords = std::slice::from_raw_parts(style.coords, axis_count);
-                // FT_Fixed 16.16 → integer CSS weight.
-                let value = (coords[wght_index] as f64 / 65536.0).round();
-                if (1.0..=1000.0).contains(&value) {
-                    weights.push(value as u16);
+        /// Probe `file`[`face_index`] like GNU `font_open_entity`: try
+        /// `pixel_size`, bumping upward (at most 15 times) until average
+        /// width and height are positive.
+        pub fn probe_font_px_metrics(
+            file: &str,
+            face_index: u32,
+            pixel_size: u32,
+            wght: Option<f32>,
+        ) -> Option<FontPxMetrics> {
+            let library = Library::init().ok()?;
+            let mut face = library.new_face(file, face_index as isize).ok()?;
+            // Variable fonts: GNU probes the MATCHED named instance (the
+            // cairo scaled font carries the fontconfig pattern's wght), not
+            // the default instance — thin/bold advances differ from regular
+            // at real sizes.
+            if let Some(wght) = wght {
+                apply_wght_axis(&library, &mut face, wght);
+            }
+            let start = pixel_size.max(1);
+            for psize in start..=start + 15 {
+                if let Some(metrics) = probe_at_exact_px(&face, psize)
+                    && metrics.average_width > 0
+                    && metrics.height > 0
+                {
+                    return Some(metrics);
                 }
             }
+            None
         }
-        ft::FT_Done_MM_Var(library.raw(), mm);
-    }
-    weights.sort_unstable();
-    weights.dedup();
-    weights
-}
 
-/// Set the `wght` design axis (OT axis units == CSS weight), leaving all
-/// other axes at their defaults. No-op for non-variable fonts.
-#[cfg(unix)]
-fn apply_wght_axis(library: &Library, face: &mut freetype::Face, wght: f32) {
-    use freetype::freetype_sys as ft;
-    unsafe {
-        let raw = face.raw_mut() as *mut ft::FT_FaceRec;
-        let mut mm: *mut ft::FT_MM_Var = std::ptr::null_mut();
-        if ft::FT_Get_MM_Var(raw, &mut mm) != 0 || mm.is_null() {
-            return;
+        /// The `wght` design-axis values of a variable font's fvar NAMED
+        /// INSTANCES (OT axis units == CSS weight), sorted ascending and
+        /// deduped. Empty for a non-variable font or one whose instances omit
+        /// a `wght` axis.
+        ///
+        /// GNU/fontconfig expose named instances as separate font entities,
+        /// so weight resolution snaps a request to the nearest instance
+        /// rather than synthesizing an arbitrary axis value
+        /// (font_match::resolve_requested_weight).
+        pub fn named_instance_wght_values(file: &str, face_index: u32) -> Vec<u16> {
+            use freetype::freetype_sys as ft;
+            let Ok(library) = Library::init() else {
+                return Vec::new();
+            };
+            let Ok(face) = library.new_face(file, face_index as isize) else {
+                return Vec::new();
+            };
+            let mut weights = Vec::new();
+            unsafe {
+                let raw = face.raw() as *const ft::FT_FaceRec as *mut ft::FT_FaceRec;
+                let mut mm: *mut ft::FT_MM_Var = std::ptr::null_mut();
+                if ft::FT_Get_MM_Var(raw, &mut mm) != 0 || mm.is_null() {
+                    return Vec::new();
+                }
+                let axis_count = (*mm).num_axis as usize;
+                let axes = std::slice::from_raw_parts((*mm).axis, axis_count);
+                let wght_tag = u32::from_be_bytes(*b"wght") as ft::FT_ULong;
+                if let Some(wght_index) = axes.iter().position(|axis| axis.tag == wght_tag) {
+                    let n = (*mm).num_namedstyles as usize;
+                    let styles = std::slice::from_raw_parts((*mm).namedstyle, n);
+                    for style in styles {
+                        let coords = std::slice::from_raw_parts(style.coords, axis_count);
+                        // FT_Fixed 16.16 → integer CSS weight.
+                        let value = (coords[wght_index] as f64 / 65536.0).round();
+                        if (1.0..=1000.0).contains(&value) {
+                            weights.push(value as u16);
+                        }
+                    }
+                }
+                ft::FT_Done_MM_Var(library.raw(), mm);
+            }
+            weights.sort_unstable();
+            weights.dedup();
+            weights
         }
-        let axis_count = (*mm).num_axis as usize;
-        let axes = std::slice::from_raw_parts((*mm).axis, axis_count);
-        let mut coords: Vec<ft::FT_Fixed> = axes.iter().map(|axis| axis.def).collect();
-        let wght_tag = u32::from_be_bytes(*b"wght") as ft::FT_ULong;
-        for (i, axis) in axes.iter().enumerate() {
-            if axis.tag == wght_tag {
-                coords[i] = (f64::from(wght) * 65536.0) as ft::FT_Fixed;
+
+        /// Set the `wght` design axis (OT axis units == CSS weight), leaving
+        /// all other axes at their defaults. No-op for non-variable fonts.
+        fn apply_wght_axis(library: &Library, face: &mut freetype::Face, wght: f32) {
+            use freetype::freetype_sys as ft;
+            unsafe {
+                let raw = face.raw_mut() as *mut ft::FT_FaceRec;
+                let mut mm: *mut ft::FT_MM_Var = std::ptr::null_mut();
+                if ft::FT_Get_MM_Var(raw, &mut mm) != 0 || mm.is_null() {
+                    return;
+                }
+                let axis_count = (*mm).num_axis as usize;
+                let axes = std::slice::from_raw_parts((*mm).axis, axis_count);
+                let mut coords: Vec<ft::FT_Fixed> = axes.iter().map(|axis| axis.def).collect();
+                let wght_tag = u32::from_be_bytes(*b"wght") as ft::FT_ULong;
+                for (i, axis) in axes.iter().enumerate() {
+                    if axis.tag == wght_tag {
+                        coords[i] = (f64::from(wght) * 65536.0) as ft::FT_Fixed;
+                    }
+                }
+                let _ = ft::FT_Set_Var_Design_Coordinates(raw, axis_count as u32, coords.as_mut_ptr());
+                ft::FT_Done_MM_Var(library.raw(), mm);
             }
         }
-        let _ = ft::FT_Set_Var_Design_Coordinates(raw, axis_count as u32, coords.as_mut_ptr());
-        ft::FT_Done_MM_Var(library.raw(), mm);
+
+        fn probe_at_exact_px(face: &freetype::Face, pixel_size: u32) -> Option<FontPxMetrics> {
+            face.set_pixel_sizes(pixel_size, pixel_size).ok()?;
+
+            // ASCII printables loop (ftcrfont.c ftcrfont_open): per-glyph
+            // width is the hinted advance rounded to integer pixels (cairo
+            // lround of x_advance with hint-metrics on). Glyphs a char is
+            // missing fall back to glyph id 0, mirroring the cairo
+            // text_to_glyphs failure path.
+            let mut max_width = 0i32;
+            let mut space_width = 0i32;
+            let mut average_width = 0i64;
+            let mut n = 0i64;
+            // Cairo under fontconfig's default hintstyle=hintslight loads
+            // with FT_LOAD_TARGET_LIGHT: vertical-only hinting, so horizontal
+            // advances stay fractional and hint-metrics rounding (lround)
+            // decides the pixel width. Full bytecode hinting (LOAD_DEFAULT)
+            // would widen some glyphs (Noto '@'-class) to 2px where GNU
+            // reports 1.
+            let load_flags = LoadFlag::TARGET_LIGHT;
+            for c in 32u8..127 {
+                if face.load_char(c as usize, load_flags).is_err()
+                    && face.load_glyph(0, load_flags).is_err()
+                {
+                    continue;
+                }
+                // 26.6 fixed-point hinted advance → integer pixels, round
+                // half up (lround semantics for the non-negative advances
+                // fonts produce).
+                let advance = face.glyph().advance().x;
+                let this_width = ((advance + 32) >> 6) as i32;
+                if this_width > 0 {
+                    if this_width > max_width {
+                        max_width = this_width;
+                    }
+                    if c == 32 {
+                        space_width = this_width;
+                    }
+                    average_width += this_width as i64;
+                    n += 1;
+                }
+            }
+            if n > 0 {
+                average_width /= n;
+            }
+
+            // Font extents (cairo_scaled_font_extents → lround): for an FT
+            // backend with hint-metrics on these are the grid-fitted size
+            // metrics.
+            let size_metrics = face.size_metrics()?;
+            let ascent = ((size_metrics.ascender + 32) >> 6) as i32;
+            let descent = ((-size_metrics.descender + 32) >> 6) as i32;
+
+            Some(FontPxMetrics {
+                pixel_size,
+                height: ascent + descent,
+                ascent,
+                descent,
+                max_width,
+                space_width,
+                average_width: average_width as i32,
+            })
+        }
+
+        // The probe tests exercise the FreeType functions against real fonts.
+        #[cfg(test)]
+        #[path = "font_probe_test.rs"]
+        mod tests;
+    }
+    _ => {
+        /// Non-unix stub: no FreeType, so no px-metric probe.
+        pub fn probe_font_px_metrics(
+            _file: &str,
+            _face_index: u32,
+            _pixel_size: u32,
+            _wght: Option<f32>,
+        ) -> Option<FontPxMetrics> {
+            None
+        }
+
+        /// Non-unix stub: no FreeType, so no named-instance enumeration.
+        pub fn named_instance_wght_values(_file: &str, _face_index: u32) -> Vec<u16> {
+            Vec::new()
+        }
     }
 }
-
-#[cfg(unix)]
-fn probe_at_exact_px(face: &freetype::Face, pixel_size: u32) -> Option<FontPxMetrics> {
-    face.set_pixel_sizes(pixel_size, pixel_size).ok()?;
-
-    // ASCII printables loop (ftcrfont.c ftcrfont_open): per-glyph width is
-    // the hinted advance rounded to integer pixels (cairo lround of
-    // x_advance with hint-metrics on). Glyphs a char is missing fall back
-    // to glyph id 0, mirroring the cairo text_to_glyphs failure path.
-    let mut max_width = 0i32;
-    let mut space_width = 0i32;
-    let mut average_width = 0i64;
-    let mut n = 0i64;
-    // Cairo under fontconfig's default hintstyle=hintslight loads with
-    // FT_LOAD_TARGET_LIGHT: vertical-only hinting, so horizontal advances
-    // stay fractional and hint-metrics rounding (lround) decides the pixel
-    // width. Full bytecode hinting (LOAD_DEFAULT) would widen some glyphs
-    // (Noto '@'-class) to 2px where GNU reports 1.
-    let load_flags = LoadFlag::TARGET_LIGHT;
-    for c in 32u8..127 {
-        if face.load_char(c as usize, load_flags).is_err()
-            && face.load_glyph(0, load_flags).is_err()
-        {
-            continue;
-        }
-        // 26.6 fixed-point hinted advance → integer pixels, round half up
-        // (lround semantics for the non-negative advances fonts produce).
-        let advance = face.glyph().advance().x;
-        let this_width = ((advance + 32) >> 6) as i32;
-        if this_width > 0 {
-            if this_width > max_width {
-                max_width = this_width;
-            }
-            if c == 32 {
-                space_width = this_width;
-            }
-            average_width += this_width as i64;
-            n += 1;
-        }
-    }
-    if n > 0 {
-        average_width /= n;
-    }
-
-    // Font extents (cairo_scaled_font_extents → lround): for an FT backend
-    // with hint-metrics on these are the grid-fitted size metrics.
-    let size_metrics = face.size_metrics()?;
-    let ascent = ((size_metrics.ascender + 32) >> 6) as i32;
-    let descent = ((-size_metrics.descender + 32) >> 6) as i32;
-
-    Some(FontPxMetrics {
-        pixel_size,
-        height: ascent + descent,
-        ascent,
-        descent,
-        max_width,
-        space_width,
-        average_width: average_width as i32,
-    })
-}
-
-// The probe tests exercise the FreeType functions against real font files.
-#[cfg(all(test, unix))]
-#[path = "font_probe_test.rs"]
-mod tests;
 
 /// One langsys of an OpenType script: `None` tag = the default langsys.
 #[derive(Clone, Debug, PartialEq, Eq)]
