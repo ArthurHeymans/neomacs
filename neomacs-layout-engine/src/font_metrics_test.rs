@@ -1614,3 +1614,64 @@ fn realize_frame_fonts_publishes_face_identity_and_table() {
     assert!(tty_state.fonts.is_empty());
     assert_eq!(tty_state.faces[&0].default_resolved_font_id, None);
 }
+
+/// Not a pass/fail perf gate (wall-clock asserts flake in CI) — this prints
+/// the steady-state cost of the per-frame font realization pass so its
+/// evaluator-thread overhead is measurable on demand:
+/// `cargo nextest run -p neomacs-layout-engine realize_frame_fonts_steady --no-capture`
+#[test]
+fn realize_frame_fonts_steady_state_cost_probe() {
+    use neomacs_display_protocol::face::Face;
+    use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
+
+    let mut service = Some(make_svc());
+    let build_state = || {
+        let mut state = FrameDisplayState::new(120, 40, 8.0, 16.0);
+        // 40 faces across a few realistic attr combos (default, bold,
+        // italic, size variants) — a typical GUI frame's face table.
+        for id in 0..40u32 {
+            let mut face = Face::new(id);
+            face.font_family = "Monospace".to_string();
+            face.font_size = 14.0 + (id % 3) as f32;
+            face.font_weight = if id % 4 == 0 { 700 } else { 400 };
+            state.faces.insert(id, face);
+        }
+        state
+    };
+
+    // Cold pass: pays the one-time probe-shape per unique attr combo.
+    let cold_start = std::time::Instant::now();
+    let mut state = build_state();
+    realize_frame_fonts(&mut state, &mut service);
+    let cold = cold_start.elapsed();
+    assert!(
+        state
+            .faces
+            .values()
+            .all(|f| f.default_resolved_font_id.is_some())
+    );
+
+    // Steady state: what every subsequent redisplay pays on the eval thread.
+    const FRAMES: u32 = 1000;
+    let warm_start = std::time::Instant::now();
+    for _ in 0..FRAMES {
+        let mut state = build_state();
+        realize_frame_fonts(&mut state, &mut service);
+    }
+    let warm = warm_start.elapsed();
+    // Subtract the state-construction baseline so the printed number is the
+    // realization pass alone.
+    let base_start = std::time::Instant::now();
+    for _ in 0..FRAMES {
+        let state = build_state();
+        std::hint::black_box(&state);
+    }
+    let base = base_start.elapsed();
+    eprintln!(
+        "realize_frame_fonts: cold(first frame, 40 faces) = {cold:?}; \
+         steady state = {:?}/frame incl. state build, {:?}/frame realization only \
+         ({FRAMES} frames, 40 faces/frame)",
+        warm / FRAMES,
+        warm.saturating_sub(base) / FRAMES
+    );
+}
