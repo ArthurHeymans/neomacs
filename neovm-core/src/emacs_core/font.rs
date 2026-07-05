@@ -2706,11 +2706,20 @@ fn font_info_vector_for_entity(eval: &mut super::eval::Context, entity: &Value) 
             _ => None,
         })
         .unwrap_or(0);
+    // Variable fonts: probe the value's weight instance (OT wght axis units
+    // are CSS weights).
+    let wght = font_vector_get_flexible(&elems, "weight")
+        .and_then(|value| value.as_symbol_name())
+        .and_then(|name| name.trim_start_matches(':').parse::<FontWeight>().ok())
+        .map(|weight| f32::from(weight.css_weight()));
     let probe = eval
         .display_host
         .as_mut()
-        .and_then(|host| host.probe_font_px_metrics(&file, 0, px).ok())
+        .and_then(|host| host.probe_font_px_metrics(&file, 0, px, wght).ok())
         .flatten()?;
+    // Element 14: (opentype GSUB . GPOS) like GNU's
+    // `Fcons (Qopentype, otf_capability (font))` (font.c Ffont_info).
+    let capability = otf_capability_lisp(eval, &file);
 
     let (
         foundry,
@@ -2787,11 +2796,74 @@ fn font_info_vector_for_entity(eval: &mut super::eval::Context, entity: &Value) 
         Value::fixnum(probe.space_width as i64),
         Value::fixnum(probe.average_width as i64),
         file_value,
-        Value::NIL,
+        capability,
     ]))
 }
 
-fn font_info_vector_for_runtime_font(font_like: &Value, frame: &crate::window::Frame) -> Value {
+/// `(opentype GSUB . GPOS)` for a font file, or nil when unavailable.
+fn otf_capability_lisp(eval: &mut super::eval::Context, file: &str) -> Value {
+    eval.display_host
+        .as_mut()
+        .and_then(|host| host.font_otf_capability(file, 0).ok())
+        .flatten()
+        .map(|caps| {
+            Value::cons(
+                Value::symbol("opentype"),
+                Value::cons(otf_side_to_lisp(&caps.gsub), otf_side_to_lisp(&caps.gpos)),
+            )
+        })
+        .unwrap_or(Value::NIL)
+}
+
+/// Capability for any font VALUE carrying a `:file`, else nil.
+fn font_value_otf_capability(eval: &mut super::eval::Context, font_like: &Value) -> Value {
+    let Some(file) = font_like
+        .as_vector_data()
+        .and_then(|elems| font_vector_get_flexible(&elems, "file"))
+        .filter(|value| value.is_string())
+        .and_then(|value| value.as_utf8_str().map(|s| s.to_owned()))
+    else {
+        return Value::NIL;
+    };
+    otf_capability_lisp(eval, &file)
+}
+
+/// Lisp form of one GSUB/GPOS side: list of `(SCRIPT (LANGSYS FEATURES...)
+/// ...)`, default langsys printed as `nil`; `nil` for an empty side —
+/// mirroring GNU `hbfont_otf_features`.
+fn otf_side_to_lisp(side: &super::eval::OtfSideCapability) -> Value {
+    let scripts: Vec<Value> = side
+        .iter()
+        .map(|(script, lang_syses)| {
+            let langsys_values: Vec<Value> = lang_syses
+                .iter()
+                .map(|(tag, features)| {
+                    let feature_values: Vec<Value> = features
+                        .iter()
+                        .map(|feature| Value::from_sym_id(intern(feature)))
+                        .collect();
+                    Value::cons(
+                        tag.as_deref()
+                            .map(|tag| Value::from_sym_id(intern(tag)))
+                            .unwrap_or(Value::NIL),
+                        Value::list(feature_values),
+                    )
+                })
+                .collect();
+            Value::cons(
+                Value::from_sym_id(intern(script)),
+                Value::list(langsys_values),
+            )
+        })
+        .collect();
+    Value::list(scripts)
+}
+
+fn font_info_vector_for_runtime_font(
+    font_like: &Value,
+    frame: &crate::window::Frame,
+    capability: Value,
+) -> Value {
     let opened_name = font_name_value(font_like).unwrap_or_else(|| Value::string(""));
     let full_name = opened_name;
     let file = match font_like.kind() {
@@ -2825,7 +2897,7 @@ fn font_info_vector_for_runtime_font(font_like: &Value, frame: &crate::window::F
         Value::fixnum(space_width),
         Value::fixnum(average_width),
         file,
-        Value::NIL,
+        capability,
     ])
 }
 
@@ -6623,20 +6695,27 @@ pub(crate) fn builtin_font_info(eval: &mut super::eval::Context, args: Vec<Value
         return Ok(Value::NIL);
     }
 
-    if is_font_entity(&args[0]) {
-        // GNU opens the entity itself (font_open_entity) and reports the
-        // opened font's metrics; only fall back to the frame font when the
-        // entity can't be probed (no file, unreadable, ...).
+    if is_font_entity(&args[0]) || is_font_object(&args[0]) {
+        // GNU opens the font itself (font_open_entity for entities; a
+        // font-at object is already opened at its pixel size) and reports
+        // the OPENED font's metrics; only fall back to the frame font when
+        // the value can't be probed (no file, unreadable, ...).
         if let Some(info) = font_info_vector_for_entity(eval, &args[0]) {
             return Ok(info);
         }
     }
+    // GNU attaches (opentype . caps) to font-info for OPENED fonts too
+    // (font-at objects); compute it from the font's file before borrowing
+    // the frame.
+    let capability = font_value_otf_capability(eval, &args[0]);
     let frame = eval
         .frames
         .get(frame_id)
         .ok_or_else(|| signal("error", vec![Value::string("No selected frame")]))?;
     if args[0].is_string() || is_font(&args[0]) {
-        Ok(font_info_vector_for_runtime_font(&args[0], frame))
+        Ok(font_info_vector_for_runtime_font(
+            &args[0], frame, capability,
+        ))
     } else {
         Err(signal(
             "wrong-type-argument",

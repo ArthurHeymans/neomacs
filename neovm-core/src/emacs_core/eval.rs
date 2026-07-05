@@ -1373,6 +1373,18 @@ pub struct FontPxProbeResult {
     pub average_width: i32,
 }
 
+/// One GSUB/GPOS side of an OpenType capability report: per script
+/// (table order), langsyses (`None` = default langsys, first) with their
+/// feature tags. Tags keep trailing spaces ("MKD ").
+pub type OtfSideCapability = Vec<(String, Vec<(Option<String>, Vec<String>)>)>;
+
+/// GSUB/GPOS capability of a font file (GNU `hbfont_otf_capability`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FontOtfCapability {
+    pub gsub: OtfSideCapability,
+    pub gpos: OtfSideCapability,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ImageResolveSource {
     File(crate::heap_types::LispString),
@@ -1514,7 +1526,15 @@ pub trait DisplayHost {
         _file: &str,
         _face_index: u32,
         _pixel_size: u32,
+        _wght: Option<f32>,
     ) -> Result<Option<FontPxProbeResult>, String> {
+        Ok(None)
+    }
+    fn font_otf_capability(
+        &mut self,
+        _file: &str,
+        _face_index: u32,
+    ) -> Result<Option<FontOtfCapability>, String> {
         Ok(None)
     }
     fn resolve_image(

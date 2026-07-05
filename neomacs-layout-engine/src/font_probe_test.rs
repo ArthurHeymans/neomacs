@@ -9,7 +9,7 @@ fn assert_gnu_probe(file: &str, size: u32, expect: FontPxMetrics) {
         eprintln!("skipping: {file} not present");
         return;
     }
-    let got = probe_font_px_metrics(file, 0, size).expect("probe succeeds");
+    let got = probe_font_px_metrics(file, 0, size, None).expect("probe succeeds");
     assert_eq!(got, expect, "probe of {file} at px={size}");
 }
 

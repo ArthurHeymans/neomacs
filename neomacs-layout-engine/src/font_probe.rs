@@ -44,9 +44,16 @@ pub fn probe_font_px_metrics(
     file: &str,
     face_index: u32,
     pixel_size: u32,
+    wght: Option<f32>,
 ) -> Option<FontPxMetrics> {
     let library = Library::init().ok()?;
-    let face = library.new_face(file, face_index as isize).ok()?;
+    let mut face = library.new_face(file, face_index as isize).ok()?;
+    // Variable fonts: GNU probes the MATCHED named instance (the cairo
+    // scaled font carries the fontconfig pattern's wght), not the default
+    // instance — thin/bold advances differ from regular at real sizes.
+    if let Some(wght) = wght {
+        apply_wght_axis(&library, &mut face, wght);
+    }
     let start = pixel_size.max(1);
     for psize in start..=start + 15 {
         if let Some(metrics) = probe_at_exact_px(&face, psize)
@@ -57,6 +64,30 @@ pub fn probe_font_px_metrics(
         }
     }
     None
+}
+
+/// Set the `wght` design axis (OT axis units == CSS weight), leaving all
+/// other axes at their defaults. No-op for non-variable fonts.
+fn apply_wght_axis(library: &Library, face: &mut freetype::Face, wght: f32) {
+    use freetype::freetype_sys as ft;
+    unsafe {
+        let raw = face.raw_mut() as *mut ft::FT_FaceRec;
+        let mut mm: *mut ft::FT_MM_Var = std::ptr::null_mut();
+        if ft::FT_Get_MM_Var(raw, &mut mm) != 0 || mm.is_null() {
+            return;
+        }
+        let axis_count = (*mm).num_axis as usize;
+        let axes = std::slice::from_raw_parts((*mm).axis, axis_count);
+        let mut coords: Vec<ft::FT_Fixed> = axes.iter().map(|axis| axis.def).collect();
+        let wght_tag = u32::from_be_bytes(*b"wght") as ft::FT_ULong;
+        for (i, axis) in axes.iter().enumerate() {
+            if axis.tag == wght_tag {
+                coords[i] = (f64::from(wght) * 65536.0) as ft::FT_Fixed;
+            }
+        }
+        let _ = ft::FT_Set_Var_Design_Coordinates(raw, axis_count as u32, coords.as_mut_ptr());
+        ft::FT_Done_MM_Var(library.raw(), mm);
+    }
 }
 
 fn probe_at_exact_px(face: &freetype::Face, pixel_size: u32) -> Option<FontPxMetrics> {
@@ -121,3 +152,82 @@ fn probe_at_exact_px(face: &freetype::Face, pixel_size: u32) -> Option<FontPxMet
 #[cfg(test)]
 #[path = "font_probe_test.rs"]
 mod tests;
+
+/// One langsys of an OpenType script: `None` tag = the default langsys.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OtfLangSys {
+    pub tag: Option<String>,
+    pub features: Vec<String>,
+}
+
+/// One script of a GSUB/GPOS table with its langsyses (default first).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OtfScript {
+    pub tag: String,
+    pub lang_syses: Vec<OtfLangSys>,
+}
+
+/// GSUB/GPOS capability of a font file, shaped like GNU's
+/// `hbfont_otf_capability` (src/hbfont.c): per table, scripts in table
+/// order; per script the default langsys first (tag `None`) then named
+/// langsyses in table order, langsyses without features skipped; features
+/// are the langsys's feature indices mapped to tags in index order. Tags
+/// keep their trailing spaces ("MKD ").
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct OtfCapability {
+    pub gsub: Vec<OtfScript>,
+    pub gpos: Vec<OtfScript>,
+}
+
+pub fn otf_capability(file: &str, face_index: u32) -> Option<OtfCapability> {
+    let data = std::fs::read(file).ok()?;
+    let face = ttf_parser::Face::parse(&data, face_index).ok()?;
+    let tables = face.tables();
+    Some(OtfCapability {
+        gsub: tables.gsub.map(otf_table_scripts).unwrap_or_default(),
+        gpos: tables.gpos.map(otf_table_scripts).unwrap_or_default(),
+    })
+}
+
+fn otf_table_scripts(table: ttf_parser::opentype_layout::LayoutTable) -> Vec<OtfScript> {
+    // GNU only reports a table with at least one feature tag.
+    if table.features.is_empty() {
+        return Vec::new();
+    }
+    let feature_tag = |index: u16| -> Option<String> {
+        table
+            .features
+            .get(index)
+            .map(|feature| tag_string(feature.tag))
+    };
+    let mut scripts = Vec::new();
+    for script in table.scripts {
+        let mut lang_syses = Vec::new();
+        let mut push_langsys =
+            |tag: Option<String>, lang: ttf_parser::opentype_layout::LanguageSystem| {
+                let features: Vec<String> = lang
+                    .feature_indices
+                    .into_iter()
+                    .filter_map(feature_tag)
+                    .collect();
+                if !features.is_empty() {
+                    lang_syses.push(OtfLangSys { tag, features });
+                }
+            };
+        if let Some(default) = script.default_language {
+            push_langsys(None, default);
+        }
+        for lang in script.languages {
+            push_langsys(Some(tag_string(lang.tag)), lang);
+        }
+        scripts.push(OtfScript {
+            tag: tag_string(script.tag),
+            lang_syses,
+        });
+    }
+    scripts
+}
+
+fn tag_string(tag: ttf_parser::Tag) -> String {
+    String::from_utf8_lossy(&tag.to_bytes()).into_owned()
+}
