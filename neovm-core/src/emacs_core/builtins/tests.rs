@@ -7160,7 +7160,10 @@ fn memory_limit_returns_resident_kib_integer() {
     // oracle corpus asserts `(> (memory-limit) 0)` => t
     // (divergence_combo_complex239::div_cx239_memory_limit_query).
     #[cfg(target_os = "linux")]
-    assert!(kib > 0, "expected positive resident KiB on Linux, got {kib}");
+    assert!(
+        kib > 0,
+        "expected positive resident KiB on Linux, got {kib}"
+    );
 }
 
 #[test]
