@@ -15399,6 +15399,259 @@ fn aot_bench_compute_loop() {
     );
 }
 
+/// PART 1 GO/NO-GO bench for the CALL-HEAVY spec-bearing profitability re-weight
+/// (`body_is_jit_profitable`). Today a font-lock/syntax sweep body is
+/// `calls >> arith` -> `NotProfitable` -> it NEVER tiers, so the #1 `Op::Call`
+/// `Many`-spec sites (re-search-forward / looking-at / parse-partial-sexp) that
+/// it carries NEVER engage. The re-weight would let it tier; the question this
+/// bench answers is whether that is net-POSITIVE.
+///
+/// A/B in ONE process (cancels CPU-frequency variance): a Hot copy of a REAL
+/// byte-compiled font-lock sweep, compiled with the profitability gate FORCED
+/// OFF so it actually tiers to native WITH the #1 `Many`-spec sites armed, vs a
+/// force-Cold copy pinned to the Tier-0 interpreter. The body is a `while
+/// re-search-forward` loop that at each match runs `looking-at` +
+/// `parse-partial-sexp` over the current line — call-heavy, little arithmetic,
+/// carrying exactly the `Op::Call` `Many`-spec population the re-weight unlocks.
+/// `has_op_call_spec_sites` asserts the spec sites are actually present, so the
+/// Hot side is native+spec, not a silent fallback. The reported ratio (>1 =
+/// native+spec faster) is the ship/defer signal.
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_call_heavy_fontlock_reweight() {
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::jit::compile;
+    crate::test_utils::init_test_tracing();
+    let mut ev = runtime_startup_context();
+
+    // A sizeable, varied elisp-ish buffer, made PERMANENTLY current (no
+    // with-current-buffer, so it stays current for the funcall'd scans). ~24 KB
+    // of real defun/defvar/comment shapes so the search + line-parse do
+    // realistic work (not a degenerate empty/tiny buffer).
+    let setup = r#"(progn
+      (set-buffer (get-buffer-create "*neo-bench-fl*"))
+      (fundamental-mode)
+      (erase-buffer)
+      (dotimes (_ 80)
+        (insert "(defun sample-alpha (a b) \"docstring here\" (let ((x (+ a b)) (y (- a b))) (if (> x y) (list x y 'ok) (cons y x))))\n")
+        (insert "(defvar sample-beta 12345 \"a special variable\")\n")
+        (insert ";; a comment line with (parens) and foo-bar-baz symbols\n")
+        (insert "(defun sample-gamma (items acc) (while items (setq acc (cons (car items) acc)) (setq items (cdr items))) acc)\n"))
+      (goto-char (point-min))
+      (buffer-size))"#;
+    let sz = ev.eval_str(setup).expect("bench buffer setup");
+
+    // A REALISTIC font-lock/syntax sweep: search each `(defXXX`, look at the
+    // following char class, and parse-partial-sexp the current line (bounded,
+    // realistic "local syntactic context" check). Call-heavy, ~1 arith/iter.
+    ev.eval_str(
+        r#"(defun neo-bench-fontlock-scan ()
+             (goto-char (point-min))
+             (let ((count 0))
+               (while (re-search-forward "(def[a-z]+" nil t)
+                 (looking-at "[ \t]*[a-z]")
+                 (parse-partial-sexp (line-beginning-position) (point))
+                 (setq count (1+ count)))
+               count))"#,
+    )
+    .expect("defun scan");
+    ev.eval_str("(byte-compile 'neo-bench-fontlock-scan)")
+        .expect("byte-compile scan");
+
+    // Extract the byte-compiled body (the REAL compiler output, not hand-rolled).
+    let fn_val = ev
+        .eval_str("(symbol-function 'neo-bench-fontlock-scan)")
+        .expect("symbol-function");
+    let bc = fn_val
+        .get_bytecode_data()
+        .expect("scan must be byte-compiled to a bytecode object");
+    let arity = bc.params.required.len();
+
+    // Shape report: op histogram (documents that this really is call-heavy).
+    let (mut n_call, mut n_cbsym, mut n_arith) = (0usize, 0usize, 0usize);
+    for op in &bc.ops {
+        match op {
+            Op::Call(_) | Op::Apply(_) | Op::CallBuiltin(..) => n_call += 1,
+            Op::CallBuiltinSym(..) => n_cbsym += 1,
+            Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Rem | Op::Add1 | Op::Sub1
+            | Op::Negate | Op::Max | Op::Min | Op::Eqlsign | Op::Lss | Op::Gtr | Op::Leq
+            | Op::Geq => n_arith += 1,
+            _ => {}
+        }
+    }
+
+    // CONFIRM the #1 Op::Call Many-spec (or round-1 fixed) sites are actually
+    // present — so the Hot side really is native+spec, not a silent fallback.
+    let has_spec =
+        compile::has_op_call_spec_sites(&bc.ops, &bc.constants, arity, &ev.obarray);
+    assert!(
+        has_spec,
+        "the byte-compiled sweep must carry >=1 Op::Call spec site (re-search-forward / looking-at / parse-partial-sexp); \
+         ops-call={n_call} cbsym={n_cbsym} arith={n_arith}"
+    );
+
+    // A/B copies. Gate FORCED OFF so the call-heavy body actually compiles;
+    // otherwise `NotProfitable` would keep BOTH on the interpreter and the bench
+    // would measure interp-vs-interp (~1x — which is exactly the state the
+    // re-weight would change).
+    compile::force_profit_gate_for_test(false);
+    let hot = bc.clone();
+    hot.runtime.set_hot_for_test();
+    let hot_val = Value::make_bytecode(hot);
+    let cold = bc.clone();
+    cold.runtime.set_cold_for_test();
+    let cold_val = Value::make_bytecode(cold);
+
+    // Parity: native+spec sweep must equal the interpreter sweep.
+    let want = ev
+        .funcall_general_untraced(cold_val, vec![])
+        .expect("cold scan runs");
+    // Native-engagement PROOF: snapshot the armed-subr-spec fast counter around
+    // the Hot warm-up. If it does not move, the Hot copy silently ran the
+    // interpreter (compile bailed) and the whole bench would be interp-vs-interp
+    // — the one confound that would fake a ~1x result. (debug-assertions only,
+    // which is how release+jit is built here.)
+    #[cfg(debug_assertions)]
+    let fast_before =
+        compile::SUBR_SPEC_FAST_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+    let hot_first = ev
+        .funcall_general_untraced(hot_val, vec![])
+        .expect("hot scan runs");
+    assert_eq!(
+        hot_first.bits(),
+        want.bits(),
+        "native+spec sweep result == interpreter sweep result"
+    );
+    #[cfg(debug_assertions)]
+    {
+        let fast_after =
+            compile::SUBR_SPEC_FAST_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+        assert!(
+            fast_after > fast_before,
+            "the Hot copy must run NATIVE with the Many-spec fast path armed \
+             (fast-count delta={}) — else this measures interp-vs-interp",
+            fast_after - fast_before
+        );
+    }
+
+    // Min-of-N wall clock (min cancels transient scheduler/thermal noise).
+    let bench0 = |ev: &mut Context, f: Value, want: Value, iters: u32| -> std::time::Duration {
+        assert_eq!(
+            ev.funcall_general_untraced(f, vec![]).unwrap().bits(),
+            want.bits()
+        );
+        let mut best = std::time::Duration::MAX;
+        for _ in 0..iters {
+            let t = std::time::Instant::now();
+            let r = ev.funcall_general_untraced(f, vec![]).unwrap();
+            best = best.min(t.elapsed());
+            assert_eq!(r.bits(), want.bits());
+        }
+        best
+    };
+    let iters = 9u32;
+    let nat = bench0(&mut ev, hot_val, want, iters);
+    let int = bench0(&mut ev, cold_val, want, iters);
+    panic!(
+        "BENCH call-heavy-fontlock(buf={sz:?} matches={want:?} | ops={} call={n_call} cbsym={n_cbsym} arith={n_arith}): \
+         native+spec {nat:?} interp {int:?} -> {:.3}x",
+        bc.ops.len(),
+        int.as_secs_f64() / nat.as_secs_f64()
+    );
+}
+
+/// PART 1 UPPER-BOUND companion to `jit_bench_call_heavy_fontlock_reweight`: the
+/// DISPATCH-DOMINATED extreme. A tight loop whose body is nothing but the
+/// LIGHTEST allowlisted `Many`-spec builtin that the byte-compiler actually
+/// emits as a generic `Op::Call` (`looking-at` on a 1-char regexp over the empty
+/// scratch buffer — a near-immediate non-match). NOTE the dedicated-opcode
+/// "cheap" buffer builtins (point/goto-char/widen/current-column/char-syntax/…)
+/// are all `Op::CallBuiltinSym`, already covered by round-2 — so the `Op::Call`
+/// `Many` population the re-weight actually unlocks is inherently the *heavier*
+/// builtins; `looking-at` is about as light as that population gets. If EVEN this
+/// shows no meaningful win, the re-weight cannot help the realistic shape either.
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn jit_bench_spec_call_dispatch_upper_bound() {
+    use crate::emacs_core::jit::compile;
+    crate::test_utils::init_test_tracing();
+    let mut ev = runtime_startup_context();
+
+    // Body = a tight countdown loop calling a light Many-spec builtin 4x/iter
+    // (results discarded), so dispatch is ~all of the per-iteration cost.
+    ev.eval_str(
+        r#"(defun neo-bench-spec-microloop (n)
+             (let ((i 0))
+               (while (< i n)
+                 (looking-at "a") (looking-at "a") (looking-at "a") (looking-at "a")
+                 (setq i (1+ i)))
+               i))"#,
+    )
+    .expect("defun microloop");
+    ev.eval_str("(byte-compile 'neo-bench-spec-microloop)")
+        .expect("byte-compile microloop");
+    let fn_val = ev
+        .eval_str("(symbol-function 'neo-bench-spec-microloop)")
+        .expect("symbol-function");
+    let bc = fn_val
+        .get_bytecode_data()
+        .expect("microloop must be byte-compiled");
+    let arity = bc.params.required.len();
+    assert!(
+        compile::has_op_call_spec_sites(&bc.ops, &bc.constants, arity, &ev.obarray),
+        "microloop must carry the looking-at Op::Call Many-spec site"
+    );
+
+    compile::force_profit_gate_for_test(false);
+    let hot = bc.clone();
+    hot.runtime.set_hot_for_test();
+    let hot_val = Value::make_bytecode(hot);
+    let cold = bc.clone();
+    cold.runtime.set_cold_for_test();
+    let cold_val = Value::make_bytecode(cold);
+
+    let n = 200_000i64;
+    let want = Value::make_int(n);
+    let arg = || vec![Value::make_int(n)];
+    let cold_r = ev.funcall_general_untraced(cold_val, arg()).expect("cold");
+    #[cfg(debug_assertions)]
+    let fast_before =
+        compile::SUBR_SPEC_FAST_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+    let hot_r = ev.funcall_general_untraced(hot_val, arg()).expect("hot");
+    assert_eq!(cold_r.bits(), want.bits());
+    assert_eq!(hot_r.bits(), want.bits(), "native+spec result == interp");
+    #[cfg(debug_assertions)]
+    {
+        let fast_after =
+            compile::SUBR_SPEC_FAST_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+        assert!(
+            fast_after > fast_before,
+            "Hot copy must run native+spec (fast delta={})",
+            fast_after - fast_before
+        );
+    }
+
+    let bench = |ev: &mut Context, f: Value, want: Value, iters: u32| -> std::time::Duration {
+        let mut best = std::time::Duration::MAX;
+        for _ in 0..iters {
+            let t = std::time::Instant::now();
+            let r = ev.funcall_general_untraced(f, vec![Value::make_int(n)]).unwrap();
+            best = best.min(t.elapsed());
+            assert_eq!(r.bits(), want.bits());
+        }
+        best
+    };
+    let iters = 9u32;
+    let nat = bench(&mut ev, hot_val, want, iters);
+    let int = bench(&mut ev, cold_val, want, iters);
+    panic!(
+        "BENCH spec-call-upper-bound(n={n}, 4x looking-at/iter): native+spec {nat:?} interp {int:?} -> {:.3}x",
+        int.as_secs_f64() / nat.as_secs_f64()
+    );
+}
+
 /// R2-E E2: the ONE-MORE-REAL-FN demo — a RECOGNIZABLE pure-fixnum algorithm
 /// (Collatz step-count) served via the AOT path NATIVE FROM CALL 1 vs the
 /// interpreter. The body is the REAL byte-compiled `rb-collatz-steps` (verified
