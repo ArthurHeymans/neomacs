@@ -258,7 +258,9 @@ fn repro_mir_inlined_plus_residual_generic() {
 #[test]
 #[ignore = "diagnostic JIT-rooting repro (gc_stress); run with --run-ignored"]
 fn repro_baseline_bignum_residual_generic() {
-    use crate::emacs_core::eval::{push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots};
+    use crate::emacs_core::eval::{
+        push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
+    };
     crate::test_utils::init_test_tracing();
     crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
     let mut ev = Context::new();
@@ -298,7 +300,10 @@ fn repro_baseline_bignum_residual_generic() {
         // swept-r artifact.
         let saved = save_scratch_gc_roots();
         push_scratch_gc_root(r);
-        assert!(r.is_integer() && !r.is_fixnum(), "B must stay a bignum (got {r:?})");
+        assert!(
+            r.is_integer() && !r.is_fixnum(),
+            "B must stay a bignum (got {r:?})"
+        );
         assert_eq!(
             crate::emacs_core::print::print_value(&r),
             expected_str,
@@ -380,24 +385,24 @@ fn repro_loop_carried_cons_across_call() {
     let caller = Value::make_bytecode(bc(
         2,
         vec![
-            Op::Constant(0), // 1        0
-            Op::Constant(1), // 2        1
-            Op::Cons,        // acc      2
-            Op::StackRef(2), // n        3  <- loop head
-            Op::Constant(2), // 0        4
-            Op::Gtr,         // n>0      5
+            Op::Constant(0),   // 1        0
+            Op::Constant(1),   // 2        1
+            Op::Cons,          // acc      2
+            Op::StackRef(2),   // n        3  <- loop head
+            Op::Constant(2),   // 0        4
+            Op::Gtr,           // n>0      5
             Op::GotoIfNil(16), //        6  -> exit
-            Op::StackRef(1), // mkl      7
-            Op::Constant(3), // 40       8
-            Op::Constant(2), // 0        9
-            Op::Call(2),     // call     10  residual=[n mkl acc]
-            Op::Pop,         //          11
-            Op::StackRef(2), // n        12
-            Op::Sub1,        // n-1      13
-            Op::StackSet(3), // n=n-1    14
-            Op::Goto(3),     // backedge 15
-            Op::StackRef(0), // acc      16 <- exit
-            Op::Return,      //          17 -> acc
+            Op::StackRef(1),   // mkl      7
+            Op::Constant(3),   // 40       8
+            Op::Constant(2),   // 0        9
+            Op::Call(2),       // call     10  residual=[n mkl acc]
+            Op::Pop,           //          11
+            Op::StackRef(2),   // n        12
+            Op::Sub1,          // n-1      13
+            Op::StackSet(3),   // n=n-1    14
+            Op::Goto(3),       // backedge 15
+            Op::StackRef(0),   // acc      16 <- exit
+            Op::Return,        //          17 -> acc
         ],
         vec![
             Value::make_int(1),
@@ -465,7 +470,10 @@ fn repro_deep_residual_three_conses() {
         let r = ev
             .funcall_general_untraced(caller, vec![make_list])
             .expect("3-deep residual across call");
-        assert!(r.is_cons() && r.cons_car() == Value::make_int(5), "h3 intact (got {r:?})");
+        assert!(
+            r.is_cons() && r.cons_car() == Value::make_int(5),
+            "h3 intact (got {r:?})"
+        );
     }
 }
 
@@ -481,7 +489,12 @@ fn diag_repro_bodies_compile() {
     bind_fn(
         &mut ev,
         "jitinc",
-        bc(1, vec![Op::StackRef(0), Op::Add1, Op::Return], vec![], false),
+        bc(
+            1,
+            vec![Op::StackRef(0), Op::Add1, Op::Return],
+            vec![],
+            false,
+        ),
     );
     let cases: Vec<(&str, ByteCodeFunction)> = vec![
         (
@@ -556,7 +569,8 @@ fn diag_repro_bodies_compile() {
         ),
     ];
     for (name, f) in cases {
-        match crate::emacs_core::jit::compile::compile_bytecode_function_with(&f, Some(&ev.obarray)) {
+        match crate::emacs_core::jit::compile::compile_bytecode_function_with(&f, Some(&ev.obarray))
+        {
             Ok(_) => eprintln!("COMPILE OK   [{name}]"),
             Err(e) => eprintln!("COMPILE ERR  [{name}]: {e:?}"),
         }
@@ -630,7 +644,8 @@ fn repro_redherring_parse_partial_sexp_bare_context() {
     crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
     let mut ev = Context::new();
     ev.gc_stress = true;
-    ev.eval_str("(insert \"(foo (bar baz) (qux (a b c) d) e)\")").unwrap();
+    ev.eval_str("(insert \"(foo (bar baz) (qux (a b c) d) e)\")")
+        .unwrap();
     let caller = Value::make_bytecode(bc(
         1,
         vec![

@@ -153,7 +153,10 @@ pub(crate) mod vm_profile {
             let name = crate::emacs_core::intern::resolve_sym(*id);
             let pct = 100.0 * *count as f64 / subr_total.max(1) as f64;
             let opcall = entry.get(&(id.0, ENTRY_CALL)).copied().unwrap_or(0);
-            let cbsym = entry.get(&(id.0, ENTRY_CALLBUILTINSYM)).copied().unwrap_or(0);
+            let cbsym = entry
+                .get(&(id.0, ENTRY_CALLBUILTINSYM))
+                .copied()
+                .unwrap_or(0);
             let cbtin = entry.get(&(id.0, ENTRY_CALLBUILTIN)).copied().unwrap_or(0);
             let other = count.saturating_sub(opcall + cbsym + cbtin);
             let _ = writeln!(
@@ -4686,9 +4689,7 @@ impl<'a> Vm<'a> {
                         .dispatch_builtin_subr_from_stack_args_unchecked(
                             function, args_start, nargs,
                         )
-                        .unwrap_or_else(|| {
-                            Err(signal("void-function", vec![func_val]))
-                        }),
+                        .unwrap_or_else(|| Err(signal("void-function", vec![func_val]))),
                     None => Err(signal("void-function", vec![func_val])),
                 }
             };

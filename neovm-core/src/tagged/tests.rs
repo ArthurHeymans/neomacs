@@ -710,9 +710,14 @@ fn alloc_roundtrip_cost_probe() {
     let mut out = String::new();
     out.push_str("CURRENT (Box + FxHashSet + intrusive list) alloc/free round-trip:\n");
 
-    run_case("float (24B fixed)", m, |h| {
-        h.alloc_float(1.5);
-    }, &mut out);
+    run_case(
+        "float (24B fixed)",
+        m,
+        |h| {
+            h.alloc_float(1.5);
+        },
+        &mut out,
+    );
     for payload in [0usize, 48, 240, 1008, 4080] {
         run_case(
             &format!("string payload={payload}B"),
@@ -733,23 +738,48 @@ fn alloc_roundtrip_cost_probe() {
             &mut out,
         );
     }
-    run_case("record len=4", m, |h| {
-        h.alloc_record(vec![TaggedValue::fixnum(7); 4]);
-    }, &mut out);
-    run_case("lambda 6 slots", m, |h| {
-        h.alloc_lambda(vec![TaggedValue::NIL; 6]);
-    }, &mut out);
-    run_case("macro 6 slots", m, |h| {
-        h.alloc_macro(vec![TaggedValue::NIL; 6]);
-    }, &mut out);
-    run_case("bytecode (~360B fixed)", m, |h| {
-        h.alloc_bytecode(crate::emacs_core::bytecode::ByteCodeFunction::new(
-            crate::emacs_core::value::LambdaParams::simple(vec![]),
-        ));
-    }, &mut out);
-    run_case("symbol-with-pos (40B fixed)", m, |h| {
-        h.alloc_symbol_with_pos(TaggedValue::T, TaggedValue::fixnum(3));
-    }, &mut out);
+    run_case(
+        "record len=4",
+        m,
+        |h| {
+            h.alloc_record(vec![TaggedValue::fixnum(7); 4]);
+        },
+        &mut out,
+    );
+    run_case(
+        "lambda 6 slots",
+        m,
+        |h| {
+            h.alloc_lambda(vec![TaggedValue::NIL; 6]);
+        },
+        &mut out,
+    );
+    run_case(
+        "macro 6 slots",
+        m,
+        |h| {
+            h.alloc_macro(vec![TaggedValue::NIL; 6]);
+        },
+        &mut out,
+    );
+    run_case(
+        "bytecode (~360B fixed)",
+        m,
+        |h| {
+            h.alloc_bytecode(crate::emacs_core::bytecode::ByteCodeFunction::new(
+                crate::emacs_core::value::LambdaParams::simple(vec![]),
+            ));
+        },
+        &mut out,
+    );
+    run_case(
+        "symbol-with-pos (40B fixed)",
+        m,
+        |h| {
+            h.alloc_symbol_with_pos(TaggedValue::T, TaggedValue::fixnum(3));
+        },
+        &mut out,
+    );
 
     // Report via panic! so nextest surfaces the dump (profiling aid pattern).
     panic!("ALLOC ROUND-TRIP PROBE (profiling aid, not a failure)\n{out}");

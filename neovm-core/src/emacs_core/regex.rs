@@ -2053,27 +2053,28 @@ pub fn re_search_forward_with_posix(
     let compiled =
         compile_search_pattern_with_posix(&pattern_for_compile(pattern), case_fold, posix, &syn)?;
 
-    let md_opt = with_buffer_emacs_bytes_for_search(buf, accessible.range(), |text| match &compiled {
-        CompiledSearchPattern::Literal(literal) => {
-            literal_find_emacs_bytes(&text[start_rel..limit_rel], literal, multibyte, case_fold)
-                .map(|matched| {
-                    MatchData::buffer_bytes(
-                        gnu_single_group_vec(Some(matched.shift(start.get()))),
-                        Some(buffer_id),
-                    )
-                })
-        }
-        CompiledSearchPattern::Emacs(cp) => {
-            let range = (limit_rel - start_rel) as isize;
-            regex_emacs::re_search(cp.as_ref(), text, start_rel, range, &syn, start_rel).map(
-                |(_pos, regs)| {
-                    let mut md = buffer_match_data_from_registers(&regs, region_start.get());
-                    md.set_buffer_id(buffer_id);
-                    md
-                },
-            )
-        }
-    });
+    let md_opt =
+        with_buffer_emacs_bytes_for_search(buf, accessible.range(), |text| match &compiled {
+            CompiledSearchPattern::Literal(literal) => {
+                literal_find_emacs_bytes(&text[start_rel..limit_rel], literal, multibyte, case_fold)
+                    .map(|matched| {
+                        MatchData::buffer_bytes(
+                            gnu_single_group_vec(Some(matched.shift(start.get()))),
+                            Some(buffer_id),
+                        )
+                    })
+            }
+            CompiledSearchPattern::Emacs(cp) => {
+                let range = (limit_rel - start_rel) as isize;
+                regex_emacs::re_search(cp.as_ref(), text, start_rel, range, &syn, start_rel).map(
+                    |(_pos, regs)| {
+                        let mut md = buffer_match_data_from_registers(&regs, region_start.get());
+                        md.set_buffer_id(buffer_id);
+                        md
+                    },
+                )
+            }
+        });
 
     if md_opt.is_none()
         && matches!(compiled, CompiledSearchPattern::Emacs(_))
@@ -2150,28 +2151,32 @@ pub fn re_search_backward_with_posix(
     let compiled =
         compile_search_pattern_with_posix(&pattern_for_compile(pattern), case_fold, posix, &syn)?;
 
-    let md_opt = with_buffer_emacs_bytes_for_search(buf, accessible.range(), |text| match &compiled {
-        CompiledSearchPattern::Literal(literal) => {
-            literal_rfind_emacs_bytes(&text[limit_rel..start_rel], literal, multibyte, case_fold)
-                .map(|matched| {
-                    MatchData::buffer_bytes(
-                        gnu_single_group_vec(Some(matched.shift(region_start.get() + limit_rel))),
-                        Some(buffer_id),
-                    )
-                })
-        }
-        CompiledSearchPattern::Emacs(cp) => {
-            // Backward search: negative range means search backward.
-            let range = -((start_rel - limit_rel) as isize);
-            regex_emacs::re_search(cp.as_ref(), &text, start_rel, range, &syn, start_rel).map(
-                |(_pos, regs)| {
-                    let mut md = buffer_match_data_from_registers(&regs, region_start.get());
-                    md.set_buffer_id(buffer_id);
-                    md
-                },
+    let md_opt =
+        with_buffer_emacs_bytes_for_search(buf, accessible.range(), |text| match &compiled {
+            CompiledSearchPattern::Literal(literal) => literal_rfind_emacs_bytes(
+                &text[limit_rel..start_rel],
+                literal,
+                multibyte,
+                case_fold,
             )
-        }
-    });
+            .map(|matched| {
+                MatchData::buffer_bytes(
+                    gnu_single_group_vec(Some(matched.shift(region_start.get() + limit_rel))),
+                    Some(buffer_id),
+                )
+            }),
+            CompiledSearchPattern::Emacs(cp) => {
+                // Backward search: negative range means search backward.
+                let range = -((start_rel - limit_rel) as isize);
+                regex_emacs::re_search(cp.as_ref(), &text, start_rel, range, &syn, start_rel).map(
+                    |(_pos, regs)| {
+                        let mut md = buffer_match_data_from_registers(&regs, region_start.get());
+                        md.set_buffer_id(buffer_id);
+                        md
+                    },
+                )
+            }
+        });
 
     if md_opt.is_none()
         && matches!(compiled, CompiledSearchPattern::Emacs(_))
@@ -2439,16 +2444,18 @@ pub(crate) fn looking_at_lisp_with_posix(
         &syn,
     )?;
 
-    if let Some((_end, regs)) = with_buffer_emacs_bytes_for_search(buf, accessible.range(), |text| {
-        regex_emacs::re_match(
-            compiled.as_ref(),
-            text,
-            start_rel,
-            text.len(),
-            &syn,
-            start_rel,
-        )
-    }) {
+    if let Some((_end, regs)) =
+        with_buffer_emacs_bytes_for_search(buf, accessible.range(), |text| {
+            regex_emacs::re_match(
+                compiled.as_ref(),
+                text,
+                start_rel,
+                text.len(),
+                &syn,
+                start_rel,
+            )
+        })
+    {
         let mut md = buffer_match_data_from_registers(&regs, region_start.get());
         md.set_buffer_id(buffer_id);
         *match_data = Some(md);

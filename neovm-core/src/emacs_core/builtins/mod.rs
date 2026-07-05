@@ -1202,10 +1202,7 @@ fn register_cursor_effect_subrs(ctx: &mut super::eval::Context) {
 /// (OP-MIX + SUBR-MIX + the Op::Call/CallBuiltinSym entry split). Call before a
 /// measured batch editing session so loadup/startup traffic is excluded.
 #[cfg(feature = "vm-profile")]
-fn defsubr_vm_profile_reset(
-    _eval: &mut super::eval::Context,
-    _args: Vec<Value>,
-) -> EvalResult {
+fn defsubr_vm_profile_reset(_eval: &mut super::eval::Context, _args: Vec<Value>) -> EvalResult {
     crate::emacs_core::bytecode::vm::vm_profile::reset();
     Ok(Value::NIL)
 }
@@ -1214,10 +1211,7 @@ fn defsubr_vm_profile_reset(
 /// stderr with an optional LABEL (string). Returns nil. Pairs with
 /// `neovm--vm-profile-reset` for a reset → workload → dump batch session.
 #[cfg(feature = "vm-profile")]
-fn defsubr_vm_profile_dump(
-    _eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
+fn defsubr_vm_profile_dump(_eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     let label = args
         .first()
         .map(|v| format!("{v}").trim_matches('"').to_string())
@@ -1253,8 +1247,18 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     // Diagnostics-only VM-profiler control subrs (feature `vm-profile`).
     #[cfg(feature = "vm-profile")]
     {
-        ctx.defsubr("neovm--vm-profile-reset", defsubr_vm_profile_reset, 0, Some(0));
-        ctx.defsubr("neovm--vm-profile-dump", defsubr_vm_profile_dump, 0, Some(1));
+        ctx.defsubr(
+            "neovm--vm-profile-reset",
+            defsubr_vm_profile_reset,
+            0,
+            Some(0),
+        );
+        ctx.defsubr(
+            "neovm--vm-profile-dump",
+            defsubr_vm_profile_dump,
+            0,
+            Some(1),
+        );
     }
     ctx.defsubr_slice("apply", builtin_apply_slice, 1, None);
     ctx.defsubr_slice("funcall", builtin_funcall_slice, 1, None);

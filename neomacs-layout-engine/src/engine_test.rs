@@ -2343,7 +2343,10 @@ fn phase1_cursor_move_matches_full_rebuild_golden() {
     // retained matrix → full rebuild).
     let (mut eval_ref, frame_ref, buf_ref, _wr) = incr_editing_frame(&text, 800, 600);
     {
-        let buffer = eval_ref.buffer_manager_mut().get_mut(buf_ref).expect("buffer");
+        let buffer = eval_ref
+            .buffer_manager_mut()
+            .get_mut(buf_ref)
+            .expect("buffer");
         buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10));
     }
     let mut ref_engine = LayoutEngine::new();
@@ -2394,7 +2397,10 @@ fn phase1_overlay_change_bails_to_full() {
         "overlay tick moved → must NOT take the cursor-only fast path (got {:?})",
         m.stats
     );
-    assert_eq!(m.stats.reused_rows, 0, "overlay change forces a full rebuild");
+    assert_eq!(
+        m.stats.reused_rows, 0,
+        "overlay change forces a full rebuild"
+    );
 }
 
 /// Phase 1 — a `put-text-property` (face/display/invisible) co-moving with the
@@ -2416,7 +2422,10 @@ fn phase1_put_text_property_bails_to_full() {
         "props tick moved → must NOT take the cursor-only fast path (got {:?})",
         m.stats
     );
-    assert_eq!(m.stats.reused_rows, 0, "text-property change forces a full rebuild");
+    assert_eq!(
+        m.stats.reused_rows, 0,
+        "text-property change forces a full rebuild"
+    );
 }
 
 /// Phase 1 — a face-attribute change (theme load / `set-face-attribute`) co-moving
@@ -2536,7 +2545,14 @@ fn phase2_scroll_matches_full_rebuild_golden() {
     let (mut eval, frame_id, buf_id, win) = incr_editing_frame(&text, 800, 600);
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id);
-    scroll_window_to(&mut eval, frame_id, win, buf_id, new_window_start, point_byte);
+    scroll_window_to(
+        &mut eval,
+        frame_id,
+        win,
+        buf_id,
+        new_window_start,
+        point_byte,
+    );
     engine.layout_frame_rust(&mut eval, frame_id);
     assert_eq!(
         engine.last_layout_stats().scroll_windows,
@@ -13963,7 +13979,10 @@ fn phase3_plain_edit_matches_full_rebuild_golden() {
 
     let (mut eval_ref, frame_ref, buf_ref, _wr) = incr_editing_frame(&text, 800, 600);
     {
-        let buffer = eval_ref.buffer_manager_mut().get_mut(buf_ref).expect("buffer");
+        let buffer = eval_ref
+            .buffer_manager_mut()
+            .get_mut(buf_ref)
+            .expect("buffer");
         buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_at));
         buffer.insert("x");
     }
@@ -14089,7 +14108,11 @@ fn phase3_below_reuse_relays_only_edited_line() {
         buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10 * 24 + 5));
         buffer.insert("x");
     });
-    assert_eq!(m.stats.edit_windows, 1, "took the edit fast path (got {:?})", m.stats);
+    assert_eq!(
+        m.stats.edit_windows, 1,
+        "took the edit fast path (got {:?})",
+        m.stats
+    );
     assert!(
         m.stats.relaid_body_rows <= 2,
         "below-reuse relays only the edited line, not the rows below it (got {:?})",
@@ -14107,7 +14130,10 @@ fn phase3_below_reuse_matches_full_rebuild_golden() {
 
     let (mut eval_ref, frame_ref, buf_ref, _wr) = incr_editing_frame(&text, 800, 600);
     {
-        let buffer = eval_ref.buffer_manager_mut().get_mut(buf_ref).expect("buffer");
+        let buffer = eval_ref
+            .buffer_manager_mut()
+            .get_mut(buf_ref)
+            .expect("buffer");
         buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_at));
         buffer.insert("x");
     }
@@ -14125,7 +14151,11 @@ fn phase3_below_reuse_matches_full_rebuild_golden() {
         buffer.insert("x");
     }
     engine.layout_frame_rust(&mut eval, frame_id);
-    assert_eq!(engine.last_layout_stats().edit_windows, 1, "took the edit fast path");
+    assert_eq!(
+        engine.last_layout_stats().edit_windows,
+        1,
+        "took the edit fast path"
+    );
     let incremental = selected_window_layout_trace(&eval, &engine, frame_id);
 
     assert_eq!(
@@ -14143,7 +14173,10 @@ fn below_reuse_bail_golden_stats(insert_text: &str) -> LayoutStats {
 
     let (mut eval_ref, frame_ref, buf_ref, _wr) = incr_editing_frame(&text, 800, 600);
     {
-        let buffer = eval_ref.buffer_manager_mut().get_mut(buf_ref).expect("buffer");
+        let buffer = eval_ref
+            .buffer_manager_mut()
+            .get_mut(buf_ref)
+            .expect("buffer");
         buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_at));
         buffer.insert(insert_text);
     }
@@ -14173,7 +14206,10 @@ fn below_reuse_bail_golden_stats(insert_text: &str) -> LayoutStats {
 #[test]
 fn phase3_below_reuse_bails_on_newline_insert() {
     let stats = below_reuse_bail_golden_stats("\n");
-    assert_eq!(stats.edit_windows, 1, "still the edit fast path (got {stats:?})");
+    assert_eq!(
+        stats.edit_windows, 1,
+        "still the edit fast path (got {stats:?})"
+    );
     assert!(
         stats.relaid_body_rows > 2,
         "above-only (not below-reuse, which would relay ~1) — got {stats:?}"
@@ -14185,7 +14221,10 @@ fn phase3_below_reuse_bails_on_newline_insert() {
 #[test]
 fn phase3_below_reuse_bails_on_wrapping_insert() {
     let stats = below_reuse_bail_golden_stats(&"x".repeat(100));
-    assert_eq!(stats.edit_windows, 1, "still the edit fast path (got {stats:?})");
+    assert_eq!(
+        stats.edit_windows, 1,
+        "still the edit fast path (got {stats:?})"
+    );
     assert!(
         stats.relaid_body_rows > 2,
         "above-only (not below-reuse) — got {stats:?}"
@@ -14243,7 +14282,10 @@ fn no_change_relayout_matches_full_rebuild_golden() {
         "unchanged window took the no-change cursor-only path"
     );
     let incremental = selected_window_layout_trace(&eval, &engine, frame_id);
-    assert_eq!(incremental, reference, "no-change must be byte-identical to a full rebuild");
+    assert_eq!(
+        incremental, reference,
+        "no-change must be byte-identical to a full rebuild"
+    );
 }
 
 /// Multi-window cross-window correctness (adversarial-review dimension D6): in a
@@ -14300,7 +14342,10 @@ fn multi_window_edit_matches_full_rebuild_for_both_windows() {
     // Reference: full rebuild of the edited state.
     let (mut eval_ref, frame_ref, left_ref, lw_ref, rw_ref) = setup();
     {
-        let buf = eval_ref.buffer_manager_mut().get_mut(left_ref).expect("left");
+        let buf = eval_ref
+            .buffer_manager_mut()
+            .get_mut(left_ref)
+            .expect("left");
         buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(edit_at));
         buf.insert("x");
     }
@@ -14322,7 +14367,10 @@ fn multi_window_edit_matches_full_rebuild_for_both_windows() {
     let inc_left = window_layout_trace(&eval, &engine, frame_id, lw);
     let inc_right = window_layout_trace(&eval, &engine, frame_id, rw);
 
-    assert_eq!(inc_left, ref_left, "edited window must be byte-identical to a full rebuild");
+    assert_eq!(
+        inc_left, ref_left,
+        "edited window must be byte-identical to a full rebuild"
+    );
     assert_eq!(
         inc_right, ref_right,
         "the OTHER window must be byte-identical (no cross-window corruption)"
@@ -14340,7 +14388,11 @@ fn cursor_only_reused_body_face_ids_are_registered_in_frame_faces() {
     let mut engine = LayoutEngine::new();
     engine.layout_frame_rust(&mut eval, frame_id); // warm (registers faces)
     engine.layout_frame_rust(&mut eval, frame_id); // no-change cursor-only
-    assert_eq!(engine.last_layout_stats().cursor_only_windows, 1, "expected cursor-only");
+    assert_eq!(
+        engine.last_layout_stats().cursor_only_windows,
+        1,
+        "expected cursor-only"
+    );
     let state = engine.last_frame_display_state.as_ref().expect("state");
     let faces = &state.faces;
     let entry = state
@@ -14385,7 +14437,10 @@ fn cursor_only_reused_multiface_body_face_ids_are_registered_in_frame_faces() {
     let (mut eval, frame_id, buf_id, win) = incr_editing_frame(&text, 800, 600);
     // Distinct :face per several lines BEFORE the warm pass, so the props tick is
     // stable and a later bare point move takes the cursor-only fast path.
-    for (i, color) in ["red", "green", "blue", "magenta", "cyan"].iter().enumerate() {
+    for (i, color) in ["red", "green", "blue", "magenta", "cyan"]
+        .iter()
+        .enumerate()
+    {
         let start = i * 24 + 3;
         let end = start + 8;
         eval.eval_str(&format!(
@@ -14466,7 +14521,11 @@ fn non_selected_unchanged_window_reuses_via_cursor_only() {
     let frame = eval
         .frame_manager_mut()
         .create_frame("mw-reuse", 800, 600, left);
-    let lw = eval.frame_manager().get(frame).expect("frame").selected_window;
+    let lw = eval
+        .frame_manager()
+        .get(frame)
+        .expect("frame")
+        .selected_window;
     eval.frame_manager_mut()
         .split_window(
             frame,

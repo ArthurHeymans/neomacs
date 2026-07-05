@@ -2794,7 +2794,9 @@ fn regex_bench_literal_100kb() {
     let cp_miss = regex_bench_compile("neverxyzzyneverxyzzy", false);
     let t_engine_miss = regex_bench_min(iters, || {
         let syn = DefaultSyntaxLookup;
-        assert!(regex_emacs::re_search(&cp_miss, bytes, 0, bytes.len() as isize, &syn, 0).is_none());
+        assert!(
+            regex_emacs::re_search(&cp_miss, bytes, 0, bytes.len() as isize, &syn, 0).is_none()
+        );
     });
     let t_find_miss = regex_bench_min(iters, || {
         assert!(literal_find(&hay, "neverxyzzyneverxyzzy", false).is_none());
@@ -2840,7 +2842,9 @@ fn regex_bench_fontlock_engine() {
             kib / 1024.0 / t.as_secs_f64(),
         ));
     }
-    report.push_str(&format!("  TOTAL one fontify pass over all patterns: {total:.1?}"));
+    report.push_str(&format!(
+        "  TOTAL one fontify pass over all patterns: {total:.1?}"
+    ));
     panic!("{report}");
 }
 
@@ -2974,8 +2978,8 @@ fn regex_bench_compile_cost() {
         let compiles = 200u32;
         let t_miss = regex_bench_min(5, || {
             for _ in 0..compiles {
-                let cp = regex_emacs::regex_compile_lisp(&lisp, false, false)
-                    .expect("pattern compiles");
+                let cp =
+                    regex_emacs::regex_compile_lisp(&lisp, false, false).expect("pattern compiles");
                 std::hint::black_box(&cp);
             }
         });
@@ -3047,9 +3051,7 @@ fn regex_bench_fontlock_elisp() {
             assert_eq!(got.as_int(), Some(matches));
         });
         total += t;
-        report.push_str(&format!(
-            "  {name:<16} {t:>10.1?}  {matches:>5} matches\n"
-        ));
+        report.push_str(&format!("  {name:<16} {t:>10.1?}  {matches:>5} matches\n"));
     }
     report.push_str(&format!(
         "  TOTAL one fontify pass over all patterns: {total:.1?}\n"
@@ -3117,7 +3119,6 @@ fn regex_bench_string_match_elisp() {
         hay.len() / 1024,
     );
 }
-
 
 // =========================================================================
 // Fastmap restoration (GNU parity) — gates, equivalence fuzz, cache axis

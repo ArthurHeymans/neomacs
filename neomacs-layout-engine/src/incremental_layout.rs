@@ -147,20 +147,25 @@ impl RetainedWindowKey {
         // the buffer mid-render (after window params were captured), the fresh
         // chars tick + fresh buffer_size both reflect it and the edit/full path
         // sees a correct delta (adversarial-review Phase A staleness fix).
-        let (chars_modified_tick, props_modified_tick, overlay_modified_tick, is_multibyte, buffer_size) =
-            evaluator
-                .buffer_manager()
-                .get(neovm_core::buffer::BufferId(p.buffer_id))
-                .map(|buffer| {
-                    (
-                        buffer.chars_modified_tick(),
-                        buffer.props_modified_tick(),
-                        buffer.overlay_modified_tick(),
-                        buffer.get_multibyte(),
-                        buffer.point_max_char_pos().get() as i64,
-                    )
-                })
-                .unwrap_or((0, 0, 0, false, p.buffer_size));
+        let (
+            chars_modified_tick,
+            props_modified_tick,
+            overlay_modified_tick,
+            is_multibyte,
+            buffer_size,
+        ) = evaluator
+            .buffer_manager()
+            .get(neovm_core::buffer::BufferId(p.buffer_id))
+            .map(|buffer| {
+                (
+                    buffer.chars_modified_tick(),
+                    buffer.props_modified_tick(),
+                    buffer.overlay_modified_tick(),
+                    buffer.get_multibyte(),
+                    buffer.point_max_char_pos().get() as i64,
+                )
+            })
+            .unwrap_or((0, 0, 0, false, p.buffer_size));
         Self {
             buffer_id: p.buffer_id,
             window_start: p.window_start,
@@ -414,7 +419,9 @@ impl RetainedWindowMatrix {
             return None;
         }
         let (new_cursor_row_index, cursor_row) = new_cursor?;
-        if cursor_row.continued || cursor_row.truncated_left || cursor_row.left_fringe_bitmap.is_some()
+        if cursor_row.continued
+            || cursor_row.truncated_left
+            || cursor_row.left_fringe_bitmap.is_some()
         {
             return None;
         }
@@ -875,7 +882,9 @@ mod scroll_classifier_tests {
     fn scroll_replay_detects_whole_row_scroll_down() {
         let m = synthetic_matrix(0, 5); // rows start at 0,10,20,30,40
         let curr = synthetic_key(20, 25); // scrolled to row 2, point followed
-        let r = m.scroll_replay(&curr).expect("whole-row scroll-down is eligible");
+        let r = m
+            .scroll_replay(&curr)
+            .expect("whole-row scroll-down is eligible");
         assert_eq!(r.dvpos, -32.0, "removed two 16px rows");
         // Rows [2,3,4] reused into matrix indices [0,1,2] with shifted pixel_y.
         assert_eq!(
@@ -884,7 +893,10 @@ mod scroll_classifier_tests {
         );
         assert_eq!(r.reused_rows[0].1.pixel_y, 0.0);
         assert_eq!(r.reused_rows[2].1.pixel_y, 32.0);
-        assert_eq!(r.exposed_row_count, 2, "two newly-exposed rows at the bottom");
+        assert_eq!(
+            r.exposed_row_count, 2,
+            "two newly-exposed rows at the bottom"
+        );
         assert_eq!(r.exposed_row_base, 3);
         assert_eq!(r.exposed_start_charpos, 50); // after row 4 (chars 40..49)
         assert_eq!(r.exposed_text_y, 48.0); // 3rd visual row top
@@ -1041,6 +1053,9 @@ mod scroll_classifier_tests {
             vec![0, 1],
             "only the rows above the edit are reused"
         );
-        assert_eq!(above_only.exposed_row_count, 3, "edited line + 2 rows below");
+        assert_eq!(
+            above_only.exposed_row_count, 3,
+            "edited line + 2 rows below"
+        );
     }
 }

@@ -868,7 +868,10 @@ fn collect_baseline_aot_relocs(
 ) -> Option<(Vec<Value>, std::collections::HashMap<usize, u32>)> {
     let mut seen: std::collections::HashMap<usize, u32> = std::collections::HashMap::new();
     let mut out: Vec<Value> = Vec::new();
-    let add = |v: Value, out: &mut Vec<Value>, seen: &mut std::collections::HashMap<usize, u32>| -> Option<()> {
+    let add = |v: Value,
+               out: &mut Vec<Value>,
+               seen: &mut std::collections::HashMap<usize, u32>|
+     -> Option<()> {
         if !super::compile::const_relocs_for_aot(v) {
             return Some(()); // immediate (fixnum/nil/t/char) — baked, not reloc'd.
         }
@@ -957,8 +960,8 @@ fn live_reloc_for_emit_tier(
     obarray: Option<&crate::emacs_core::symbol::Obarray>,
 ) -> Option<Vec<Value>> {
     // Mirror the EMIT tier-pivot: spec-bearing → BASELINE collector, unconditionally.
-    let spec_forced = obarray
-        .is_some_and(|ob| super::compile::has_op_call_spec_sites(ops, constants, arity, ob));
+    let spec_forced =
+        obarray.is_some_and(|ob| super::compile::has_op_call_spec_sites(ops, constants, arity, ob));
     if !spec_forced
         && let Ok(m) = mir::build_mir(ops, constants, arity)
         && mir_is_aot_runnable(&m)
@@ -1068,8 +1071,8 @@ pub(crate) fn compile_leaf_to_object(
     // paths, and the LOAD path (`live_reloc_for_emit_tier`) mirrors this so both
     // agree on the reloc collector (else the leaf silently never serves). Only when
     // NOT spec-forced do we try the (faster) MIR tier first.
-    let spec_forced = obarray
-        .is_some_and(|ob| super::compile::has_op_call_spec_sites(ops, constants, arity, ob));
+    let spec_forced =
+        obarray.is_some_and(|ob| super::compile::has_op_call_spec_sites(ops, constants, arity, ob));
     if !spec_forced {
         // MIR tier first (the existing pure/reloc/call-bearing subset).
         if let Some(p) = prepare_leaf_emit(ops, constants, arity)? {
@@ -1369,7 +1372,13 @@ fn manifest_unescape_name(tok: &str) -> Option<String> {
 /// Render ONE v2 pre-key line: `leaf <m|x> <ops_len> <arity> <hash> <name>\n`.
 /// The single source for the line format — the parser ([`parse_preload_manifest`])
 /// and the producer ([`build_and_link_preload`]) both go through it / its tests.
-fn manifest_leaf_line(member: bool, ops_len: usize, arity: usize, hash: u128, name: &str) -> String {
+fn manifest_leaf_line(
+    member: bool,
+    ops_len: usize,
+    arity: usize,
+    hash: u128,
+    name: &str,
+) -> String {
     format!(
         "leaf {} {ops_len} {arity} {hash:032x} {}\n",
         if member { 'm' } else { 'x' },
@@ -1601,7 +1610,11 @@ pub fn run_dump_time_preload(ctx: &crate::emacs_core::eval::Context, dump_dir: &
                     stats.skipped_unsupported,
                 );
                 for leaf in leaves.iter().take(40) {
-                    tracing::info!("aot-preload candidate: {} (arity={})", leaf.name, leaf.arity);
+                    tracing::info!(
+                        "aot-preload candidate: {} (arity={})",
+                        leaf.name,
+                        leaf.arity
+                    );
                 }
                 if leaves.len() > 40 {
                     tracing::info!("aot-preload: ... and {} more candidates", leaves.len() - 40);
@@ -1727,7 +1740,8 @@ pub fn testkit_emit_baseline_and_place_so(
     arity: usize,
     dir: &std::path::Path,
 ) -> Option<u128> {
-    let (obj, content_hash) = build_baseline_object_for_leaf(ops, constants, arity, None).ok()??;
+    let (obj, content_hash) =
+        build_baseline_object_for_leaf(ops, constants, arity, None).ok()??;
     let so_path = dir.join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
     link_object_to_so(&obj, &so_path).ok()?;
     Some(content_hash)
@@ -1938,7 +1952,9 @@ pub fn testkit_call_bearing_selftest(dir: &std::path::Path) -> Result<(), String
     };
     let interp_count = count(cell);
     if interp_count != 1 {
-        return Err(format!("interp: bump ran {interp_count} times (expected 1)"));
+        return Err(format!(
+            "interp: bump ran {interp_count} times (expected 1)"
+        ));
     }
     if aot_res.is_err() != interp_res.is_err() {
         return Err(format!(
@@ -2024,27 +2040,28 @@ pub fn testkit_baseline_aot_selftest(dir: &std::path::Path) -> Result<(), String
     // Value. Returns the two Values; compare by `eql_value` (a bignum/float result
     // is a HEAP object — distinct allocations have distinct addresses, so a raw-bits
     // compare would falsely fail; eql compares by numeric VALUE).
-    let aot_and_interp = |ev: &mut Context, ctx: *mut Context, x: Value| -> Result<(Value, Value), String> {
-        let f = mk_fn(arity);
-        let f_val = Value::make_bytecode(f.clone());
-        // AOT serve (try_run_compiled consults AOT first under force).
-        let aot = super::cache::try_run_compiled(ctx, &f, f_val, &[x])
-            .map_err(|_| "aot run raised".to_string())?
-            .ok_or("aot run returned None (not served)".to_string())?;
-        // Confirm it was actually AOT-backed (not JIT'd).
-        if super::cache::cached_leaf_is_aot_for_func(&f) != Some(true) {
-            return Err(format!("body not served AOT-backed for x={x:?}"));
-        }
-        // Interp result (a fresh fn, never compiled — run via the VM directly).
-        let interp = {
-            use crate::emacs_core::bytecode::Vm;
-            let g = mk_fn(arity);
-            let mut vm = Vm::from_context(ev);
-            vm.execute(&g, vec![x])
-                .map_err(|_| "interp run raised".to_string())?
+    let aot_and_interp =
+        |ev: &mut Context, ctx: *mut Context, x: Value| -> Result<(Value, Value), String> {
+            let f = mk_fn(arity);
+            let f_val = Value::make_bytecode(f.clone());
+            // AOT serve (try_run_compiled consults AOT first under force).
+            let aot = super::cache::try_run_compiled(ctx, &f, f_val, &[x])
+                .map_err(|_| "aot run raised".to_string())?
+                .ok_or("aot run returned None (not served)".to_string())?;
+            // Confirm it was actually AOT-backed (not JIT'd).
+            if super::cache::cached_leaf_is_aot_for_func(&f) != Some(true) {
+                return Err(format!("body not served AOT-backed for x={x:?}"));
+            }
+            // Interp result (a fresh fn, never compiled — run via the VM directly).
+            let interp = {
+                use crate::emacs_core::bytecode::Vm;
+                let g = mk_fn(arity);
+                let mut vm = Vm::from_context(ev);
+                vm.execute(&g, vec![x])
+                    .map_err(|_| "interp run raised".to_string())?
+            };
+            Ok((Value::from_bits(aot), interp))
         };
-        Ok((Value::from_bits(aot), interp))
-    };
 
     // (1) In-range: x=7 → 49, native (no deopt). AOT == interp (by value).
     let (a1, i1) = aot_and_interp(&mut ev, ctx, Value::make_int(7))?;
@@ -2061,10 +2078,14 @@ pub fn testkit_baseline_aot_selftest(dir: &std::path::Path) -> Result<(), String
     let big = 3_037_000_500i64; // big*big ≈ 9.22e18 > MOST_POSITIVE_FIXNUM (~2.3e18)
     let (a2, i2) = aot_and_interp(&mut ev, ctx, Value::make_int(big))?;
     if !crate::emacs_core::value::eql_value(&a2, &i2) {
-        return Err(format!("overflow-deopt: AOT {a2:?} != interp {i2:?} (x={big})"));
+        return Err(format!(
+            "overflow-deopt: AOT {a2:?} != interp {i2:?} (x={big})"
+        ));
     }
     if a2.as_fixnum().is_some() {
-        return Err("overflow-deopt: result is a fixnum — no overflow happened, deopt not exercised".into());
+        return Err(
+            "overflow-deopt: result is a fixnum — no overflow happened, deopt not exercised".into(),
+        );
     }
 
     // (3) FORCED TYPE-GUARD DEOPT (team-lead defense-in-depth): a NON-fixnum operand
@@ -2076,12 +2097,16 @@ pub fn testkit_baseline_aot_selftest(dir: &std::path::Path) -> Result<(), String
     let fx = Value::make_float(2.5);
     let (a3, i3) = aot_and_interp(&mut ev, ctx, fx)?;
     if !crate::emacs_core::value::eql_value(&a3, &i3) {
-        return Err(format!("type-guard-deopt: AOT {a3:?} != interp {i3:?} (x=2.5)"));
+        return Err(format!(
+            "type-guard-deopt: AOT {a3:?} != interp {i3:?} (x=2.5)"
+        ));
     }
     // Sanity: a float result (2.5*2.5=6.25) — NOT a fixnum, so the type-guard deopt
     // genuinely fired (the native fixnum fast path cannot produce a float).
     if a3.as_fixnum().is_some() {
-        return Err("type-guard-deopt: result is a fixnum — the float type-guard deopt did not fire".into());
+        return Err(
+            "type-guard-deopt: result is a fixnum — the float type-guard deopt did not fire".into(),
+        );
     }
 
     super::cache::clear();
@@ -2157,7 +2182,11 @@ pub fn testkit_baseline_deep_rawslot_deopt_selftest(dir: &std::path::Path) -> Re
     // Serve via the cache (baseline-backed) + the interpreter; compare. Two regimes:
     //  (1) NO deopt: small a,b → native fixnum result.
     //  (2) FORCED OVERFLOW deopt at the deep Mul (depth 4, live raw slots).
-    let run_baseline = |ev: &mut Context, ctx: *mut Context, a: Value, b: Value| -> Result<(Value, Value), String> {
+    let run_baseline = |ev: &mut Context,
+                        ctx: *mut Context,
+                        a: Value,
+                        b: Value|
+     -> Result<(Value, Value), String> {
         let f = mk_fn();
         let f_val = Value::make_bytecode(f.clone());
         let bits = super::cache::try_run_compiled(ctx, &f, f_val, &[a, b])
@@ -2181,7 +2210,9 @@ pub fn testkit_baseline_deep_rawslot_deopt_selftest(dir: &std::path::Path) -> Re
         return Err(format!("deep no-deopt: AOT {n_aot:?} != interp {n_int:?}"));
     }
     if n_aot.as_fixnum() != Some(20) {
-        return Err(format!("deep no-deopt: wrong result {n_aot:?} (expected 20)"));
+        return Err(format!(
+            "deep no-deopt: wrong result {n_aot:?} (expected 20)"
+        ));
     }
 
     // (2) FORCED OVERFLOW at the DEEP Mul (depth 4, two live raw slots (a+1),(b+1)):
@@ -2192,7 +2223,9 @@ pub fn testkit_baseline_deep_rawslot_deopt_selftest(dir: &std::path::Path) -> Re
     let big = 2_000_000_000i64;
     let (d_aot, d_int) = run_baseline(&mut ev, ctx, Value::make_int(big), Value::make_int(big))?;
     if !crate::emacs_core::value::eql_value(&d_aot, &d_int) {
-        return Err(format!("deep overflow-deopt: AOT {d_aot:?} != interp {d_int:?} (a=b={big})"));
+        return Err(format!(
+            "deep overflow-deopt: AOT {d_aot:?} != interp {d_int:?} (a=b={big})"
+        ));
     }
     if d_aot.as_fixnum().is_some() {
         return Err(
@@ -2256,7 +2289,9 @@ pub fn testkit_callbuiltinsym_aot_selftest(dir: &std::path::Path) -> Result<(), 
     }
     // The recipe should contain the bytes "length" (the RECIPE_SYMBOL name).
     if !recipe.windows(b"length".len()).any(|w| w == b"length") {
-        return Err("reloc recipe does not encode the callee name 'length' (reloc-by-name missing)".into());
+        return Err(
+            "reloc recipe does not encode the callee name 'length' (reloc-by-name missing)".into(),
+        );
     }
 
     // Emit via the baseline AOT path + place the `.so`.
@@ -2287,7 +2322,11 @@ pub fn testkit_callbuiltinsym_aot_selftest(dir: &std::path::Path) -> Result<(), 
     let mut ev = Context::new();
     let ctx = &mut ev as *mut Context;
     // arg = a 3-element list → (length arg) == 3.
-    let arg = Value::list(vec![Value::make_int(10), Value::make_int(20), Value::make_int(30)]);
+    let arg = Value::list(vec![
+        Value::make_int(10),
+        Value::make_int(20),
+        Value::make_int(30),
+    ]);
 
     let f = mk_fn();
     let f_val = Value::make_bytecode(f.clone());
@@ -2302,7 +2341,8 @@ pub fn testkit_callbuiltinsym_aot_selftest(dir: &std::path::Path) -> Result<(), 
     let interp = {
         let g = mk_fn();
         let mut vm = Vm::from_context(&mut ev);
-        vm.execute(&g, vec![arg]).map_err(|_| "interp raised".to_string())?
+        vm.execute(&g, vec![arg])
+            .map_err(|_| "interp raised".to_string())?
     };
     if !crate::emacs_core::value::eql_value(&Value::from_bits(aot), &interp) {
         return Err(format!(
@@ -2322,8 +2362,7 @@ pub fn testkit_callbuiltinsym_aot_selftest(dir: &std::path::Path) -> Result<(), 
     // RELOC SET, resolved BY NAME to "length" (the CURRENT canonical symbol — note
     // the intern table was grown above). A BAKED SymId would NOT appear in
     // reloc_values(); its presence proves the op-SymId is reloc'd-by-name.
-    let content_hash =
-        leaf_content_hash(&ops, &constants, arity).ok_or("content hash None")?;
+    let content_hash = leaf_content_hash(&ops, &constants, arity).ok_or("content hash None")?;
     let unit = load_unit(content_hash).ok_or("unit not found for reloc-set proof")?;
     let live_reloc = collect_baseline_aot_relocs(&ops, &constants)
         .ok_or("baseline relocs None at load")?
@@ -2499,7 +2538,14 @@ pub fn testkit_cbsym_aot_fast_shim_selftest(dir: &std::path::Path) -> Result<(),
         .ok_or("Tier-B (length) baseline AOT emit/place failed")?;
 
     // Tier-A: (point) → neovm_jit_cbsym_read (GC-free read).
-    cbsym_aot_serve_and_check(&mut ev, &point_ops, &[], 0, &[], "Tier-A (point) [cbsym_read]")?;
+    cbsym_aot_serve_and_check(
+        &mut ev,
+        &point_ops,
+        &[],
+        0,
+        &[],
+        "Tier-A (point) [cbsym_read]",
+    )?;
 
     // Tier-B: (length x) → neovm_jit_cbsym_spec (dispatch-skip), x a 4-element list.
     cbsym_aot_serve_and_check(
@@ -2620,8 +2666,11 @@ pub fn testkit_baseline_op_symbol_reloc_selftest(dir: &std::path::Path) -> Resul
         }
         // The session-specific symbol MUST be in the reloc recipe BY NAME (a baked
         // id would not be collected at all).
-        let (reloc_data, _idx, recipe) = prepare_baseline_relocs(&b.ops, &b.constants)
-            .ok_or(format!("{}: baseline relocs None (symbol not recipe-able?)", b.label))?;
+        let (reloc_data, _idx, recipe) =
+            prepare_baseline_relocs(&b.ops, &b.constants).ok_or(format!(
+                "{}: baseline relocs None (symbol not recipe-able?)",
+                b.label
+            ))?;
         if reloc_data.is_empty() {
             return Err(format!(
                 "{}: NO reloc consts — the op-SymId was BAKED, not collected by name",
@@ -2668,7 +2717,10 @@ pub fn testkit_baseline_op_symbol_reloc_selftest(dir: &std::path::Path) -> Resul
         let f_val = Value::make_bytecode(f.clone());
         let aot = super::cache::try_run_compiled(ctx, &f, f_val, &b.args)
             .map_err(|_| format!("{}: aot run raised", b.label))?
-            .ok_or(format!("{}: aot run returned None (reloc/tier mismatch?)", b.label))?;
+            .ok_or(format!(
+                "{}: aot run returned None (reloc/tier mismatch?)",
+                b.label
+            ))?;
         if super::cache::cached_leaf_is_aot_for_func(&f) != Some(true) {
             return Err(format!("{}: not served AOT-backed", b.label));
         }
@@ -2701,8 +2753,11 @@ pub fn testkit_baseline_op_symbol_reloc_selftest(dir: &std::path::Path) -> Resul
         let live_reloc = collect_baseline_aot_relocs(&b.ops, &b.constants)
             .ok_or(format!("{}: baseline relocs None at load", b.label))?
             .0;
-        let leaf = load_leaf_from_unit(&unit, content_hash, b.arity, &live_reloc, None)
-            .ok_or(format!("{}: load_leaf_from_unit None (reloc/recipe mismatch?)", b.label))?;
+        let leaf =
+            load_leaf_from_unit(&unit, content_hash, b.arity, &live_reloc, None).ok_or(format!(
+                "{}: load_leaf_from_unit None (reloc/recipe mismatch?)",
+                b.label
+            ))?;
         let reloc_names: std::collections::HashSet<String> = leaf
             .reloc_values()
             .iter()
@@ -3178,8 +3233,10 @@ pub fn testkit_pgo_drain_selftest(dir: &std::path::Path) -> Result<(), String> {
     alias(&mut c1, "pgo-drain-callee", "recordp")?;
     // Bind the fn under an interned name so the drain's obarray WALK finds it, and
     // retrieve the heap `bc` the walk will use (same identity → same compiled_id).
-    c1.obarray
-        .set_symbol_function("pgo-drain-fn", Value::make_bytecode(mk_fn("pgo-drain-callee")));
+    c1.obarray.set_symbol_function(
+        "pgo-drain-fn",
+        Value::make_bytecode(mk_fn("pgo-drain-callee")),
+    );
     let bc = c1
         .obarray
         .symbol_function_id(intern("pgo-drain-fn"))
@@ -3199,12 +3256,17 @@ pub fn testkit_pgo_drain_selftest(dir: &std::path::Path) -> Result<(), String> {
     let hash = leaf_content_hash(&bc.ops, &bc.constants, 1).ok_or("content hash None")?;
     let expected = dir.join(format!("{hash:032x}_{ABI_TAG:08x}.so"));
     if !expected.exists() {
-        return Err(format!("drained .so not at expected name {}", expected.display()));
+        return Err(format!(
+            "drained .so not at expected name {}",
+            expected.display()
+        ));
     }
     // Second drain is a NO-OP (the `.exists()` skip): no duplicate `cc` spawn.
     let n2 = drain_aot_pgo(&c1);
     if n2 != 0 {
-        return Err(format!("second drain emitted {n2}, expected 0 (.exists() skip)"));
+        return Err(format!(
+            "second drain emitted {n2}, expected 0 (.exists() skip)"
+        ));
     }
 
     // ---- PASS 2 — a FRESH session serves the drained `.so` AOT + FAST-from-call-1. ----
@@ -3278,7 +3340,9 @@ pub fn testkit_pgo_default_off_selftest(dir: &std::path::Path) -> Result<(), Str
         .filter(|e| e.path().extension().is_some_and(|x| x == "so"))
         .count();
     if so_files != 0 {
-        return Err(format!("default-off left {so_files} .so file(s) in the dir"));
+        return Err(format!(
+            "default-off left {so_files} .so file(s) in the dir"
+        ));
     }
     super::cache::clear();
     Ok(())
@@ -3394,7 +3458,8 @@ fn load_unit(content_hash: u128) -> Option<std::sync::Arc<super::compile::Loaded
     let lib = unsafe { libloading::Library::new(path) }.ok()?;
     let unit = std::sync::Arc::new(super::compile::LoadedUnit::new(lib));
     LOADED_UNITS.with(|m| {
-        m.borrow_mut().insert(content_hash, std::sync::Arc::clone(&unit));
+        m.borrow_mut()
+            .insert(content_hash, std::sync::Arc::clone(&unit));
     });
     Some(unit)
 }
@@ -3685,9 +3750,7 @@ pub(crate) fn load_leaf_from_unit(
             return None;
         }
         let spec_bytes = (spec_count as usize).checked_mul(SPEC_SITE_BYTES)?;
-        let total = HDR
-            .checked_add(recipe_len)?
-            .checked_add(spec_bytes)?;
+        let total = HDR.checked_add(recipe_len)?.checked_add(spec_bytes)?;
         let all = std::slice::from_raw_parts(desc_ptr, total).to_vec();
         (entry_ptr, all)
     };
@@ -3810,9 +3873,7 @@ pub struct PrepopulateStats {
 ///
 /// Runs ONLY when [`aot_enabled`]; a missing/invalid preload is a clean no-op
 /// (every function just JITs — strictly additive). Returns the stats.
-pub fn prepopulate_aot_from_preload(
-    ctx: &crate::emacs_core::eval::Context,
-) -> PrepopulateStats {
+pub fn prepopulate_aot_from_preload(ctx: &crate::emacs_core::eval::Context) -> PrepopulateStats {
     let mut stats = PrepopulateStats::default();
     if !aot_enabled() {
         return stats;
@@ -3879,9 +3940,10 @@ pub fn prepopulate_aot_from_preload(
         // name its entry symbol; dlsym stays the membership ground truth), and
         // any ops_len/arity MISMATCH (body redefined between pdump load and
         // prepopulate, e.g. by `after-pdump-load-hook`).
-        if let Some(key) = prekeys.as_ref().and_then(|map| {
-            map.get(crate::emacs_core::intern::resolve_name(name_id))
-        }) && !key.member
+        if let Some(key) = prekeys
+            .as_ref()
+            .and_then(|map| map.get(crate::emacs_core::intern::resolve_name(name_id)))
+            && !key.member
             && key.ops_len == bc.ops.len()
             && key.arity == arity
         {
@@ -3936,8 +3998,13 @@ pub fn prepopulate_aot_from_preload(
         // B2 fast-from-call-1: RE-CLASSIFY each leaf's spec sites against the LIVE
         // obarray (post-loadup) so a pred/subr-class body serves the armed FAST shim
         // from call 1 — no JIT warmup, no first-call re-arm.
-        match load_leaf_from_unit(&unit, p.content_hash, p.arity, &p.live_reloc, Some(&ctx.obarray))
-        {
+        match load_leaf_from_unit(
+            &unit,
+            p.content_hash,
+            p.arity,
+            &p.live_reloc,
+            Some(&ctx.obarray),
+        ) {
             Some(leaf) => leaves.push((p.compiled_id, leaf)),
             None => stats.missed += 1,
         }
@@ -4009,10 +4076,7 @@ fn pgo_atomic_place(
     std::fs::rename(&tmp_path, &final_path).map_err(|e| {
         // Best-effort cleanup so a failed drain leaves no dangling temp.
         let _ = std::fs::remove_file(&tmp_path);
-        module_init_err(format!(
-            "pgo atomic rename → {}: {e}",
-            final_path.display()
-        ))
+        module_init_err(format!("pgo atomic rename → {}: {e}", final_path.display()))
     })?;
     Ok(final_path)
 }
@@ -4061,8 +4125,12 @@ pub(crate) fn drain_aot_pgo_to_dir(
     // Collect the hot ∩ required-only-bytecode candidates with their heat, to emit
     // HOTTEST-FIRST under `cap`. Bodies are borrowed `'static` from the heap
     // (`get_bytecode_data`), so holding refs across the sort is sound.
-    let mut cands: Vec<(u32, u128, &'static crate::emacs_core::bytecode::ByteCodeFunction, usize)> =
-        Vec::new();
+    let mut cands: Vec<(
+        u32,
+        u128,
+        &'static crate::emacs_core::bytecode::ByteCodeFunction,
+        usize,
+    )> = Vec::new();
     for (_name_id, func_val) in ctx.obarray.interned_function_cells_with_names() {
         if !func_val.is_bytecode() {
             continue;
@@ -4273,7 +4341,12 @@ fn define_leaf_into_module(
     // loader can dlsym it and recover the leaf metadata + reloc rebuild recipe.
     if let Some((desc_name, desc_bytes)) = descriptor {
         let data_id = module
-            .declare_data(desc_name, Linkage::Export, /*writable=*/ false, /*tls=*/ false)
+            .declare_data(
+                desc_name,
+                Linkage::Export,
+                /*writable=*/ false,
+                /*tls=*/ false,
+            )
             .map_err(|e| module_init_err(e.to_string()))?;
         let mut desc = cranelift_module::DataDescription::new();
         desc.define(desc_bytes.to_vec().into_boxed_slice());
@@ -4347,10 +4420,14 @@ fn define_baseline_leaf_into_module(
     };
     // Bake the baseline leaf's `Op::Call` spec sites (in slot order) into the
     // descriptor so the loader can re-classify + arm each runtime SpecSlot.
-    let desc_bytes =
-        encode_descriptor(&meta, &recipe, reloc_data.len() as u32, &bmeta.spec_sites);
+    let desc_bytes = encode_descriptor(&meta, &recipe, reloc_data.len() as u32, &bmeta.spec_sites);
     let data_id = module
-        .declare_data(desc_name, Linkage::Export, /*writable=*/ false, /*tls=*/ false)
+        .declare_data(
+            desc_name,
+            Linkage::Export,
+            /*writable=*/ false,
+            /*tls=*/ false,
+        )
         .map_err(|e| module_init_err(e.to_string()))?;
     let mut desc = cranelift_module::DataDescription::new();
     desc.define(desc_bytes.into_boxed_slice());
@@ -4495,8 +4572,7 @@ pub(crate) mod test_support {
     /// The injected `load_preload` result, if a test set one. Outer `Some` means
     /// "injected" (use the inner value); `None` means fall through to the real
     /// resolver.
-    pub(crate) fn injected_preload()
-    -> Option<Option<Arc<super::super::compile::LoadedUnit>>> {
+    pub(crate) fn injected_preload() -> Option<Option<Arc<super::super::compile::LoadedUnit>>> {
         INJECTED_PRELOAD.with(|c| c.borrow().clone())
     }
 
@@ -4696,7 +4772,11 @@ mod tests {
                     core::ptr::null(),
                 )
             };
-            assert_eq!(status, super::super::compile::STATUS_OK, "AOT status not OK");
+            assert_eq!(
+                status,
+                super::super::compile::STATUS_OK,
+                "AOT status not OK"
+            );
             assert_eq!(out, jit, "AOT result != JIT result for arg {a}");
         }
     }
@@ -4809,14 +4889,21 @@ mod tests {
             .expect("compile ok")
             .expect("pure subset → Some");
         let dir = tempfile::tempdir().expect("tempdir");
-        let so_path = dir.path().join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
+        let so_path = dir
+            .path()
+            .join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
         link_object_to_so(&obj, &so_path).expect("link .so");
         // SAFETY: dlopen a `.so` we just emitted; pure leaf has no shim imports.
         let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
         let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
-        let aot_leaf =
-            load_leaf_from_unit(&unit, content_hash, nargs, &live_reloc_for(ops, constants, nargs), None)
-                .expect("load leaf from unit");
+        let aot_leaf = load_leaf_from_unit(
+            &unit,
+            content_hash,
+            nargs,
+            &live_reloc_for(ops, constants, nargs),
+            None,
+        )
+        .expect("load leaf from unit");
 
         // Reference: JIT leaf for the same MIR.
         let m = mir::build_mir(ops, constants, nargs).expect("mir");
@@ -4842,7 +4929,12 @@ mod tests {
         let calls: Vec<Vec<Value>> = if nargs == 1 {
             args.iter().map(|&a| vec![Value::make_int(a)]).collect()
         } else {
-            vec![args.iter().take(nargs).map(|&a| Value::make_int(a)).collect()]
+            vec![
+                args.iter()
+                    .take(nargs)
+                    .map(|&a| Value::make_int(a))
+                    .collect(),
+            ]
         };
         for call in calls {
             let interp = {
@@ -4908,20 +5000,11 @@ mod tests {
         // 1-arg: (1+ arg)
         assert_aot_matches_interp_and_jit(&[Op::Add1, Op::Return], &[], 1, &probe);
         // 1-arg: (* arg arg) — needs the arg twice (StackRef duplicates it).
-        assert_aot_matches_interp_and_jit(
-            &[Op::StackRef(0), Op::Mul, Op::Return],
-            &[],
-            1,
-            &probe,
-        );
+        assert_aot_matches_interp_and_jit(&[Op::StackRef(0), Op::Mul, Op::Return], &[], 1, &probe);
         // 1-arg branchy: (if (< arg 0) ...) via Lss + GotoIfNil — comparison +
         // control flow, the deopt-free pure path.
         assert_aot_matches_interp_and_jit(
-            &[
-                Op::Constant(0),
-                Op::Lss,
-                Op::Return,
-            ],
+            &[Op::Constant(0), Op::Lss, Op::Return],
             &[Value::make_int(0)],
             1,
             &probe,
@@ -4963,7 +5046,9 @@ mod tests {
             panic!("symbol-bearing shim-free leaf must be AOT-runnable");
         };
         let dir = tempfile::tempdir().expect("tempdir");
-        let so_path = dir.path().join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
+        let so_path = dir
+            .path()
+            .join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
         link_object_to_so(&obj, &so_path).expect("link");
 
         // Grow the intern table BEFORE loading, so an emit-time-baked SymId for
@@ -4976,9 +5061,14 @@ mod tests {
 
         let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
         let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
-        let aot_leaf =
-            load_leaf_from_unit(&unit, content_hash, arity, &live_reloc_for(&ops, &constants, arity), None)
-                .expect("load");
+        let aot_leaf = load_leaf_from_unit(
+            &unit,
+            content_hash,
+            arity,
+            &live_reloc_for(&ops, &constants, arity),
+            None,
+        )
+        .expect("load");
 
         // PROOF OF #16 FIX: both symbols are in the reloc set (the func's own
         // canonical symbol objects), NOT baked. A baked symbol would NOT appear
@@ -4993,7 +5083,10 @@ mod tests {
                 )
             })
             .collect();
-        assert!(names.contains("aot-yes") && names.contains("aot-no"), "names: {names:?}");
+        assert!(
+            names.contains("aot-yes") && names.contains("aot-no"),
+            "names: {names:?}"
+        );
 
         // And the leaf returns the RIGHT symbol per branch, by IDENTITY (eq):
         // the rebuilt symbol must be the live obarray's 'aot-yes/'aot-no.
@@ -5085,13 +5178,20 @@ mod tests {
             .expect("compile ok")
             .expect("reloc-bearing shim-free leaf → Some");
         let dir = tempfile::tempdir().expect("tempdir");
-        let so_path = dir.path().join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
+        let so_path = dir
+            .path()
+            .join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
         link_object_to_so(&obj, &so_path).expect("link .so");
         let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
         let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
-        let aot_leaf =
-            load_leaf_from_unit(&unit, content_hash, arity, &live_reloc_for(&ops, &constants, arity), None)
-                .expect("load reloc leaf");
+        let aot_leaf = load_leaf_from_unit(
+            &unit,
+            content_hash,
+            arity,
+            &live_reloc_for(&ops, &constants, arity),
+            None,
+        )
+        .expect("load reloc leaf");
 
         // The reloc Vec holds the FUNCTION'S OWN "hello" object (audit #A:
         // eq-identical to the source constant, not a fresh copy).
@@ -5151,13 +5251,20 @@ mod tests {
             return;
         };
         let dir = tempfile::tempdir().expect("tempdir");
-        let so_path = dir.path().join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
+        let so_path = dir
+            .path()
+            .join(format!("{content_hash:032x}_{ABI_TAG:08x}.so"));
         link_object_to_so(&obj, &so_path).expect("link");
         let lib = unsafe { libloading::Library::new(&so_path) }.expect("dlopen");
         let unit = std::sync::Arc::new(super::super::compile::LoadedUnit::new(lib));
-        let aot_leaf =
-            load_leaf_from_unit(&unit, content_hash, arity, &live_reloc_for(&ops, &constants, arity), None)
-                .expect("load");
+        let aot_leaf = load_leaf_from_unit(
+            &unit,
+            content_hash,
+            arity,
+            &live_reloc_for(&ops, &constants, arity),
+            None,
+        )
+        .expect("load");
 
         // reloc_values must be ["first","second"] in that order.
         let relocs = aot_leaf.reloc_values();
@@ -5385,7 +5492,8 @@ mod tests {
         a.constants = vec![Value::make_int(5)];
         a.max_stack = 16;
         let a_id = crate::emacs_core::intern::intern("r2-cand-add5");
-        ev.obarray.set_symbol_function_id(a_id, Value::make_bytecode(a));
+        ev.obarray
+            .set_symbol_function_id(a_id, Value::make_bytecode(a));
 
         // Non-candidate B: an &OPTIONAL fn — rejected by the required-only filter
         // (matches the MIR pure-tier arity shape).
@@ -5398,7 +5506,8 @@ mod tests {
         b.ops = vec![Op::StackRef(0), Op::Return];
         b.max_stack = 16;
         let b_id = crate::emacs_core::intern::intern("r2-noncand-optional");
-        ev.obarray.set_symbol_function_id(b_id, Value::make_bytecode(b));
+        ev.obarray
+            .set_symbol_function_id(b_id, Value::make_bytecode(b));
 
         let leaves = enumerate_loadup_leaves(&ev, /*d0_filter=*/ true);
         let names: std::collections::HashSet<&str> =
@@ -5473,7 +5582,10 @@ mod tests {
                         .unwrap_or(false)
             })
             .count();
-        assert_eq!(entries, 2, "two unique entry symbols, no duplicate-symbol collision");
+        assert_eq!(
+            entries, 2,
+            "two unique entry symbols, no duplicate-symbol collision"
+        );
     }
 
     /// R2-C3 GATE (native-from-call-1 AND survive-a-GC). Prepopulate the COMPILED
@@ -5506,7 +5618,8 @@ mod tests {
         a.constants = constants.clone();
         a.max_stack = 16;
         let sym = crate::emacs_core::intern::intern("r2-prepop-add5");
-        ev.obarray.set_symbol_function_id(sym, Value::make_bytecode(a));
+        ev.obarray
+            .set_symbol_function_id(sym, Value::make_bytecode(a));
 
         // Build the ONE preload `.so` (the producer's multi-leaf object), dlopen,
         // and inject it as THE preload (so load_preload returns it).
@@ -5532,8 +5645,14 @@ mod tests {
         // PREPOPULATE. NOTE: no pre-priming of the heap guard — prepopulate must
         // establish COMPILED_HEAP itself for the survive-a-GC half to pass.
         let stats = prepopulate_aot_from_preload(&ev);
-        assert!(stats.candidates >= 1, "at least one candidate; got {stats:?}");
-        assert_eq!(stats.loaded, stats.candidates, "all candidates loaded from .so");
+        assert!(
+            stats.candidates >= 1,
+            "at least one candidate; got {stats:?}"
+        );
+        assert_eq!(
+            stats.loaded, stats.candidates,
+            "all candidates loaded from .so"
+        );
         assert_eq!(
             stats.inserted, stats.loaded,
             "empty cache → every loaded leaf fills a cold slot; got {stats:?}"
@@ -5592,7 +5711,8 @@ mod tests {
         a.constants = vec![Value::make_int(5)];
         a.max_stack = 16;
         let sym = crate::emacs_core::intern::intern("r2-prepop-miss-add5");
-        ev.obarray.set_symbol_function_id(sym, Value::make_bytecode(a));
+        ev.obarray
+            .set_symbol_function_id(sym, Value::make_bytecode(a));
         let id = ev
             .obarray
             .symbol_function_id(sym)
@@ -5606,7 +5726,10 @@ mod tests {
         test_support::inject_preload_miss();
 
         let stats = prepopulate_aot_from_preload(&ev);
-        assert_eq!(stats.candidates, 0, "no candidates collected on a preload miss");
+        assert_eq!(
+            stats.candidates, 0,
+            "no candidates collected on a preload miss"
+        );
         assert_eq!(stats.inserted, 0, "nothing inserted on a preload miss");
         assert!(
             !super::super::cache::is_compiled_for_test(id),
@@ -5651,7 +5774,8 @@ mod tests {
         a.constants = vec![Value::make_int(5)];
         a.max_stack = 16;
         let sym = crate::emacs_core::intern::intern("r2-prepop-nooverwrite-add5");
-        ev.obarray.set_symbol_function_id(sym, Value::make_bytecode(a));
+        ev.obarray
+            .set_symbol_function_id(sym, Value::make_bytecode(a));
         let id = ev
             .obarray
             .symbol_function_id(sym)
@@ -5696,7 +5820,10 @@ mod tests {
         let stats = prepopulate_aot_from_preload(&ev);
         // The fn WAS loadable from the preload (loaded>=1) but its slot was already
         // occupied by the JIT leaf, so inserted=0 for it (insert-if-absent).
-        assert!(stats.loaded >= 1, "the fn is loadable from the preload; got {stats:?}");
+        assert!(
+            stats.loaded >= 1,
+            "the fn is loadable from the preload; got {stats:?}"
+        );
         assert_eq!(
             stats.inserted, 0,
             "the already-warm JIT slot must NOT be filled (insert-if-absent); got {stats:?}"
@@ -5740,25 +5867,49 @@ mod tests {
         let entries: [(&str, ManifestPreKey); 4] = [
             (
                 "plain-name",
-                ManifestPreKey { member: true, ops_len: 3, arity: 1, hash: 0xdead_beef },
+                ManifestPreKey {
+                    member: true,
+                    ops_len: 3,
+                    arity: 1,
+                    hash: 0xdead_beef,
+                },
             ),
             (
                 "with space", // whitespace → hex-escaped token
-                ManifestPreKey { member: false, ops_len: 7, arity: 2, hash: 1 },
+                ManifestPreKey {
+                    member: false,
+                    ops_len: 7,
+                    arity: 2,
+                    hash: 1,
+                },
             ),
             (
                 "%leading", // leading '%' → hex-escaped (escape marker collision)
-                ManifestPreKey { member: false, ops_len: 1, arity: 0, hash: 2 },
+                ManifestPreKey {
+                    member: false,
+                    ops_len: 1,
+                    arity: 0,
+                    hash: 2,
+                },
             ),
             (
                 "", // empty name → escapes to the bare "%" token
-                ManifestPreKey { member: true, ops_len: 2, arity: 3, hash: u128::MAX },
+                ManifestPreKey {
+                    member: true,
+                    ops_len: 2,
+                    arity: 3,
+                    hash: u128::MAX,
+                },
             ),
         ];
         let mut text = String::from("version 2\nabi_tag 00000000\nfingerprint f00\nleaves 4\n");
         for (name, key) in &entries {
             text.push_str(&manifest_leaf_line(
-                key.member, key.ops_len, key.arity, key.hash, name,
+                key.member,
+                key.ops_len,
+                key.arity,
+                key.hash,
+                name,
             ));
         }
         let parsed = parse_preload_manifest(&text);
@@ -5789,7 +5940,10 @@ mod tests {
             ("truncated fields", "leaves 1\nleaf m 3\n"),
             ("count mismatch", "leaves 2\nleaf m 3 1 00 name\n"),
             ("missing leaves line", "leaf m 3 1 00 name\n"),
-            ("duplicate name", "leaves 2\nleaf m 3 1 00 dup\nleaf x 4 2 01 dup\n"),
+            (
+                "duplicate name",
+                "leaves 2\nleaf m 3 1 00 dup\nleaf x 4 2 01 dup\n",
+            ),
             ("odd escape hex", "leaves 1\nleaf m 3 1 00 %abc\n"),
             ("non-hex hash", "leaves 1\nleaf m 3 1 zz name\n"),
         ] {
@@ -5833,19 +5987,35 @@ mod tests {
         for (name, f) in [
             (
                 "prod-pf-member-add5",
-                mk(vec![SymId(1)], vec![], member_ops.clone(), member_consts.clone()),
+                mk(
+                    vec![SymId(1)],
+                    vec![],
+                    member_ops.clone(),
+                    member_consts.clone(),
+                ),
             ),
             (
                 "prod-pf-nonmember-throw",
-                mk(vec![SymId(1)], vec![], throw_ops.clone(), throw_consts.clone()),
+                mk(
+                    vec![SymId(1)],
+                    vec![],
+                    throw_ops.clone(),
+                    throw_consts.clone(),
+                ),
             ),
             (
                 "prod-pf-optional",
-                mk(vec![], vec![SymId(1)], member_ops.clone(), member_consts.clone()),
+                mk(
+                    vec![],
+                    vec![SymId(1)],
+                    member_ops.clone(),
+                    member_consts.clone(),
+                ),
             ),
         ] {
             let sym = crate::emacs_core::intern::intern(name);
-            ev.obarray.set_symbol_function_id(sym, Value::make_bytecode(f));
+            ev.obarray
+                .set_symbol_function_id(sym, Value::make_bytecode(f));
         }
 
         let dir = tempfile::tempdir().expect("tempdir");
@@ -5860,7 +6030,9 @@ mod tests {
             Some(crate::emacs_core::pdump::fingerprint_hex()),
             "manifest carries the running fingerprint (stale interlock)"
         );
-        let map = parsed.prekeys.expect("v2 manifest carries a well-formed pre-key map");
+        let map = parsed
+            .prekeys
+            .expect("v2 manifest carries a well-formed pre-key map");
 
         let member_hash = leaf_content_hash(&member_ops, &member_consts, 1).expect("hashable");
         assert_eq!(
@@ -5964,8 +6136,14 @@ mod tests {
         test_support::reset_hash_calls();
         let control = prepopulate_aot_from_preload(&ev);
         let control_hashes = test_support::hash_calls();
-        assert!(control.loaded >= 1, "member loads in control; got {control:?}");
-        assert!(control.missed >= 1, "nonmember misses in control; got {control:?}");
+        assert!(
+            control.loaded >= 1,
+            "member loads in control; got {control:?}"
+        );
+        assert!(
+            control.missed >= 1,
+            "nonmember misses in control; got {control:?}"
+        );
         super::super::cache::clear();
 
         // FILTERED: inject the v2 pre-keys — `m` for the member, verified `x`
@@ -5973,11 +6151,21 @@ mod tests {
         let mut map = PreKeyMap::new();
         map.insert(
             "pf-member-add5".into(),
-            ManifestPreKey { member: true, ops_len: 3, arity: 1, hash: m_hash },
+            ManifestPreKey {
+                member: true,
+                ops_len: 3,
+                arity: 1,
+                hash: m_hash,
+            },
         );
         map.insert(
             "pf-nonmember-sub1".into(),
-            ManifestPreKey { member: false, ops_len: 3, arity: 1, hash: x_hash },
+            ManifestPreKey {
+                member: false,
+                ops_len: 3,
+                arity: 1,
+                hash: x_hash,
+            },
         );
         test_support::inject_prekeys(map);
         test_support::reset_hash_calls();
@@ -5992,7 +6180,10 @@ mod tests {
             "the verified non-member must be skipped WITHOUT a leaf_content_hash call"
         );
         // Count parity with the pre-filter-less pass.
-        assert_eq!(filtered.candidates, control.candidates, "candidates preserved");
+        assert_eq!(
+            filtered.candidates, control.candidates,
+            "candidates preserved"
+        );
         assert_eq!(filtered.missed, control.missed, "missed preserved");
         assert_eq!(filtered.loaded, control.loaded, "loaded preserved");
         // Membership outcome: member native + AOT-backed, nonmember untouched.
@@ -6036,7 +6227,8 @@ mod tests {
         f.constants = consts.clone();
         f.max_stack = 16;
         let sym = crate::emacs_core::intern::intern("pf-fc-add5");
-        ev.obarray.set_symbol_function_id(sym, Value::make_bytecode(f));
+        ev.obarray
+            .set_symbol_function_id(sym, Value::make_bytecode(f));
         let id = ev
             .obarray
             .symbol_function_id(sym)
@@ -6050,7 +6242,8 @@ mod tests {
             constants: Box::leak(consts.clone().into_boxed_slice()),
             arity: 1,
         };
-        let (obj, _) = build_preload_object(std::slice::from_ref(&leaf), None).expect("build preload");
+        let (obj, _) =
+            build_preload_object(std::slice::from_ref(&leaf), None).expect("build preload");
         let dir = tempfile::tempdir().expect("tempdir");
         let so_path = dir.path().join(PRELOAD_SO_NAME);
         link_object_to_so(&obj, &so_path).expect("link");
@@ -6064,7 +6257,12 @@ mod tests {
         let mut map = PreKeyMap::new();
         map.insert(
             "pf-fc-add5".into(),
-            ManifestPreKey { member: false, ops_len: 99, arity: 1, hash: 0 },
+            ManifestPreKey {
+                member: false,
+                ops_len: 99,
+                arity: 1,
+                hash: 0,
+            },
         );
         test_support::inject_prekeys(map);
         test_support::reset_hash_calls();
@@ -6196,7 +6394,11 @@ mod tests {
         );
 
         // CAP=1 → exactly ONE .so emitted (the shutdown-budget lever).
-        assert_eq!(drain_aot_pgo_to_dir(&c, dir.path(), 1), 1, "cap=1 bounds emit");
+        assert_eq!(
+            drain_aot_pgo_to_dir(&c, dir.path(), 1),
+            1,
+            "cap=1 bounds emit"
+        );
         assert_eq!(count_so(dir.path()), 1);
 
         // CAP high → the remaining leaf emits; the first is `.exists()`-skipped (no dup).
@@ -6205,7 +6407,11 @@ mod tests {
             1,
             "second drain emits only the not-yet-persisted leaf"
         );
-        assert_eq!(count_so(dir.path()), 2, "two distinct bodies → two .so total");
+        assert_eq!(
+            count_so(dir.path()),
+            2,
+            "two distinct bodies → two .so total"
+        );
 
         // A THIRD drain is a full no-op (both `.exists()`).
         assert_eq!(
@@ -6248,8 +6454,16 @@ mod tests {
 
         // Default-off wrapper: NEOVM_AOT_PGO unset → drain_aot_pgo is a no-op even
         // though a hot leaf exists; the testable core WOULD have drained it.
-        assert_eq!(drain_aot_pgo(&c), 0, "wrapper no-op when NEOVM_AOT_PGO unset");
-        assert_eq!(count_so(dir.path()), 0, "no surprise cache files by default");
+        assert_eq!(
+            drain_aot_pgo(&c),
+            0,
+            "wrapper no-op when NEOVM_AOT_PGO unset"
+        );
+        assert_eq!(
+            count_so(dir.path()),
+            0,
+            "no surprise cache files by default"
+        );
         assert_eq!(
             drain_aot_pgo_to_dir(&c, dir.path(), 128),
             1,

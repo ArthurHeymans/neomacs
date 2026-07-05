@@ -2789,9 +2789,7 @@ impl Obarray {
     /// so a caller that filters further (e.g. to bytecode-bound symbols) only
     /// pays the name resolution for the survivors (task #11: the manifest
     /// pre-filter keys candidates by symbol name).
-    pub fn interned_function_cells_with_names(
-        &self,
-    ) -> impl Iterator<Item = (NameId, Value)> + '_ {
+    pub fn interned_function_cells_with_names(&self) -> impl Iterator<Item = (NameId, Value)> + '_ {
         self.symbols
             .iter()
             .filter(|sym| {

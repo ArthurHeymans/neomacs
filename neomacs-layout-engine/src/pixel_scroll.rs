@@ -58,7 +58,10 @@ mod tests {
     fn rows() -> Vec<ScrollRowMetric> {
         [1, 40, 80, 120, 160]
             .iter()
-            .map(|&c| ScrollRowMetric { start_charpos: c, height_px: 20 })
+            .map(|&c| ScrollRowMetric {
+                start_charpos: c,
+                height_px: 20,
+            })
             .collect()
     }
 

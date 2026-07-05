@@ -987,19 +987,18 @@ pub extern "C" fn neovm_jit_call_spec(
                 let epoch = ctx.obarray.function_epoch();
                 // NEOVM_JIT_FORCE_SLOW_SPEC pretends the armed epoch is stale so
                 // every call exercises the re-validate/re-arm branch.
-                (!jit_force_slow_spec() && slot_epoch == epoch)
-                    || {
-                        let cur = ctx.obarray.symbol_function_id(SymId(sym as u32));
-                        if cur.is_some_and(|v| v.bits() as i64 == expected) {
-                            slot.epoch.store(epoch, Ordering::Relaxed);
-                            true
-                        } else {
-                            // The binding changed: drop any cached callee leaf so
-                            // a later re-arm can't reuse a stale callee.
-                            slot.leaf.store(0, Ordering::Relaxed);
-                            false
-                        }
+                (!jit_force_slow_spec() && slot_epoch == epoch) || {
+                    let cur = ctx.obarray.symbol_function_id(SymId(sym as u32));
+                    if cur.is_some_and(|v| v.bits() as i64 == expected) {
+                        slot.epoch.store(epoch, Ordering::Relaxed);
+                        true
+                    } else {
+                        // The binding changed: drop any cached callee leaf so
+                        // a later re-arm can't reuse a stale callee.
+                        slot.leaf.store(0, Ordering::Relaxed);
+                        false
                     }
+                }
             };
             // Armed: the symbol still names the compile-time bytecode object.
             // Try the fast path (cached leaf, native-to-native pass-through when
@@ -1353,7 +1352,8 @@ pub extern "C" fn neovm_jit_cbsym_spec(
     // shim reproduces void/invalid-function exactly. FORCE_CBSYM_GENERIC forces
     // every classified site down this bounce (harness).
     let armed = !force_cbsym_generic()
-        && lookup_global_subr_entry(sym_id).is_some_and(|e| e.dispatch_kind == SubrDispatchKind::Builtin);
+        && lookup_global_subr_entry(sym_id)
+            .is_some_and(|e| e.dispatch_kind == SubrDispatchKind::Builtin);
     if !armed {
         #[cfg(debug_assertions)]
         CBSYM_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
@@ -1470,7 +1470,8 @@ pub extern "C" fn neovm_jit_cbsym_read(
     // harness forces it.
     let armed = !force_cbsym_generic()
         && nargs == cbsym_read_expected_nargs(which)
-        && lookup_global_subr_entry(sym_id).is_some_and(|e| e.dispatch_kind == SubrDispatchKind::Builtin);
+        && lookup_global_subr_entry(sym_id)
+            .is_some_and(|e| e.dispatch_kind == SubrDispatchKind::Builtin);
     if !armed {
         #[cfg(debug_assertions)]
         CBSYM_SPEC_GENERIC_COUNT.fetch_add(1, Ordering::Relaxed);
@@ -1521,7 +1522,11 @@ pub extern "C" fn neovm_jit_cbsym_read(
         CBSYM_A_MATCH_BEGINNING => {
             // SAFETY: the generated code stored exactly nargs==1 word at args_ptr.
             let group = Value::from_bits(unsafe { *args_ptr } as usize);
-            search::builtin_match_beginning_with_state(Some(&ctx.buffers), &ctx.match_data, &[group])
+            search::builtin_match_beginning_with_state(
+                Some(&ctx.buffers),
+                &ctx.match_data,
+                &[group],
+            )
         }
         CBSYM_A_MATCH_END => {
             // SAFETY: the generated code stored exactly nargs==1 word at args_ptr.
@@ -1699,7 +1704,12 @@ pub extern "C" fn neovm_jit_push_cc(ctx: *mut u8, target: i64, stack_len: i64) {
 /// SAFETY: same vmctx contract as [`neovm_jit_call`].
 #[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
 #[unsafe(no_mangle)]
-pub extern "C" fn neovm_jit_push_cc_raw(ctx: *mut u8, target: i64, stack_len: i64, conditions: i64) {
+pub extern "C" fn neovm_jit_push_cc_raw(
+    ctx: *mut u8,
+    target: i64,
+    stack_len: i64,
+    conditions: i64,
+) {
     let conditions = Value::from_bits(conditions as usize);
     // SAFETY: see neovm_jit_call's function-level contract.
     let ctx = unsafe { &mut *(ctx as *mut Context) };
@@ -2093,7 +2103,8 @@ const _: () = {
     assert!(core::mem::offset_of!(LeafSidecar, meta_pc) == LeafSidecar::OFF_META_PC as usize);
     assert!(core::mem::offset_of!(LeafSidecar, meta_depth) == LeafSidecar::OFF_META_DEPTH as usize);
     assert!(
-        core::mem::offset_of!(LeafSidecar, meta_handlers) == LeafSidecar::OFF_META_HANDLERS as usize
+        core::mem::offset_of!(LeafSidecar, meta_handlers)
+            == LeafSidecar::OFF_META_HANDLERS as usize
     );
     assert!(
         core::mem::offset_of!(LeafSidecar, spec_slot_base)
@@ -2372,7 +2383,9 @@ impl CompiledLeaf {
         obarray: Option<&Obarray>,
     ) -> Self {
         let deopt_spill: Box<[core::cell::Cell<i64>]> = if meta.has_precise_deopt {
-            (0..meta.max_depth).map(|_| core::cell::Cell::new(0)).collect()
+            (0..meta.max_depth)
+                .map(|_| core::cell::Cell::new(0))
+                .collect()
         } else {
             Box::from([])
         };
@@ -2414,8 +2427,7 @@ impl CompiledLeaf {
                 let live_disc = if cell.get_bytecode_data().is_some() {
                     SpecCalleeKind::Bytecode.to_spec_disc()
                 } else {
-                    subr_spec_kind(cell, sym_id, site.nargs as usize)
-                        .and_then(|k| k.to_spec_disc())
+                    subr_spec_kind(cell, sym_id, site.nargs as usize).and_then(|k| k.to_spec_disc())
                 };
                 // ARM only on an EXACT discriminant match (never "builtin+arity").
                 if live_disc == Some(site.kind_disc) {
@@ -2806,7 +2818,8 @@ fn materialize_spec_expected(
     slot_idx: usize,
 ) -> ClifValue {
     if aot {
-        let base = spec_expected_base.expect("AOT sets spec_expected_base at an Op::Call spec site");
+        let base =
+            spec_expected_base.expect("AOT sets spec_expected_base at an Op::Call spec site");
         fb.ins()
             .load(types::I64, MemFlags::trusted(), base, (slot_idx * 8) as i32)
     } else {
@@ -6151,7 +6164,8 @@ fn lower_simple_op(
                     .refs
                     .cbsym_spec
                     .ok_or(CompileError::UnsupportedOp("cbsym-spec-refs"))?;
-                fb.ins().call(f, &[vmctx, sym_v, args_addr, n_val, out_addr])
+                fb.ins()
+                    .call(f, &[vmctx, sym_v, args_addr, n_val, out_addr])
             } else {
                 let variant_v = fb.ins().iconst(types::I64, variant);
                 fb.ins().call(
@@ -6632,9 +6646,10 @@ fn subr_spec_kind(binding: Value, site_sym: SymId, nargs: usize) -> Option<SpecC
     }
     let site_name = resolve_sym(site_sym);
     let resolved_name = resolve_sym(subr_sym);
-    if [site_name, resolved_name].iter().any(|name| {
-        matches!(*name, "aset" | "fillarray" | "funcall" | "apply" | "eval")
-    }) {
+    if [site_name, resolved_name]
+        .iter()
+        .any(|name| matches!(*name, "aset" | "fillarray" | "funcall" | "apply" | "eval"))
+    {
         return None;
     }
     if Context::subr_entry_uses_fixed_value_call(entry) {
@@ -8163,8 +8178,9 @@ pub(crate) fn build_baseline_leaf_object<M: Module>(
     // Sized-but-unbaked deopt buffers: in AOT mode build_leaf_fn loads the spill +
     // meta bases from the SIDECAR (not these addresses), so these are throwaway
     // (the per-thread real buffers are allocated by the loader from the descriptor).
-    let deopt_spill: Box<[core::cell::Cell<i64>]> =
-        (0..cfg.max_depth).map(|_| core::cell::Cell::new(0)).collect();
+    let deopt_spill: Box<[core::cell::Cell<i64>]> = (0..cfg.max_depth)
+        .map(|_| core::cell::Cell::new(0))
+        .collect();
     let deopt_meta: Box<DeoptCells> = Box::new(DeoptCells {
         pc: core::cell::Cell::new(0),
         depth: core::cell::Cell::new(0),
@@ -8300,8 +8316,14 @@ fn build_leaf_fn<M: Module>(
             // resolved against the host at `dlopen`.
             let cbsym_spec = spec_sites.values().any(|site| site.kind.is_cbsym());
             // `module` is already `&mut M`; reborrow it for the call.
-            let refs =
-                declare_rt_refs(&mut *module, fb.func, call_conv, ptr_ty, subr_spec, cbsym_spec)?;
+            let refs = declare_rt_refs(
+                &mut *module,
+                fb.func,
+                call_conv,
+                ptr_ty,
+                subr_spec,
+                cbsym_spec,
+            )?;
             let vmctx_var = fb.declare_var(ptr_ty);
             let max_call_args = ops
                 .iter()
@@ -8397,9 +8419,7 @@ fn build_leaf_fn<M: Module>(
         // slot/expected as `iconst`), so the JIT lowering is byte-identical to
         // pre-B2. `None` when the leaf has no such site, so a null sidecar base is
         // never loaded/indexed.
-        let has_op_call_spec = spec_sites
-            .values()
-            .any(|s| s.kind.to_spec_disc().is_some());
+        let has_op_call_spec = spec_sites.values().any(|s| s.kind.to_spec_disc().is_some());
         let (spec_slot_base, spec_expected_base) = if aot && has_op_call_spec {
             let sc = sidecar_param.expect("AOT sets sidecar_param");
             (
@@ -10802,11 +10822,13 @@ mod tests {
         use crate::emacs_core::eval::Context;
         use crate::emacs_core::intern::intern;
         let _ev = Context::new();
-        for name in CBSYM_SPECIAL_NAMES
-            .iter()
-            .copied()
-            .chain(["aset", "fillarray", "funcall", "apply", "eval"])
-        {
+        for name in CBSYM_SPECIAL_NAMES.iter().copied().chain([
+            "aset",
+            "fillarray",
+            "funcall",
+            "apply",
+            "eval",
+        ]) {
             assert!(
                 cbsym_spec_kind(intern(name), 0).is_none(),
                 "excluded name {name:?} must never classify as a CBSym intrinsic"
@@ -12338,7 +12360,14 @@ mod tests {
     #[test]
     fn subr_spec_many_allowlist_disjoint_from_manyslice() {
         const MANYSLICE: &[&str] = &[
-            "+", "logand", "logior", "logxor", "list", "vector", "append", "nconc",
+            "+",
+            "logand",
+            "logior",
+            "logxor",
+            "list",
+            "vector",
+            "append",
+            "nconc",
             "string-match",
         ];
         for name in SUBR_MANY_ALLOWLIST {
@@ -12391,7 +12420,14 @@ mod tests {
         }
         // REJECT: every registered ManySlice variadic stays generic at any arity.
         for name in [
-            "+", "logand", "logior", "logxor", "list", "vector", "append", "nconc",
+            "+",
+            "logand",
+            "logior",
+            "logxor",
+            "list",
+            "vector",
+            "append",
+            "nconc",
             "string-match",
         ] {
             let id = sid(name);

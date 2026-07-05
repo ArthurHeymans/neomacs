@@ -1352,8 +1352,7 @@ const OBJECT_PAGE_ALIGN: usize = OBJECT_PAGE_BYTES;
 /// Bitmap capacity for the smallest stride (32B floats → 2048 slots → 32
 /// words). Classes with larger strides use a prefix of the array; the unused
 /// tail words stay zero forever.
-const OBJECT_PAGE_MAX_ALLOC_WORDS: usize =
-    (OBJECT_PAGE_BYTES / 32).div_ceil(usize::BITS as usize);
+const OBJECT_PAGE_MAX_ALLOC_WORDS: usize = (OBJECT_PAGE_BYTES / 32).div_ceil(usize::BITS as usize);
 /// Sentinel: "no slot" (free-list terminator) / "no page" (partial-chain
 /// terminator and empty-chain head).
 const PAGE_NONE: usize = usize::MAX;
@@ -1705,8 +1704,7 @@ impl<T: PagedObject> ObjectPage<T> {
     #[inline]
     fn set_allocated(&mut self, index: usize) {
         debug_assert!(!self.is_allocated(index), "arena slot double-allocated");
-        self.alloc_bits[index / usize::BITS as usize] |=
-            1usize << (index % usize::BITS as usize);
+        self.alloc_bits[index / usize::BITS as usize] |= 1usize << (index % usize::BITS as usize);
         self.allocated += 1;
     }
 
@@ -6197,8 +6195,7 @@ impl TaggedHeap {
         for page in &self.vector_arena.pages {
             vector_bases.insert(page.base_addr());
         }
-        self.handshake.last_start_vecbasesnap_us =
-            vecbasesnap_t0.elapsed().as_micros() as u64;
+        self.handshake.last_start_vecbasesnap_us = vecbasesnap_t0.elapsed().as_micros() as u64;
         // CONCURRENT BYTECODE CLAIMS (task 01) claim oracle: capture the
         // bytecode arena's page bases at this same world-stopped instant
         // (retired pages included — tenured bytecode recognize-and-drops at
@@ -6389,10 +6386,8 @@ impl TaggedHeap {
         // (`rx.recv()`) established the happens-before, so a Relaxed read
         // sees the final counts.
         self.last_concurrent_str_claimed = self.concurrent_str_claimed.load(Ordering::Relaxed);
-        self.last_concurrent_float_claimed =
-            self.concurrent_float_claimed.load(Ordering::Relaxed);
-        self.last_concurrent_subr_dropped =
-            self.concurrent_subr_dropped.load(Ordering::Relaxed);
+        self.last_concurrent_float_claimed = self.concurrent_float_claimed.load(Ordering::Relaxed);
+        self.last_concurrent_subr_dropped = self.concurrent_subr_dropped.load(Ordering::Relaxed);
         self.last_concurrent_vec_claimed = self.concurrent_vec_claimed.load(Ordering::Relaxed);
         self.last_concurrent_bc_claimed = self.concurrent_bc_claimed.load(Ordering::Relaxed);
         // Task 01 INSERTION-COVERAGE RE-TRACE (the load-bearing companion of
@@ -6864,7 +6859,10 @@ impl TaggedHeap {
             let current = self.sweep_noncons_pending;
             unsafe {
                 self.sweep_noncons_pending = (*current).next;
-                debug_assert!(!(*current).tenured, "tenured object on the young sweep list");
+                debug_assert!(
+                    !(*current).tenured,
+                    "tenured object on the young sweep list"
+                );
                 if (*current).is_marked_at(parity) {
                     // Survivor: relink onto the (fresh) young list.
                     (*current).next = self.all_objects;
@@ -7560,18 +7558,18 @@ impl TaggedHeap {
         let (fl, ff) = self
             .float_arena
             .sweep_range(float_range.0, float_range.1, parity, |_| {});
-        let (sl, sf) = self
-            .string_arena
-            .sweep_range(string_range.0, string_range.1, parity, |_| {});
+        let (sl, sf) =
+            self.string_arena
+                .sweep_range(string_range.0, string_range.1, parity, |_| {});
         let (bl, bf) =
             self.bytecode_arena
                 .sweep_range(bytecode_range.0, bytecode_range.1, parity, |_| {});
         let (lal, laf) =
             self.lambda_arena
                 .sweep_range(lambda_range.0, lambda_range.1, parity, |_| {});
-        let (mal, maf) =
-            self.macro_arena
-                .sweep_range(macro_range.0, macro_range.1, parity, |_| {});
+        let (mal, maf) = self
+            .macro_arena
+            .sweep_range(macro_range.0, macro_range.1, parity, |_| {});
         let (rel, ref_) =
             self.record_arena
                 .sweep_range(record_range.0, record_range.1, parity, |_| {});
@@ -7746,15 +7744,13 @@ impl TaggedHeap {
     #[inline]
     fn owns_float_object(&self, ptr: *const u8) -> bool {
         !ptr.is_null()
-            && (self.float_arena.owns(ptr)
-                || self.non_cons_object_addrs.contains(&(ptr as usize)))
+            && (self.float_arena.owns(ptr) || self.non_cons_object_addrs.contains(&(ptr as usize)))
     }
 
     #[inline]
     fn owns_string_object(&self, ptr: *const u8) -> bool {
         !ptr.is_null()
-            && (self.string_arena.owns(ptr)
-                || self.non_cons_object_addrs.contains(&(ptr as usize)))
+            && (self.string_arena.owns(ptr) || self.non_cons_object_addrs.contains(&(ptr as usize)))
     }
 
     #[inline]
@@ -8064,9 +8060,15 @@ impl TaggedHeap {
         let mut on_chain: HashSet<usize> = HashSet::new();
         let mut cursor = arena.partial_head;
         while cursor != PAGE_NONE {
-            assert!(on_chain.insert(cursor), "partial chain cycle at page {cursor}");
+            assert!(
+                on_chain.insert(cursor),
+                "partial chain cycle at page {cursor}"
+            );
             let page = &arena.pages[cursor];
-            assert!(page.on_partial, "chained page {cursor} not flagged on_partial");
+            assert!(
+                page.on_partial,
+                "chained page {cursor} not flagged on_partial"
+            );
             assert!(!page.retired, "retired page {cursor} on the partial chain");
             assert_ne!(
                 page.free_head, PAGE_NONE,
@@ -8136,7 +8138,10 @@ impl TaggedHeap {
             let mut free_seen: HashSet<usize> = HashSet::new();
             let mut fcursor = page.free_head;
             while fcursor != PAGE_NONE {
-                assert!(fcursor < page.next_index, "free slot beyond the bump cursor");
+                assert!(
+                    fcursor < page.next_index,
+                    "free slot beyond the bump cursor"
+                );
                 assert!(
                     !page.is_allocated(fcursor),
                     "free-listed slot {fcursor} has its alloc bit set",
@@ -8222,8 +8227,8 @@ impl Drop for TaggedHeap {
 #[cfg(test)]
 pub(crate) mod alloc_probe {
     use super::{GcHeader, HeapObjectKind, TaggedHeap, VecLikeHeader, VecLikeType};
-    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
     use std::sync::Mutex;
+    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
     const N_KINDS: usize = 28;
     const N_BUCKETS: usize = 11;
@@ -8261,8 +8266,7 @@ pub(crate) mod alloc_probe {
     ];
     /// Histogram bucket upper bounds (bytes).
     pub(crate) const BUCKET_LABELS: [&str; N_BUCKETS] = [
-        "<=16", "<=32", "<=64", "<=128", "<=256", "<=512", "<=1K", "<=4K", "<=16K", "<=64K",
-        ">64K",
+        "<=16", "<=32", "<=64", "<=128", "<=256", "<=512", "<=1K", "<=4K", "<=16K", "<=64K", ">64K",
     ];
 
     #[allow(clippy::declare_interior_mutable_const)]
@@ -8937,7 +8941,11 @@ mod ownership_tests {
              (str={})",
             kinds.string,
         );
-        assert!(kinds.record >= N_REC, "records parked (rec={})", kinds.record);
+        assert!(
+            kinds.record >= N_REC,
+            "records parked (rec={})",
+            kinds.record
+        );
         assert!(
             kinds.closure >= N_LAMBDA + N_MACRO,
             "lambdas + macros share the closure bucket (clo={})",
@@ -9614,8 +9622,7 @@ mod ownership_tests {
              snapshotted page (allocator changed? fix the test setup)",
         );
         assert!(
-            pre_launch_bases
-                .contains(&(new_ptr & !(OBJECT_PAGE_ALIGN - 1))),
+            pre_launch_bases.contains(&(new_ptr & !(OBJECT_PAGE_ALIGN - 1))),
             "the reused slot's page must be in this cycle's snapshot",
         );
         assert!(crate::tagged::mutate::set_cons_car(home, TaggedValue::NIL));
@@ -9853,7 +9860,10 @@ mod ownership_tests {
         // seeded root (p.cdr), then UNLINK x from p.car — both barriered.
         let c = heap.alloc_cons(x, TaggedValue::fixnum(0));
         assert!(crate::tagged::mutate::set_cons_cdr(p, c));
-        assert!(crate::tagged::mutate::set_cons_car(p, TaggedValue::fixnum(99)));
+        assert!(crate::tagged::mutate::set_cons_car(
+            p,
+            TaggedValue::fixnum(99)
+        ));
 
         finish_concurrent_cycle(&mut heap, root);
 
@@ -9945,8 +9955,7 @@ mod ownership_tests {
                 std::mem::size_of::<VectorObj>(),
             )
         };
-        let mapped_val =
-            unsafe { TaggedValue::from_veclike_ptr(mapped as *const VecLikeHeader) };
+        let mapped_val = unsafe { TaggedValue::from_veclike_ptr(mapped as *const VecLikeHeader) };
         let root = heap.alloc_cons(mapped_val, TaggedValue::fixnum(0));
 
         heap.concurrent_begin();
@@ -10081,8 +10090,7 @@ mod ownership_tests {
         let mut list = TaggedValue::fixnum(0);
         for i in 0..N {
             // A value reachable ONLY through the string's initial interval table.
-            let born =
-                heap.alloc_cons(TaggedValue::fixnum(i as i64), TaggedValue::fixnum(-1));
+            let born = heap.alloc_cons(TaggedValue::fixnum(i as i64), TaggedValue::fixnum(-1));
             let s = heap.alloc_string(crate::heap_types::LispString::from_utf8("adv"));
             unsafe {
                 *(*(s.as_string_ptr().unwrap() as *mut StringObj))
@@ -10117,9 +10125,7 @@ mod ownership_tests {
                 let s = strings[i];
                 let vec = vectors[i];
                 // remove-text-properties: drop the whole table (AtomicPtr swap).
-                let _ = crate::tagged::mutate::with_lisp_string_mut(s, |ls| {
-                    ls.clear_intervals()
-                });
+                let _ = crate::tagged::mutate::with_lisp_string_mut(s, |ls| ls.clear_intervals());
                 // put-text-property: reinstall a fresh table (ensure_intervals
                 // AtomicPtr store) carrying a fresh in-flight child value.
                 let prop_v = heap.alloc_cons(
@@ -10127,9 +10133,7 @@ mod ownership_tests {
                     TaggedValue::fixnum(-2),
                 );
                 let table = interval_table_carrying(prop_v);
-                let _ = crate::tagged::mutate::with_string_text_props_mut(s, |t| {
-                    *t = table
-                });
+                let _ = crate::tagged::mutate::with_string_text_props_mut(s, |t| *t = table);
                 last_prop[i] = prop_v;
                 // vector aset of a fresh in-flight value (atomic slot store).
                 let slot_v = heap.alloc_cons(
@@ -10345,7 +10349,10 @@ mod ownership_tests {
             node = unsafe { (*node.xcons_ptr()).load_cdr() };
             count += 1;
         }
-        assert_eq!(count, N, "the whole rooted list survived the concurrent cycle");
+        assert_eq!(
+            count, N,
+            "the whole rooted list survived the concurrent cycle"
+        );
     }
 
     /// Drive one full concurrent cycle re-seeding SEVERAL roots at the
@@ -10591,7 +10598,11 @@ mod ownership_tests {
                 "cycle {cycle}: claimed string swept while rooted",
             );
             assert!(
-                unsafe { (*(s_ptr as *const StringObj)).header.is_marked_at(heap.mark_parity) },
+                unsafe {
+                    (*(s_ptr as *const StringObj))
+                        .header
+                        .is_marked_at(heap.mark_parity)
+                },
                 "cycle {cycle}: claimed string must be black at the cycle parity",
             );
         }
@@ -11394,7 +11405,11 @@ mod float_arena_tests {
         for i in 0..n {
             floats.push(heap.alloc_float(i as f64));
         }
-        assert_eq!(heap.float_arena.pages.len(), 3, "3 * PAGE_SLOTS floats = 3 pages");
+        assert_eq!(
+            heap.float_arena.pages.len(),
+            3,
+            "3 * PAGE_SLOTS floats = 3 pages"
+        );
         heap.assert_object_arenas_coherent();
 
         // Keep the even-indexed half; the odd half is garbage.
@@ -11711,8 +11726,7 @@ mod float_arena_tests {
         while heap.float_arena.pages.len() == pages_before {
             f_new = heap.alloc_float(2.0);
         }
-        let new_base =
-            (f_new.as_float_ptr().unwrap() as usize) & !(OBJECT_PAGE_ALIGN - 1);
+        let new_base = (f_new.as_float_ptr().unwrap() as usize) & !(OBJECT_PAGE_ALIGN - 1);
         assert!(
             !snap.contains(&new_base),
             "the defer probe must live in a post-snapshot page",
@@ -12053,8 +12067,14 @@ mod float_arena_tests {
             );
             unsafe {
                 assert_eq!((*ptr).header.kind, HeapObjectKind::Float);
-                assert!(!(*ptr).header.tenured, "stale tenured byte must be rewritten");
-                assert!((*ptr).header.next.is_null(), "stale next ptr must be rewritten");
+                assert!(
+                    !(*ptr).header.tenured,
+                    "stale tenured byte must be rewritten"
+                );
+                assert!(
+                    (*ptr).header.next.is_null(),
+                    "stale next ptr must be rewritten"
+                );
             }
             assert!((r.xfloat() - (500.0 + i as f64)).abs() < f64::EPSILON);
         }
@@ -12112,7 +12132,10 @@ mod float_arena_tests {
         heap.collect_exact(std::iter::once(root));
         assert!(heap.dump_blackened);
         let t_header = t.as_veclike_ptr().unwrap();
-        assert!(unsafe { (*t_header).gc.tenured }, "record must have tenured");
+        assert!(
+            unsafe { (*t_header).gc.tenured },
+            "record must have tenured"
+        );
         assert!(heap.owns_non_cons_object(f_ptr));
 
         // Two partitioned cycles (one per parity): T is permanent-black and
@@ -12217,10 +12240,7 @@ mod arena_promotion_tests {
             "page string not tenured",
         );
         let v_ptr = v.as_veclike_ptr().unwrap();
-        assert!(
-            unsafe { (*v_ptr).gc.tenured },
-            "page vector not tenured",
-        );
+        assert!(unsafe { (*v_ptr).gc.tenured }, "page vector not tenured",);
 
         // The full float page RETIRED; the partial string/vector pages did
         // not. Retired ⇒ still registered + owned (C1), full, no free list.
@@ -12228,8 +12248,7 @@ mod arena_promotion_tests {
         assert!(!heap.string_arena.pages[0].retired, "partial page retired");
         assert!(!heap.vector_arena.pages[0].retired, "partial page retired");
         assert_eq!(
-            heap.float_arena.pages[0].allocated,
-            FLOAT_PAGE_SLOTS,
+            heap.float_arena.pages[0].allocated, FLOAT_PAGE_SLOTS,
             "retired page must stay full",
         );
         heap.assert_object_arenas_coherent();
@@ -12320,8 +12339,8 @@ mod arena_promotion_tests {
         for cycle in 0..2 {
             for i in 0..5 {
                 let _ = heap.alloc_float(1000.0 + i as f64);
-                let _ = heap
-                    .alloc_string(crate::heap_types::LispString::from_utf8("young-garbage"));
+                let _ =
+                    heap.alloc_string(crate::heap_types::LispString::from_utf8("young-garbage"));
                 let _ = heap.alloc_vector(vec![TaggedValue::fixnum(-1); 2]);
             }
             heap.collect_exact(std::iter::once(root));
@@ -12442,17 +12461,14 @@ mod arena_promotion_tests {
             let mut root = TaggedValue::fixnum(0);
             for i in 0..200 {
                 let s = heap.alloc_string(crate::heap_types::LispString::from_unibyte(vec![
-                        b'p';
-                        1024
-                    ]));
+                    b'p';
+                    1024
+                ]));
                 // Half the strings carry interval tables (dropped at Drop).
                 if i % 2 == 0 {
                     let carried = heap.alloc_cons(TaggedValue::fixnum(i), TaggedValue::NIL);
                     let ptr = s.as_string_ptr().unwrap() as *mut StringObj;
-                    unsafe {
-                        *(*ptr).data.intervals_mut() =
-                            interval_table_carrying(carried)
-                    };
+                    unsafe { *(*ptr).data.intervals_mut() = interval_table_carrying(carried) };
                 }
                 let v = heap.alloc_vector(vec![s; 8]);
                 root = heap.alloc_cons(v, root);
@@ -12532,17 +12548,13 @@ mod arena_promotion_tests {
         let expected_objects: usize = [s_big, s_small]
             .iter()
             .map(|s| {
-                TaggedHeap::object_bytes_from_header(
-                    s.as_string_ptr().unwrap() as *const GcHeader
-                )
+                TaggedHeap::object_bytes_from_header(s.as_string_ptr().unwrap() as *const GcHeader)
             })
             .sum::<usize>()
             + TaggedHeap::object_bytes_from_header(
                 v_big.as_veclike_ptr().unwrap() as *const GcHeader
             )
-            + TaggedHeap::object_bytes_from_header(
-                f.as_float_ptr().unwrap() as *const GcHeader
-            );
+            + TaggedHeap::object_bytes_from_header(f.as_float_ptr().unwrap() as *const GcHeader);
         let expected = expected_objects + cons_count * size_of::<ConsCell>();
 
         // Eager (finalize_collection) recompute site.
@@ -12685,11 +12697,7 @@ mod bytecode_arena_tests {
     /// and `payload` raw GNU bytecode bytes — the REAL-`Drop` payloads the
     /// page sweep must `drop_in_place`. Empty params keep the arglist NIL so
     /// the object's only heap children are its constants (GC-exact tests).
-    fn bytecode_fn(
-        constants: Vec<TaggedValue>,
-        n_ops: usize,
-        payload: usize,
-    ) -> ByteCodeFunction {
+    fn bytecode_fn(constants: Vec<TaggedValue>, n_ops: usize, payload: usize) -> ByteCodeFunction {
         let mut f = ByteCodeFunction::new(LambdaParams::simple(vec![]));
         f.constants = constants;
         f.ops = vec![Op::Nil; n_ops];
@@ -12746,20 +12754,19 @@ mod bytecode_arena_tests {
         assert!(!heap.bytecode_arena.owns((b_addr + 192) as *const u8));
         assert!(!heap.bytecode_arena.owns((b_addr + 1) as *const u8));
         // Never-allocated slot beyond the bump cursor, inside the page.
-        let page_base = ObjectPage::<ByteCodeObj>::page_base_for_ptr(
-            b_addr as *const ByteCodeObj,
-        );
-        let beyond_bump =
-            page_base + 100 * <ByteCodeObj as PagedObject>::SLOT_BYTES;
+        let page_base = ObjectPage::<ByteCodeObj>::page_base_for_ptr(b_addr as *const ByteCodeObj);
+        let beyond_bump = page_base + 100 * <ByteCodeObj as PagedObject>::SLOT_BYTES;
         assert!(!heap.bytecode_arena.owns(beyond_bump as *const u8));
         // THE PAGE TAIL: slot index SLOTS (byte 65280) is stride-aligned but
         // past the last real slot — the explicit `< SLOTS` bound in `owns`
         // must answer NOT-owned (a power-of-two-stride oracle never sees
         // this case; the 384B class does).
         assert_eq!(ObjectPage::<ByteCodeObj>::SLOTS, BYTECODE_PAGE_SLOTS);
-        let tail = page_base
-            + BYTECODE_PAGE_SLOTS * <ByteCodeObj as PagedObject>::SLOT_BYTES;
-        assert!(tail - page_base < OBJECT_PAGE_BYTES, "tail is inside the page");
+        let tail = page_base + BYTECODE_PAGE_SLOTS * <ByteCodeObj as PagedObject>::SLOT_BYTES;
+        assert!(
+            tail - page_base < OBJECT_PAGE_BYTES,
+            "tail is inside the page"
+        );
         assert!(!heap.bytecode_arena.owns(tail as *const u8));
         // Wrong-class registries: never merged, never colliding.
         let f_addr = f.as_float_ptr().unwrap() as usize;
@@ -12937,11 +12944,7 @@ mod bytecode_arena_tests {
         for i in 0..300 {
             let child = heap.alloc_cons(TaggedValue::fixnum(10_000 + i), TaggedValue::fixnum(0));
             children.push(child);
-            let b = heap.alloc_bytecode(bytecode_fn(
-                vec![TaggedValue::fixnum(i), child],
-                4,
-                16,
-            ));
+            let b = heap.alloc_bytecode(bytecode_fn(vec![TaggedValue::fixnum(i), child], 4, 16));
             bytecodes.push(b);
             list = heap.alloc_cons(b, list);
         }
@@ -12964,8 +12967,7 @@ mod bytecode_arena_tests {
         list = heap.alloc_cons(full, list);
         // Garbage bytecode whose constants hold an otherwise-unreachable
         // string child (ownership-probe-able, unlike a cons): both must go.
-        let g_child =
-            heap.alloc_string(crate::heap_types::LispString::from_utf8("bc-garbage-kid"));
+        let g_child = heap.alloc_string(crate::heap_types::LispString::from_utf8("bc-garbage-kid"));
         let g_child_ptr = g_child.as_string_ptr().unwrap() as *const u8;
         let garbage = heap.alloc_bytecode(bytecode_fn(vec![g_child], 4, 16));
         let garbage_ptr = bc_ptr(garbage);
@@ -13075,11 +13077,7 @@ mod bytecode_arena_tests {
         // constants carry one heap child (plus a fixnum that must NOT be
         // pushed).
         let child = heap.alloc_cons(TaggedValue::fixnum(51), TaggedValue::fixnum(52));
-        let b_old = heap.alloc_bytecode(bytecode_fn(
-            vec![TaggedValue::fixnum(7), child],
-            2,
-            0,
-        ));
+        let b_old = heap.alloc_bytecode(bytecode_fn(vec![TaggedValue::fixnum(7), child], 2, 0));
         let snap: std::collections::HashSet<usize> = heap
             .bytecode_arena
             .pages
@@ -13158,7 +13156,10 @@ mod bytecode_arena_tests {
             1,
             "a deferred bytecode must not bump the claim counter",
         );
-        assert!(gray.is_empty(), "a deferred bytecode must not push children");
+        assert!(
+            gray.is_empty(),
+            "a deferred bytecode must not push children"
+        );
         assert!(unsafe {
             !(*b_new.as_veclike_ptr().unwrap())
                 .gc
@@ -13348,11 +13349,7 @@ mod bytecode_arena_tests {
 
         let mut bytecodes = Vec::new();
         for i in 0..100 {
-            bytecodes.push(heap.alloc_bytecode(bytecode_fn(
-                vec![TaggedValue::fixnum(i)],
-                4,
-                16,
-            )));
+            bytecodes.push(heap.alloc_bytecode(bytecode_fn(vec![TaggedValue::fixnum(i)], 4, 16)));
         }
         let keep: Vec<TaggedValue> = bytecodes.iter().copied().step_by(2).collect();
         let dead_ptrs: Vec<*mut ByteCodeObj> = bytecodes
@@ -13406,8 +13403,14 @@ mod bytecode_arena_tests {
             unsafe {
                 assert_eq!((*ptr).header.gc.kind, HeapObjectKind::VecLike);
                 assert_eq!((*ptr).header.type_tag, VecLikeType::ByteCode);
-                assert!(!(*ptr).header.gc.tenured, "stale tenured byte must be rewritten");
-                assert!((*ptr).header.gc.next.is_null(), "stale next ptr must be rewritten");
+                assert!(
+                    !(*ptr).header.gc.tenured,
+                    "stale tenured byte must be rewritten"
+                );
+                assert!(
+                    (*ptr).header.gc.next.is_null(),
+                    "stale next ptr must be rewritten"
+                );
             }
             assert_eq!(bc_constant(*r, 0).as_fixnum(), Some(500 + i as i64));
         }
@@ -13559,18 +13562,13 @@ mod bytecode_arena_tests {
         let expected_objects: usize = [b_big, b_small]
             .iter()
             .map(|b| {
-                TaggedHeap::object_bytes_from_header(
-                    b.as_veclike_ptr().unwrap() as *const GcHeader
-                )
+                TaggedHeap::object_bytes_from_header(b.as_veclike_ptr().unwrap() as *const GcHeader)
             })
             .sum::<usize>();
         let expected = expected_objects + cons_count * size_of::<ConsCell>();
         // The payload really is variable-size (ops + constants + raw bytes
         // dominate the 384B slot).
-        assert!(
-            expected_objects
-                > 2 * size_of::<ByteCodeObj>() + 1_000 * size_of::<Op>() + 10_000
-        );
+        assert!(expected_objects > 2 * size_of::<ByteCodeObj>() + 1_000 * size_of::<Op>() + 10_000);
 
         // Eager (finalize_collection) recompute site.
         heap.collect_exact(std::iter::once(root));
@@ -13613,11 +13611,7 @@ mod bytecode_arena_tests {
         let mut root = TaggedValue::fixnum(0);
         let mut bytecodes = Vec::with_capacity(BYTECODE_PAGE_SLOTS + 2);
         for i in 0..(BYTECODE_PAGE_SLOTS + 2) {
-            let b = heap.alloc_bytecode(bytecode_fn(
-                vec![TaggedValue::fixnum(i as i64)],
-                4,
-                16,
-            ));
+            let b = heap.alloc_bytecode(bytecode_fn(vec![TaggedValue::fixnum(i as i64)], 4, 16));
             bytecodes.push(b);
             root = heap.alloc_cons(b, root);
         }
@@ -13635,11 +13629,16 @@ mod bytecode_arena_tests {
             assert!(unsafe { (*ptr).gc.tenured }, "page bytecode not tenured");
         }
         // The FULL page retired; the partial overflow page did not.
-        assert!(heap.bytecode_arena.pages[0].retired, "full page must retire");
-        assert!(!heap.bytecode_arena.pages[1].retired, "partial page retired");
+        assert!(
+            heap.bytecode_arena.pages[0].retired,
+            "full page must retire"
+        );
+        assert!(
+            !heap.bytecode_arena.pages[1].retired,
+            "partial page retired"
+        );
         assert_eq!(
-            heap.bytecode_arena.pages[0].allocated,
-            BYTECODE_PAGE_SLOTS,
+            heap.bytecode_arena.pages[0].allocated, BYTECODE_PAGE_SLOTS,
             "retired page must stay full",
         );
         // C1: retired-page slots STAY owned via the page oracle.
@@ -13720,11 +13719,7 @@ mod bytecode_arena_tests {
         let mut keep = Vec::new();
         let mut root = TaggedValue::fixnum(0);
         for i in 0..10 {
-            let b = heap.alloc_bytecode(bytecode_fn(
-                vec![TaggedValue::fixnum(i as i64)],
-                4,
-                16,
-            ));
+            let b = heap.alloc_bytecode(bytecode_fn(vec![TaggedValue::fixnum(i as i64)], 4, 16));
             if i % 2 == 0 {
                 keep.push(b);
                 root = heap.alloc_cons(b, root);
@@ -13740,11 +13735,8 @@ mod bytecode_arena_tests {
         // Refill freed slots with YOUNG garbage, one cycle per parity.
         for cycle in 0..2 {
             for i in 0..5 {
-                let _ = heap.alloc_bytecode(bytecode_fn(
-                    vec![TaggedValue::fixnum(-(i as i64))],
-                    4,
-                    16,
-                ));
+                let _ =
+                    heap.alloc_bytecode(bytecode_fn(vec![TaggedValue::fixnum(-(i as i64))], 4, 16));
             }
             heap.collect_exact(std::iter::once(root));
             for (i, b) in keep.iter().enumerate() {
@@ -13850,9 +13842,7 @@ mod bytecode_arena_tests {
         assert!(unsafe { (*b.as_veclike_ptr().unwrap()).gc.tenured });
 
         // The seam refuses non-bytecode values.
-        assert!(
-            crate::tagged::mutate::with_bytecode_data_mut_for_test(root, |_| ()).is_none()
-        );
+        assert!(crate::tagged::mutate::with_bytecode_data_mut_for_test(root, |_| ()).is_none());
 
         // Mutate the tenured owner's constants to a YOUNG cons through the
         // seam; the pre-write barrier must remember the owner.
@@ -14325,8 +14315,14 @@ mod lambda_macro_arena_tests {
             unsafe {
                 assert_eq!((*ptr).header.gc.kind, HeapObjectKind::VecLike);
                 assert_eq!((*ptr).header.type_tag, VecLikeType::Lambda);
-                assert!(!(*ptr).header.gc.tenured, "stale tenured byte must be rewritten");
-                assert!((*ptr).header.gc.next.is_null(), "stale next ptr must be rewritten");
+                assert!(
+                    !(*ptr).header.gc.tenured,
+                    "stale tenured byte must be rewritten"
+                );
+                assert!(
+                    (*ptr).header.gc.next.is_null(),
+                    "stale next ptr must be rewritten"
+                );
             }
             assert_eq!(lam_slot(*r, 0).as_fixnum(), Some(500 + i as i64));
         }
@@ -14740,7 +14736,10 @@ mod lambda_macro_arena_tests {
 
             heap.collect_exact(std::iter::once(root));
             assert!(heap.dump_blackened);
-            assert!(heap.macro_arena.pages[0].retired, "full macro page must retire");
+            assert!(
+                heap.macro_arena.pages[0].retired,
+                "full macro page must retire"
+            );
             assert!(!heap.macro_arena.pages[1].retired);
             // C1: retired-page macro slots stay owned across both parities.
             for cycle in 0..2 {
@@ -15109,8 +15108,14 @@ mod record_arena_tests {
             unsafe {
                 assert_eq!((*ptr).header.gc.kind, HeapObjectKind::VecLike);
                 assert_eq!((*ptr).header.type_tag, VecLikeType::Record);
-                assert!(!(*ptr).header.gc.tenured, "stale tenured byte must be rewritten");
-                assert!((*ptr).header.gc.next.is_null(), "stale next ptr must be rewritten");
+                assert!(
+                    !(*ptr).header.gc.tenured,
+                    "stale tenured byte must be rewritten"
+                );
+                assert!(
+                    (*ptr).header.gc.next.is_null(),
+                    "stale next ptr must be rewritten"
+                );
             }
             assert_eq!(rec_slot(*r, 0).as_fixnum(), Some(500 + i as i64));
         }
@@ -15814,8 +15819,14 @@ mod symbol_with_pos_arena_tests {
             unsafe {
                 assert_eq!((*ptr).header.gc.kind, HeapObjectKind::VecLike);
                 assert_eq!((*ptr).header.type_tag, VecLikeType::SymbolWithPos);
-                assert!(!(*ptr).header.gc.tenured, "stale tenured byte must be rewritten");
-                assert!((*ptr).header.gc.next.is_null(), "stale next ptr must be rewritten");
+                assert!(
+                    !(*ptr).header.gc.tenured,
+                    "stale tenured byte must be rewritten"
+                );
+                assert!(
+                    (*ptr).header.gc.next.is_null(),
+                    "stale next ptr must be rewritten"
+                );
             }
             assert_eq!(swp_pos(*r).as_fixnum(), Some(500 + i as i64));
         }
@@ -15879,7 +15890,10 @@ mod symbol_with_pos_arena_tests {
         }
         for r in &reused {
             let ptr = r.as_veclike_ptr().unwrap() as *const SymbolWithPosObj;
-            assert_eq!(ObjectPage::<SymbolWithPosObj>::page_base_for_ptr(ptr), page0_base);
+            assert_eq!(
+                ObjectPage::<SymbolWithPosObj>::page_base_for_ptr(ptr),
+                page0_base
+            );
             assert!(dead_addrs.contains(&(ptr as usize)));
         }
         heap.assert_object_arenas_coherent();
@@ -15939,14 +15953,20 @@ mod symbol_with_pos_arena_tests {
             root = heap.alloc_cons(b, root);
         }
         assert_eq!(heap.symbol_with_pos_arena.pages.len(), 2);
-        assert_eq!(heap.symbol_with_pos_arena.pages[0].allocated, SYMBOL_WITH_POS_PAGE_SLOTS);
+        assert_eq!(
+            heap.symbol_with_pos_arena.pages[0].allocated,
+            SYMBOL_WITH_POS_PAGE_SLOTS
+        );
 
         heap.collect_exact(std::iter::once(root));
         assert!(heap.dump_blackened);
         for b in &objs {
             assert!(unsafe { (*b.as_veclike_ptr().unwrap()).gc.tenured });
         }
-        assert!(heap.symbol_with_pos_arena.pages[0].retired, "full page must retire");
+        assert!(
+            heap.symbol_with_pos_arena.pages[0].retired,
+            "full page must retire"
+        );
         assert!(!heap.symbol_with_pos_arena.pages[1].retired);
         assert!(heap.owns_non_cons_object(swp_ptr(objs[0])));
         heap.assert_object_arenas_coherent();
@@ -15969,7 +15989,10 @@ mod symbol_with_pos_arena_tests {
                 );
                 assert_eq!(swp_pos(*b).as_fixnum(), Some(i as i64));
             }
-            assert_eq!(heap.symbol_with_pos_arena.pages[0].allocated, SYMBOL_WITH_POS_PAGE_SLOTS);
+            assert_eq!(
+                heap.symbol_with_pos_arena.pages[0].allocated,
+                SYMBOL_WITH_POS_PAGE_SLOTS
+            );
             heap.assert_object_arenas_coherent();
         }
     }

@@ -368,7 +368,10 @@ fn dump_emacs_portable_signals_error_for_live_finalizer() {
         }
         other => panic!("unexpected flow: {other:?}"),
     }
-    assert!(!dump_path.exists(), "a refused dump must not produce a file");
+    assert!(
+        !dump_path.exists(),
+        "a refused dump must not produce a file"
+    );
 }
 
 #[test]

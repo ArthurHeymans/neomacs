@@ -1675,12 +1675,11 @@ fn compile_repetition(
                 // per-iteration on_failure_jump is GNU's own fallback
                 // shape and none of the measured font-lock patterns has
                 // a simple `+` body.
-                let loop_op =
-                    if repeated_body_may_match_empty(&buf.buffer[laststart..after_last]) {
-                        RegexOp::OnFailureJumpLoop
-                    } else {
-                        RegexOp::OnFailureJump
-                    };
+                let loop_op = if repeated_body_may_match_empty(&buf.buffer[laststart..after_last]) {
+                    RegexOp::OnFailureJumpLoop
+                } else {
+                    RegexOp::OnFailureJump
+                };
                 // Loop-op fail target → past the Jump instruction (continue)
                 buf.buffer.push(loop_op as u8);
                 let ofjl_pos = buf.buffer.len();
@@ -3062,9 +3061,7 @@ fn re_match_candidate(
     point: usize,
 ) -> Option<(usize, MatchRegisters)> {
     MATCH_SCRATCH.with(|cell| match cell.try_borrow_mut() {
-        Ok(mut scratch) => {
-            re_match_internal(&mut scratch, pattern, text, pos, stop, syntax, point)
-        }
+        Ok(mut scratch) => re_match_internal(&mut scratch, pattern, text, pos, stop, syntax, point),
         // Defensive: if a syntax/category callback ever re-enters the
         // matcher, fall back to fresh (allocating) state for the nested
         // match rather than corrupting the outer one.
@@ -4228,7 +4225,8 @@ fn one_char_match_superset(buf: &CompiledPattern, pos: usize) -> Option<CharSupe
             // characters from a negated set, so ignoring them keeps
             // this a superset).
             for c in 0..128usize {
-                let in_bitmap = c / 8 < bitmap_len && (bytecode[pos + 2 + c / 8] >> (c % 8)) & 1 != 0;
+                let in_bitmap =
+                    c / 8 < bitmap_len && (bytecode[pos + 2 + c / 8] >> (c % 8)) & 1 != 0;
                 if !in_bitmap {
                     set.add_char(c as u32);
                 }
@@ -4271,10 +4269,7 @@ fn continuation_first_superset(buf: &CompiledPattern, from: usize) -> Option<Cha
                 RegexOp::Succeed => return None,
 
                 // Char-matching terminals: contribute their superset.
-                RegexOp::Exactn
-                | RegexOp::AnyChar
-                | RegexOp::Charset
-                | RegexOp::CharsetNot => {
+                RegexOp::Exactn | RegexOp::AnyChar | RegexOp::Charset | RegexOp::CharsetNot => {
                     set.union(one_char_match_superset(buf, pc)?);
                     break;
                 }

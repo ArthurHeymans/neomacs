@@ -5591,7 +5591,9 @@ pub(crate) fn builtin_dump_emacs_portable(
     // logged + swallowed inside the hook (an additive miss → runtime JITs).
     #[cfg(feature = "jit")]
     if is_final_dump {
-        let dump_dir = dump_path.parent().unwrap_or_else(|| std::path::Path::new("."));
+        let dump_dir = dump_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."));
         crate::emacs_core::jit::aot::run_dump_time_preload(ctx, dump_dir);
     }
 

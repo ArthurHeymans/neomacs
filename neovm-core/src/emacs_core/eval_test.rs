@@ -13581,10 +13581,11 @@ fn jit_subr_spec_symbol_with_pos_p_both_flag_states() {
                 "symbol-with-pos-p parity (flag={flag})"
             );
         }
-        let native = ev
-            .funcall_general_untraced(hot, vec![swp])
-            .expect("native");
-        assert!(native.is_truthy(), "swp-p on a symbol-with-pos (flag={flag})");
+        let native = ev.funcall_general_untraced(hot, vec![swp]).expect("native");
+        assert!(
+            native.is_truthy(),
+            "swp-p on a symbol-with-pos (flag={flag})"
+        );
     }
 }
 
@@ -13630,7 +13631,7 @@ fn jit_subr_spec_eq_incl_props_hit_and_miss() {
             (Value::string("ab"), Value::string("ac")),       // nil
             // Distinct NaN boxes, same bit pattern: t (GNU float equality).
             (Value::make_float(f64::NAN), Value::make_float(f64::NAN)),
-            (Value::make_int(7), Value::make_int(7)),         // t (bitwise hit)
+            (Value::make_int(7), Value::make_int(7)), // t (bitwise hit)
         ]
     };
     for (a, b) in cases {
@@ -13735,7 +13736,10 @@ fn jit_subr_spec_tracks_redefinition_and_rearms() {
     #[cfg(debug_assertions)]
     {
         let (_, fast1, gen1) = jit_subr_spec_counters();
-        assert!(fast1 > fast0, "restoring the same subr object re-arms the site");
+        assert!(
+            fast1 > fast0,
+            "restoring the same subr object re-arms the site"
+        );
         assert_eq!(gen1, gen0, "the re-armed call does not bounce generic");
     }
 
@@ -13751,7 +13755,10 @@ fn jit_subr_spec_tracks_redefinition_and_rearms() {
     #[cfg(debug_assertions)]
     {
         let (_, fast3, gen3) = jit_subr_spec_counters();
-        assert!(fast3 > fast2, "unrelated epoch bump re-arms via re-validation");
+        assert!(
+            fast3 > fast2,
+            "unrelated epoch bump re-arms via re-validation"
+        );
         assert_eq!(gen3, gen2, "no generic bounce after an unrelated bump");
     }
 }
@@ -13858,7 +13865,8 @@ fn jit_subr_spec_many_re_search_forward_engages_and_matches() {
     crate::test_utils::init_test_tracing();
     crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
     let mut ev = Context::new();
-    ev.eval_str("(insert \"hello world\")").expect("buffer content");
+    ev.eval_str("(insert \"hello world\")")
+        .expect("buffer content");
     let hot = jit_subr_spec_caller("re-search-forward", 1, true);
     let cold = jit_subr_spec_caller("re-search-forward", 1, false);
     #[cfg(debug_assertions)]
@@ -13867,12 +13875,14 @@ fn jit_subr_spec_many_re_search_forward_engages_and_matches() {
     fn probe(ev: &mut Context) -> String {
         format_eval_result(&ev.eval_str("(list (point) (match-beginning 0) (match-end 0))"))
     }
-    ev.eval_str("(goto-char (point-min))").expect("point to bob");
+    ev.eval_str("(goto-char (point-min))")
+        .expect("point to bob");
     let native = ev
         .funcall_general_untraced(hot, vec![Value::string("world")])
         .expect("native re-search-forward");
     let native_state = probe(&mut ev);
-    ev.eval_str("(goto-char (point-min))").expect("point to bob");
+    ev.eval_str("(goto-char (point-min))")
+        .expect("point to bob");
     let interp = ev
         .funcall_general_untraced(cold, vec![Value::string("world")])
         .expect("interp re-search-forward");
@@ -13966,7 +13976,8 @@ fn jit_subr_spec_many_side_effect_goldens_match_interp() {
     crate::test_utils::init_test_tracing();
     crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
     let mut ev = Context::new();
-    ev.eval_str("(insert \"foo (bar baz) qux\")").expect("buffer");
+    ev.eval_str("(insert \"foo (bar baz) qux\")")
+        .expect("buffer");
 
     let match_state = |ev: &mut Context| {
         format_eval_result(&ev.eval_str("(list (match-beginning 0) (match-end 0) (match-data))"))
@@ -14005,7 +14016,10 @@ fn jit_subr_spec_many_side_effect_goldens_match_interp() {
         .expect("rsf interp");
     let i_state = rsf_state(&mut ev);
     assert_eq!(a.bits(), i.bits(), "re-search-forward result parity");
-    assert_eq!(a_state, i_state, "re-search-forward point+match golden armed==interp");
+    assert_eq!(
+        a_state, i_state,
+        "re-search-forward point+match golden armed==interp"
+    );
 
     // set-match-data round-trip: set '(3 6), read back via (match-data).
     let smd_hot = jit_subr_spec_caller("set-match-data", 1, true);
@@ -14062,8 +14076,12 @@ fn jit_subr_spec_many_signal_parity_armed_vs_interp() {
         .funcall_general_untraced(rsf_cold, vec![Value::string("ZZZ-nomatch")])
         .expect_err("rsf interp signals");
     assert_eq!(
-        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_a))),
-        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_i))),
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(
+            map_flow(e_a)
+        )),
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(
+            map_flow(e_i)
+        )),
         "re-search-forward search-failed Flow parity armed==interp"
     );
 
@@ -14077,8 +14095,12 @@ fn jit_subr_spec_many_signal_parity_armed_vs_interp() {
         .funcall_general_untraced(ss_cold, vec![Value::make_int(7), Value::make_int(1)])
         .expect_err("scan-sexps interp signals");
     assert_eq!(
-        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_a))),
-        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_i))),
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(
+            map_flow(e_a)
+        )),
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(
+            map_flow(e_i)
+        )),
         "scan-sexps scan-error Flow parity armed==interp"
     );
 
@@ -14102,8 +14124,12 @@ fn jit_subr_spec_many_signal_parity_armed_vs_interp() {
         .funcall_general_untraced(ptp_cold, ro_args())
         .expect_err("ptp interp signals");
     assert_eq!(
-        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_a))),
-        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_i))),
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(
+            map_flow(e_a)
+        )),
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(
+            map_flow(e_i)
+        )),
         "put-text-property text-read-only Flow parity armed==interp"
     );
 }
@@ -14144,7 +14170,10 @@ fn jit_subr_spec_many_put_text_property_arity_and_effect() {
         .expect("ptp(4) interp");
     let i_get = format_eval_result(&ev.eval_str("(get-text-property 1 'face)"));
     assert_eq!(a.bits(), i.bits(), "put-text-property(4) result parity");
-    assert_eq!(a_get, i_get, "put-text-property(4) side-effect golden armed==interp");
+    assert_eq!(
+        a_get, i_get,
+        "put-text-property(4) side-effect golden armed==interp"
+    );
 
     // Op::Call(2): below the body-enforced min (4) -> wrong-number-of-arguments.
     let ptp2_hot = jit_subr_spec_caller("put-text-property", 2, true);
@@ -14157,8 +14186,12 @@ fn jit_subr_spec_many_put_text_property_arity_and_effect() {
         .funcall_general_untraced(ptp2_cold, two())
         .expect_err("ptp(2) interp signals");
     assert_eq!(
-        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_a))),
-        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_i))),
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(
+            map_flow(e_a)
+        )),
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(
+            map_flow(e_i)
+        )),
         "put-text-property(2) under-arity signal parity armed==interp"
     );
 
@@ -14182,8 +14215,12 @@ fn jit_subr_spec_many_put_text_property_arity_and_effect() {
         .funcall_general_untraced(ptp6_cold, six())
         .expect_err("ptp(6) interp signals");
     assert_eq!(
-        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_a))),
-        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(map_flow(e_i))),
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(
+            map_flow(e_a)
+        )),
+        format_eval_result(&Err::<Value, crate::emacs_core::error::EvalError>(
+            map_flow(e_i)
+        )),
         "put-text-property(6) over-arity signal parity armed==interp"
     );
 }
@@ -14329,7 +14366,8 @@ fn jit_cbsym_spec_tierb_engages_and_matches() {
     crate::test_utils::init_test_tracing();
     crate::emacs_core::jit::compile::force_profit_gate_for_test(false);
     let mut ev = Context::new();
-    ev.eval_str("(insert \"hello world\")").expect("buffer setup");
+    ev.eval_str("(insert \"hello world\")")
+        .expect("buffer setup");
     #[cfg(debug_assertions)]
     let (count0, fast0, _) = jit_cbsym_spec_counters();
     let list = ev.eval_str("'(a b c d)").expect("list");
@@ -14431,23 +14469,23 @@ fn jit_cbsym_buffer_loop_tiers_with_profit_gate_on() {
         });
         f.lexical = true;
         f.ops = vec![
-            Op::StackRef(0),                                          // 0  [n n]
-            Op::Constant(0),                                          // 1  [n n 0]
-            Op::Gtr,                                                  // 2  [n c]   arith
-            Op::GotoIfNil(15),                                        // 3  [n]
-            Op::Constant(1),                                          // 4  [n 1]
+            Op::StackRef(0),                                                       // 0  [n n]
+            Op::Constant(0),                                                       // 1  [n n 0]
+            Op::Gtr,           // 2  [n c]   arith
+            Op::GotoIfNil(15), // 3  [n]
+            Op::Constant(1),   // 4  [n 1]
             Op::CallBuiltinSym(crate::emacs_core::intern::intern("goto-char"), 1), // 5 [n pos]
-            Op::Pop,                                                  // 6  [n]
+            Op::Pop,           // 6  [n]
             Op::CallBuiltinSym(crate::emacs_core::intern::intern("current-column"), 0), // 7 [n col]
-            Op::Pop,                                                  // 8  [n]
+            Op::Pop,           // 8  [n]
             Op::CallBuiltinSym(crate::emacs_core::intern::intern("widen"), 0), // 9 [n nil]
-            Op::Pop,                                                  // 10 [n]
-            Op::StackRef(0),                                          // 11 [n n]
-            Op::Sub1,                                                 // 12 [n n-1] arith
-            Op::StackSet(1),                                          // 13 [n-1]
-            Op::Goto(0),                                              // 14 backedge
-            Op::StackRef(0),                                          // 15 [n n]   exit
-            Op::Return,                                               // 16
+            Op::Pop,           // 10 [n]
+            Op::StackRef(0),   // 11 [n n]
+            Op::Sub1,          // 12 [n n-1] arith
+            Op::StackSet(1),   // 13 [n-1]
+            Op::Goto(0),       // 14 backedge
+            Op::StackRef(0),   // 15 [n n]   exit
+            Op::Return,        // 16
         ];
         f.constants = vec![Value::make_int(0), Value::make_int(1)];
         f.max_stack = 16;
@@ -14466,7 +14504,11 @@ fn jit_cbsym_buffer_loop_tiers_with_profit_gate_on() {
     let interp = ev
         .funcall_general_untraced(mk(false), vec![Value::make_int(4)])
         .expect("interp buffer loop runs");
-    assert_eq!(native.bits(), interp.bits(), "buffer-op loop parity hot vs cold");
+    assert_eq!(
+        native.bits(),
+        interp.bits(),
+        "buffer-op loop parity hot vs cold"
+    );
     assert_eq!(native, Value::make_int(0), "loop counts down to 0");
     #[cfg(debug_assertions)]
     if !jit_cbsym_fastpath_suppressed_by_harness() {
@@ -14615,14 +14657,14 @@ fn jit_cbsym_spec_adds_no_eval_depth_level() {
         });
         f.lexical = true;
         f.ops = vec![
-            Op::VarRef(0),                       // 0  [d]        (const0 = cbsym-depth)
-            Op::Add1,                            // 1  [d+1]
-            Op::VarSet(0),                       // 2  []         cbsym-depth = d+1
+            Op::VarRef(0), // 0  [d]        (const0 = cbsym-depth)
+            Op::Add1,      // 1  [d+1]
+            Op::VarSet(0), // 2  []         cbsym-depth = d+1
             Op::CallBuiltinSym(crate::emacs_core::intern::intern("widen"), 0), // 3 [nil]  Tier-B
-            Op::Pop,                             // 4  []
-            Op::Constant(1),                     // 5  [f]        (const1 = f symbol)
-            Op::Call(0),                         // 6  recurse (adds ONE eval-depth level)
-            Op::Return,                          // 7
+            Op::Pop,       // 4  []
+            Op::Constant(1), // 5  [f]        (const1 = f symbol)
+            Op::Call(0),   // 6  recurse (adds ONE eval-depth level)
+            Op::Return,    // 7
         ];
         f.constants = vec![Value::symbol("cbsym-depth"), f_sym];
         f.max_stack = 16;
@@ -14635,15 +14677,17 @@ fn jit_cbsym_spec_adds_no_eval_depth_level() {
     ev.eval_str("(setq max-lisp-eval-depth 150)").unwrap();
     let depth_after = |ev: &mut Context, hot: bool| -> i64 {
         ev.eval_str("(setq cbsym-depth 0)").unwrap();
-        ev.obarray
-            .set_symbol_function_id(f_id, mk(hot));
+        ev.obarray.set_symbol_function_id(f_id, mk(hot));
         // Recurses until max-lisp-eval-depth signals; catch it.
         let _ = ev.funcall_general_untraced(f_sym, Vec::<Value>::new());
         ev.eval_str("cbsym-depth").unwrap().as_fixnum().unwrap()
     };
     let hot_depth = depth_after(&mut ev, true);
     let cold_depth = depth_after(&mut ev, false);
-    assert!(hot_depth > 1, "the recursion actually ran (depth {hot_depth})");
+    assert!(
+        hot_depth > 1,
+        "the recursion actually ran (depth {hot_depth})"
+    );
     assert_eq!(
         hot_depth, cold_depth,
         "a compiled Tier-B CBSym op adds no eval-depth level: \
@@ -14716,16 +14760,38 @@ fn jit_cbsym_read_match_beginning_end_char_positions_and_edges() {
     let mb_cold = jit_cbsym_spec_caller("match-beginning", 1, false);
     let me_hot = jit_cbsym_spec_caller("match-end", 1, true);
     let me_cold = jit_cbsym_spec_caller("match-end", 1, false);
-    let call = |ev: &mut Context, f: Value, g: i64| ev.funcall_general_untraced(f, vec![Value::make_int(g)]);
+    let call = |ev: &mut Context, f: Value, g: i64| {
+        ev.funcall_general_untraced(f, vec![Value::make_int(g)])
+    };
     // group 0: CHAR positions, == interp (both compiled/interp and the live form).
     let nb = call(&mut ev, mb_hot, 0).unwrap();
-    assert_eq!(nb, call(&mut ev, mb_cold, 0).unwrap(), "match-beginning 0 hot==cold");
-    assert_eq!(nb, ev.eval_str("(match-beginning 0)").unwrap(), "match-beginning 0 == live interp CHAR pos");
+    assert_eq!(
+        nb,
+        call(&mut ev, mb_cold, 0).unwrap(),
+        "match-beginning 0 hot==cold"
+    );
+    assert_eq!(
+        nb,
+        ev.eval_str("(match-beginning 0)").unwrap(),
+        "match-beginning 0 == live interp CHAR pos"
+    );
     let ne = call(&mut ev, me_hot, 0).unwrap();
-    assert_eq!(ne, call(&mut ev, me_cold, 0).unwrap(), "match-end 0 hot==cold");
-    assert_eq!(ne, ev.eval_str("(match-end 0)").unwrap(), "match-end 0 == live interp CHAR pos");
+    assert_eq!(
+        ne,
+        call(&mut ev, me_cold, 0).unwrap(),
+        "match-end 0 hot==cold"
+    );
+    assert_eq!(
+        ne,
+        ev.eval_str("(match-end 0)").unwrap(),
+        "match-end 0 == live interp CHAR pos"
+    );
     // group beyond the match count -> nil.
-    assert_eq!(call(&mut ev, mb_hot, 5).unwrap(), Value::NIL, "group beyond count -> nil");
+    assert_eq!(
+        call(&mut ev, mb_hot, 5).unwrap(),
+        Value::NIL,
+        "group beyond count -> nil"
+    );
     // negative group -> args-out-of-range == interp.
     let neg_hot = format!("{:?}", call(&mut ev, mb_hot, -1).unwrap_err());
     let neg_cold = format!("{:?}", call(&mut ev, mb_cold, -1).unwrap_err());
@@ -14756,12 +14822,14 @@ fn jit_cbsym_read_char_accessors_at_boundaries() {
     let fc = jit_cbsym_spec_caller("following-char", 0, true);
     let ca = jit_cbsym_spec_caller("char-after", 0, true);
     assert_eq!(
-        ev.funcall_general_untraced(fc, Vec::<Value>::new()).unwrap(),
+        ev.funcall_general_untraced(fc, Vec::<Value>::new())
+            .unwrap(),
         Value::make_int(0),
         "following-char at ZV -> 0"
     );
     assert_eq!(
-        ev.funcall_general_untraced(ca, Vec::<Value>::new()).unwrap(),
+        ev.funcall_general_untraced(ca, Vec::<Value>::new())
+            .unwrap(),
         Value::NIL,
         "char-after at ZV -> nil (NOT conflated with following-char's 0)"
     );
@@ -14769,12 +14837,14 @@ fn jit_cbsym_read_char_accessors_at_boundaries() {
     let pc = jit_cbsym_spec_caller("preceding-char", 0, true);
     let ca2 = jit_cbsym_spec_caller("char-after", 0, true);
     assert_eq!(
-        ev.funcall_general_untraced(pc, Vec::<Value>::new()).unwrap(),
+        ev.funcall_general_untraced(pc, Vec::<Value>::new())
+            .unwrap(),
         Value::make_int(0),
         "preceding-char at BOB -> 0"
     );
     assert_eq!(
-        ev.funcall_general_untraced(ca2, Vec::<Value>::new()).unwrap(),
+        ev.funcall_general_untraced(ca2, Vec::<Value>::new())
+            .unwrap(),
         Value::make_int('x' as i64),
         "char-after at BOB -> 'x' (a real char, proves ZV-nil is position-specific)"
     );
@@ -14793,8 +14863,12 @@ fn jit_cbsym_read_bolp_at_begv_in_narrowed_buffer() {
     ev.eval_str("(goto-char (point-min))").unwrap(); // point = BEGV = 3
     let bolp = jit_cbsym_spec_caller("bolp", 0, true);
     let bolp_cold = jit_cbsym_spec_caller("bolp", 0, false);
-    let native = ev.funcall_general_untraced(bolp, Vec::<Value>::new()).unwrap();
-    let interp = ev.funcall_general_untraced(bolp_cold, Vec::<Value>::new()).unwrap();
+    let native = ev
+        .funcall_general_untraced(bolp, Vec::<Value>::new())
+        .unwrap();
+    let interp = ev
+        .funcall_general_untraced(bolp_cold, Vec::<Value>::new())
+        .unwrap();
     assert_eq!(native, interp, "bolp at BEGV parity hot vs cold");
     assert!(
         native.is_truthy(),
@@ -14817,9 +14891,13 @@ fn jit_cbsym_read_current_buffer_bounces_when_unmaterialized() {
     let hot = jit_cbsym_spec_caller("current-buffer", 0, true);
     let cold = jit_cbsym_spec_caller("current-buffer", 0, false);
     let (_, fast0, gen0) = jit_cbsym_spec_counters();
-    let native = ev.funcall_general_untraced(hot, Vec::<Value>::new()).unwrap();
+    let native = ev
+        .funcall_general_untraced(hot, Vec::<Value>::new())
+        .unwrap();
     let (_, fast1, gen1) = jit_cbsym_spec_counters();
-    let interp = ev.funcall_general_untraced(cold, Vec::<Value>::new()).unwrap();
+    let interp = ev
+        .funcall_general_untraced(cold, Vec::<Value>::new())
+        .unwrap();
     assert_eq!(native, interp, "current-buffer compiled == interp");
     if !jit_cbsym_fastpath_suppressed_by_harness() {
         // The FIRST compiled call materialized the buffer via the general
@@ -14828,14 +14906,22 @@ fn jit_cbsym_read_current_buffer_bounces_when_unmaterialized() {
             gen1 > gen0,
             "the first current-buffer (unmaterialized) bounced to the general path"
         );
-        assert_eq!(fast1, fast0, "the shim did NOT take the fast (allocating-risk) path");
+        assert_eq!(
+            fast1, fast0,
+            "the shim did NOT take the fast (allocating-risk) path"
+        );
         // Now materialized: a second compiled call takes the GC-free fast path.
         let hot2 = jit_cbsym_spec_caller("current-buffer", 0, true);
         let (_, fast2, _) = jit_cbsym_spec_counters();
-        let native2 = ev.funcall_general_untraced(hot2, Vec::<Value>::new()).unwrap();
+        let native2 = ev
+            .funcall_general_untraced(hot2, Vec::<Value>::new())
+            .unwrap();
         let (_, fast3, _) = jit_cbsym_spec_counters();
         assert_eq!(native2, interp, "second current-buffer still == interp");
-        assert!(fast3 > fast2, "the materialized buffer now takes the fast path");
+        assert!(
+            fast3 > fast2,
+            "the materialized buffer now takes the fast path"
+        );
     }
 }
 
@@ -14863,9 +14949,16 @@ fn jit_cbsym_read_ignores_function_cell_override() {
     // ...but the compiled CallBuiltinSym `point` ignores it (static-table dispatch).
     let hot = jit_cbsym_spec_caller("point", 0, true);
     let cold = jit_cbsym_spec_caller("point", 0, false);
-    let native = ev.funcall_general_untraced(hot, Vec::<Value>::new()).unwrap();
-    let interp = ev.funcall_general_untraced(cold, Vec::<Value>::new()).unwrap();
-    assert_eq!(native, interp, "compiled == interp CBSym point (both cell-immune)");
+    let native = ev
+        .funcall_general_untraced(hot, Vec::<Value>::new())
+        .unwrap();
+    let interp = ev
+        .funcall_general_untraced(cold, Vec::<Value>::new())
+        .unwrap();
+    assert_eq!(
+        native, interp,
+        "compiled == interp CBSym point (both cell-immune)"
+    );
     assert_eq!(
         native, real_point,
         "compiled CBSym point returns the REAL point, ignoring the cell override"
@@ -15575,8 +15668,20 @@ fn jit_bench_call_heavy_fontlock_reweight() {
         match op {
             Op::Call(_) | Op::Apply(_) | Op::CallBuiltin(..) => n_call += 1,
             Op::CallBuiltinSym(..) => n_cbsym += 1,
-            Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Rem | Op::Add1 | Op::Sub1
-            | Op::Negate | Op::Max | Op::Min | Op::Eqlsign | Op::Lss | Op::Gtr | Op::Leq
+            Op::Add
+            | Op::Sub
+            | Op::Mul
+            | Op::Div
+            | Op::Rem
+            | Op::Add1
+            | Op::Sub1
+            | Op::Negate
+            | Op::Max
+            | Op::Min
+            | Op::Eqlsign
+            | Op::Lss
+            | Op::Gtr
+            | Op::Leq
             | Op::Geq => n_arith += 1,
             _ => {}
         }
@@ -15584,8 +15689,7 @@ fn jit_bench_call_heavy_fontlock_reweight() {
 
     // CONFIRM the #1 Op::Call Many-spec (or round-1 fixed) sites are actually
     // present — so the Hot side really is native+spec, not a silent fallback.
-    let has_spec =
-        compile::has_op_call_spec_sites(&bc.ops, &bc.constants, arity, &ev.obarray);
+    let has_spec = compile::has_op_call_spec_sites(&bc.ops, &bc.constants, arity, &ev.obarray);
     assert!(
         has_spec,
         "the byte-compiled sweep must carry >=1 Op::Call spec site (re-search-forward / looking-at / parse-partial-sexp); \
@@ -15614,8 +15718,7 @@ fn jit_bench_call_heavy_fontlock_reweight() {
     // — the one confound that would fake a ~1x result. (debug-assertions only,
     // which is how release+jit is built here.)
     #[cfg(debug_assertions)]
-    let fast_before =
-        compile::SUBR_SPEC_FAST_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+    let fast_before = compile::SUBR_SPEC_FAST_COUNT.load(std::sync::atomic::Ordering::Relaxed);
     let hot_first = ev
         .funcall_general_untraced(hot_val, vec![])
         .expect("hot scan runs");
@@ -15626,8 +15729,7 @@ fn jit_bench_call_heavy_fontlock_reweight() {
     );
     #[cfg(debug_assertions)]
     {
-        let fast_after =
-            compile::SUBR_SPEC_FAST_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+        let fast_after = compile::SUBR_SPEC_FAST_COUNT.load(std::sync::atomic::Ordering::Relaxed);
         assert!(
             fast_after > fast_before,
             "the Hot copy must run NATIVE with the Many-spec fast path armed \
@@ -15718,15 +15820,13 @@ fn jit_bench_spec_call_dispatch_upper_bound() {
     let arg = || vec![Value::make_int(n)];
     let cold_r = ev.funcall_general_untraced(cold_val, arg()).expect("cold");
     #[cfg(debug_assertions)]
-    let fast_before =
-        compile::SUBR_SPEC_FAST_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+    let fast_before = compile::SUBR_SPEC_FAST_COUNT.load(std::sync::atomic::Ordering::Relaxed);
     let hot_r = ev.funcall_general_untraced(hot_val, arg()).expect("hot");
     assert_eq!(cold_r.bits(), want.bits());
     assert_eq!(hot_r.bits(), want.bits(), "native+spec result == interp");
     #[cfg(debug_assertions)]
     {
-        let fast_after =
-            compile::SUBR_SPEC_FAST_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+        let fast_after = compile::SUBR_SPEC_FAST_COUNT.load(std::sync::atomic::Ordering::Relaxed);
         assert!(
             fast_after > fast_before,
             "Hot copy must run native+spec (fast delta={})",
@@ -15738,7 +15838,9 @@ fn jit_bench_spec_call_dispatch_upper_bound() {
         let mut best = std::time::Duration::MAX;
         for _ in 0..iters {
             let t = std::time::Instant::now();
-            let r = ev.funcall_general_untraced(f, vec![Value::make_int(n)]).unwrap();
+            let r = ev
+                .funcall_general_untraced(f, vec![Value::make_int(n)])
+                .unwrap();
             best = best.min(t.elapsed());
             assert_eq!(r.bits(), want.bits());
         }
@@ -15784,30 +15886,30 @@ fn aot_bench_real_algorithm() {
     // (n) (let ((steps 0)) (while (> n 1) (if (= (% n 2) 0) (setq n (/ n 2))
     // (setq n (+ (* 3 n) 1))) (setq steps (1+ steps))) steps))
     let ops = vec![
-        Op::Constant(0),       // 0  steps=0  [n steps]
-        Op::StackRef(1),       // 1  [n steps n]   <- loop head
-        Op::Constant(1),       // 2  [.. n 1]
-        Op::Gtr,               // 3  [.. (> n 1)]
-        Op::GotoIfNil(23),     // 4  exit
-        Op::StackRef(1),       // 5  [.. n]
-        Op::Constant(2),       // 6  [.. n 2]
-        Op::Rem,               // 7  [.. (% n 2)]
-        Op::Constant(0),       // 8  [.. r 0]
-        Op::Eqlsign,           // 9  [.. (= r 0)]
-        Op::GotoIfNil(16),     // 10 odd branch
-        Op::StackRef(1),       // 11 [.. n]
-        Op::Constant(2),       // 12 [.. n 2]
-        Op::Div,               // 13 [.. (/ n 2)]
-        Op::StackSet(2),       // 14 n=/   [n steps]
-        Op::Goto(21),          // 15
-        Op::StackRef(1),       // 16 [.. n]   <- odd
-        Op::Constant(3),       // 17 [.. n 3]
-        Op::Mul,               // 18 [.. (* 3 n)]  (constants[3]=3)
-        Op::Add1,              // 19 [.. (1+ (* 3 n))]
-        Op::StackSet(2),       // 20 n=3n+1
-        Op::Add1,              // 21 steps=1+steps  [n steps']  <- join
-        Op::Goto(1),           // 22 backedge
-        Op::Return,            // 23 return steps
+        Op::Constant(0),   // 0  steps=0  [n steps]
+        Op::StackRef(1),   // 1  [n steps n]   <- loop head
+        Op::Constant(1),   // 2  [.. n 1]
+        Op::Gtr,           // 3  [.. (> n 1)]
+        Op::GotoIfNil(23), // 4  exit
+        Op::StackRef(1),   // 5  [.. n]
+        Op::Constant(2),   // 6  [.. n 2]
+        Op::Rem,           // 7  [.. (% n 2)]
+        Op::Constant(0),   // 8  [.. r 0]
+        Op::Eqlsign,       // 9  [.. (= r 0)]
+        Op::GotoIfNil(16), // 10 odd branch
+        Op::StackRef(1),   // 11 [.. n]
+        Op::Constant(2),   // 12 [.. n 2]
+        Op::Div,           // 13 [.. (/ n 2)]
+        Op::StackSet(2),   // 14 n=/   [n steps]
+        Op::Goto(21),      // 15
+        Op::StackRef(1),   // 16 [.. n]   <- odd
+        Op::Constant(3),   // 17 [.. n 3]
+        Op::Mul,           // 18 [.. (* 3 n)]  (constants[3]=3)
+        Op::Add1,          // 19 [.. (1+ (* 3 n))]
+        Op::StackSet(2),   // 20 n=3n+1
+        Op::Add1,          // 21 steps=1+steps  [n steps']  <- join
+        Op::Goto(1),       // 22 backedge
+        Op::Return,        // 23 return steps
     ];
     let constants = vec![
         Value::make_int(0),
@@ -15910,48 +16012,52 @@ fn aot_bench_real_algorithm() {
     // Both keep call-count < HOT_THRESHOLD so the interp copy never tiers.
     let aot_fn = &aot_fn; // borrow for closures
     let aot_val2 = aot_val;
-    let mut regime = |calls: &[i64], reps: usize| -> (std::time::Duration, std::time::Duration, i64) {
-        let want: i64 = calls.iter().map(|&n| collatz_ref(n)).sum::<i64>() * reps as i64;
-        let aot_min = {
-            let mut best = std::time::Duration::MAX;
-            for _ in 0..9 {
-                let t = std::time::Instant::now();
-                let mut acc = 0i64;
-                for _ in 0..reps {
-                    for &n in calls {
-                        let r = crate::emacs_core::jit::cache::try_run_compiled(
-                            ctx, aot_fn, aot_val2, &[Value::make_int(n)],
-                        )
-                        .expect("aot run")
-                        .expect("aot served");
-                        acc += Value::from_bits(r).as_fixnum().expect("fixnum");
+    let mut regime =
+        |calls: &[i64], reps: usize| -> (std::time::Duration, std::time::Duration, i64) {
+            let want: i64 = calls.iter().map(|&n| collatz_ref(n)).sum::<i64>() * reps as i64;
+            let aot_min = {
+                let mut best = std::time::Duration::MAX;
+                for _ in 0..9 {
+                    let t = std::time::Instant::now();
+                    let mut acc = 0i64;
+                    for _ in 0..reps {
+                        for &n in calls {
+                            let r = crate::emacs_core::jit::cache::try_run_compiled(
+                                ctx,
+                                aot_fn,
+                                aot_val2,
+                                &[Value::make_int(n)],
+                            )
+                            .expect("aot run")
+                            .expect("aot served");
+                            acc += Value::from_bits(r).as_fixnum().expect("fixnum");
+                        }
                     }
+                    best = best.min(t.elapsed());
+                    assert_eq!(acc, want, "AOT collatz regime sum");
                 }
-                best = best.min(t.elapsed());
-                assert_eq!(acc, want, "AOT collatz regime sum");
-            }
-            best
-        };
-        let int_min = {
-            let mut best = std::time::Duration::MAX;
-            for _ in 0..9 {
-                let t = std::time::Instant::now();
-                let mut acc = 0i64;
-                for _ in 0..reps {
-                    for &n in calls {
-                        let r = ev
-                            .funcall_general_untraced(cold_val, vec![Value::make_int(n)])
-                            .unwrap();
-                        acc += r.as_fixnum().expect("fixnum");
+                best
+            };
+            let int_min = {
+                let mut best = std::time::Duration::MAX;
+                for _ in 0..9 {
+                    let t = std::time::Instant::now();
+                    let mut acc = 0i64;
+                    for _ in 0..reps {
+                        for &n in calls {
+                            let r = ev
+                                .funcall_general_untraced(cold_val, vec![Value::make_int(n)])
+                                .unwrap();
+                            acc += r.as_fixnum().expect("fixnum");
+                        }
                     }
+                    best = best.min(t.elapsed());
+                    assert_eq!(acc, want, "interp collatz regime sum");
                 }
-                best = best.min(t.elapsed());
-                assert_eq!(acc, want, "interp collatz regime sum");
-            }
-            best
+                best
+            };
+            (aot_min, int_min, want)
         };
-        (aot_min, int_min, want)
-    };
 
     // (A) realistic many-short-calls: 7999 calls × ~100 inner iters.
     let short_calls: Vec<i64> = (2..=8000).collect();
@@ -16412,7 +16518,8 @@ fn jit_bench_cbsym_goto_value(tier: BenchTier) -> Value {
 fn jit_bench_cbsym_goto() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    ev.eval_str("(insert \"hello world\")").expect("buffer content");
+    ev.eval_str("(insert \"hello world\")")
+        .expect("buffer content");
     let native = jit_bench_cbsym_goto_value(BenchTier::Hot);
     let cold = jit_bench_cbsym_goto_value(BenchTier::Cold);
     let n = 2_000_000i64;
@@ -16553,7 +16660,8 @@ fn jit_bench_many() {
     let mut ev = Context::new();
     ev.eval_str("(insert \"(defun f (a b) (+ a b))\")")
         .expect("buffer content for looking-at");
-    ev.eval_str("(goto-char (point-min))").expect("point to bob");
+    ev.eval_str("(goto-char (point-min))")
+        .expect("point to bob");
     let native = jit_bench_many_value(BenchTier::Hot);
     let cold = jit_bench_many_value(BenchTier::Cold);
     let n = std::env::var("NEOVM_BENCH_N")
@@ -17025,7 +17133,10 @@ fn gc_concurrent_handshake_stats_populate_per_group() {
             break;
         }
     }
-    assert!(ev.gc_count > bootstrap_count, "no concurrent cycle completed");
+    assert!(
+        ev.gc_count > bootstrap_count,
+        "no concurrent cycle completed"
+    );
 
     let hs = ev.tagged_heap.handshake_stats();
     assert!(hs.start_count >= 1, "start handshake never recorded");
@@ -19026,7 +19137,11 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
          f_claimed={} sub_dropped={} v_claimed={} bc_claimed={}\n\
          kind medians: str={} vec={} rec={} clo={} bc={} ht={} ct={} f={} cons={} sub={} other={}\n\
          kind maxima (lifetime): {}\n",
-        if pdump { "pdump(mapped-dump)" } else { "plain(dump-less)" },
+        if pdump {
+            "pdump(mapped-dump)"
+        } else {
+            "plain(dump-less)"
+        },
         captures.len(),
         missed,
         ev.tagged_heap.gc_collections() - start_collections,
@@ -19068,8 +19183,7 @@ fn gc_drain_kinds_profile(pdump: bool, chunks: usize) {
     // for the start and termination context-root breakdowns.
     let group_table = |select: &dyn Fn(
         &crate::tagged::gc::HandshakeStats,
-    )
-        -> &crate::tagged::gc::RootSeedBreakdown| {
+    ) -> &crate::tagged::gc::RootSeedBreakdown| {
         let mut agg: std::collections::BTreeMap<&'static str, (Vec<u64>, Vec<u64>)> =
             std::collections::BTreeMap::new();
         for hs in &hs_captures {
@@ -19188,10 +19302,8 @@ fn gc_concurrent_leaked_subr_drop_under_pdump_verifiers() {
     let seen0 = ev.tagged_heap.sweep_stats().termination_count;
     let mut guard = 0usize;
     while ev.tagged_heap.sweep_stats().termination_count < seen0 + 2 {
-        ev.eval_str(
-            "(let ((l nil)) (dotimes (i 2000) (push (format \"s%d\" i) l)) (length l))",
-        )
-        .expect("churn step");
+        ev.eval_str("(let ((l nil)) (dotimes (i 2000) (push (format \"s%d\" i) l)) (length l))")
+            .expect("churn step");
         guard += 1;
         assert!(
             guard < 4000,
@@ -19310,7 +19422,8 @@ fn gc_concurrent_obarray_scan_vs_defalias_churn() {
         //     interned symbols — the write the pre-fix presence read raced.
         for (k, &id) in churn_ids.iter().enumerate() {
             if k % 2 == 0 {
-                ev.obarray.set_symbol_function_id(id, Value::fixnum(k as i64));
+                ev.obarray
+                    .set_symbol_function_id(id, Value::fixnum(k as i64));
             } else {
                 ev.obarray.fmakunbound_id(id);
             }
@@ -19486,7 +19599,11 @@ fn alloc_class_profile(pdump: bool) {
          === phase 1: startup (bootstrap load) ===\n{startup_report}\
          === phase 2: mixed churn (drain-kinds recipe, 100x200 iters, {churn_secs:.2}s) ===\n{churn_report}\
          === phase 3: byte-compile x3 ({bc_secs:.2}s) ===\n{bc_report}",
-        if pdump { "pdump(mapped-dump)" } else { "plain(dump-less)" },
+        if pdump {
+            "pdump(mapped-dump)"
+        } else {
+            "plain(dump-less)"
+        },
     );
 }
 

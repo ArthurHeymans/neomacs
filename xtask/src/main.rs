@@ -747,7 +747,9 @@ fn run_aot_preload_dry_run_gate(
     if !status.success() {
         return Err(format!(
             "aot-preload dry-run: --temacs=pdump exited with {}",
-            status.code().map_or_else(|| "signal".to_string(), |c| c.to_string())
+            status
+                .code()
+                .map_or_else(|| "signal".to_string(), |c| c.to_string())
         )
         .into());
     }
