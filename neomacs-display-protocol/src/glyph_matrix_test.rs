@@ -1107,6 +1107,7 @@ fn text_area_clip_rect_narrows_to_band_between_chrome_rows() {
     let entry = WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 32.0, 100.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 32.0, 100.0),
         selected: true,
@@ -1133,6 +1134,7 @@ fn text_area_clip_rect_equals_text_pixel_bounds_without_chrome() {
     let entry = WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 80.0, 32.0),
         text_pixel_bounds,
         selected: true,
@@ -1171,6 +1173,7 @@ fn materialize_clips_vscrolled_text_row_to_text_band() {
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
+        damage: Vec::new(),
         pixel_bounds: Rect::new(0.0, 0.0, 32.0, 100.0),
         text_pixel_bounds: Rect::new(0.0, 0.0, 32.0, 100.0),
         selected: true,
