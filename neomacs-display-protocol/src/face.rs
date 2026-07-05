@@ -263,9 +263,17 @@ pub struct Face {
     /// Lisp face name this realized face came from (e.g.
     /// "font-lock-keyword-face"), when known. `None` for anonymous faces
     /// realized from raw attribute plists. Basic faces (id 0-19) fall back
-    /// to their canonical [`BasicFaceId`] name at snapshot time. Kept LAST:
-    /// `#[repr(C)]` prefix layout stays stable for existing readers.
+    /// to their canonical [`BasicFaceId`] name at snapshot time.
+    ///
+    /// NOTE: new fields append AFTER this one so the `#[repr(C)]` prefix
+    /// layout stays stable for existing readers.
     pub lisp_name: Option<String>,
+
+    /// The face's primary resolved font, referencing the frame state's
+    /// resolved font table (`FrameDisplayState::fonts`). When present, the
+    /// renderer must rasterize with exactly this font instead of re-running
+    /// semantic selection from `font_family`/`font_weight`/attributes.
+    pub default_resolved_font_id: Option<crate::font::ResolvedFontId>,
 }
 
 impl Default for Face {
@@ -298,6 +306,7 @@ impl Default for Face {
             underline_thickness: 1,
             background_gradient: None,
             lisp_name: None,
+            default_resolved_font_id: None,
         }
     }
 }
@@ -514,6 +523,7 @@ impl FaceDataFFI {
             underline_thickness: self.underline_thickness.max(1),
             background_gradient: None,
             lisp_name: None,
+            default_resolved_font_id: None,
         }
     }
 }

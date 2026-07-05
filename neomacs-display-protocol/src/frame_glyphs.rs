@@ -854,6 +854,11 @@ pub struct FrameGlyphBuffer {
     /// Rebuilt from scratch each frame by apply_face() in the layout engine.
     pub faces: HashMap<u32, Face>,
 
+    /// Resolved font table referenced by `Face::default_resolved_font_id`
+    /// (and eventually shaped glyph runs). Carried alongside `faces` so the
+    /// renderer rasterizes the exact fonts layout resolved.
+    pub fonts: crate::font::ResolvedFontTable,
+
     /// Stipple patterns: bitmap_id -> StipplePattern
     pub stipple_patterns: HashMap<i32, StipplePattern>,
 
@@ -1004,6 +1009,7 @@ impl FrameGlyphBuffer {
             underline_thickness: 1,
             background_gradient: None,
             lisp_name: None,
+            default_resolved_font_id: None,
         }
     }
 
@@ -1042,6 +1048,7 @@ impl FrameGlyphBuffer {
             current_row_role: GlyphRowRole::Text,
             current_clip_rect: None,
             faces: HashMap::new(),
+            fonts: crate::font::ResolvedFontTable::new(),
             stipple_patterns: HashMap::new(),
             fringe_bitmaps: HashMap::new(),
         }
@@ -1068,6 +1075,7 @@ impl FrameGlyphBuffer {
         self.stipple_patterns.clear();
         self.fringe_bitmaps.clear();
         self.faces.clear();
+        self.fonts.clear();
         self.current_window_id = DisplayWindowId::new(0);
         self.current_row_role = GlyphRowRole::Text;
         self.current_clip_rect = None;

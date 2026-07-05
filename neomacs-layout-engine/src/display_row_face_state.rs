@@ -258,6 +258,7 @@ impl DisplayRowFace {
             underline_position: self.underline_position.max(1),
             underline_thickness: self.underline_thickness.max(1),
             background_gradient: None,
+            default_resolved_font_id: None,
             lisp_name: self.lisp_name.clone().or_else(|| {
                 neomacs_display_protocol::face::BasicFaceId::from_gnu_code(self.face_id)
                     .map(|basic| basic.name().to_string())

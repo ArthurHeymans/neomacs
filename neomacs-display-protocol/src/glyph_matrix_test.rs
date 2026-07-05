@@ -1114,7 +1114,10 @@ fn text_area_clip_rect_narrows_to_band_between_chrome_rows() {
     };
 
     // header bottom (20) .. mode-line top (80).
-    assert_eq!(entry.text_area_clip_rect(), Rect::new(0.0, 20.0, 32.0, 60.0));
+    assert_eq!(
+        entry.text_area_clip_rect(),
+        Rect::new(0.0, 20.0, 32.0, 60.0)
+    );
 }
 
 #[test]
@@ -1452,5 +1455,60 @@ fn frame_display_state_integer_map_keys_round_trip() {
     assert!(
         back.cursor_effects_by_window
             .contains_key(&crate::types::DisplayWindowId::new(7))
+    );
+}
+
+/// The resolved font table and `Face::default_resolved_font_id` must survive
+/// both directions of the frame IR conversion (grid state -> glyph buffer ->
+/// grid state) and JSON snapshots, so the render thread always sees the exact
+/// fonts layout resolved.
+#[test]
+fn resolved_fonts_survive_materialize_and_round_trip() {
+    use crate::font::{
+        FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId, ResolvedFontIdentity,
+    };
+
+    let mut state = state_with_text("f");
+    let font_id = ResolvedFontId(3);
+    let mut face = Face::new(0);
+    face.default_resolved_font_id = Some(font_id);
+    state.faces.insert(0, face);
+    state.fonts.insert(
+        font_id,
+        ResolvedFont {
+            id: font_id,
+            identity: ResolvedFontIdentity::from_file("/fonts/mono.ttf", 0, None),
+            family: "Mono".to_string(),
+            full_name: None,
+            postscript_name: None,
+            weight: 400,
+            slant: FontSlantKind::Normal,
+            width: 5,
+            pixel_size: 15.0,
+            ascent_px: 12.0,
+            descent_px: 3.0,
+            source: FontResolutionSource::FacePrimary,
+        },
+    );
+
+    // grid -> buffer
+    let buf = state.materialize();
+    assert_eq!(buf.fonts.get(&font_id), state.fonts.get(&font_id));
+    assert_eq!(
+        buf.faces.get(&0).unwrap().default_resolved_font_id,
+        Some(font_id)
+    );
+
+    // buffer -> grid
+    let back = FrameDisplayState::from_frame_glyph_buffer(&buf);
+    assert_eq!(back.fonts.get(&font_id), state.fonts.get(&font_id));
+
+    // JSON snapshot
+    let json = serde_json::to_string(&state).expect("serialize");
+    let parsed: FrameDisplayState = serde_json::from_str(&json).expect("deserialize");
+    assert_eq!(parsed.fonts.get(&font_id), state.fonts.get(&font_id));
+    assert_eq!(
+        parsed.faces.get(&0).unwrap().default_resolved_font_id,
+        Some(font_id)
     );
 }

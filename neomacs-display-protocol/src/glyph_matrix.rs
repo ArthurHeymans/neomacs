@@ -693,6 +693,11 @@ pub struct FrameDisplayState {
     pub font_pixel_size: f32,
     pub background: Color,
     pub faces: HashMap<u32, Face>,
+    /// Resolved font table for this frame. `Face::default_resolved_font_id`
+    /// and (eventually) shaped glyph runs reference entries here; the render
+    /// thread rasterizes these exact fonts instead of re-selecting by
+    /// family/weight/slant.
+    pub fonts: crate::font::ResolvedFontTable,
     pub frame_id: DisplayFrameId,
     pub parent_id: DisplayFrameId,
     pub parent_x: f32,
@@ -845,6 +850,7 @@ impl FrameDisplayState {
                 a: 1.0,
             },
             faces: HashMap::new(),
+            fonts: crate::font::ResolvedFontTable::new(),
             frame_id: DisplayFrameId::new(0),
             parent_id: DisplayFrameId::new(0),
             parent_x: 0.0,
@@ -907,6 +913,7 @@ impl FrameDisplayState {
         state.background_alpha = buf.background_alpha;
         state.no_accept_focus = buf.no_accept_focus;
         state.faces = buf.faces.clone();
+        state.fonts = buf.fonts.clone();
         state.window_infos = buf.window_infos.clone();
         // Reconstruct the layout-internal phys_cursor from the unified list's
         // active entry; charpos isn't carried on WindowCursor so default to 0.
@@ -1117,6 +1124,11 @@ impl FrameDisplayState {
         // Copy faces
         for (id, face) in &self.faces {
             buf.faces.insert(*id, face.clone());
+        }
+
+        // Copy resolved fonts
+        for (id, font) in &self.fonts {
+            buf.fonts.insert(*id, font.clone());
         }
 
         // Copy window_infos

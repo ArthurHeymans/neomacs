@@ -4,6 +4,7 @@ pub mod cursor;
 pub mod cursor_effect_command;
 pub mod effect_config;
 pub mod face;
+pub mod font;
 pub mod frame_glyphs;
 pub mod glyph_matrix;
 pub mod gradient;
