@@ -18,7 +18,8 @@
 //! its own binary/process (nextest), so the process-global `SUBR_SPEC_*` counters,
 //! the `NEOVM_AOT*` OnceLock gates, and the frozen unit index are uncontended.
 
-#![cfg(all(feature = "jit", target_os = "linux"))]
+// debug_assertions: the self-tests assert on the debug-only SUBR_SPEC_* counters.
+#![cfg(all(feature = "jit", target_os = "linux", debug_assertions))]
 
 /// STEP 1 (GO/NO-GO): a pred-class body emitted via `compile_leaf_to_object` (the
 /// drain's exact producer) round-trips runtime-emit → next-session-load: it serves

@@ -17,7 +17,8 @@
 //! thing runs in the (shim-exporting) integration-test process. It runs ALONE in
 //! its own binary, so the process-global `SUBR_SPEC_*` counters are uncontended.
 
-#![cfg(all(feature = "jit", target_os = "linux"))]
+// debug_assertions: the self-test asserts on the debug-only SUBR_SPEC_* counters.
+#![cfg(all(feature = "jit", target_os = "linux", debug_assertions))]
 
 /// The full B2 cross-session corpus: (a) armed cross-session + FAST-from-call-1 for
 /// the pred + subr spec shims (dlopen e2e; eq shim is export/import-audit-covered),

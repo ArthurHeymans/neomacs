@@ -2741,7 +2741,9 @@ pub fn testkit_baseline_op_symbol_reloc_selftest(dir: &std::path::Path) -> Resul
 ///      at 0 and move `SUBR_SPEC_GENERIC_COUNT` each time (the `SPEC_EPOCH_DISARMED`
 ///      short-circuit, distinct from a re-armable epoch-stale slot).
 #[doc(hidden)]
-#[cfg(target_os = "linux")]
+// Consumes the debug-only SUBR_SPEC_* counters → must match their cfg, else
+// `cargo build --release --features jit` fails to resolve them (E0432).
+#[cfg(all(target_os = "linux", debug_assertions))]
 pub fn testkit_spec_aot_selftest(dir: &std::path::Path) -> Result<(), String> {
     use super::compile::{SUBR_SPEC_FAST_COUNT, SUBR_SPEC_GENERIC_COUNT};
     use crate::emacs_core::bytecode::{ByteCodeFunction, Vm};
@@ -3012,7 +3014,7 @@ pub fn testkit_spec_aot_selftest(dir: &std::path::Path) -> Result<(), String> {
 /// Invoked from `tests/aot_pgo.rs` (a shim-exporting `-rdynamic` integration binary,
 /// so the `neovm_jit_pred_spec` import resolves at dlopen).
 #[doc(hidden)]
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", debug_assertions))]
 pub fn testkit_pgo_roundtrip_selftest(dir: &std::path::Path) -> Result<(), String> {
     use super::compile::SUBR_SPEC_FAST_COUNT;
     use crate::emacs_core::bytecode::{ByteCodeFunction, Vm};
@@ -3132,7 +3134,7 @@ pub fn testkit_pgo_roundtrip_selftest(dir: &std::path::Path) -> Result<(), Strin
 /// PASS 2 is that first `load_unit`, freezing the index WITH the drained `.so`
 /// present. Invoked from `tests/aot_pgo.rs` (shim-exporting `-rdynamic` binary).
 #[doc(hidden)]
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", debug_assertions))]
 pub fn testkit_pgo_drain_selftest(dir: &std::path::Path) -> Result<(), String> {
     use super::compile::SUBR_SPEC_FAST_COUNT;
     use crate::emacs_core::bytecode::{ByteCodeFunction, Vm};
