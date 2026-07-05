@@ -349,6 +349,7 @@ fn find_font_eval_requests_exact_registry_match_from_display_host() {
     eval.set_display_host(Box::new(CapturingFindFontDisplayHost {
         last_request: Rc::clone(&last_request),
         matched: Some(ResolvedFontSpecMatch {
+            foundry: None,
             family: LispString::from_utf8("Noto Sans Mono CJK SC"),
             registry: Some(LispString::from_utf8("iso10646-1")),
             file: Some(LispString::from_utf8("/tmp/NotoSansMonoCJKsc-Regular.otf")),
@@ -420,6 +421,7 @@ fn find_font_eval_returns_gnu_canonical_ultra_light_weight_symbol() {
     eval.set_display_host(Box::new(CapturingFindFontDisplayHost {
         last_request: Rc::clone(&last_request),
         matched: Some(ResolvedFontSpecMatch {
+            foundry: None,
             family: LispString::from_utf8("JetBrains Mono"),
             registry: Some(LispString::from_utf8("iso10646-1")),
             file: None,

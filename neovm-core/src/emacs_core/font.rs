@@ -753,6 +753,23 @@ fn is_font(val: &Value) -> bool {
     is_font_spec(val) || is_font_entity(val) || is_font_object(val)
 }
 
+/// The `type-of`/`cl-type-of` symbol for a font value, mirroring GNU's
+/// `PVEC_FONT` size discrimination (`font-spec` < `font-entity` <
+/// `font-object`, src/font.h FONT_*_MAX). Neomacs represents fonts as
+/// tag-keyword vectors, so the type predicates must recognize them
+/// explicitly. `None` for non-font values.
+pub(crate) fn font_value_type_symbol(val: &Value) -> Option<&'static str> {
+    if is_font_spec(val) {
+        Some(FONT_SPEC_TAG)
+    } else if is_font_entity(val) {
+        Some(FONT_ENTITY_TAG)
+    } else if is_font_object(val) {
+        Some(FONT_OBJECT_TAG)
+    } else {
+        None
+    }
+}
+
 /// Extract a property from a tagged font vector.
 ///
 /// Property lookup is strict: keys only match if they are exactly equal to
@@ -2392,6 +2409,14 @@ fn build_font_entity_for_spec_match(matched: &super::eval::ResolvedFontSpecMatch
         elems.push(value);
     };
 
+    // GNU orders entity fields foundry-first (XLFD order); the foundry is
+    // a symbol (e.g. GOOG) read from fontconfig FC_FOUNDRY.
+    if let Some(foundry) = &matched.foundry {
+        push_field(
+            "foundry",
+            Value::from_sym_id(intern(foundry.as_utf8_str().unwrap_or_default())),
+        );
+    }
     push_field(
         "family",
         Value::from_sym_id(intern(matched.family.as_utf8_str().unwrap_or_default())),
@@ -2423,6 +2448,9 @@ fn build_font_entity_for_spec_match(matched: &super::eval::ResolvedFontSpecMatch
     if let Some(file) = &matched.file {
         push_field("file", Value::heap_string(file.clone()));
     }
+    // Scalable entities carry average width 0 (GNU src/ftfont.c sets
+    // FONT_AVGWIDTH_INDEX to 0); the XLFD renders it as "0", not "*".
+    push_field("avg-width", Value::fixnum(0));
 
     Value::vector(elems)
 }

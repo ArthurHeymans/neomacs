@@ -1345,6 +1345,7 @@ pub struct ResolvedFrameFont {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ResolvedFontSpecMatch {
     pub family: crate::heap_types::LispString,
+    pub foundry: Option<crate::heap_types::LispString>,
     pub registry: Option<crate::heap_types::LispString>,
     pub file: Option<crate::heap_types::LispString>,
     pub weight: Option<FontWeight>,

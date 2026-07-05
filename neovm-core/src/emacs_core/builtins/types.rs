@@ -393,6 +393,11 @@ pub(crate) fn builtin_cl_type_of(args: Vec<Value>) -> EvalResult {
     if chartable::is_bool_vector(&args[0]) {
         return Ok(Value::symbol("bool-vector"));
     }
+    // Font values are tag-keyword vectors; GNU's PVEC_FONT reports
+    // font-spec/font-entity/font-object from type-of and cl-type-of.
+    if let Some(name) = crate::emacs_core::font::font_value_type_symbol(&args[0]) {
+        return Ok(Value::symbol(name));
+    }
     let name = match args[0].kind() {
         ValueKind::Nil => "null",
         ValueKind::T => "boolean",

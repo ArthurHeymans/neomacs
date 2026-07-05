@@ -295,6 +295,7 @@ fn spacing_categories_follow_gnu_numeric_ranges() {
 #[test]
 fn monospace_preference_penalizes_proportional_candidates() {
     let mono_candidate = ListedFont {
+        foundry: None,
         matched: super::FontMatch {
             family: "Noto Sans Mono CJK SC".to_string(),
             file: None,
@@ -308,6 +309,7 @@ fn monospace_preference_penalizes_proportional_candidates() {
         spacing: Some(FONT_SPACING_MONO),
     };
     let proportional_candidate = ListedFont {
+        foundry: None,
         matched: super::FontMatch {
             family: "Noto Sans CJK SC".to_string(),
             file: None,
@@ -350,6 +352,7 @@ fn monospace_preference_penalizes_proportional_candidates() {
 #[test]
 fn family_affinity_prefers_requested_family_over_unrelated_fixed_pitch_fallback() {
     let requested_family_candidate = ListedFont {
+        foundry: None,
         matched: super::FontMatch {
             family: "Noto Sans Mono CJK SC".to_string(),
             file: None,
@@ -363,6 +366,7 @@ fn family_affinity_prefers_requested_family_over_unrelated_fixed_pitch_fallback(
         spacing: None,
     };
     let unrelated_fixed_candidate = ListedFont {
+        foundry: None,
         matched: super::FontMatch {
             family: "Sarasa Fixed Slab SC".to_string(),
             file: None,
@@ -417,6 +421,7 @@ fn family_affinity_treats_cjk_companion_as_close_match() {
 fn best_candidate_for_pass_prefers_first_family_when_later_style_matches_catch_up() {
     let candidates = vec![
         ListedFont {
+            foundry: None,
             matched: super::FontMatch {
                 family: "Noto Sans Mono CJK SC".to_string(),
                 file: Some("mono.ttc".to_string()),
@@ -430,6 +435,7 @@ fn best_candidate_for_pass_prefers_first_family_when_later_style_matches_catch_u
             spacing: None,
         },
         ListedFont {
+            foundry: None,
             matched: super::FontMatch {
                 family: "Noto Sans CJK JP".to_string(),
                 file: Some("sans.ttc".to_string()),
@@ -443,6 +449,7 @@ fn best_candidate_for_pass_prefers_first_family_when_later_style_matches_catch_u
             spacing: None,
         },
         ListedFont {
+            foundry: None,
             matched: super::FontMatch {
                 family: "Noto Sans Mono CJK SC".to_string(),
                 file: Some("mono.ttc".to_string()),

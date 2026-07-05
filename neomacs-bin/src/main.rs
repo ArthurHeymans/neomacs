@@ -1426,6 +1426,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         );
         Ok(matched.map(|font| ResolvedFontSpecMatch {
             family: LispString::from_utf8(&font.family),
+            foundry: font.foundry.map(|s| LispString::from_utf8(&s)),
             registry: Some(LispString::from_utf8("iso10646-1")),
             file: font.file.map(|s| LispString::from_utf8(&s)),
             weight: font.weight.map(FontWeight::from_css_weight),

@@ -87,6 +87,7 @@ impl FontMatch {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SpecFontMatch {
     pub family: String,
+    pub foundry: Option<String>,
     pub registry: Option<String>,
     pub file: Option<String>,
     pub weight: Option<u16>,
@@ -113,6 +114,9 @@ struct ListedFont {
     weight_css: Option<u16>,
     width: Option<FontWidth>,
     spacing: Option<i32>,
+    /// FC_FOUNDRY (e.g. "GOOG"); GNU carries it on font entities
+    /// (src/ftfont.c ftfont_pattern_entity reads FC_FOUNDRY).
+    foundry: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -445,6 +449,7 @@ pub fn find_font_for_spec(
         .find(|candidate| candidate_matches_find_font_spec(candidate, &spec))
         .map(|candidate| SpecFontMatch {
             family: candidate.matched.family,
+            foundry: candidate.foundry,
             registry: Some("iso10646-1".to_string()),
             file: candidate.matched.file,
             weight: candidate
@@ -1170,6 +1175,7 @@ fn listed_font_from_raw_pattern(pattern: *mut fontconfig_sys::FcPattern) -> Opti
         weight_css,
         width: raw_pattern_int(pattern, fontconfig::FC_WIDTH).map(map_fontconfig_width_raw),
         spacing,
+        foundry: raw_pattern_string(pattern, fontconfig::FC_FOUNDRY),
     })
 }
 
@@ -1470,6 +1476,7 @@ fn fc_list_candidates(
                 weight_css,
                 width: None,
                 spacing,
+                foundry: None,
             };
             candidates.push(candidate);
         }
