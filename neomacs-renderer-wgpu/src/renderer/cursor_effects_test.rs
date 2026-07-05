@@ -56,6 +56,7 @@ fn make_selected_window_info(x: f32, y: f32, w: f32, h: f32) -> WindowInfo {
         selected: true,
         is_minibuffer: false,
         char_height: 16.0,
+        buffer_name: String::new(),
         buffer_file_name: String::new(),
         modified: false,
     }

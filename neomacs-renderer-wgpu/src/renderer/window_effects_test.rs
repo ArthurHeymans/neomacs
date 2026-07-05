@@ -45,6 +45,7 @@ fn test_window_info(
         selected,
         is_minibuffer,
         char_height: 20.0,
+        buffer_name: String::new(),
         buffer_file_name: String::new(),
         modified,
     }
