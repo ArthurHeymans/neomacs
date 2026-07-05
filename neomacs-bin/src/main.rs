@@ -1358,8 +1358,9 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         );
         Ok(selected.map(|font| ResolvedFontMatch {
             family: LispString::from_utf8(&font.family),
-            foundry: None,
+            foundry: font.foundry.as_deref().map(LispString::from_utf8),
             file: font.file.map(|s| LispString::from_utf8(&s)),
+            pixel_size_px: font_size.round().max(1.0) as u32,
             weight: font.weight,
             slant: font.slant,
             width: font.width,
@@ -1401,7 +1402,7 @@ impl DisplayHost for PrimaryWindowDisplayHost {
             );
         Ok(Some(ResolvedFrameFont {
             family: LispString::from_utf8(&font.family),
-            foundry: None,
+            foundry: font.foundry.as_deref().map(LispString::from_utf8),
             weight: font.weight,
             slant: font.slant,
             width: font.width,

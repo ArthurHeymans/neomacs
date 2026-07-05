@@ -43,9 +43,13 @@ fn realized_face_info(
         .font_system
         .db()
         .face(glyph.physical((0.0, 0.0), 1.0).cache_key.font_id)?;
+    let file = fontdb_face_file(face);
     Some(SelectedFontInfo {
+        foundry: file
+            .as_deref()
+            .and_then(crate::fontconfig::foundry_for_file),
         family: resolved.family.clone(),
-        file: fontdb_face_file(face),
+        file,
         postscript_name: Some(face.post_script_name.clone()).filter(|name| !name.is_empty()),
         weight: FontWeight::from_css_weight(face.weight.0),
         slant: font_slant_from_fontdb(face.style),

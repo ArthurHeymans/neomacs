@@ -1219,6 +1219,80 @@ fn map_fontconfig_width_raw(width: i32) -> FontWidth {
     }
 }
 
+/// FC_FOUNDRY for a concrete font file (e.g. "GOOG" for Noto), as GNU
+/// carries on font entities/objects. Queried once per file and cached.
+pub fn foundry_for_file(file: &str) -> Option<String> {
+    static CACHE: OnceLock<Mutex<std::collections::HashMap<String, Option<String>>>> =
+        OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
+    if let Ok(cache) = cache.lock()
+        && let Some(cached) = cache.get(file)
+    {
+        return cached.clone();
+    }
+    let found = foundry_for_file_uncached(file);
+    if let Ok(mut cache) = cache.lock() {
+        cache.insert(file.to_string(), found.clone());
+    }
+    found
+}
+
+#[cfg(unix)]
+fn foundry_for_file_uncached(file: &str) -> Option<String> {
+    if fontconfig_handle().is_none() {
+        return None;
+    }
+    let pattern = unsafe { fontconfig_sys::FcPatternCreate() };
+    if pattern.is_null() {
+        return None;
+    }
+    let pattern = FcPatternGuard(pattern);
+    let value = CString::new(file).ok()?;
+    let ok = unsafe {
+        fontconfig_sys::FcPatternAddString(
+            pattern.0,
+            fontconfig::FC_FILE.as_ptr(),
+            value.as_ptr().cast(),
+        )
+    };
+    if ok == 0 {
+        return None;
+    }
+    let object_set = unsafe { fontconfig_sys::FcObjectSetCreate() };
+    if object_set.is_null() {
+        return None;
+    }
+    let object_set = FcObjectSetGuard(object_set);
+    let ok =
+        unsafe { fontconfig_sys::FcObjectSetAdd(object_set.0, fontconfig::FC_FOUNDRY.as_ptr()) };
+    if ok == 0 {
+        return None;
+    }
+    let fontset = unsafe {
+        FcFontSetGuard(fontconfig_sys::FcFontList(
+            ptr::null_mut(),
+            pattern.0,
+            object_set.0,
+        ))
+    };
+    if fontset.0.is_null() {
+        return None;
+    }
+    let nfont = unsafe { (*fontset.0).nfont } as usize;
+    for i in 0..nfont {
+        let candidate = unsafe { *(*fontset.0).fonts.add(i) };
+        if let Some(foundry) = raw_pattern_string(candidate, fontconfig::FC_FOUNDRY) {
+            return Some(foundry);
+        }
+    }
+    None
+}
+
+#[cfg(not(unix))]
+fn foundry_for_file_uncached(_file: &str) -> Option<String> {
+    None
+}
+
 #[cfg(unix)]
 fn fc_list_candidates(
     family: Option<&str>,

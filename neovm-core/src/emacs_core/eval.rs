@@ -1316,6 +1316,9 @@ pub struct ResolvedFontMatch {
     pub family: crate::heap_types::LispString,
     pub foundry: Option<crate::heap_types::LispString>,
     pub file: Option<crate::heap_types::LispString>,
+    /// Pixel size the font was resolved/opened at (GNU font-object
+    /// FONT_SIZE is the opened pixel size; the object XLFD prints it).
+    pub pixel_size_px: u32,
     pub weight: FontWeight,
     pub slant: FontSlant,
     pub width: FontWidth,

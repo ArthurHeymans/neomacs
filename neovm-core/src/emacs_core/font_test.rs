@@ -1174,6 +1174,7 @@ fn font_at_eval_prefers_backend_selected_font_match_when_available() {
     ensure_selected_gui_frame(&mut eval);
     eval.set_display_host(Box::new(FontAtDisplayHost {
         matched: Some(ResolvedFontMatch {
+            pixel_size_px: 15,
             family: LispString::from_utf8("Noto Sans Mono CJK SC"),
             foundry: None,
             file: Some(LispString::from_utf8("/tmp/NotoSansMonoCJKsc-Regular.otf")),

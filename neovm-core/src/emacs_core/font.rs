@@ -2349,6 +2349,12 @@ fn font_weight_symbol(weight: FontWeight) -> &'static str {
 }
 
 fn build_font_object(face: &RuntimeFace) -> Value {
+    build_font_object_with_pixel_size(face, None)
+}
+
+/// GNU font objects carry the OPENED pixel size in FONT_SIZE (the XLFD's
+/// pixel field prints it); pass `pixel_size` when the resolver knows it.
+fn build_font_object_with_pixel_size(face: &RuntimeFace, pixel_size: Option<i64>) -> Value {
     let mut elems = vec![Value::keyword(FONT_OBJECT_TAG)];
 
     let mut push_field = |name: &str, value: Value| {
@@ -2372,19 +2378,36 @@ fn build_font_object(face: &RuntimeFace) -> Value {
     {
         push_field("family", family);
     }
+    // GNU's canonical style-table first names, as on entities.
     if let Some(weight) = face.weight {
-        push_field("weight", Value::symbol(font_weight_symbol(weight)));
+        let name = font_weight_symbol(weight);
+        let name = gnu_style_first_name(GNU_WEIGHT_TABLE, name).unwrap_or(name);
+        push_field("weight", Value::symbol(name));
     }
     if let Some(slant) = face.slant {
-        push_field("slant", Value::symbol(slant.symbol_name()));
+        let name = slant.symbol_name();
+        let name = gnu_style_first_name(GNU_SLANT_TABLE, name).unwrap_or(name);
+        push_field("slant", Value::symbol(name));
     }
     if let Some(width) = face.width {
-        push_field("width", Value::symbol(width.symbol_name()));
+        let name = width.symbol_name();
+        let name = gnu_style_first_name(GNU_WIDTH_TABLE, name).unwrap_or(name);
+        push_field("width", Value::symbol(name));
     }
     if let Some(height) = &face.height {
-        let value = face_height_to_font_value(height);
-        push_field("height", value);
-        push_field("size", value);
+        push_field("height", face_height_to_font_value(height));
+    }
+    if let Some(px) = pixel_size {
+        push_field("size", Value::fixnum(px));
+    } else if let Some(height) = &face.height {
+        push_field("size", face_height_to_font_value(height));
+    }
+    if pixel_size.is_some() {
+        // A resolver-opened font: like GNU's opened font objects, carry the
+        // entity registry and the scalable avg-width 0 so the object XLFD
+        // ends "-0-iso10646-1", not "-*-*".
+        push_field("registry", Value::from_sym_id(intern("iso10646-1")));
+        push_field("avg-width", Value::fixnum(0));
     }
 
     let font_object = Value::vector(elems);
@@ -2497,7 +2520,10 @@ fn build_font_object_for_match(
     selected.weight = Some(matched.weight);
     selected.slant = Some(matched.slant);
     selected.width = Some(matched.width);
-    font_vector_with_file(build_font_object(&selected), &matched.file)
+    font_vector_with_file(
+        build_font_object_with_pixel_size(&selected, Some(matched.pixel_size_px.max(1) as i64)),
+        &matched.file,
+    )
 }
 
 fn font_name_value(font_like: &Value) -> Option<Value> {

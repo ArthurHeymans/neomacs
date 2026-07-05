@@ -201,6 +201,7 @@ fn fontdb_face_file(face: &fontdb::FaceInfo) -> Option<String> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SelectedFontInfo {
     pub family: String,
+    pub foundry: Option<String>,
     pub file: Option<String>,
     pub postscript_name: Option<String>,
     pub weight: FontWeight,
@@ -595,14 +596,18 @@ impl FontMetricsService {
             .font_system
             .db()
             .face(glyph.physical((0.0, 0.0), 1.0).cache_key.font_id)?;
+        let file = fontdb_face_file(face);
         Some(SelectedFontInfo {
+            foundry: file
+                .as_deref()
+                .and_then(crate::fontconfig::foundry_for_file),
             // TTC/variable collections frequently expose several regional
             // aliases, and fontdb may report the file's first alias instead of
             // the family we explicitly resolved for this character. Preserve
             // the selector's family so `font-at` mirrors GNU Emacs' realized
             // face semantics.
             family: resolved.family.clone(),
-            file: fontdb_face_file(face),
+            file,
             postscript_name: Some(face.post_script_name.clone()).filter(|name| !name.is_empty()),
             // Variable fonts often report the container face's metadata weight
             // here even when shaping used a different requested instance.
