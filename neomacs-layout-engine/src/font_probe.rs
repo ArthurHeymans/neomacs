@@ -18,8 +18,16 @@
 //! Byte-exactness is enforced by tests against captured GNU output for
 //! concrete font files; if a future font/hinting configuration diverges,
 //! the tests say so instead of the probe silently guessing.
+//!
+//! FreeType is only available on the fontconfig/FreeType platforms (Linux
+//! and other unix); Windows/macOS use their own font backends, so the
+//! FreeType-backed probes below have `cfg(not(unix))` stubs that return
+//! `None`/empty. The GSUB/GPOS `otf_capability` reader uses ttf-parser and
+//! is cross-platform.
 
+#[cfg(unix)]
 use freetype::Library;
+#[cfg(unix)]
 use freetype::face::LoadFlag;
 
 /// Metrics of one font file probed at an exact pixel size, shaped like the
@@ -37,9 +45,27 @@ pub struct FontPxMetrics {
     pub average_width: i32,
 }
 
+/// Non-unix stub: no FreeType, so no px-metric probe.
+#[cfg(not(unix))]
+pub fn probe_font_px_metrics(
+    _file: &str,
+    _face_index: u32,
+    _pixel_size: u32,
+    _wght: Option<f32>,
+) -> Option<FontPxMetrics> {
+    None
+}
+
+/// Non-unix stub: no FreeType, so no named-instance enumeration.
+#[cfg(not(unix))]
+pub fn named_instance_wght_values(_file: &str, _face_index: u32) -> Vec<u16> {
+    Vec::new()
+}
+
 /// Probe `file`[`face_index`] like GNU `font_open_entity`: try
 /// `pixel_size`, bumping upward (at most 15 times) until average width and
 /// height are positive.
+#[cfg(unix)]
 pub fn probe_font_px_metrics(
     file: &str,
     face_index: u32,
@@ -73,6 +99,7 @@ pub fn probe_font_px_metrics(
 /// GNU/fontconfig expose named instances as separate font entities, so
 /// weight resolution snaps a request to the nearest instance rather than
 /// synthesizing an arbitrary axis value (font_match::resolve_requested_weight).
+#[cfg(unix)]
 pub fn named_instance_wght_values(file: &str, face_index: u32) -> Vec<u16> {
     use freetype::freetype_sys as ft;
     let Ok(library) = Library::init() else {
@@ -112,6 +139,7 @@ pub fn named_instance_wght_values(file: &str, face_index: u32) -> Vec<u16> {
 
 /// Set the `wght` design axis (OT axis units == CSS weight), leaving all
 /// other axes at their defaults. No-op for non-variable fonts.
+#[cfg(unix)]
 fn apply_wght_axis(library: &Library, face: &mut freetype::Face, wght: f32) {
     use freetype::freetype_sys as ft;
     unsafe {
@@ -134,6 +162,7 @@ fn apply_wght_axis(library: &Library, face: &mut freetype::Face, wght: f32) {
     }
 }
 
+#[cfg(unix)]
 fn probe_at_exact_px(face: &freetype::Face, pixel_size: u32) -> Option<FontPxMetrics> {
     face.set_pixel_sizes(pixel_size, pixel_size).ok()?;
 
@@ -193,7 +222,8 @@ fn probe_at_exact_px(face: &freetype::Face, pixel_size: u32) -> Option<FontPxMet
     })
 }
 
-#[cfg(test)]
+// The probe tests exercise the FreeType functions against real font files.
+#[cfg(all(test, unix))]
 #[path = "font_probe_test.rs"]
 mod tests;
 
