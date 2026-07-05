@@ -2607,6 +2607,154 @@ fn live_frame_font_attribute_fallback(
         .find_map(|(derived_attr, derived_value)| (derived_attr == attr).then_some(derived_value))
 }
 
+/// GNU font.c style tables (weight/slant/width). Each row is the aliases of
+/// one numeric style value; `font_style_symbolic` reports the FIRST name,
+/// which is what `font_unparse_fcname` prints in the fontconfig-style full
+/// name (e.g. "extra-bold").
+const GNU_WEIGHT_TABLE: &[&[&str]] = &[
+    &["thin"],
+    &["ultra-light", "ultralight", "extra-light", "extralight"],
+    &["light"],
+    &["semi-light", "semilight", "demilight"],
+    &["regular", "normal", "unspecified", "book"],
+    &["medium"],
+    &["semi-bold", "semibold", "demibold", "demi-bold", "demi"],
+    &["bold"],
+    &["extra-bold", "extrabold", "ultra-bold", "ultrabold"],
+    &["black", "heavy"],
+    &["ultra-heavy", "ultraheavy"],
+];
+const GNU_SLANT_TABLE: &[&[&str]] = &[
+    &["reverse-oblique", "ro"],
+    &["reverse-italic", "ri"],
+    &["normal", "r", "unspecified"],
+    &["italic", "i", "ot"],
+    &["oblique", "o"],
+];
+const GNU_WIDTH_TABLE: &[&[&str]] = &[
+    &["ultra-condensed", "ultracondensed"],
+    &["extra-condensed", "extracondensed"],
+    &["condensed", "compressed", "narrow"],
+    &["semi-condensed", "semicondensed", "demicondensed"],
+    &["normal", "medium", "regular", "unspecified"],
+    &["semi-expanded", "semiexpanded", "demiexpanded"],
+    &["expanded"],
+    &["extra-expanded", "extraexpanded"],
+    &["ultra-expanded", "ultraexpanded", "wide"],
+];
+
+/// Map a style symbol name to GNU's canonical (first) table name.
+fn gnu_style_first_name(
+    table: &'static [&'static [&'static str]],
+    name: &str,
+) -> Option<&'static str> {
+    table
+        .iter()
+        .find(|row| row.contains(&name))
+        .map(|row| row[0])
+}
+
+/// `font-info` for a font ENTITY, following GNU font.c `Ffont_info`: open
+/// the entity via `font_open_entity` (a scalable entity's size 0 probes
+/// upward from 1px until the font is "manageable") and report the OPENED
+/// font's metrics — the tiny pixelsize=1 numbers — not the frame's realized
+/// font. Names: element 0 is the entity XLFD with the probed pixel size,
+/// element 1 the fontconfig-style name `font_unparse_fcname` builds.
+fn font_info_vector_for_entity(eval: &mut super::eval::Context, entity: &Value) -> Option<Value> {
+    let elems = entity.as_vector_data()?.clone();
+    let file_value = font_vector_get_flexible(&elems, "file").filter(|value| value.is_string())?;
+    let file = file_value.as_utf8_str()?.to_owned();
+    let px = font_vector_get_flexible(&elems, "size")
+        .and_then(|value| match value.kind() {
+            ValueKind::Fixnum(n) if n > 0 => Some(n as u32),
+            _ => None,
+        })
+        .unwrap_or(0);
+    let probe = eval
+        .display_host
+        .as_mut()
+        .and_then(|host| host.probe_font_px_metrics(&file, 0, px).ok())
+        .flatten()?;
+
+    let (
+        foundry,
+        family,
+        weight,
+        slant,
+        set_width,
+        adstyle,
+        _pixel,
+        resx,
+        spacing_field,
+        avg_width,
+        registry,
+    ) = xlfd_fields_from_font_vector(&elems);
+    let opened_name = format!(
+        "-{}-{}-{}-{}-{}-{}-{}-*-{}-{}-{}-{}",
+        foundry,
+        family,
+        weight,
+        slant,
+        set_width,
+        adstyle,
+        probe.pixel_size,
+        resx,
+        spacing_field,
+        avg_width,
+        registry
+    );
+
+    // font_unparse_fcname: family:pixelsize=N[:foundry=F][:weight=W]
+    // [:slant=S][:width=W][:spacing=N]:scalable=true (avgwidth 0).
+    let mut full_name = String::new();
+    full_name.push_str(&family);
+    full_name.push_str(&format!(":pixelsize={}", probe.pixel_size));
+    if foundry != "*" {
+        full_name.push_str(&format!(":foundry={foundry}"));
+    }
+    let style = |key: &str, table: &'static [&'static [&'static str]]| -> Option<&'static str> {
+        font_vector_get_flexible(&elems, key)
+            .and_then(|value| value.as_symbol_name())
+            .and_then(|name| gnu_style_first_name(table, name.trim_start_matches(':')))
+    };
+    if let Some(name) = style("weight", GNU_WEIGHT_TABLE) {
+        full_name.push_str(&format!(":weight={name}"));
+    }
+    if let Some(name) = style("slant", GNU_SLANT_TABLE).or(Some("normal")) {
+        full_name.push_str(&format!(":slant={name}"));
+    }
+    full_name.push_str(&format!(
+        ":width={}",
+        style("width", GNU_WIDTH_TABLE).unwrap_or("normal")
+    ));
+    if let Some(spacing) =
+        font_vector_get_flexible(&elems, "spacing").and_then(|value| match value.kind() {
+            ValueKind::Fixnum(n) => Some(n),
+            _ => None,
+        })
+    {
+        full_name.push_str(&format!(":spacing={spacing}"));
+    }
+    full_name.push_str(":scalable=true");
+
+    Some(Value::vector(vec![
+        Value::string(opened_name),
+        Value::string(full_name),
+        Value::fixnum(probe.pixel_size as i64),
+        Value::fixnum(probe.height as i64),
+        Value::fixnum(0),
+        Value::fixnum(0),
+        Value::fixnum(0),
+        Value::fixnum(probe.max_width as i64),
+        Value::fixnum(probe.ascent as i64),
+        Value::fixnum(probe.descent as i64),
+        Value::fixnum(probe.space_width as i64),
+        Value::fixnum(probe.average_width as i64),
+        file_value,
+        Value::NIL,
+    ]))
+}
+
 fn font_info_vector_for_runtime_font(font_like: &Value, frame: &crate::window::Frame) -> Value {
     let opened_name = font_name_value(font_like).unwrap_or_else(|| Value::string(""));
     let full_name = opened_name;
@@ -6429,14 +6577,28 @@ pub(crate) fn builtin_font_info(eval: &mut super::eval::Context, args: Vec<Value
             ));
         }
     };
+    let has_window_system = eval
+        .frames
+        .get(frame_id)
+        .ok_or_else(|| signal("error", vec![Value::string("No selected frame")]))?
+        .window_system
+        .is_some();
+    if !has_window_system {
+        return Ok(Value::NIL);
+    }
+
+    if is_font_entity(&args[0]) {
+        // GNU opens the entity itself (font_open_entity) and reports the
+        // opened font's metrics; only fall back to the frame font when the
+        // entity can't be probed (no file, unreadable, ...).
+        if let Some(info) = font_info_vector_for_entity(eval, &args[0]) {
+            return Ok(info);
+        }
+    }
     let frame = eval
         .frames
         .get(frame_id)
         .ok_or_else(|| signal("error", vec![Value::string("No selected frame")]))?;
-    if frame.window_system.is_none() {
-        return Ok(Value::NIL);
-    }
-
     if args[0].is_string() || is_font(&args[0]) {
         Ok(font_info_vector_for_runtime_font(&args[0], frame))
     } else {

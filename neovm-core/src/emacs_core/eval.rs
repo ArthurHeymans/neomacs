@@ -1355,6 +1355,21 @@ pub struct ResolvedFontSpecMatch {
     pub postscript_name: Option<crate::heap_types::LispString>,
 }
 
+/// Metrics of a font file probed at an exact pixel size, following GNU
+/// `font_open_entity` + `ftcrfont_open` semantics (the values `font-info`
+/// reports for a font entity). Produced by the layout engine's FreeType
+/// probe.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FontPxProbeResult {
+    pub pixel_size: u32,
+    pub height: i32,
+    pub ascent: i32,
+    pub descent: i32,
+    pub max_width: i32,
+    pub space_width: i32,
+    pub average_width: i32,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ImageResolveSource {
     File(crate::heap_types::LispString),
@@ -1489,6 +1504,14 @@ pub trait DisplayHost {
         &mut self,
         _request: FontSpecResolveRequest,
     ) -> Result<Option<ResolvedFontSpecMatch>, String> {
+        Ok(None)
+    }
+    fn probe_font_px_metrics(
+        &mut self,
+        _file: &str,
+        _face_index: u32,
+        _pixel_size: u32,
+    ) -> Result<Option<FontPxProbeResult>, String> {
         Ok(None)
     }
     fn resolve_image(

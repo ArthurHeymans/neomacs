@@ -1437,6 +1437,26 @@ impl DisplayHost for PrimaryWindowDisplayHost {
         }))
     }
 
+    fn probe_font_px_metrics(
+        &mut self,
+        file: &str,
+        face_index: u32,
+        pixel_size: u32,
+    ) -> Result<Option<neovm_core::emacs_core::eval::FontPxProbeResult>, String> {
+        Ok(
+            neomacs_layout_engine::font_probe::probe_font_px_metrics(file, face_index, pixel_size)
+                .map(|m| neovm_core::emacs_core::eval::FontPxProbeResult {
+                    pixel_size: m.pixel_size,
+                    height: m.height,
+                    ascent: m.ascent,
+                    descent: m.descent,
+                    max_width: m.max_width,
+                    space_width: m.space_width,
+                    average_width: m.average_width,
+                }),
+        )
+    }
+
     fn resolve_image(&self, request: ImageResolveRequest) -> Result<Option<ResolvedImage>, String> {
         let image = match self.request_image(request.clone())? {
             Some(image) if image.dimensions_known => return Ok(Some(image)),

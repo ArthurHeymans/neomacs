@@ -93,6 +93,7 @@ pub mod font_backend;
 pub mod font_loader;
 pub mod font_match;
 pub mod font_metrics;
+pub mod font_probe;
 pub mod fontconfig;
 pub(crate) mod glyph_advance;
 pub(crate) mod glyph_row_writer;
