@@ -859,6 +859,10 @@ pub struct FrameGlyphBuffer {
     /// renderer rasterizes the exact fonts layout resolved.
     pub fonts: crate::font::ResolvedFontTable,
 
+    /// Per-character fallback fonts (`face_id → repr char → font id`); see
+    /// [`crate::font::CharFontTable`].
+    pub char_fonts: crate::font::CharFontTable,
+
     /// Stipple patterns: bitmap_id -> StipplePattern
     pub stipple_patterns: HashMap<i32, StipplePattern>,
 
@@ -1049,6 +1053,7 @@ impl FrameGlyphBuffer {
             current_clip_rect: None,
             faces: HashMap::new(),
             fonts: crate::font::ResolvedFontTable::new(),
+            char_fonts: crate::font::CharFontTable::new(),
             stipple_patterns: HashMap::new(),
             fringe_bitmaps: HashMap::new(),
         }
@@ -1076,6 +1081,7 @@ impl FrameGlyphBuffer {
         self.fringe_bitmaps.clear();
         self.faces.clear();
         self.fonts.clear();
+        self.char_fonts.clear();
         self.current_window_id = DisplayWindowId::new(0);
         self.current_row_role = GlyphRowRole::Text;
         self.current_clip_rect = None;

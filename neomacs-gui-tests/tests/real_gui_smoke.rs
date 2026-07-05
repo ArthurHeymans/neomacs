@@ -72,6 +72,32 @@ fn real_gui_smoke_generates_surface_readback_png() {
         !doc["frames"].as_array().expect("frames array").is_empty(),
         "at least one frame in snapshot"
     );
+
+    // Font render-boundary gate: every realized GUI face must carry a
+    // layout-resolved font identity referencing the frame's font table, so
+    // the render thread never re-selects fonts for normal text (design doc
+    // 2026-07-05-font-realization-render-boundary-design.md §10/§16).
+    for frame in doc["frames"].as_array().expect("frames array") {
+        let fonts = frame["fonts"].as_object().expect("frame fonts table");
+        assert!(
+            !fonts.is_empty(),
+            "frame must publish a resolved font table"
+        );
+        for (face_id, face) in frame["faces"].as_object().expect("faces table") {
+            let resolved = &face["default_resolved_font_id"];
+            assert!(
+                !resolved.is_null(),
+                "face {face_id} ({:?}) has no resolved font id — unresolved \
+                 GUI text would hit the renderer's emergency fallback",
+                face["lisp_name"]
+            );
+            let font_id = resolved.as_u64().expect("font id number").to_string();
+            assert!(
+                fonts.contains_key(&font_id),
+                "face {face_id} references font {font_id} missing from the frame font table"
+            );
+        }
+    }
 }
 
 #[test]

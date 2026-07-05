@@ -1,7 +1,50 @@
 # Font Realization and Render Boundary Design
 
 Date: 2026-07-05
-Status: Draft
+Status: Phases 0–2 shipped; Phase 3a (per-char fallback identity) shipped;
+Phases 3b–6 open
+
+## 0. Amendments from implementation (2026-07-05)
+
+Decisions made while shipping Phases 0–2 and 3a:
+
+- **Phase 2 warning scope.** Per-character coverage fallback (CJK/emoji)
+  remains a render-side decision until glyph-level resolved fonts exist, so
+  the "unresolved GUI text" warning and counter
+  (`unresolved_face_text_total`) fire only when a face has neither a
+  resolved identity nor the C-FFI `font_file_path` bridge — not whenever
+  per-char fallback engages. Per-char fallback is traced separately under
+  the `font_boundary` target.
+- **`ResolvedFontId` scoping (answers §15).** Ids are interned by the
+  layout-side `FontMetricsService` and are stable for the service's
+  lifetime (the interner survives `clear_caches`, append-only). Frame
+  snapshots carry the subset used. Renderer caches must key on the
+  *identity* (or a hash including it), never the raw id alone.
+- **Phase 3a shipped as a fontset projection.** Instead of per-glyph
+  fields, frames carry `char_fonts: face_id → representative char →
+  ResolvedFontId` for the non-ASCII characters actually on screen —
+  GNU-shaped (fontset lookup is (face, char) → font) and it avoids
+  touching every glyph constructor. The representative-char policy
+  (`composition::representative_char_for_cluster`) is shared by layout
+  and renderer so both threads make the same decision. Glyph cache keys
+  need no change: charcode is already in `GlyphKey`.
+- **Realization seam.** Face- and char-level realization run as one pass
+  (`realize_frame_fonts`) at `LayoutEngine::finish_frame_output`, after
+  all install paths have filled the frame state — no per-call-site
+  plumbing. Measured steady-state cost ~37µs/frame at 40 faces (release),
+  on the evaluator thread; probe test
+  `realize_frame_fonts_steady_state_cost_probe` keeps it measurable.
+- **Phase 3b parity guard (constraint on §8/§12).** GNU does NOT shape
+  plain Latin text: it takes per-char metrics from the font driver, and
+  shaping happens only through the composition machinery
+  (`composition-function-table`, auto-composition). Shaped runs must be
+  emitted only where GNU would compose; `ShapeOptions` for ordinary text
+  must not introduce ligatures/kerning GNU doesn't apply, or column
+  metrics diverge from GNU. This is also the performance strategy: the
+  hot path for ordinary text never enters the shaper.
+- **Enforcement.** `real_gui_smoke` gates on: every face in the frame
+  snapshot carries `default_resolved_font_id`, and every referenced id
+  exists in the frame's font table.
 
 ## 1. Problem Statement
 

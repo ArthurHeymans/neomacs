@@ -140,6 +140,17 @@ pub struct ResolvedFont {
 /// Resolved font table carried by frame state, keyed by [`ResolvedFontId`].
 pub type ResolvedFontTable = HashMap<ResolvedFontId, ResolvedFont>;
 
+/// Per-frame character fallback font table: `face_id → representative char →
+/// resolved font`.
+///
+/// This is the layout side's projection of GNU's fontset lookup for the
+/// characters actually on screen: for text a face's primary font does not
+/// cover (CJK, emoji, symbols), layout resolves the covering font during
+/// measurement and publishes the answer here so the render thread rasterizes
+/// the same font instead of re-running its own per-character matching.
+/// Entries reference [`ResolvedFontTable`] ids.
+pub type CharFontTable = HashMap<u32, HashMap<char, ResolvedFontId>>;
+
 #[cfg(test)]
 #[path = "font_test.rs"]
 mod tests;

@@ -1512,3 +1512,36 @@ fn resolved_fonts_survive_materialize_and_round_trip() {
         Some(font_id)
     );
 }
+
+/// `char_fonts` (per-char fallback font table) must survive materialize and
+/// JSON snapshots like the faces/fonts tables do.
+#[test]
+fn char_fonts_survive_materialize_and_serde() {
+    use crate::font::ResolvedFontId;
+
+    let mut state = state_with_text("x");
+    state
+        .char_fonts
+        .entry(7)
+        .or_default()
+        .insert('好', ResolvedFontId(3));
+
+    let buf = state.materialize();
+    assert_eq!(
+        buf.char_fonts.get(&7).and_then(|m| m.get(&'好')),
+        Some(&ResolvedFontId(3))
+    );
+
+    let back = FrameDisplayState::from_frame_glyph_buffer(&buf);
+    assert_eq!(
+        back.char_fonts.get(&7).and_then(|m| m.get(&'好')),
+        Some(&ResolvedFontId(3))
+    );
+
+    let json = serde_json::to_string(&state).expect("serialize");
+    let parsed: FrameDisplayState = serde_json::from_str(&json).expect("deserialize");
+    assert_eq!(
+        parsed.char_fonts.get(&7).and_then(|m| m.get(&'好')),
+        Some(&ResolvedFontId(3))
+    );
+}

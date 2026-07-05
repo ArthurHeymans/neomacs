@@ -18,7 +18,7 @@ use cosmic_text::{
 };
 
 use neomacs_display_protocol::face::Face;
-use neomacs_display_protocol::font::{ResolvedFont, ResolvedFontTable};
+use neomacs_display_protocol::font::{CharFontTable, ResolvedFont, ResolvedFontTable};
 use neomacs_layout_engine::font_loader::FontFileCache;
 use neomacs_layout_engine::fontconfig::{FontconfigSubpixelOrder, default_subpixel_order};
 use swash::scale::{Render, ScaleContext, Source, StrikeWith};
@@ -203,6 +203,10 @@ pub struct WgpuGlyphAtlas {
     /// into it; the exact-font text path reads the answer from here instead
     /// of re-running semantic selection.
     frame_fonts: ResolvedFontTable,
+    /// Layout-resolved per-character fallback fonts (`face_id → repr char →
+    /// font id`), installed alongside `frame_fonts`. Consulted before any
+    /// render-side `match_font_for_char`.
+    frame_char_fonts: CharFontTable,
     /// Total GUI text lookups whose face had no layout-resolved font and no
     /// font-file bridge — i.e. the renderer had to make a semantic font
     /// decision on its own (design §10 "emergency fallback"). Must stay 0
@@ -272,6 +276,7 @@ impl WgpuGlyphAtlas {
             font_file_cache: FontFileCache::new(),
             subpixel_order: default_subpixel_order(),
             frame_fonts: ResolvedFontTable::new(),
+            frame_char_fonts: CharFontTable::new(),
             unresolved_face_text_total: 0,
             unresolved_face_warned: HashSet::new(),
             cache_hits_this_frame: 0,
@@ -743,14 +748,33 @@ impl WgpuGlyphAtlas {
         .render(&mut scaler, cache_key.glyph_id)
     }
 
-    /// Install a frame's layout-resolved font table before its text draws.
+    /// Reset the per-character table at the start of a render pass.
     ///
-    /// Ids are interned by the layout-side resolver and stable across frames,
-    /// so entries are upserted (a re-sent id always carries the same
+    /// `frame_char_fonts` is keyed by frame face id, and face ids can be
+    /// reused for DIFFERENT realized faces across frames, so entries must
+    /// not outlive the render pass that installed them. `frame_fonts` is
+    /// keyed by identity-stable ids and persists.
+    pub fn begin_frame_fonts(&mut self) {
+        self.frame_char_fonts.clear();
+    }
+
+    /// Install a frame's layout-resolved font tables before its text draws.
+    ///
+    /// Font ids are interned by the layout-side resolver and stable across
+    /// frames, so entries are upserted (a re-sent id always carries the same
     /// identity; overwriting also heals a hypothetical resolver restart).
-    pub fn install_frame_fonts(&mut self, fonts: &ResolvedFontTable) {
+    /// Char entries keep the FIRST binding per (face, char) within a render
+    /// pass, matching how the render thread merges face tables across the
+    /// main and child frames.
+    pub fn install_frame_fonts(&mut self, fonts: &ResolvedFontTable, char_fonts: &CharFontTable) {
         for (id, font) in fonts {
             self.frame_fonts.insert(*id, font.clone());
+        }
+        for (face_id, by_char) in char_fonts {
+            let entry = self.frame_char_fonts.entry(*face_id).or_default();
+            for (ch, id) in by_char {
+                entry.entry(*ch).or_insert(*id);
+            }
         }
     }
 
@@ -762,6 +786,46 @@ impl WgpuGlyphAtlas {
     fn face_resolved_font(&self, face: &Face) -> Option<&ResolvedFont> {
         face.default_resolved_font_id
             .and_then(|id| self.frame_fonts.get(&id))
+    }
+
+    /// Build cosmic Attrs that replay a layout-resolved font verbatim: the
+    /// same `select_cosmic_family` family mapping and the already-effective
+    /// weight the layout probe used, so cosmic-text picks the identical
+    /// fontdb face the layout metrics came from. Primes the identity's font
+    /// file first. No fontconfig, no weight re-resolution: the render thread
+    /// makes no semantic font decision here.
+    fn exact_attrs_for_resolved_font(
+        &mut self,
+        font: &ResolvedFont,
+        style: Option<Style>,
+    ) -> Attrs<'static> {
+        if let Some(path) = font.identity.file_path.as_deref() {
+            let _ = self.font_file_cache.prime_file(&mut self.font_system, path);
+        }
+        let mut attrs = Attrs::new();
+        attrs = match neomacs_layout_engine::font_match::select_cosmic_family(
+            &self.font_system,
+            &font.family,
+        ) {
+            neomacs_layout_engine::font_match::CosmicFamilySelection::Name(name) => {
+                let interned = self.intern_family(name);
+                attrs.family(Family::Name(interned))
+            }
+            neomacs_layout_engine::font_match::CosmicFamilySelection::Monospace => {
+                attrs.family(Family::Monospace)
+            }
+            neomacs_layout_engine::font_match::CosmicFamilySelection::Serif => {
+                attrs.family(Family::Serif)
+            }
+            neomacs_layout_engine::font_match::CosmicFamilySelection::SansSerif => {
+                attrs.family(Family::SansSerif)
+            }
+        };
+        attrs = attrs.weight(Weight(font.weight));
+        if let Some(style) = style {
+            attrs = attrs.style(style);
+        }
+        attrs
     }
 
     fn intern_family(&mut self, family: &str) -> &'static str {
@@ -805,27 +869,23 @@ impl WgpuGlyphAtlas {
             // Choose the font by what the cluster's presentation actually
             // requires, not by a selector char's own font.
             //
-            // U+FE0F (emoji variation selector) requests EMOJI (color)
-            // presentation for the whole cluster. An emoji keycap is
-            // digit + U+FE0F + U+20E3: the digit is ASCII and U+20E3 is
-            // classified as a plain symbol, so without honoring U+FE0F the
-            // cluster resolves to a monochrome symbol font and renders as an
-            // outline box instead of GNU's color keycap. When U+FE0F is
-            // present, resolve the font the way an emoji codepoint does (the
-            // fontset's emoji entry → the color emoji font) by probing with a
-            // canonical emoji; cosmic-text then shapes the whole sequence with
-            // that font and forms the precomposed color glyph.
-            //
-            // Otherwise pick the first glyph-bearing character, skipping
-            // zero-width joiners/selectors that don't determine the font.
-            let repr_char = if text.contains('\u{FE0F}') {
-                Some('\u{1F600}')
-            } else {
-                text.chars().find(|&ch| {
-                    !ch.is_ascii() && !neomacs_layout_engine::composition::is_composition_joiner(ch)
-                })
-            };
+            // Representative-char policy shared with the layout side (emoji
+            // presentation via U+FE0F, else first glyph-bearing non-ASCII
+            // char) so both threads make the same fallback decision.
+            let repr_char =
+                neomacs_layout_engine::composition::representative_char_for_cluster(text);
             if let Some(ch) = repr_char {
+                // Layout-resolved per-char fallback: replay the exact font
+                // the measurement pass selected for this (face, char).
+                if let Some(font) = self
+                    .frame_char_fonts
+                    .get(&f.id)
+                    .and_then(|by_char| by_char.get(&ch))
+                    .and_then(|id| self.frame_fonts.get(id))
+                    .cloned()
+                {
+                    return self.exact_attrs_for_resolved_font(&font, effective_style);
+                }
                 // Per-character coverage fallback (CJK/emoji/symbols). This
                 // stays a render-side decision until shaped runs carry
                 // glyph-level resolved fonts (design Phase 3); it mirrors the
@@ -852,39 +912,10 @@ impl WgpuGlyphAtlas {
                     }
                     effective_family = matched.family;
                 }
-            } else if let Some(font) = resolved.as_ref() {
-                // Exact face-primary path: replay the layout resolver's
-                // realized answer verbatim — the same
-                // `select_cosmic_family` family mapping and the already
-                // effective weight it probed with — so cosmic-text picks
-                // the identical fontdb face the layout metrics came from.
-                // No fontconfig, no weight re-resolution: the render thread
-                // makes no semantic font decision here.
-                let family = font.family.clone();
-                let mut attrs = Attrs::new();
-                attrs = match neomacs_layout_engine::font_match::select_cosmic_family(
-                    &self.font_system,
-                    &family,
-                ) {
-                    neomacs_layout_engine::font_match::CosmicFamilySelection::Name(name) => {
-                        let interned = self.intern_family(name);
-                        attrs.family(Family::Name(interned))
-                    }
-                    neomacs_layout_engine::font_match::CosmicFamilySelection::Monospace => {
-                        attrs.family(Family::Monospace)
-                    }
-                    neomacs_layout_engine::font_match::CosmicFamilySelection::Serif => {
-                        attrs.family(Family::Serif)
-                    }
-                    neomacs_layout_engine::font_match::CosmicFamilySelection::SansSerif => {
-                        attrs.family(Family::SansSerif)
-                    }
-                };
-                attrs = attrs.weight(Weight(font.weight));
-                if let Some(style) = effective_style {
-                    attrs = attrs.style(style);
-                }
-                return attrs;
+            } else if let Some(font) = resolved.as_ref().cloned() {
+                // Exact face-primary path: no per-char fallback needed and
+                // layout resolved this face's font — replay it verbatim.
+                return self.exact_attrs_for_resolved_font(&font, effective_style);
             }
 
             if resolved.is_none() && prime_path.is_none() {

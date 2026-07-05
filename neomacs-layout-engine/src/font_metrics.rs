@@ -321,6 +321,9 @@ pub struct FontMetricsService {
     /// Renderer caches key on the identity anyway, so a stale id can never
     /// alias a glyph to the wrong font.
     resolved_font_ids: HashMap<ResolvedFontIdentity, ResolvedFontId>,
+    /// Cache: (face attrs, char) → the char's resolved fallback font. Same
+    /// generation contract as the other caches: cleared by `clear_caches`.
+    resolved_char_font_cache: HashMap<(MetricsCacheKey, char), Option<ResolvedFont>>,
 }
 
 impl FontMetricsService {
@@ -344,6 +347,7 @@ impl FontMetricsService {
             n_shape_calls: 0,
             resolved_face_font_cache: HashMap::new(),
             resolved_font_ids: HashMap::new(),
+            resolved_char_font_cache: HashMap::new(),
         }
     }
 
@@ -710,6 +714,109 @@ impl FontMetricsService {
         })
     }
 
+    /// Resolve the covering font for one character under a face, as an exact
+    /// interned identity.
+    ///
+    /// This is the fallback half of the render-boundary design: it runs the
+    /// SAME per-char resolution the measurement path uses
+    /// (`resolve_font_for_char` → fontconfig `match_font_for_char`) and then
+    /// pins the concrete fontdb face a probe shape of `ch` selects, so the
+    /// published identity is the font the char's advance width came from.
+    /// GNU analog: `fontset_font` realizing the fontset entry for a
+    /// character.
+    pub fn resolved_font_for_char(
+        &mut self,
+        ch: char,
+        family: &str,
+        weight: u16,
+        italic: bool,
+        font_size: f32,
+    ) -> Option<ResolvedFont> {
+        let key = (MetricsCacheKey::new(family, weight, italic, font_size), ch);
+        if let Some(cached) = self.resolved_char_font_cache.get(&key) {
+            return cached.clone();
+        }
+        let resolved = self.resolve_char_font_uncached(ch, family, weight, italic, font_size);
+        self.resolved_char_font_cache.insert(key, resolved.clone());
+        resolved
+    }
+
+    fn resolve_char_font_uncached(
+        &mut self,
+        ch: char,
+        family: &str,
+        weight: u16,
+        italic: bool,
+        font_size: f32,
+    ) -> Option<ResolvedFont> {
+        let resolved = self.resolve_font_for_char(ch, family, weight, italic);
+        let attrs = self.build_attrs(&resolved.family, resolved.weight, resolved.slant);
+        let metrics = safe_metrics(font_size, font_size * 1.3);
+        let mut buffer = Buffer::new(&mut self.font_system, metrics);
+        buffer.set_size(
+            &mut self.font_system,
+            Some(font_size * 4.0),
+            Some(font_size * 2.0),
+        );
+        let text = String::from(ch);
+        buffer.set_text(
+            &mut self.font_system,
+            &text,
+            &attrs,
+            cosmic_text::Shaping::Advanced,
+            None,
+        );
+        buffer.shape_until_scroll(&mut self.font_system, false);
+        let font_id = buffer
+            .layout_runs()
+            .find_map(|run| run.glyphs.iter().next())?
+            .physical((0.0, 0.0), 1.0)
+            .cache_key
+            .font_id;
+        let vertical = self.font_metrics_from_selected_face(font_id, font_size);
+        let (file, face_index, postscript_name, style, stretch) = {
+            let face = self.font_system.db().face(font_id)?;
+            (
+                fontdb_face_file(face),
+                face.index,
+                Some(face.post_script_name.clone()).filter(|name| !name.is_empty()),
+                face.style,
+                face.stretch,
+            )
+        };
+        let identity = match file.as_deref() {
+            Some(path) => {
+                ResolvedFontIdentity::from_file(path, face_index, postscript_name.clone())
+            }
+            None => ResolvedFontIdentity {
+                backend: FontBackendKind::Fontconfig,
+                stable_key: format!(
+                    "mem:{}#{face_index}",
+                    postscript_name.as_deref().unwrap_or(&resolved.family)
+                ),
+                file_path: None,
+                face_index,
+                postscript_name: postscript_name.clone(),
+                variation_coords: Vec::new(),
+            },
+        };
+        let id = self.intern_resolved_font_id(&identity);
+        Some(ResolvedFont {
+            id,
+            identity,
+            family: resolved.family.clone(),
+            full_name: None,
+            postscript_name,
+            weight: resolved.weight,
+            slant: font_slant_kind_from_fontdb(style),
+            width: stretch.to_number(),
+            pixel_size: font_size,
+            ascent_px: vertical.as_ref().map(|v| v.ascent).unwrap_or(0.0),
+            descent_px: vertical.as_ref().map(|v| v.descent).unwrap_or(0.0),
+            source: FontResolutionSource::FontsetFallback,
+        })
+    }
+
     fn intern_resolved_font_id(&mut self, identity: &ResolvedFontIdentity) -> ResolvedFontId {
         if let Some(&id) = self.resolved_font_ids.get(identity) {
             return id;
@@ -1062,6 +1169,7 @@ impl FontMetricsService {
         self.metrics_cache.clear();
         self.shaped_run_cache.clear();
         self.resolved_face_font_cache.clear();
+        self.resolved_char_font_cache.clear();
     }
 
     /// Number of times `shape_run` actually invoked cosmic-text shaping (i.e.
@@ -1129,6 +1237,109 @@ pub fn realize_frame_fonts(
                     family = %face.font_family,
                     weight = face.font_weight,
                     "GUI face has no resolvable primary font; renderer will re-select"
+                );
+            }
+        }
+    }
+
+    realize_frame_char_fonts(state, svc);
+}
+
+/// Stamp per-character fallback fonts for the non-ASCII characters actually
+/// on this frame's grid (`FrameDisplayState::char_fonts`).
+///
+/// For each (face, representative char) pair present in the window matrices
+/// and chrome rows, resolves the covering font through the same per-char path
+/// the measurement code uses and publishes the exact identity, so the render
+/// thread's CJK/emoji/symbol fallback becomes a table lookup instead of its
+/// own fontconfig match.
+fn realize_frame_char_fonts(
+    state: &mut neomacs_display_protocol::glyph_matrix::FrameDisplayState,
+    svc: &mut FontMetricsService,
+) {
+    use neomacs_display_protocol::glyph_matrix::{GlyphRow, GlyphType};
+
+    // Pass 1: collect the (face, repr char) pairs on screen. Bounded by the
+    // number of distinct non-ASCII chars visible, not by grid size.
+    let mut wanted: Vec<(u32, char)> = Vec::new();
+    let mut seen: std::collections::HashSet<(u32, char)> = std::collections::HashSet::new();
+    let mut collect_row = |row: &GlyphRow| {
+        if !row.enabled {
+            return;
+        }
+        for area in &row.glyphs {
+            for glyph in area {
+                if glyph.padding {
+                    continue;
+                }
+                let repr = match &glyph.glyph_type {
+                    GlyphType::Char { ch } => {
+                        if ch.is_ascii() || crate::composition::is_composition_joiner(*ch) {
+                            continue;
+                        }
+                        *ch
+                    }
+                    GlyphType::Composite { text } => {
+                        match crate::composition::representative_char_for_cluster(text) {
+                            Some(ch) => ch,
+                            None => continue,
+                        }
+                    }
+                    _ => continue,
+                };
+                if seen.insert((glyph.face_id, repr)) {
+                    wanted.push((glyph.face_id, repr));
+                }
+            }
+        }
+    };
+    for entry in &state.window_matrices {
+        for row in &entry.matrix.rows {
+            collect_row(row);
+        }
+    }
+    for chrome in &state.frame_chrome_rows {
+        collect_row(&chrome.row);
+    }
+
+    // Pass 2: resolve and publish. Steady state is one cache-hit per pair.
+    for (face_id, repr) in wanted {
+        if state
+            .char_fonts
+            .get(&face_id)
+            .is_some_and(|by_char| by_char.contains_key(&repr))
+        {
+            continue;
+        }
+        let Some(face) = state.faces.get(&face_id) else {
+            continue;
+        };
+        let family = if face.font_family.is_empty() {
+            "monospace"
+        } else {
+            face.font_family.as_str()
+        };
+        match svc.resolved_font_for_char(
+            repr,
+            family,
+            face.font_weight,
+            face.is_italic(),
+            face.font_size.max(1.0),
+        ) {
+            Some(font) => {
+                state
+                    .char_fonts
+                    .entry(face_id)
+                    .or_default()
+                    .insert(repr, font.id);
+                state.fonts.entry(font.id).or_insert(font);
+            }
+            None => {
+                tracing::trace!(
+                    target: "font_boundary",
+                    face_id,
+                    ch = %repr,
+                    "no per-char fallback font resolved; renderer will re-select"
                 );
             }
         }

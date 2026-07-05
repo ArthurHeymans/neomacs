@@ -1675,3 +1675,73 @@ fn realize_frame_fonts_steady_state_cost_probe() {
         warm.saturating_sub(base) / FRAMES
     );
 }
+
+#[test]
+fn realize_frame_char_fonts_stamps_cjk_fallback() {
+    use neomacs_display_protocol::face::Face;
+    use neomacs_display_protocol::glyph_matrix::{
+        FrameDisplayState, Glyph, GlyphArea, GlyphMatrix, WindowMatrixEntry,
+    };
+    use neomacs_display_protocol::types::Rect;
+
+    let mut state = FrameDisplayState::new(20, 1, 8.0, 16.0);
+    let mut face = Face::new(0);
+    face.font_family = "Monospace".to_string();
+    face.font_size = 14.0;
+    state.faces.insert(0, face);
+
+    let mut matrix = GlyphMatrix::new(1, 20);
+    matrix.rows[0].enabled = true;
+    for (i, ch) in "a好b".chars().enumerate() {
+        matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, 0, i));
+    }
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: 1,
+        matrix,
+        damage: Vec::new(),
+        pixel_bounds: Rect::new(0.0, 0.0, 160.0, 16.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 160.0, 16.0),
+        selected: true,
+    });
+
+    let mut service = Some(make_svc());
+    realize_frame_fonts(&mut state, &mut service);
+
+    // ASCII chars must NOT get char-fallback entries; the CJK char must.
+    let by_char = state
+        .char_fonts
+        .get(&0)
+        .expect("face 0 has char fallback entries");
+    assert!(!by_char.contains_key(&'a'));
+    let font_id = by_char.get(&'好').copied().expect("好 resolved");
+    let font = state
+        .fonts
+        .get(&font_id)
+        .expect("char fallback font published in frame font table");
+    assert_eq!(font.id, font_id);
+    assert_eq!(
+        font.source,
+        neomacs_display_protocol::font::FontResolutionSource::FontsetFallback
+    );
+    // The layout-side selection agrees with the char-selection oracle path.
+    let selected = service
+        .as_mut()
+        .unwrap()
+        .select_font_for_char('好', "Monospace", 400, false, 14.0)
+        .expect("char font");
+    assert_eq!(font.identity.file_path, selected.file);
+}
+
+#[test]
+fn representative_char_policy_matches_render_side_expectations() {
+    use crate::composition::representative_char_for_cluster;
+    assert_eq!(representative_char_for_cluster("abc"), None);
+    assert_eq!(representative_char_for_cluster("a好b"), Some('好'));
+    // Emoji presentation selector forces the canonical emoji probe.
+    assert_eq!(
+        representative_char_for_cluster("1\u{FE0F}\u{20E3}"),
+        Some('\u{1F600}')
+    );
+    // Joiners alone don't determine a font.
+    assert_eq!(representative_char_for_cluster("a\u{200D}b"), None);
+}

@@ -698,6 +698,10 @@ pub struct FrameDisplayState {
     /// thread rasterizes these exact fonts instead of re-selecting by
     /// family/weight/slant.
     pub fonts: crate::font::ResolvedFontTable,
+    /// Per-character fallback fonts for chars the face primary font may not
+    /// cover (CJK/emoji/symbols): `face_id → representative char → font id`.
+    #[serde(default)]
+    pub char_fonts: crate::font::CharFontTable,
     pub frame_id: DisplayFrameId,
     pub parent_id: DisplayFrameId,
     pub parent_x: f32,
@@ -851,6 +855,7 @@ impl FrameDisplayState {
             },
             faces: HashMap::new(),
             fonts: crate::font::ResolvedFontTable::new(),
+            char_fonts: crate::font::CharFontTable::new(),
             frame_id: DisplayFrameId::new(0),
             parent_id: DisplayFrameId::new(0),
             parent_x: 0.0,
@@ -914,6 +919,7 @@ impl FrameDisplayState {
         state.no_accept_focus = buf.no_accept_focus;
         state.faces = buf.faces.clone();
         state.fonts = buf.fonts.clone();
+        state.char_fonts = buf.char_fonts.clone();
         state.window_infos = buf.window_infos.clone();
         // Reconstruct the layout-internal phys_cursor from the unified list's
         // active entry; charpos isn't carried on WindowCursor so default to 0.
@@ -1130,6 +1136,7 @@ impl FrameDisplayState {
         for (id, font) in &self.fonts {
             buf.fonts.insert(*id, font.clone());
         }
+        buf.char_fonts = self.char_fonts.clone();
 
         // Copy window_infos
         for info in &self.window_infos {

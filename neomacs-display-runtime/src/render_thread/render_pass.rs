@@ -455,9 +455,10 @@ impl RenderApp {
         // (font realization / render boundary design, Phase 2). Child frames
         // share the same layout-side id interner, so merging is safe.
         if let Some(atlas) = render.compositor.glyph_atlas.as_mut() {
-            atlas.install_frame_fonts(&frame.fonts);
+            atlas.begin_frame_fonts();
+            atlas.install_frame_fonts(&frame.fonts, &frame.char_fonts);
             for entry in render.compositor.child_frames.frames.values() {
-                atlas.install_frame_fonts(&entry.frame.fonts);
+                atlas.install_frame_fonts(&entry.frame.fonts, &entry.frame.char_fonts);
             }
         }
         if extra_line_spacing != 0.0 || extra_letter_spacing != 0.0 {
