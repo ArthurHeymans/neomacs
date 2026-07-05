@@ -456,9 +456,13 @@ impl RenderApp {
         // share the same layout-side id interner, so merging is safe.
         if let Some(atlas) = render.compositor.glyph_atlas.as_mut() {
             atlas.begin_frame_fonts();
-            atlas.install_frame_fonts(&frame.fonts, &frame.char_fonts);
+            atlas.install_frame_fonts(&frame.fonts, &frame.char_fonts, &frame.shaped_clusters);
             for entry in render.compositor.child_frames.frames.values() {
-                atlas.install_frame_fonts(&entry.frame.fonts, &entry.frame.char_fonts);
+                atlas.install_frame_fonts(
+                    &entry.frame.fonts,
+                    &entry.frame.char_fonts,
+                    &entry.frame.shaped_clusters,
+                );
             }
         }
         if extra_line_spacing != 0.0 || extra_letter_spacing != 0.0 {

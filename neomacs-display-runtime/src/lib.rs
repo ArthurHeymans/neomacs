@@ -13,7 +13,6 @@
 
 pub mod backend;
 pub mod core;
-pub mod text;
 pub mod thread_comm;
 pub mod tty_input;
 mod window_icon;
@@ -36,7 +35,6 @@ pub mod layout {
 
 pub use crate::backend::DisplayBackend;
 pub use crate::core::*;
-pub use crate::text::TextEngine;
 
 /// Library version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
