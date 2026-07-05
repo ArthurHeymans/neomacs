@@ -18,7 +18,10 @@ use cosmic_text::{
 };
 
 use neomacs_display_protocol::face::Face;
-use neomacs_display_protocol::font::{CharFontTable, ResolvedFont, ResolvedFontTable};
+use neomacs_display_protocol::font::{
+    CharFontTable, ResolvedFont, ResolvedFontId, ResolvedFontTable, ResolvedGlyph,
+    ShapedClusterTable,
+};
 use neomacs_layout_engine::font_loader::FontFileCache;
 use neomacs_layout_engine::fontconfig::{FontconfigSubpixelOrder, default_subpixel_order};
 use swash::scale::{Render, ScaleContext, Source, StrikeWith};
@@ -129,6 +132,11 @@ struct CachedAtlasGlyph {
     last_accessed: u64,
 }
 
+/// One rasterized sub-glyph awaiting compositing:
+/// (bearing_x, bearing_y, width, height, pixel_data, is_color, is_subpixel,
+/// advance_width).
+type SubGlyph = (f32, f32, u32, u32, Vec<u8>, bool, bool, f32);
+
 fn normalize_subpixel_mask(
     mask: &[u8],
     pixel_count: usize,
@@ -207,6 +215,14 @@ pub struct WgpuGlyphAtlas {
     /// font id`), installed alongside `frame_fonts`. Consulted before any
     /// render-side `match_font_for_char`.
     frame_char_fonts: CharFontTable,
+    /// Layout-shaped composed clusters (`face_id → cluster text → resolved
+    /// glyphs`). Consulted before re-shaping cluster text. Cleared per
+    /// render pass like `frame_char_fonts` (face-id keyed).
+    frame_shaped_clusters: ShapedClusterTable,
+    /// Cache: resolved font identity → this FontSystem's fontdb face id.
+    /// Valid for the fontdb's lifetime (fonts are only ever appended by
+    /// priming); dropped by [`Self::clear`] with the rest of the caches.
+    resolved_fontdb_ids: HashMap<ResolvedFontId, Option<fontdb::ID>>,
     /// Total GUI text lookups whose face had no layout-resolved font and no
     /// font-file bridge — i.e. the renderer had to make a semantic font
     /// decision on its own (design §10 "emergency fallback"). Must stay 0
@@ -277,6 +293,8 @@ impl WgpuGlyphAtlas {
             subpixel_order: default_subpixel_order(),
             frame_fonts: ResolvedFontTable::new(),
             frame_char_fonts: CharFontTable::new(),
+            frame_shaped_clusters: ShapedClusterTable::new(),
+            resolved_fontdb_ids: HashMap::new(),
             unresolved_face_text_total: 0,
             unresolved_face_warned: HashSet::new(),
             cache_hits_this_frame: 0,
@@ -370,7 +388,7 @@ impl WgpuGlyphAtlas {
 
         // For multi-glyph sequences (e.g. emoji ZWJ), we need to composite
         // all sub-glyphs into a single texture. Collect them first.
-        let mut sub_glyphs: Vec<(f32, f32, u32, u32, Vec<u8>, bool, bool, f32)> = Vec::new();
+        let mut sub_glyphs: Vec<SubGlyph> = Vec::new();
 
         for run in buffer.layout_runs() {
             for glyph in run.glyphs.iter() {
@@ -454,33 +472,8 @@ impl WgpuGlyphAtlas {
                         height
                     );
 
-                    let (pixel_data, is_color, is_subpixel) = match image.content {
-                        cosmic_text::SwashContent::Mask => (image.data.clone(), false, false),
-                        cosmic_text::SwashContent::Color => (image.data.clone(), true, false),
-                        cosmic_text::SwashContent::SubpixelMask => {
-                            if self.render_mode(enable_subpixel) == GlyphRenderMode::Subpixel {
-                                (
-                                    normalize_subpixel_mask(
-                                        &image.data,
-                                        (width as usize) * (height as usize),
-                                        self.subpixel_order,
-                                    ),
-                                    false,
-                                    true,
-                                )
-                            } else {
-                                let alpha: Vec<u8> = image
-                                    .data
-                                    .chunks(3)
-                                    .map(|chunk| {
-                                        ((chunk[0] as u16 + chunk[1] as u16 + chunk[2] as u16) / 3)
-                                            as u8
-                                    })
-                                    .collect();
-                                (alpha, false, false)
-                            }
-                        }
-                    };
+                    let (pixel_data, is_color, is_subpixel) =
+                        self.image_sub_glyph_payload(&image, width, height, enable_subpixel);
 
                     sub_glyphs.push((
                         bearing_x,
@@ -496,6 +489,49 @@ impl WgpuGlyphAtlas {
             }
         }
 
+        self.composite_sub_glyphs(sub_glyphs)
+    }
+
+    /// Convert a rendered swash image into a sub-glyph payload
+    /// (pixel data + color/subpixel classification).
+    fn image_sub_glyph_payload(
+        &self,
+        image: &cosmic_text::SwashImage,
+        width: u32,
+        height: u32,
+        enable_subpixel: bool,
+    ) -> (Vec<u8>, bool, bool) {
+        match image.content {
+            cosmic_text::SwashContent::Mask => (image.data.clone(), false, false),
+            cosmic_text::SwashContent::Color => (image.data.clone(), true, false),
+            cosmic_text::SwashContent::SubpixelMask => {
+                if self.render_mode(enable_subpixel) == GlyphRenderMode::Subpixel {
+                    (
+                        normalize_subpixel_mask(
+                            &image.data,
+                            (width as usize) * (height as usize),
+                            self.subpixel_order,
+                        ),
+                        false,
+                        true,
+                    )
+                } else {
+                    let alpha: Vec<u8> = image
+                        .data
+                        .chunks(3)
+                        .map(|chunk| {
+                            ((chunk[0] as u16 + chunk[1] as u16 + chunk[2] as u16) / 3) as u8
+                        })
+                        .collect();
+                    (alpha, false, false)
+                }
+            }
+        }
+    }
+
+    /// Composite rasterized sub-glyphs into one texture: the shared tail of
+    /// `rasterize_text` and `rasterize_resolved_cluster`.
+    fn composite_sub_glyphs(&self, sub_glyphs: Vec<SubGlyph>) -> Option<RasterizeResult> {
         if sub_glyphs.is_empty() {
             return None;
         }
@@ -756,6 +792,7 @@ impl WgpuGlyphAtlas {
     /// keyed by identity-stable ids and persists.
     pub fn begin_frame_fonts(&mut self) {
         self.frame_char_fonts.clear();
+        self.frame_shaped_clusters.clear();
     }
 
     /// Install a frame's layout-resolved font tables before its text draws.
@@ -766,7 +803,12 @@ impl WgpuGlyphAtlas {
     /// Char entries keep the FIRST binding per (face, char) within a render
     /// pass, matching how the render thread merges face tables across the
     /// main and child frames.
-    pub fn install_frame_fonts(&mut self, fonts: &ResolvedFontTable, char_fonts: &CharFontTable) {
+    pub fn install_frame_fonts(
+        &mut self,
+        fonts: &ResolvedFontTable,
+        char_fonts: &CharFontTable,
+        shaped_clusters: &ShapedClusterTable,
+    ) {
         for (id, font) in fonts {
             self.frame_fonts.insert(*id, font.clone());
         }
@@ -774,6 +816,12 @@ impl WgpuGlyphAtlas {
             let entry = self.frame_char_fonts.entry(*face_id).or_default();
             for (ch, id) in by_char {
                 entry.entry(*ch).or_insert(*id);
+            }
+        }
+        for (face_id, by_text) in shaped_clusters {
+            let entry = self.frame_shaped_clusters.entry(*face_id).or_default();
+            for (text, glyphs) in by_text {
+                entry.entry(text.clone()).or_insert_with(|| glyphs.clone());
             }
         }
     }
@@ -1007,6 +1055,116 @@ impl WgpuGlyphAtlas {
         self.atlas_pages.clear();
         self.cached_char_width = None;
         self.cached_font_ascent = None;
+        self.resolved_fontdb_ids.clear();
+    }
+
+    /// Map a layout-resolved font identity to this FontSystem's own fontdb
+    /// face id, priming the font file if needed. Layout-side fontdb ids are
+    /// generation-local to the LAYOUT FontSystem and never cross the
+    /// boundary; the durable identity (file path + face index) does.
+    fn local_fontdb_id_for(&mut self, resolved_font_id: ResolvedFontId) -> Option<fontdb::ID> {
+        if let Some(&cached) = self.resolved_fontdb_ids.get(&resolved_font_id) {
+            return cached;
+        }
+        let Some(font) = self.frame_fonts.get(&resolved_font_id).cloned() else {
+            // Not cached: the table entry may arrive with a later frame.
+            return None;
+        };
+        let Some(path) = font.identity.file_path.clone() else {
+            self.resolved_fontdb_ids.insert(resolved_font_id, None);
+            return None;
+        };
+        let _ = self
+            .font_file_cache
+            .prime_file(&mut self.font_system, &path);
+        let face_index = font.identity.face_index;
+        let found = self.font_system.db().faces().find_map(|face| {
+            let source_path = match &face.source {
+                fontdb::Source::File(p) | fontdb::Source::SharedFile(p, _) => p,
+                fontdb::Source::Binary(_) => return None,
+            };
+            (face.index == face_index && source_path.as_os_str() == std::ffi::OsStr::new(&path))
+                .then_some(face.id)
+        });
+        self.resolved_fontdb_ids.insert(resolved_font_id, found);
+        found
+    }
+
+    /// Rasterize a layout-shaped cluster from its exact (font, glyph id)
+    /// pairs — no shaping, no font selection on the render thread. Positions
+    /// and advances arrive in logical pixels and are scaled here.
+    fn rasterize_resolved_cluster(
+        &mut self,
+        glyphs: &[ResolvedGlyph],
+        requested_weight: u16,
+        font_size: f32,
+        x_bin: SubpixelBin,
+        y_bin: SubpixelBin,
+        enable_subpixel: bool,
+    ) -> Option<RasterizeResult> {
+        if glyphs.is_empty() {
+            return None;
+        }
+        let scale = self.scale_factor;
+        let mut sub_glyphs: Vec<SubGlyph> = Vec::new();
+        for glyph in glyphs {
+            let font_id = self.local_fontdb_id_for(glyph.resolved_font_id)?;
+            let cache_key = cosmic_text::CacheKey {
+                font_id,
+                glyph_id: glyph.glyph_id,
+                font_size_bits: (font_size * scale).to_bits(),
+                x_bin,
+                y_bin,
+                font_weight: fontdb::Weight(requested_weight),
+                flags: CacheKeyFlags::empty(),
+            };
+            let image = self.render_cache_key_image(cache_key, enable_subpixel)?;
+            let width = image.placement.width;
+            let height = image.placement.height;
+            if width == 0 || height == 0 {
+                continue;
+            }
+            // Mirror `rasterize_text`: pen x position plus bitmap bearing.
+            let pen_x = (glyph.x * scale).round();
+            let bearing_x = pen_x + image.placement.left as f32;
+            let bearing_y = image.placement.top as f32;
+            let (pixel_data, is_color, is_subpixel) =
+                self.image_sub_glyph_payload(&image, width, height, enable_subpixel);
+            sub_glyphs.push((
+                bearing_x,
+                bearing_y,
+                width,
+                height,
+                pixel_data,
+                is_color,
+                is_subpixel,
+                glyph.x_advance * scale,
+            ));
+        }
+        self.composite_sub_glyphs(sub_glyphs)
+    }
+
+    /// Rasterize a composed cluster from the layout-published shaped table,
+    /// if this (face, text) was shaped layout-side.
+    fn rasterize_shaped_cluster_if_published(
+        &mut self,
+        text: &str,
+        face: Option<&Face>,
+        x_bin: SubpixelBin,
+        y_bin: SubpixelBin,
+        enable_subpixel: bool,
+    ) -> Option<RasterizeResult> {
+        let face = face?;
+        let glyphs = self.frame_shaped_clusters.get(&face.id)?.get(text)?.clone();
+        let font_size = effective_font_size(Some(face.font_size), self.default_font_size);
+        self.rasterize_resolved_cluster(
+            &glyphs,
+            face.font_weight,
+            font_size,
+            x_bin,
+            y_bin,
+            enable_subpixel,
+        )
     }
 
     /// Update the scale factor and clear the cache so glyphs are
@@ -1648,8 +1806,12 @@ impl WgpuGlyphAtlas {
         }
 
         let enable_subpixel = matches!(subpixel, SubpixelRequest::Enabled);
+        // Prefer the layout-shaped exact glyphs; re-shape the cluster text
+        // only when this (face, text) wasn't published (render-side
+        // fallback, e.g. renderer-owned chrome text).
         let result = self
-            .rasterize_text(text, face, x_bin, y_bin, enable_subpixel)
+            .rasterize_shaped_cluster_if_published(text, face, x_bin, y_bin, enable_subpixel)
+            .or_else(|| self.rasterize_text(text, face, x_bin, y_bin, enable_subpixel))
             .ok_or(GlyphAtlasError::RasterizeFailed)?;
 
         if result.width == 0 || result.height == 0 {

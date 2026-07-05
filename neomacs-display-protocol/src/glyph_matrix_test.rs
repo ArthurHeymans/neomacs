@@ -1545,3 +1545,46 @@ fn char_fonts_survive_materialize_and_serde() {
         Some(&ResolvedFontId(3))
     );
 }
+
+/// `shaped_clusters` must survive materialize and JSON snapshots like the
+/// other font tables.
+#[test]
+fn shaped_clusters_survive_materialize_and_serde() {
+    use crate::font::{ResolvedFontId, ResolvedGlyph};
+
+    let glyphs = vec![ResolvedGlyph {
+        resolved_font_id: ResolvedFontId(4),
+        glyph_id: 99,
+        x: 0.0,
+        y: 0.0,
+        x_advance: 8.5,
+        cluster_start: 0,
+        cluster_end: 3,
+    }];
+    let mut state = state_with_text("x");
+    state
+        .shaped_clusters
+        .entry(2)
+        .or_default()
+        .insert("e\u{301}".into(), glyphs.clone());
+
+    let buf = state.materialize();
+    assert_eq!(
+        buf.shaped_clusters.get(&2).and_then(|m| m.get("e\u{301}")),
+        Some(&glyphs)
+    );
+    let back = FrameDisplayState::from_frame_glyph_buffer(&buf);
+    assert_eq!(
+        back.shaped_clusters.get(&2).and_then(|m| m.get("e\u{301}")),
+        Some(&glyphs)
+    );
+    let json = serde_json::to_string(&state).expect("serialize");
+    let parsed: FrameDisplayState = serde_json::from_str(&json).expect("deserialize");
+    assert_eq!(
+        parsed
+            .shaped_clusters
+            .get(&2)
+            .and_then(|m| m.get("e\u{301}")),
+        Some(&glyphs)
+    );
+}

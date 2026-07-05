@@ -140,6 +140,36 @@ pub struct ResolvedFont {
 /// Resolved font table carried by frame state, keyed by [`ResolvedFontId`].
 pub type ResolvedFontTable = HashMap<ResolvedFontId, ResolvedFont>;
 
+/// One shaped glyph past semantic selection and shaping: the renderable
+/// unit. Positions/advances are logical (scale 1.0) pixels; the renderer
+/// applies its own scale factor.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ResolvedGlyph {
+    /// Font this glyph id belongs to, in the frame's font table.
+    pub resolved_font_id: ResolvedFontId,
+    /// Glyph index within that font.
+    pub glyph_id: u16,
+    /// Pen x offset within the cluster/run.
+    pub x: f32,
+    /// Pen y offset (baseline-relative).
+    pub y: f32,
+    /// Horizontal advance.
+    pub x_advance: f32,
+    /// Source-text byte range (cluster) this glyph covers.
+    pub cluster_start: u32,
+    pub cluster_end: u32,
+}
+
+/// Per-frame shaped composed-cluster table: `face_id → cluster text →
+/// shaped glyphs`.
+///
+/// For grapheme clusters the layout side shapes (emoji ZWJ sequences,
+/// combining marks, contextual scripts emitted as `GlyphType::Composite`),
+/// this publishes the exact shaped output — glyph ids in exact fonts — so
+/// the render thread rasterizes those glyphs instead of re-shaping the
+/// cluster text and risking a different font or cluster segmentation.
+pub type ShapedClusterTable = HashMap<u32, HashMap<Box<str>, Vec<ResolvedGlyph>>>;
+
 /// Per-frame character fallback font table: `face_id → representative char →
 /// resolved font`.
 ///

@@ -863,6 +863,10 @@ pub struct FrameGlyphBuffer {
     /// [`crate::font::CharFontTable`].
     pub char_fonts: crate::font::CharFontTable,
 
+    /// Shaped composed clusters (`face_id → cluster text → resolved
+    /// glyphs`); see [`crate::font::ShapedClusterTable`].
+    pub shaped_clusters: crate::font::ShapedClusterTable,
+
     /// Stipple patterns: bitmap_id -> StipplePattern
     pub stipple_patterns: HashMap<i32, StipplePattern>,
 
@@ -1054,6 +1058,7 @@ impl FrameGlyphBuffer {
             faces: HashMap::new(),
             fonts: crate::font::ResolvedFontTable::new(),
             char_fonts: crate::font::CharFontTable::new(),
+            shaped_clusters: crate::font::ShapedClusterTable::new(),
             stipple_patterns: HashMap::new(),
             fringe_bitmaps: HashMap::new(),
         }
@@ -1082,6 +1087,7 @@ impl FrameGlyphBuffer {
         self.faces.clear();
         self.fonts.clear();
         self.char_fonts.clear();
+        self.shaped_clusters.clear();
         self.current_window_id = DisplayWindowId::new(0);
         self.current_row_role = GlyphRowRole::Text;
         self.current_clip_rect = None;

@@ -702,6 +702,9 @@ pub struct FrameDisplayState {
     /// cover (CJK/emoji/symbols): `face_id → representative char → font id`.
     #[serde(default)]
     pub char_fonts: crate::font::CharFontTable,
+    /// Shaped composed clusters: `face_id → cluster text → resolved glyphs`.
+    #[serde(default)]
+    pub shaped_clusters: crate::font::ShapedClusterTable,
     pub frame_id: DisplayFrameId,
     pub parent_id: DisplayFrameId,
     pub parent_x: f32,
@@ -856,6 +859,7 @@ impl FrameDisplayState {
             faces: HashMap::new(),
             fonts: crate::font::ResolvedFontTable::new(),
             char_fonts: crate::font::CharFontTable::new(),
+            shaped_clusters: crate::font::ShapedClusterTable::new(),
             frame_id: DisplayFrameId::new(0),
             parent_id: DisplayFrameId::new(0),
             parent_x: 0.0,
@@ -920,6 +924,7 @@ impl FrameDisplayState {
         state.faces = buf.faces.clone();
         state.fonts = buf.fonts.clone();
         state.char_fonts = buf.char_fonts.clone();
+        state.shaped_clusters = buf.shaped_clusters.clone();
         state.window_infos = buf.window_infos.clone();
         // Reconstruct the layout-internal phys_cursor from the unified list's
         // active entry; charpos isn't carried on WindowCursor so default to 0.
@@ -1137,6 +1142,7 @@ impl FrameDisplayState {
             buf.fonts.insert(*id, font.clone());
         }
         buf.char_fonts = self.char_fonts.clone();
+        buf.shaped_clusters = self.shaped_clusters.clone();
 
         // Copy window_infos
         for info in &self.window_infos {

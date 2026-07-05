@@ -1745,3 +1745,75 @@ fn representative_char_policy_matches_render_side_expectations() {
     // Joiners alone don't determine a font.
     assert_eq!(representative_char_for_cluster("a\u{200D}b"), None);
 }
+
+#[test]
+fn resolved_glyphs_for_cluster_publishes_exact_glyphs() {
+    let mut svc = make_svc();
+    // A combining-mark cluster: base 'e' + COMBINING ACUTE ACCENT. Shapes to
+    // one or two glyphs depending on the font; every glyph must reference an
+    // interned font in the returned font list.
+    let (glyphs, fonts) = svc
+        .resolved_glyphs_for_cluster("e\u{0301}", "Monospace", 400, false, 24.0)
+        .expect("cluster shapes");
+    assert!(!glyphs.is_empty());
+    for glyph in &glyphs {
+        assert!(
+            fonts.iter().any(|f| f.id == glyph.resolved_font_id),
+            "glyph font {:?} present in returned fonts",
+            glyph.resolved_font_id
+        );
+        assert!(glyph.x_advance >= 0.0);
+    }
+    // Deterministic across calls (cache or not).
+    let (again, _) = svc
+        .resolved_glyphs_for_cluster("e\u{0301}", "Monospace", 400, false, 24.0)
+        .expect("cluster shapes again");
+    assert_eq!(glyphs, again);
+}
+
+#[test]
+fn realize_frame_fonts_publishes_shaped_clusters_for_composites() {
+    use neomacs_display_protocol::face::Face;
+    use neomacs_display_protocol::glyph_matrix::{
+        FrameDisplayState, Glyph, GlyphArea, GlyphMatrix, GlyphType, WindowMatrixEntry,
+    };
+    use neomacs_display_protocol::types::Rect;
+
+    let mut state = FrameDisplayState::new(20, 1, 8.0, 16.0);
+    let mut face = Face::new(0);
+    face.font_family = "Monospace".to_string();
+    face.font_size = 14.0;
+    state.faces.insert(0, face);
+
+    let mut matrix = GlyphMatrix::new(1, 20);
+    matrix.rows[0].enabled = true;
+    let mut composite = Glyph::char('e', 0, 0);
+    composite.glyph_type = GlyphType::Composite {
+        text: "e\u{0301}".into(),
+    };
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(composite);
+    state.window_matrices.push(WindowMatrixEntry {
+        window_id: 1,
+        matrix,
+        damage: Vec::new(),
+        pixel_bounds: Rect::new(0.0, 0.0, 160.0, 16.0),
+        text_pixel_bounds: Rect::new(0.0, 0.0, 160.0, 16.0),
+        selected: true,
+    });
+
+    let mut service = Some(make_svc());
+    realize_frame_fonts(&mut state, &mut service);
+
+    let glyphs = state
+        .shaped_clusters
+        .get(&0)
+        .and_then(|by_text| by_text.get("e\u{0301}"))
+        .expect("composite cluster published");
+    assert!(!glyphs.is_empty());
+    for glyph in glyphs {
+        assert!(
+            state.fonts.contains_key(&glyph.resolved_font_id),
+            "cluster glyph font in frame font table"
+        );
+    }
+}

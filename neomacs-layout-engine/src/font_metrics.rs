@@ -19,7 +19,7 @@ fn safe_metrics(font_size: f32, line_height: f32) -> cosmic_text::Metrics {
 }
 use neomacs_display_protocol::font::{
     FontBackendKind, FontResolutionSource, FontSlantKind, ResolvedFont, ResolvedFontId,
-    ResolvedFontIdentity,
+    ResolvedFontIdentity, ResolvedGlyph,
 };
 use neovm_core::face::{FontSlant, FontWeight, FontWidth};
 use std::collections::HashMap;
@@ -324,6 +324,11 @@ pub struct FontMetricsService {
     /// Cache: (face attrs, char) → the char's resolved fallback font. Same
     /// generation contract as the other caches: cleared by `clear_caches`.
     resolved_char_font_cache: HashMap<(MetricsCacheKey, char), Option<ResolvedFont>>,
+    /// Cache: (face attrs, cluster text) → shaped glyphs with interned font
+    /// identities. Same generation contract; clear-on-overflow like
+    /// `shaped_run_cache`.
+    resolved_cluster_cache:
+        HashMap<(MetricsCacheKey, String), Option<(Vec<ResolvedGlyph>, Vec<ResolvedFont>)>>,
 }
 
 impl FontMetricsService {
@@ -348,6 +353,7 @@ impl FontMetricsService {
             resolved_face_font_cache: HashMap::new(),
             resolved_font_ids: HashMap::new(),
             resolved_char_font_cache: HashMap::new(),
+            resolved_cluster_cache: HashMap::new(),
         }
     }
 
@@ -817,6 +823,167 @@ impl FontMetricsService {
         })
     }
 
+    /// Shape a composed cluster and return its glyphs with exact interned
+    /// font identities plus the distinct fonts they reference — the
+    /// renderable payload the render thread rasterizes without re-shaping.
+    ///
+    /// Shapes the cluster text standalone (the same input the renderer's
+    /// composed path uses), so replaying these glyphs reproduces current
+    /// visual behavior with the re-selection risk removed.
+    pub fn resolved_glyphs_for_cluster(
+        &mut self,
+        text: &str,
+        family: &str,
+        weight: u16,
+        italic: bool,
+        font_size: f32,
+    ) -> Option<(Vec<ResolvedGlyph>, Vec<ResolvedFont>)> {
+        if text.is_empty() {
+            return None;
+        }
+        let key = (
+            MetricsCacheKey::new(family, weight, italic, font_size),
+            text.to_string(),
+        );
+        if let Some(cached) = self.resolved_cluster_cache.get(&key) {
+            return cached.clone();
+        }
+        let result = self.resolve_cluster_uncached(text, family, weight, italic, font_size);
+        if self.resolved_cluster_cache.len() >= self.shaped_run_cache_cap {
+            self.resolved_cluster_cache.clear();
+        }
+        self.resolved_cluster_cache.insert(key, result.clone());
+        result
+    }
+
+    fn resolve_cluster_uncached(
+        &mut self,
+        text: &str,
+        family: &str,
+        weight: u16,
+        italic: bool,
+        font_size: f32,
+    ) -> Option<(Vec<ResolvedGlyph>, Vec<ResolvedFont>)> {
+        // Route the cluster through the same representative-char font
+        // resolution the renderer applies (emoji presentation via U+FE0F →
+        // the color emoji font, CJK → covering font), so e.g. an emoji
+        // keycap shapes to the emoji font's single color glyph instead of
+        // the face font's digit + combining-keycap parts.
+        let (effective_family, effective_weight, effective_italic) =
+            match crate::composition::representative_char_for_cluster(text) {
+                Some(repr) => {
+                    let resolved = self.resolve_font_for_char(repr, family, weight, italic);
+                    let italic = resolved.slant.is_italic();
+                    (resolved.family, resolved.weight, italic)
+                }
+                None => (family.to_string(), weight, italic),
+            };
+        let shaped = self.shape_run(
+            text,
+            &effective_family,
+            effective_weight,
+            effective_italic,
+            font_size,
+        );
+        if shaped.is_empty() {
+            return None;
+        }
+        let mut fonts: Vec<ResolvedFont> = Vec::new();
+        let mut by_fontdb: HashMap<fontdb::ID, ResolvedFontId> = HashMap::new();
+        let mut glyphs = Vec::with_capacity(shaped.len());
+        for shaped_glyph in &shaped {
+            let resolved_font_id = match by_fontdb.get(&shaped_glyph.font_id) {
+                Some(&id) => id,
+                None => {
+                    // The generation-local fontdb::ID becomes a durable
+                    // identity here, immediately, in the same generation
+                    // that shaped it — the conversion the ShapedGlyph docs
+                    // require before any glyph id reaches rasterization.
+                    let font = self.resolved_font_from_fontdb_id(
+                        shaped_glyph.font_id,
+                        font_size,
+                        FontResolutionSource::FontsetFallback,
+                    )?;
+                    let id = font.id;
+                    by_fontdb.insert(shaped_glyph.font_id, id);
+                    if !fonts.iter().any(|f| f.id == id) {
+                        fonts.push(font);
+                    }
+                    id
+                }
+            };
+            glyphs.push(ResolvedGlyph {
+                resolved_font_id,
+                glyph_id: shaped_glyph.glyph_id,
+                x: shaped_glyph.x,
+                y: shaped_glyph.y,
+                x_advance: shaped_glyph.x_advance,
+                cluster_start: shaped_glyph.cluster_start as u32,
+                cluster_end: shaped_glyph.cluster_end as u32,
+            });
+        }
+        Some((glyphs, fonts))
+    }
+
+    /// Build a [`ResolvedFont`] for a concrete fontdb face chosen by
+    /// shaping. Unlike the face/char resolvers (which preserve selector
+    /// family/weight semantics), this records the file's own metadata: the
+    /// font was picked by shaping fallback, not by a request.
+    fn resolved_font_from_fontdb_id(
+        &mut self,
+        font_id: fontdb::ID,
+        font_size: f32,
+        source: FontResolutionSource,
+    ) -> Option<ResolvedFont> {
+        let vertical = self.font_metrics_from_selected_face(font_id, font_size);
+        let (file, face_index, postscript_name, style, stretch, family, file_weight) = {
+            let face = self.font_system.db().face(font_id)?;
+            (
+                fontdb_face_file(face),
+                face.index,
+                Some(face.post_script_name.clone()).filter(|name| !name.is_empty()),
+                face.style,
+                face.stretch,
+                face.families
+                    .first()
+                    .map(|(name, _)| name.clone())
+                    .unwrap_or_default(),
+                face.weight.0,
+            )
+        };
+        let identity = match file.as_deref() {
+            Some(path) => {
+                ResolvedFontIdentity::from_file(path, face_index, postscript_name.clone())
+            }
+            None => ResolvedFontIdentity {
+                backend: FontBackendKind::Fontconfig,
+                stable_key: format!(
+                    "mem:{}#{face_index}",
+                    postscript_name.as_deref().unwrap_or(&family)
+                ),
+                file_path: None,
+                face_index,
+                postscript_name: postscript_name.clone(),
+                variation_coords: Vec::new(),
+            },
+        };
+        let id = self.intern_resolved_font_id(&identity);
+        Some(ResolvedFont {
+            id,
+            identity,
+            family,
+            full_name: None,
+            postscript_name,
+            weight: file_weight,
+            slant: font_slant_kind_from_fontdb(style),
+            width: stretch.to_number(),
+            pixel_size: font_size,
+            ascent_px: vertical.as_ref().map(|v| v.ascent).unwrap_or(0.0),
+            descent_px: vertical.as_ref().map(|v| v.descent).unwrap_or(0.0),
+            source,
+        })
+    }
+
     fn intern_resolved_font_id(&mut self, identity: &ResolvedFontIdentity) -> ResolvedFontId {
         if let Some(&id) = self.resolved_font_ids.get(identity) {
             return id;
@@ -1170,6 +1337,7 @@ impl FontMetricsService {
         self.shaped_run_cache.clear();
         self.resolved_face_font_cache.clear();
         self.resolved_char_font_cache.clear();
+        self.resolved_cluster_cache.clear();
     }
 
     /// Number of times `shape_run` actually invoked cosmic-text shaping (i.e.
@@ -1259,10 +1427,14 @@ fn realize_frame_char_fonts(
 ) {
     use neomacs_display_protocol::glyph_matrix::{GlyphRow, GlyphType};
 
-    // Pass 1: collect the (face, repr char) pairs on screen. Bounded by the
-    // number of distinct non-ASCII chars visible, not by grid size.
+    // Pass 1: collect the (face, repr char) pairs and composed clusters on
+    // screen. Bounded by the number of distinct non-ASCII chars/clusters
+    // visible, not by grid size.
     let mut wanted: Vec<(u32, char)> = Vec::new();
     let mut seen: std::collections::HashSet<(u32, char)> = std::collections::HashSet::new();
+    let mut wanted_clusters: Vec<(u32, Box<str>)> = Vec::new();
+    let mut seen_clusters: std::collections::HashSet<(u32, Box<str>)> =
+        std::collections::HashSet::new();
     let mut collect_row = |row: &GlyphRow| {
         if !row.enabled {
             return;
@@ -1280,6 +1452,9 @@ fn realize_frame_char_fonts(
                         *ch
                     }
                     GlyphType::Composite { text } => {
+                        if seen_clusters.insert((glyph.face_id, text.clone())) {
+                            wanted_clusters.push((glyph.face_id, text.clone()));
+                        }
                         match crate::composition::representative_char_for_cluster(text) {
                             Some(ch) => ch,
                             None => continue,
@@ -1340,6 +1515,52 @@ fn realize_frame_char_fonts(
                     face_id,
                     ch = %repr,
                     "no per-char fallback font resolved; renderer will re-select"
+                );
+            }
+        }
+    }
+
+    // Pass 3: shape composed clusters and publish their exact glyphs so the
+    // renderer replays them instead of re-shaping the cluster text.
+    for (face_id, text) in wanted_clusters {
+        if state
+            .shaped_clusters
+            .get(&face_id)
+            .is_some_and(|by_text| by_text.contains_key(&text))
+        {
+            continue;
+        }
+        let Some(face) = state.faces.get(&face_id) else {
+            continue;
+        };
+        let family = if face.font_family.is_empty() {
+            "monospace"
+        } else {
+            face.font_family.as_str()
+        };
+        match svc.resolved_glyphs_for_cluster(
+            &text,
+            family,
+            face.font_weight,
+            face.is_italic(),
+            face.font_size.max(1.0),
+        ) {
+            Some((glyphs, fonts)) => {
+                for font in fonts {
+                    state.fonts.entry(font.id).or_insert(font);
+                }
+                state
+                    .shaped_clusters
+                    .entry(face_id)
+                    .or_default()
+                    .insert(text, glyphs);
+            }
+            None => {
+                tracing::trace!(
+                    target: "font_boundary",
+                    face_id,
+                    cluster = %text,
+                    "cluster did not shape; renderer will re-shape"
                 );
             }
         }
