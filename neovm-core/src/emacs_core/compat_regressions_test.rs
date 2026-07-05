@@ -576,12 +576,77 @@ fn frame_scale_factor_defaults_to_one_float() {
 #[test]
 fn garbage_collect_maybe_requires_whole_number() {
     crate::test_utils::init_test_tracing();
-    let err =
-        crate::emacs_core::builtins::builtin_garbage_collect_maybe(vec![Value::T]).unwrap_err();
+    let mut eval = crate::emacs_core::Context::new();
+    let err = crate::emacs_core::builtins::builtin_garbage_collect_maybe(&mut eval, vec![Value::T])
+        .unwrap_err();
     match err {
         Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
         other => panic!("expected signal, got {other:?}"),
     }
+    // A negative FACTOR is likewise not a wholenump (GNU `CHECK_FIXNAT`).
+    let neg = crate::emacs_core::builtins::builtin_garbage_collect_maybe(
+        &mut eval,
+        vec![Value::fixnum(-1)],
+    )
+    .unwrap_err();
+    match neg {
+        Flow::Signal(sig) => assert_eq!(sig.symbol_name(), "wrong-type-argument"),
+        other => panic!("expected signal, got {other:?}"),
+    }
+}
+
+#[test]
+fn garbage_collect_maybe_collects_when_factor_scaled_threshold_exceeded() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::Context::new();
+
+    // FACTOR 0 never collects: GNU requires `FACTOR >= 1`.
+    let out = crate::emacs_core::builtins::builtin_garbage_collect_maybe(
+        &mut eval,
+        vec![Value::fixnum(0)],
+    )
+    .unwrap();
+    assert_eq!(out, Value::NIL, "FACTOR 0 must never collect");
+
+    // Allocate under a huge threshold so nothing auto-collects mid-eval;
+    // `bytes_since_gc` (GNU's `since_gc`) accumulates deterministically.
+    eval.tagged_heap.set_gc_threshold(usize::MAX);
+    eval.eval_str_each("(setq gc-maybe-probe (make-list 256 'x))");
+    let since_gc = eval.tagged_heap.bytes_since_gc();
+    assert!(
+        since_gc > 0,
+        "allocation should have advanced bytes_since_gc"
+    );
+
+    // Below the (still-huge) threshold, the FACTOR-scaled check does not trip:
+    // no collection happens and the result is nil.
+    let collections_before = eval.tagged_heap.gc_collections();
+    let out = crate::emacs_core::builtins::builtin_garbage_collect_maybe(
+        &mut eval,
+        vec![Value::fixnum(1)],
+    )
+    .unwrap();
+    assert_eq!(out, Value::NIL, "since_gc below gc_threshold => no collect");
+    assert_eq!(
+        eval.tagged_heap.gc_collections(),
+        collections_before,
+        "no GC cycle should have run"
+    );
+
+    // Drop the threshold below what we consed. Now FACTOR 1 exceeds
+    // `gc_threshold / 1`, so garbage-collect-maybe runs a real collection
+    // (a new GC cycle completes) and returns t.
+    eval.tagged_heap.set_gc_threshold(1);
+    let out = crate::emacs_core::builtins::builtin_garbage_collect_maybe(
+        &mut eval,
+        vec![Value::fixnum(1)],
+    )
+    .unwrap();
+    assert_eq!(out, Value::T, "FACTOR 1 past the threshold must collect");
+    assert!(
+        eval.tagged_heap.gc_collections() > collections_before,
+        "garbage-collect-maybe should have driven a real collection"
+    );
 }
 
 #[test]

@@ -5248,7 +5248,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "garbage-collect-maybe",
-        |_ctx, args| builtin_garbage_collect_maybe(args),
+        builtin_garbage_collect_maybe,
         1,
         Some(1),
     );
@@ -5696,6 +5696,12 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     ctx.defsubr(
         "memory-info",
         |_ctx, args| builtin_memory_info(args),
+        0,
+        Some(0),
+    );
+    ctx.defsubr(
+        "memory-limit",
+        |_ctx, args| builtin_memory_limit(args),
         0,
         Some(0),
     );

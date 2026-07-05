@@ -7135,6 +7135,35 @@ fn pure_dispatch_memory_module_placeholder_cluster_matches_compat_contracts() {
 }
 
 #[test]
+fn memory_limit_returns_resident_kib_integer() {
+    crate::test_utils::init_test_tracing();
+
+    // Arity is exactly 0: an extra argument is a wrong-number-of-arguments error.
+    assert!(
+        dispatch_builtin_pure("memory-limit", vec![Value::NIL])
+            .expect("memory-limit should resolve")
+            .is_err(),
+        "memory-limit takes no arguments"
+    );
+
+    let out = dispatch_builtin_pure("memory-limit", vec![])
+        .expect("memory-limit should resolve")
+        .expect("memory-limit should evaluate");
+    // GNU `Fmemory_limit` returns an integer (kilobytes of resident memory),
+    // or 0 when the OS does not report it.
+    let kib = out
+        .as_fixnum()
+        .expect("memory-limit should return an integer (KiB)");
+    assert!(kib >= 0, "resident KiB must be non-negative, got {kib}");
+
+    // GNU-parity: on Linux the OS reports RSS, so the value is positive — the
+    // oracle corpus asserts `(> (memory-limit) 0)` => t
+    // (divergence_combo_complex239::div_cx239_memory_limit_query).
+    #[cfg(target_os = "linux")]
+    assert!(kib > 0, "expected positive resident KiB on Linux, got {kib}");
+}
+
+#[test]
 fn pure_dispatch_dump_portable_placeholder_cluster_matches_compat_contracts() {
     crate::test_utils::init_test_tracing();
     let dump_portable = dispatch_builtin_pure(
