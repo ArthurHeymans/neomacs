@@ -91,7 +91,7 @@ use crate::tagged::value::{
 /// `dlopen` against the host's dynamic symbol table (the host/test binary is
 /// linked `-rdynamic`). The JIT path is unaffected — it binds shims by ADDRESS
 /// via `builder.symbol(...)`, so the only effect of `no_mangle` is an exported
-/// symbol name. All 35 shims the MIR tier can emit ([`MIR_SHIM_NAMES`]) carry it.
+/// symbol name. All 40 shims the MIR tier can emit ([`MIR_SHIM_NAMES`]) carry it.
 #[allow(clippy::not_unsafe_ptr_arg_deref)] // C-ABI shim: raw ptrs per documented SAFETY contract; only ever called from generated code.
 #[unsafe(no_mangle)]
 pub extern "C" fn neovm_jit_gc_save() -> i64 {

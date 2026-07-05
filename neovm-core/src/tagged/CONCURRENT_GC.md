@@ -1,377 +1,390 @@
-# Concurrent GC for neovm-core — design & phased plan
+# Concurrent GC for neovm-core — as-built architecture
 
-Goal: a background GC thread that marks (and eventually sweeps) concurrently
-with the mutator, so the mutator only stops for short safe-point handshakes
-(root snapshot + mark termination), each sub-millisecond. This is the Go-style
-design: concurrent tri-color mark, SATB write barrier, cooperative safe points.
+A background GC thread marks concurrently with the mutator, which stops only
+for two short safe-point handshakes per cycle (root snapshot at the start,
+mark termination at the end). This is the Go-style design: concurrent
+tri-color mark, SATB (snapshot-at-the-beginning / Yuasa) deletion barrier,
+cooperative safe points, precise (non-conservative) rooting.
 
 STATUS: the concurrent collector is the ONLY sliced/marking collector. The
-incremental slicer + the `NEOVM_GC_CONCURRENT` / `NEOVM_GC_SATB` env gates were
-REMOVED in the GC-modernization path-collapse (branch `neovm-gc-modernization`,
-2026-06-19); `NEOVM_GC_CONCURRENT=0` is now a no-op. A stop-the-world full
-collection survives ONLY as an internal phase — first-cycle bootstrap (before the
-dump partition is blackened) and explicit `garbage-collect` — not as a rival path.
-`complete_collection` marks on the GC thread; `should_run_concurrent` is just
-`partition_dump && dump_blackened`. (Historical: Phases 1-5 done, TSan-verified;
-the incremental collector had been default since `9ba9859b6` before removal.)
-Tradeoff note: under gc_stress the concurrent STW termination
-(~500-668us) is higher than the incremental one (~200us), but the cons-spine
-MARK runs off the mutator thread, so the mutator spends no time marking (better
-on large heaps / multi-core); both are sub-ms and imperceptible.
+old incremental slicer and the `NEOVM_GC_CONCURRENT` / `NEOVM_GC_SATB` env
+gates were REMOVED in the GC-modernization path-collapse (branch
+`neovm-gc-modernization`, 2026-06-19) and this doc describes the code
+as-built through the 2026-07 arc (parity mark bits, size-class object arenas,
+the task-01 concurrent-claim dispatcher, the adaptive pacer, dump-less
+concurrent, per-group handshake stats). A stop-the-world (STW) full trace
+survives ONLY as an internal phase — the first-cycle bootstrap (before the
+heap is eligible for concurrent marking) and explicit `garbage-collect` — not
+as a rival path. Everything else runs concurrently and terminates at a brief
+STW handshake. Verify every claim below against `tagged/gc.rs` +
+`tagged/header.rs` + `emacs_core/symbol.rs` (the code is truth; this doc is a
+map).
 
-## Where we start from
-
-Already in place (the incremental collector):
-- Tri-color mark with an explicit gray queue, sliced across safe points.
-- Dump partition (mapped pdump image is permanent-black) + tenured old gen +
-  remembered set, so a cycle only traces the young heap + dirty owners.
-- Incremental-update (Steele) write barrier: `record_heap_write` logs dirty
-  owners; each slice re-traces them.
-- Deferred (incremental) sweep with allocate-black during the sweep window.
-- Safe points: `gc_safe_point` at eval boundaries (GNU `maybe_gc` model).
-- The whole VM is otherwise single-threaded; the heap is reached through a
-  `thread_local!` raw pointer and every Lisp slot is a plain (non-atomic) field.
-
-## The hard problem (Rust-specific)
+## The Rust-specific hard problem
 
 A GC thread reading the object graph while the mutator writes it is a data
-race = UB in Rust, not just a logic bug. So every GC-visible mutable word that
-the two threads touch must be accessed atomically (or via `UnsafeCell` + the
-right `Ordering`). To bound the shared surface, ONLY MARKING goes concurrent;
-allocation and sweep stay mutator-side (sweep already incremental; a short
-handshake hands the sweep work over or runs it mutator-side). Shared surface:
+race = UB in Rust, not merely a logic bug. Every GC-visible word the two
+threads touch is therefore accessed atomically. To bound the shared surface,
+ONLY MARKING goes concurrent; allocation and sweep stay mutator-side
+(**no-free-during-mark**: the free list and every deallocation are
+mutator-only — the GC thread never frees, and sweep runs world-stopped at the
+termination handshake). The GC thread holds NO `&mut TaggedHeap` (two `&mut`
+to one heap is UB even with atomic fields); it works entirely through:
 
-- Mark state: cons block mark bitmaps, `GcHeader.marked`, mapped mark vectors.
-- Object slots the GC thread reads while the mutator writes: `ConsCell.car/cdr`,
-  vector/record/closure/bytecode/char-table slots, string interval roots, etc.
-- The gray queue (mutator pushes via barrier/alloc; GC thread pops).
-- The SATB log buffers (per-mutator; GC thread drains).
+- Cons block mark bitmaps (atomic `fetch_or`), read via atomic `load_car/load_cdr`.
+- `GcHeader.marked` (`AtomicBool`), claimed with an atomic `swap`.
+- Read-only `Arc` snapshots of owned page bases + the dump address span.
+- A shared `Mutex`-backed SATB buffer (mutator appends; GC drains into gray).
 
-x86 relaxed atomic loads/stores compile to plain mov, so the perf cost of
-atomic slots is essentially zero; the cost is the pervasive code change.
+x86-64 relaxed atomic loads/stores compile to plain `mov`, so the per-slot
+cost is ~zero; the cost was the pervasive representation change.
 
-## Barrier: switch to SATB (snapshot-at-the-beginning / Yuasa)
+## Object model & the heap
 
-Concurrent marking wants SATB, not incremental-update: before the mutator
-overwrites a slot, it logs the OLD value to a thread-local buffer; the GC
-thread drains the buffers and marks those values. This keeps the start-of-cycle
-snapshot live regardless of concurrent mutation, with a wait-free fast path
-(append to a local buffer). New objects allocate-black. The current
-`record_heap_write` already runs at every mutation site (18 in tagged/mutate.rs
-+ value.rs char-table/obarray) — it gains an "append old value to SATB buffer"
-path when a concurrent mark is active.
+### Parity mark bits (`tagged/header.rs`)
 
-## Handshakes (the only STW)
+`GcHeader { marked: AtomicBool, kind: HeapObjectKind, tenured: bool, next }`.
 
-1. Initial mark / root snapshot: stop the mutator briefly, scan roots (push to
-   the gray queue), enable the SATB barrier + allocate-black, start the GC
-   thread. (The obarray root scan is the ~0.5ms floor here — see Stage 0 note.)
-2. Mark termination: stop the mutator briefly, drain residual SATB buffers,
-   re-scan the small stack/specpdl roots, confirm gray empty. Then sweep.
+- `marked` is the RAW mark-parity bit (relaxed atomic). For a YOUNG
+  (non-tenured, heap-owned) non-cons object, "marked this cycle" ≡
+  `marked == TaggedHeap::mark_parity`. The heap FLIPS `mark_parity` at
+  `begin_collection` instead of walking `all_objects` to clear bits, so the
+  raw value alone is meaningless — interpret it via `is_marked_at` /
+  `mark_claim_at` against the owning heap's parity. `mark_parity` starts
+  `false`.
+- `is_marked_at(parity)` = `marked.load(Relaxed) == parity`.
+- `mark_claim_at(parity)` = `marked.swap(parity, Relaxed) != parity` — the
+  atomic CLAIM: sets the bit and returns `true` iff THIS call flipped it from
+  unmarked → marked. Used by the concurrent GC thread to mark a heap object
+  exactly once with no `&mut TaggedHeap`; the non-cons analogue of
+  `atomic_mark_owned_cons_ptr`. A lost race is benign (the object ends up
+  `== parity` either way).
+- **born-at-parity**: heap allocation paths overwrite `marked` at the link
+  seams with the current parity (allocate-black), so a mid-cycle birth is
+  already marked and never enters the GC's gray.
+- **tenured-before-parity read order**: `tenured` is a frozen bit (set at a
+  world-stopped promotion) meaning "permanently black, never re-traced /
+  re-swept". EVERY reader short-circuits on `tenured` FIRST
+  (`tenured || is_marked_at(parity)`), because the frozen flag is stable to
+  read on any thread while the parity bit is live.
+- Mapped (pdump) objects mark via the heap's mutator-only side tables and
+  never interpret `marked` at all.
 
-Both are bounded root scans, sub-ms. Everything between runs concurrently.
+`marked` is atomic precisely so the GC thread can claim it while the mutator
+allocate-blacks / reads it without a data race (`AtomicBool` has the same
+size/layout as `bool`, so the header does not grow).
 
-## Phases (each flag-gated, verified with the gc_stress test + fresh-build
-##         verify + full suite before the next)
+### Size-class object arenas (`tagged/gc.rs`)
 
-- Phase 1 — Atomic mark state. Convert cons bitmaps / `GcHeader.marked` / mapped
-  mark vectors to atomic access. No concurrency yet (single-threaded, behavior
-  identical) — de-risks the representation change in isolation.
-- Phase 2 — Atomic object slots. Convert the slots the GC reads to atomic
-  access. Still single-threaded. Verify no regression.
-  - 2a DONE (`f116d798b`): cons car/cdr (a single set_car/set_cdr chokepoint).
-  - 2b/2c the hard part — see "Resizable structures" below. Fixed-size arrays
-    (Emacs vector / record / closure: set via `aset`, never resized) and the
-    individual TaggedValue fields are mechanical (atomic element store at the
-    write + atomic load in `trace_veclike`). GROWABLE structures need real care.
+Non-cons heap objects live in per-TYPE `ObjectArena<T>` allocators, one arena
+per kind, each paging a homogeneous size class. `OBJECT_PAGE_BYTES = 64 KiB`;
+a page holds `OBJECT_PAGE_BYTES / T::SLOT_BYTES` slots. Size classes
+(`T::SLOT_BYTES`, the arena stride):
 
-### Resizable structures (the Phase 2b/2c design decision)
+| Arena | Object | `SLOT_BYTES` | `size_of::<T>()` bound |
+|-------|--------|-------------:|-----------------------:|
+| `float_arena` | `FloatObj` | 32 | == 24 |
+| `string_arena` | `StringObj` | 64 | ≤ 56 |
+| `vector_arena` | `VectorObj` | 64 | ≤ 48 |
+| `bytecode_arena` | `ByteCodeObj` | 384 | ≤ 376 |
+| `lambda_arena` | `LambdaObj` | 128 | ≤ 120 |
+| `macro_arena` | `MacroObj` | 128 | ≤ 120 |
+| `record_arena` | `RecordObj` | 64 | ≤ 56 |
+| `symbol_with_pos_arena` | `SymbolWithPosObj` | 64 | ≤ 56 |
 
-Unlike cons, veclike slot writes are NOT a single chokepoint: `with_*_data_mut`
-hand a `&mut Vec<TaggedValue>` to arbitrary closures (push/extend/index/sort),
-and hash tables + obarray buckets GROW — a `Vec::push` can REALLOCATE, moving
-the backing buffer. A concurrent GC thread holding a pointer into the old
-buffer would then read freed memory (UAF). So plain "atomic element store"
-only suffices for fixed-size arrays.
+The struct must fit in `SLOT_BYTES` minus an 8-byte trailing free-link word
+(`FREE_LINK_OFFSET = SLOT_BYTES - size_of::<usize>()`), const-checked. Conses
+use a separate block allocator (`CONS_BLOCK`) with its own mark bitmap.
 
-Approach for growable structures (to implement when the GC thread lands):
-1. Element writes go through the atomic-store path + the SATB barrier (records
-   the overwritten value) — keeps the start-of-cycle snapshot live.
-2. The backing-buffer POINTER is published atomically (Release) on realloc and
-   loaded atomically (Acquire) by the GC; the OLD buffer is RETIRED onto a
-   "retired buffers" list kept alive until mark termination, so the GC thread's
-   in-flight read of either buffer is always valid (no UAF). Freed at the
-   termination handshake.
-3. Alternatively (simpler first cut): snapshot growable structures' slot
-   pointers into the gray queue at the STW root-snapshot handshake, so the GC
-   thread never reads a growable backing buffer concurrently — only fixed-size
-   arrays and individual fields are read concurrently. Element mutations are
-   still covered by SATB. This trades a slightly larger snapshot handshake for
-   not needing retired-buffer bookkeeping; do this first, optimize later.
+**Page-ownership oracle** — `ObjectArena::owns` (registry + stride + alloc
+bit) is the EXACT page-span test that classifies a discovered address at claim
+time. The owned-page set enumerated for sweep and for the claim snapshots
+INCLUDES RETIRED (bump-exhausted, full) pages — a retired page's slots are all
+live tenured/owned objects, so it is swept and snapshotted like any other.
+`ObjectArena::sweep_range` is the only reclaimer.
 
-Recommended: start with (3) — fixed-size arrays + fields read concurrently
-(mechanical atomic conversion), growable structures captured at the snapshot
-handshake. Move to (2) only if the snapshot handshake proves too long.
-- Phase 2 status: READS done (cons `f116d798b`, veclike `9725bad38`). The
-  trace path (`trace_veclike`, cons `load_car/load_cdr`) reads every mutable
-  slot atomically; immutable types (bytecode/symbol-with-pos/module-function)
-  stay plain; `collect_veclike_children` stays plain (STW verify/scan only).
-  WRITES fold into Phase 3 (the barrier is the natural chokepoint).
-- Phase 3 — SATB barrier + per-mutator log buffers, drained on the mark path.
-  Still single-threaded (the buffer augments/replaces dirty-owner re-trace).
-  WHY SATB over the current incremental-update (Steele) barrier: the
-  incremental-update barrier RE-READS a dirty owner's slots (to shade its
-  current children). On a concurrent thread, re-reading a growable structure
-  that the mutator just REALLOCATED is a UAF. SATB instead logs the OVERWRITTEN
-  (old) value at write time, so the GC thread NEVER re-reads a mutated owner —
-  it only drains the logged values. This sidesteps the growable-realloc hazard
-  for the barrier (the GC's primary trace still needs retired-buffer retention
-  for growth, per "Resizable structures").
-  Implementation: a thread-local SATB buffer + `satb_active` flag; each
-  mutation site (or the centralized barrier, via `kind` dispatch) reads the old
-  slot value before the store and, if marking, appends it (when heap) to the
-  buffer; bulk writes snapshot all the owner's old slots. The marker drains the
-  buffer in slices + at the termination handshake. New objects allocate-black.
-  Single-threaded, SATB marking must produce the same live set as the current
-  collector (verifiable).
-- Phase 4 — GC thread + handshake protocol + shareable heap (the `Send`/sharing
-  model). GC thread initially idle except handshake validation — proves the
-  threading/sharing model with no marking moved yet.
-- Phase 4 DONE (`fe1748c0c`): background GC thread + `HeapPtr` Send wrapper +
-  blocking handshake (mutator blocks during mark = exclusive access, no pause
-  win yet). Proves heap-sharing/threading/handshake. Gated NEOVM_GC_CONCURRENT.
-- Phase 5 DONE (machinery, TSan-verified) — non-blocking concurrent marking.
-  The GC thread marks the CONS SPINE while the mutator runs; every non-cons (and
-  any non-owned cons) is DEFERRED to the stop-the-world termination. This sized
-  the shared surface down to what is provably race-safe:
-  * The GC thread holds NO `&mut TaggedHeap` (two `&mut` to one heap is UB even
-    with atomic fields). It marks conses with a SELF-FREE free function
-    (`atomic_mark_owned_cons_ptr`): the mark bitmap is at `block_base +
-    CONS_MARKS_OFFSET`, derivable from the cons pointer alone; the bit is set
-    with an atomic `fetch_or`. Children are read with atomic `load_car/load_cdr`.
-  * An IMMUTABLE `Arc<HashSet>` of owned cons-block bases (snapshotted at the STW
-    start) tells the thread which conses it may mark vs. defer. Read-only sharing
-    is always race-safe; new blocks during marking are absent (their conses
-    allocate-black and never enter the GC's gray).
-  * The dump address span (two immutable usizes) lets it skip permanent-black
-    dump conses (their young children come from the remembered set).
-  * SATB barrier logs overwritten children to a shared `Mutex<Vec>`; the GC
-    drains it into gray. Allocate-black (cons + non-cons) on every mutation-time
-    allocation. Termination: `join` (stop thread, fold residual SATB+deferred
-    into gray) -> reseed roots -> drain stop-the-world -> deferred sweep.
-  * Driver: `start_concurrent_mark` / poll `concurrent_mark_done` /
-    `terminate_concurrent_mark` slotted into `gc_collect_from_current_roots_impl`
-    before the incremental branches; `should_run_concurrent` gates on
-    NEOVM_GC_CONCURRENT + partitioned post-dump heap.
-  * THE GROWABLE BLOCKER (below) is SIDESTEPPED, not solved: by deferring ALL
-    veclikes/strings to the STW termination, the GC thread never reads a
-    reallocatable backing buffer. The expensive cons-spine traversal is what runs
-    concurrently; veclike tracing stays in the (now smaller) termination pause.
-  * VERIFIED: ThreadSanitizer (`-Zsanitizer=thread -Zbuild-std`) on a focused
-    300k-cons test with GC/mutator overlap reports 0 data races; full default
-    suite 7092/7092; full suite with NEOVM_GC_CONCURRENT=1 also 7092/7092. TSan
-    caught nothing, but a correctness bug DID surface in testing:
-    `note_heap_write_record` short-circuited before `record_heap_write` when
-    owner-tracking was Disabled, so the SATB log never fired — fixed with a
-    `TAGGED_HEAP_CONCURRENT_ACTIVE` thread-local in the fast-path gate.
-  * END-TO-END VERIFIED on the real binary: `cargo xtask fresh-build --release`
-    (full loadup + byte-compile + dump) succeeds under NEOVM_GC_CONCURRENT=1, no
-    crashes. Running the matched binary+pdump (partitioned, dump-blackened) with
-    NEOVM_GC_STRESS=1 NEOVM_GC_CONCURRENT=1 NEOVM_GC_TRACE=1 byte-compiling a real
-    .el file: 262 GC cycles, ALL 262 going through the concurrent path, 0 panics,
-    correct .elc output. Concurrent termination pause ~1.7-1.9ms [roots ~0.9ms +
-    deferred-veclike drain ~0.85ms] — the cons-spine traversal ran off the pause.
-    (NEOVM_GC_STRESS=1 is a new env hook that stress-GCs at every safe point.)
-  * PAUSE BOTTLENECK MEASURED (don't re-chase the wrong one): under gc_stress
-    the concurrent termination ~1.7ms = roots ~0.9ms + drain ~0.9ms, and BOTH
-    halves are dominated by RE-SEEDING + RE-DRAINING the full obarray (~150k
-    interned symbols) at the handshake — NOT the deferred-veclike trace. Slicing
-    the deferred-veclike drain into the incremental slicer was TRIED and REVERTED:
-    it left the termination unchanged (veclike drain was never the bottleneck) and
-    slightly regressed it (added Steele-barrier churn; p90/max rose to ~1.5/2.3ms).
-    The obarray reseed is the Stage-0 floor, paid at BOTH the start and termination
-    handshakes (twice per cycle). gc_stress is a worst case for the concurrent
-    collector's RELATIVE benefit — it forces a GC at every safe point, so each
-    cycle is almost pure handshake overhead with little marking to parallelize.
-  * STAGE 0 first cut DONE: `seed_root_with_origin` now SKIPS roots that point
-    into the blackened dump (`dump_blackened && owner_is_mapped`). Those objects
-    are already permanent-black (never cleared/swept) and their young children
-    come from the dump remembered set, so seeding them was pure waste — and in
-    blackened mode a pushed dump object is already-marked so it re-traces no
-    children anyway, i.e. NO coverage is lost (the remembered set was always the
-    sole dump->young path). This stops pushing+draining the ~450k interned-symbol
-    value/function/plist cells that still point at dumped objects every handshake.
-    Helps BOTH collectors. Measured (gc_stress, cl-seq.el byte-compile):
-      - incremental (default) termination ~0.9ms -> ~200us median (roots ~150us);
-      - concurrent termination ~1.7ms -> ~500-668us median (roots 841us->~350us).
-    Verified: fresh-build --release with NEOVM_GC_VERIFY_PARTITION=1 clean (0
-    violations), 0 panics on both collectors.
-  * STAGE 0 further — dirty-symbol remembered set: TRIED and REVERTED. The idea:
-    only enumerate symbols mutated since the dump (a dirty list) + young symbols,
-    instead of scanning all ~150k. Hooked the two `&mut LispSymbol` accessors
-    (`slot_mut`/`ensure_slot`) — the provably-complete chokepoint every cell write
-    passes through (verified CORRECT: 22k stress GCs across cl-macs/cl-seq/cl-extra
-    byte-compiles, 0 panics, correct .elc). BUT it was a PERFORMANCE REGRESSION:
-    the dirty list is scattered SymIds, so iterating it is random-access
-    (cache-missing) and it grows as more dumped symbols are mutated — termination
-    roots tail rose to ~1437us (vs Stage-0 ~150us), median 200us->319us. LESSON:
-    the contiguous 150k-symbol scan is cache-friendly and FASTER than
-    random-accessing a few thousand scattered dirty entries; the enumeration was
-    never the bottleneck — the gray push/drain was, and Stage-0 already fixed that.
-    Do not re-attempt a scattered dirty index. (A contiguous dirty-cell cache
-    could in principle help, but the residual ~150us is already negligible.)
-    Tracing deferred veclikes concurrently (retired-buffer scheme, option (b))
-    remains the only secondary lever.
+### When the concurrent collector runs — dump-less concurrent
 
-  Original design notes (kept for reference):
-  * Shared state: keep `gray_queue` GC-thread-OWNED; the SATB barrier pushes
-    overwritten values to a shared `Mutex<Vec<TaggedValue>>` (or condvar-backed)
-    that the GC thread drains into gray. Mark bits + slots are already atomic
-    (Phases 1-2), so only this buffer + done/stop flags are shared.
-  * Start handshake (STW, brief): begin_collection + seed roots + enable SATB +
-    allocate-black, signal GC thread, RETURN (don't block).
-  * GC loop: mark_all (drain gray) -> drain shared SATB into gray -> repeat;
-    when gray+SATB empty set `done`; on `stop` exit and signal `exited`.
-  * Driver polls `done` at safe points; on done -> termination handshake (STW):
-    set stop, wait `exited`, drain residual SATB + re-scan roots + final
-    mark_all (mutator-side, GC stopped) + sweep.
-  * THE BLOCKER — growable structures. The GC thread tracing a gray hash-table
-    or obarray reads its backing buffer; if the mutator grows it (Vec/HashMap
-    REALLOC) concurrently the GC reads freed memory (UAF). gc_stress grows these
-    during cl-lib load, so this WILL crash unless solved. Options:
-      (a) snapshot growable structures' elements into gray + mark them black at
-          the START handshake so the GC never traces them concurrently (growth
-          after = SATB/allocate-black). Needs to find/iterate the growables
-          (they're reached via the graph — easiest: special-case HashTable +
-          Obarray when popped from gray during the START's STW trace).
-      (b) replace their backing with a segmented/chunked store that never moves
-          existing elements on growth (then concurrent reads of old chunks are
-          safe). A data-structure change.
-    (a) is the lighter first cut. Until one is done, Phase 5 cannot pass
-    gc_stress, so it is an atomic chunk — do not ship partially.
-- Phase 6 — Concurrent / handed-off sweep; tighten the handshakes.
+```rust
+should_run_concurrent = if partition_dump { dump_blackened }
+                        else { bootstrap_collected }
+```
 
-## Risks / invariants
+- WITH a dump partition: concurrent runs once the mapped pdump image has been
+  promoted + blackened (`promote_and_blacken` at the first partition cycle's
+  sweep end sets `dump_blackened`). The first partition cycle itself is the STW
+  full trace that does the promotion.
+- WITHOUT a dump (a **dump-less heap**): concurrent runs after the bootstrap
+  cycle (`bootstrap_collected`) — the first collection is an STW bootstrap,
+  and every later cycle marks concurrently. (This is new vs. the historical
+  "concurrent only post-blackened-dump" rule; test
+  `dumpless_heap_enables_concurrent_after_bootstrap_and_collects`.)
+- A heap that registers a dump AFTER dump-less cycles reverts to the dump rule
+  (the first partition cycle must be the STW full trace regardless of earlier
+  bootstraps).
 
-- UB from a missed atomic / wrong `Ordering` → nondeterministic corruption,
-  worse than the UAFs already fixed. Gate every phase with `gc_stress` (GC at
-  every safe point) + `NEOVM_GC_VERIFY_PARTITION` + the full suite; add a
-  concurrent stress test and run under ThreadSanitizer where possible.
-- Any new root source must be seeded at BOTH the snapshot and the termination
-  handshake (the lesson from the incremental-termination UAF).
-- Keep allocation + free list mutator-only; never let the GC thread touch them.
-- Weak hash tables must be resolved (`mark_and_sweep_weak_tables`) on EVERY
-  termination path — `complete_collection` AND `incremental_finish` (the
-  concurrent/incremental termination). The remembered/SATB path
-  (`push_value_children_to_gray`) must STRONG-trace veclike children
-  (`collect_veclike_children`, not `trace_veclike`, which defers weak entries) so
-  a dumped/tenured weak table conservatively retains its entries. Missing either
-  swept a weak table's still-referenced entries → UAF (only reproduces under
-  `gc_stress` + `NEOVM_GC_VERIFY_PARTITION` together — run that combo, not each
-  alone). Fixed 2026-06-19; was latent on the concurrent + incremental paths.
-- `collect_veclike_children` MUST stay a SUPERSET of what `trace_veclike` traces
-  for every `VecLikeType` — the remembered/SATB strong-trace AND
-  `verify_dump_partition` both rely on it. A field traced by `trace_veclike` but
-  omitted from `collect_veclike_children` is invisible to the verifier (it uses
-  `collect`) yet unmarked via the remembered path → a silent UAF the gate cannot
-  catch. (Found 2026-06-19: hash-table `user_cmp_function`/`user_hash_function`
-  were missing from `collect`; added.) When adding a veclike field, update BOTH.
+## The two handshakes (the only STW)
 
-## Insertion coverage & the precise-rooting precondition (task 01 / #17, 2026-07-04)
+1. **Start / root snapshot** (`concurrent_begin` + `launch_concurrent_mark`):
+   stop the mutator briefly; flip `mark_parity` (O(1) "clear"); seed the
+   collector-internal + remembered + context roots (push to gray); capture the
+   read-only snapshots the GC thread will use (cons-block bases, Tier-B vector
+   backings, and the float / vector / bytecode PAGE-BASE sets); arm the SATB
+   barrier + allocate-black; send the job and RETURN (do not block).
+2. **Termination** (`terminate_concurrent_mark`): stop the mutator; join the
+   GC thread and fold residual SATB + deferred values into gray; re-seed the
+   runtime / remembered / context roots + mid-cycle new symbol cells
+   (`trace_new_symbol_cells`); dirty-owner re-gray (see invariant 4); final
+   mutator-side `mark_all`; weak-table / finalizer / dead-marker post-passes;
+   then the deferred sweep.
+
+Both are bounded root scans, sub-millisecond. The expensive cons-spine
+traversal runs entirely between them, off the pause.
+
+**HandshakeStats** (`handshake_stats` / `handshake_stats_mut`) is a
+diagnostics-only (no behavior) sibling of `SweepStats` that records both
+handshakes decomposed PER PHASE and PER ROOT GROUP: the mark-clear three-way
+split (cons-bitmap memset / young non-cons `all_objects` walk / mapped resets),
+`seed_all_context_roots`'s per-group `RootSeedBreakdown` at both start AND
+termination, the task-01 float / vector / bytecode page-base snapshot timings,
+join/fold, new-symbol tracing, and once-per-handshake O() size probes. The
+evaluator populates the context-root breakdown via `handshake_stats_mut`.
+
+## The concurrent mark loop & claim dispatcher
+
+`run_concurrent_mark` loops draining its local gray queue and the shared SATB
+buffer until both are empty and the mutator asks it to stop. It marks:
+
+- **Conses** via `atomic_mark_owned_cons_ptr`: the mark bitmap is at
+  `block_base + CONS_MARKS_OFFSET`, derivable from the cons pointer alone; the
+  bit is set with an atomic `fetch_or` (Relaxed), returning true iff it
+  flipped. Children read with atomic `load_car` / `load_cdr`. An immutable
+  `Arc<HashSet>` of owned cons-block bases (snapshotted at the STW start) says
+  which conses it may mark vs. defer.
+- **A small owned non-cons set** via `concurrent_try_mark_owned(val, job,
+  gray)`, DEFERRING every other non-cons (and non-owned cons) to the STW
+  termination. Each arm first tests a PAGE-BASE snapshot hit BEFORE any
+  dereference (a hit is simultaneously the ownership proof AND the type
+  classification — an arena page owns its 64 KiB span exclusively, which also
+  rules out mapped objects); a MISS returns `false` = defer (fail-safe):
+
+  - **strings** → `concurrent_try_mark_string`: owned page strings with NO
+    interval tree (`intervals_ptr()` null) claim the side-table bool (claiming
+    the `GcHeader` bit would collide with string interval roots); zero Lisp
+    children ⇒ the claim IS the trace. Interval-bearing strings defer.
+    Counter: `str_claimed`.
+  - **floats** → page-snapshot claim: a float has ZERO Lisp children
+    (`mark_value`'s float arm is mark-only), so `mark_claim_at` IS the complete
+    trace. Counter: `float_claimed`.
+  - **vectors** → page-snapshot HEADER claim only. The children are NOT
+    inline-traced here; they are covered by the union of {the Tier-B
+    start-snapshot scan of the possibly-retired-on-write start backing} +
+    {the SATB deletion barrier on every slot / bulk overwrite} +
+    {allocate-black for mid-cycle values} + {the termination root reseed} +
+    {the termination dirty-owner re-gray of `satb_snapshotted_owners`
+    (invariant 4)}. The last leg is NOT optional (it restores the
+    current-backing re-trace that header-claiming removed for mid-cycle
+    register→heap insertions). Counter: `vec_claimed`.
+  - **bytecode** → page-snapshot HEADER claim + GC-thread GRAY-PUSH of the
+    children (arglist / constants / env / doc_form / interactive / extra_slots;
+    `params` is SymIds, untraced by design). Sound ONLY because published
+    bytecode is COMPILE-TIME immutable (the sole mutation seam is
+    `#[cfg(test)] with_bytecode_data_mut_for_test`), so a fresh claim proves
+    the object pre-dates the cycle and its fields are stable to read on the GC
+    thread. Counter: `bc_claimed`.
+  - **subrs** → recognize-and-drop (NOT a claim): `SubrObj`s are `Box::leak`ed
+    statics (`allocate_static_subr_object`), never page-allocated, never linked
+    into `all_objects`, never swept — permanently live by construction. The
+    header bit is DEAD STATE nobody reads. The arm just bumps `subr_dropped`
+    and returns `true` ("handled, nothing owed"); it writes no header and a
+    subr has no Lisp children. Gated on `type_tag == VecLikeType::Subr`.
+  - **mapped (pdump) veclikes** (`dump_lo..dump_hi`) → always DEFER: they mark
+    via the mutator-only side table; recognizing one as leaked or claiming its
+    header would leave the side-table mark unset and panic the tricolor /
+    partition verifiers (the mis-claim UAF shape).
+
+**Claim-ordering rules (H4/H5, MANDATED):**
+1. Any inspection that can still send the value to `deferred` runs BEFORE the
+   claim — a claimed-THEN-deferred object whose termination trace early-returns
+   on the (now-set) mark bit would DROP its children.
+2. The TENURED check runs BEFORE the parity claim — tenured ≡ permanently
+   black; the flag froze at the world-stopped promotion, so the read is stable
+   on this thread and "handled, nothing owed" needs no touch of the frozen bit.
+
+## The SATB (deletion / Yuasa) barrier
+
+Before the mutator overwrites a heap slot it logs the OLD value; the GC drains
+those into gray, keeping the start-of-cycle snapshot live regardless of
+concurrent mutation, with a wait-free append fast path. New objects
+allocate-black.
+
+- Every `tagged/mutate.rs` heap-slot store fires `note_heap_write` /
+  `note_heap_slot_write` (owner-driven `record_heap_write`, which logs the
+  pre-overwrite children via `collect_veclike_children`) BEFORE the store.
+- Every symbol value / function / plist overwrite fires `note_root_overwrite`.
+- The barrier's fast-path gate keys on the `TAGGED_HEAP_CONCURRENT_ACTIVE`
+  thread-local, so the SATB log fires even when owner write-tracking is
+  Disabled (this was a real correctness bug: `note_heap_write_record`
+  short-circuited before `record_heap_write` and the log never fired).
+- The GC drains a shared `Mutex<Vec<TaggedValue>>` SATB buffer into gray.
+
+## The adaptive pacer
+
+After each sweep the heap recomputes `live_bytes` EXACTLY (cons + object +
+arena-page + mapped live bytes) and resets `bytes_since_gc`. `should_collect()`
+is simply `bytes_since_gc >= gc_threshold`. The evaluator's
+`effective_gc_threshold_bytes` sets the threshold to the MAX of three terms,
+clamped to `[1, GC_HI_THRESHOLD_BYTES]`:
+
+1. `gc-cons-threshold` (elisp), floored at `GC_THRESHOLD_FLOOR_BYTES` — the
+   GNU floor.
+2. the `gc-cons-percentage` term: `(live_bytes + bytes_since_gc/2) *
+   percentage`, clamped to `GC_HI` — the GNU proportional model.
+3. an internal live-proportional growth term: `live_bytes *
+   GC_LIVE_GROWTH_NUM/GC_LIVE_GROWTH_DEN`, clamped to `GC_HI`, so the O(live)
+   full-mark cost amortizes as the heap grows.
+
+The elisp-derived value (1–2) is a FLOOR term 3 never lowers (user settings
+and defaults keep their meaning as minimum budgets); an explicit
+`set_gc_threshold` override bypasses all of this (only the pacer value flows
+through `set_gc_threshold_from_runtime`).
+
+## Insertion coverage & the precise-rooting precondition (task 01 / #17)
 
 Task 01 made the GC thread CLAIM (mark, without inline-tracing) the headers of
-owned floats / vectors / bytecode. A claimed veclike's header bit is set, so the
-STW termination's `mark_value` early-returns on it and never re-runs
+owned floats / vectors / bytecode. A claimed veclike's header bit is set, so
+the STW termination's `mark_value` early-returns on it and never re-runs
 `trace_veclike`. Before claiming, that termination re-trace of every *deferred*
 veclike's CURRENT backing silently covered mid-cycle INSERTIONS (a value stored
 into an owner AFTER it was scanned). Claiming removed that backstop, so the
-collector now leans on the following invariants — verified sound by a two-lens
-adversarial review (a soundness proof + a failed reproduction attempt):
+collector now leans on these invariants (verified sound by a two-lens
+adversarial review — a soundness proof + a failed reproduction):
 
 1. **Precise-rooting precondition.** The collector is precise; there is NO
-   conservative stack scan (`set_stack_bottom` is a no-op). Every heap value the
-   mutator will use after a safepoint MUST be reachable from a seeded root
-   (`trace_roots` — operand stacks/`bc_buf`/`vm_root_frames`/specpdl/scratch
-   `GcRoot`s — or a thread-local root table) at every world-stopped mark-start.
-   Allocation never triggers a GC, so a value need only be rooted before the next
-   *safepoint*, not the next allocation. A live value held ONLY in an un-seeded
-   Rust local across a mark-start is a root-discipline violation that the STW
-   collector mishandles at the same safe point too (it also does not walk Rust
-   locals) — it is NOT a concurrent-GC regression.
+   conservative stack scan (`set_stack_bottom` is a literal no-op). Every heap
+   value the mutator will use after a safepoint MUST be reachable from a seeded
+   root (`trace_roots` — operand stacks / `bc_buf` / `vm_root_frames` /
+   specpdl / scratch `GcRoot`s — or a thread-local root table) at every
+   world-stopped mark-start. Allocation never triggers a GC, so a value need
+   only be rooted before the next *safepoint*, not the next allocation. A live
+   value held ONLY in an un-seeded Rust local across a mark-start is a
+   root-discipline violation the STW collector mishandles at the same safe
+   point too — NOT a concurrent-GC regression.
 
-2. **SATB snapshot completeness.** Every value reachable from roots at the start
-   snapshot is marked by end-of-mark. This rests on: the atomic world-stopped
-   seed; a deletion barrier on EVERY heap-slot overwrite (all `mutate.rs` sites
-   fire `note_heap_write` BEFORE the store) and EVERY symbol value/function/plist
-   overwrite (`note_root_overwrite` — symbol cells are the ONE root the seed
-   skips, via `ObarraySymbolCellSkipGuard`, because the GC thread scans them
-   concurrently and re-walks the whole obarray at termination); allocate-black
-   for mid-cycle births; and the BLV-pool full re-scan at both handshakes.
+2. **SATB snapshot completeness.** Every value reachable from roots at the
+   start snapshot is marked by end-of-mark. This rests on: the atomic
+   world-stopped seed; a deletion barrier on EVERY `mutate.rs` heap-slot
+   overwrite (all fire `note_heap_write` BEFORE the store) and EVERY symbol
+   value/function/plist overwrite (`note_root_overwrite`); allocate-black for
+   mid-cycle births; and the BLV-pool full re-scan at both handshakes. Symbol
+   cells are the ONE root skipped at the concurrent-mark TERMINATION re-seed
+   (via `ObarraySymbolCellSkipGuard`, which sets `SEED_SKIP_OBARRAY_SYMBOL_CELLS`
+   so `Obarray::trace_roots` omits the per-symbol val/function/plist walk),
+   because the GC thread scanned the whole obarray concurrently at the start
+   (`ObarrayScanSnapshot::scan`) and `note_root_overwrite` covered every
+   mid-window overwrite. The guard MUST NOT wrap the start seed or the STW
+   full-collection seeds.
 
-3. **Cons interior invariant.** A value stored into a cons (fresh OR pre-existing)
-   is protected by its OWN provenance — snapshot-marked, born-black,
-   deletion-logged on unlink, or obarray-covered — NEVER by tracing the cons.
-   Conses are DELIBERATELY excluded from the dirty-owner re-gray (they bypass
-   `satb_snapshotted_owners` in `record_heap_write`); a fresh or already-marked
-   cons is never re-traced (`mark_cons` returns false on a set bit). Correctness
-   therefore requires the inserted value to be provenance-covered, i.e. precise
-   rooting (invariant 1). Regression guard:
+3. **Cons interior invariant.** A value stored into a cons (fresh OR
+   pre-existing) is protected by its OWN provenance — snapshot-marked,
+   born-black, deletion-logged on unlink, or obarray-covered — NEVER by tracing
+   the cons. Conses are DELIBERATELY excluded from the dirty-owner re-gray:
+   `push_value_children_to_satb_shared` (the callee `record_heap_write`
+   invokes) gates the owner dedup on `!owner.is_cons()`, so conses never enter
+   `satb_snapshotted_owners` and instead enumerate their two children directly
+   each write; and `mark_cons` returns `false` on an already-set bit, so a
+   fresh or already-marked cons is never re-traced. Correctness therefore
+   requires the inserted value to be provenance-covered, i.e. precise rooting
+   (invariant 1). Regression guard:
    `concurrent_fresh_cons_interior_of_snapshot_value_survives`.
 
 4. **Fix-(2) scope (`join_concurrent_mark` dirty-owner re-gray).** At join, the
-   CURRENT children of every owner mutated this cycle (`satb_snapshotted_owners`)
-   are re-grayed. This restores, for concurrently-CLAIMED veclike/string owners,
+   CURRENT children of every multi-child owner mutated this cycle
+   (`satb_snapshotted_owners`, drained via `push_value_children_to_gray`) are
+   re-grayed. This restores, for concurrently-CLAIMED veclike/string owners,
    the current-backing re-trace that header-claiming removed. It is
-   defense-in-depth guarding the relaxed-snapshot exposure of claiming — NOT a
+   defense-in-depth for the relaxed-snapshot exposure of claiming — NOT a
    correctness requirement for correctly-rooted programs — and it deliberately
-   does NOT extend to conses (invariant 3). It also MASKS precise-rooting bugs
-   for veclike/string owners (an un-seeded inserted value survives) where conses
-   would surface them as a rare UAF; extending the re-gray to conses is a
-   possible future symmetric hardening.
+   does NOT extend to conses (invariant 3; conses never enter the set). It also
+   MASKS precise-rooting bugs for veclike/string owners (an un-seeded inserted
+   value survives) where conses would surface them as a rare UAF; extending the
+   re-gray to conses is a possible future symmetric hardening.
 
-**CLOSED GAP (2026-07):** `module_make_interactive` (`dynamic_module.rs`) used to
-write a fresh cons into a live, GC-traced `ModuleFunctionObj.interactive_form`
+## Load-bearing invariants / risks (future critics grep these)
+
+- **`collect_veclike_children` MUST stay a SUPERSET of `trace_veclike`** for
+  every `VecLikeType` — the remembered/SATB strong-trace path AND
+  `verify_dump_partition` both rely on it. A field traced by `trace_veclike`
+  but omitted from `collect_veclike_children` is invisible to the verifier
+  (it uses `collect`) yet unmarked via the remembered path → a silent UAF the
+  gate cannot catch. When adding a veclike field, update BOTH.
+- **no-free-during-mark**: allocation and the free list stay mutator-only; the
+  GC thread never frees, and sweep runs world-stopped at termination.
+- **tenured-before-parity read order**: every `marked` reader short-circuits on
+  `tenured` first.
+- **born-at-parity**: allocation link seams write `marked` at the current
+  parity (allocate-black).
+- **page ownership including retired pages**: the `ObjectArena::owns` oracle
+  and the claim/sweep page-sets include retired (full) pages.
+- Any NEW root source must be seeded at BOTH the start and termination
+  handshakes (the lesson from the historical incremental-termination UAF).
+- Weak hash tables must be resolved on EVERY termination path
+  (`mark_and_sweep_weak_tables`); the remembered/SATB path
+  (`push_value_children_to_gray`) must STRONG-trace veclike children
+  (`collect_veclike_children`, not the weak-deferring `trace_veclike`) so a
+  dumped/tenured weak table conservatively retains its entries. (Reproduces
+  only under `gc_stress` + `NEOVM_GC_VERIFY_PARTITION` TOGETHER.)
+- UB from a missed atomic / wrong `Ordering` is worse than a UAF — gate every
+  change with `gc_stress` + `NEOVM_GC_VERIFY_PARTITION` + the full suite, and
+  the concurrent-mark tests under ThreadSanitizer (`run-gc-tsan.sh`).
+
+## Closed gaps & known races (grep-able)
+
+**CLOSED GAP (2026-07):** `module_make_interactive` (`dynamic_module.rs`) used
+to write a fresh cons into a live, GC-traced `ModuleFunctionObj.interactive_form`
 slot with no deletion barrier. FIXED: it now fires
-`note_heap_write(func_val, HeapWriteKind::ModuleFunction)` before the store
-(`record_heap_write` is owner-driven, so the barrier logs the pre-overwrite
-`interactive_form` via `collect_veclike_children`). Regression test
+`note_heap_write(func_val, HeapWriteKind::ModuleFunction)` before the store, so
+`record_heap_write` logs the pre-overwrite `interactive_form` via
+`collect_veclike_children`. Regression test
 `concurrent_module_function_interactive_form_overwrite_keeps_child_alive`.
 
 **FIXED RACE (task #23, 2026-07):** the concurrent obarray scan
 (`ObarrayScanSnapshot::scan`) used to read a symbol slot's presence
 (`if let Some(sym)` over `[Option<LispSymbol>; 4096]`) non-atomically while the
 mutator wrote `LispSymbol.function_unbound` — Rust had niched the `Option` tag
-INTO that `bool` byte, so the presence read raced the write (+ the fresh-fill
-raced the GC's arm reads). FIXED by removing the niche: `name: NameId` →
-`name: AtomicU32`; the chunk store is `[LispSymbol; 4096]` with
-`name == SYMBOL_NAME_SENTINEL (u32::MAX)` marking an empty slot; a fill writes the
-arm fields then publishes with a terminal `name.store(id, Release)`; the scan gates
-on `name.load(Acquire) != SENTINEL` before the seqlock arm reads. `name` is
-write-once, so presence is monotonic (None→Some only) and the slot stays 32B (no
-pause-floor-scan regression). Regression test
+INTO that `bool` byte, so the presence read raced the write. FIXED by removing
+the niche: `LispSymbol.name` is now an `AtomicU32`; the chunk store is
+`[LispSymbol; 4096]` (`OBARRAY_CHUNK = 4096`) with
+`name == SYMBOL_NAME_SENTINEL (NameId(u32::MAX))` marking an empty slot; a fill
+writes the arm fields then publishes with a terminal `name.store(id, Release)`;
+the scan gates on `name.load(Acquire) != SENTINEL` before the seqlock arm reads.
+`name` is write-once, so presence is monotonic (None→Some only) and the slot
+stays 32 B (`assert!(size_of::<LispSymbol>() == 32)`), no pause-floor-scan
+regression; single-mutator reads stay `Relaxed`. Regression test
 `gc_concurrent_obarray_scan_vs_defalias_churn` (a TSan gate — the race was
 benign on x86, so a functional pass does not prove the fix). TSan: 9 races → 0.
 
 **KNOWN BENIGN RACE — DEFERRED (task #24, 2026-07):** the concurrent-claim
-dispatcher (`concurrent_try_mark_owned`) reads an arena object's `GcHeader.tenured`
-byte while the mutator's arena `ptr::write` (a non-atomic memcpy in
-`alloc_bytecode`/`alloc_float`/`alloc_vector`) writes the whole header — no
-happens-before because the publication chain (symbol/cons/vector cell stores +
-the GC's reads) is all `Ordering::Relaxed`. BENIGN on x86-64 (TSO retires the
-memcpy before the Relaxed publication store; `tenured` is a single byte, cannot
-tear; a reused slot's prior occupant was non-tenured, so a stale read is still
-`false` → never misclassifies → no UAF). REAL UB on weak-memory (ARM / Apple
-Silicon), where a StoreStore reorder could expose a torn/premature header.
-`run-gc-tsan.sh` therefore has ONE known-benign residual race on
+dispatcher (`concurrent_try_mark_owned`) reads an arena object's
+`GcHeader.tenured` byte (a plain `bool`, not atomic) while the mutator's arena
+`ptr::write` (a non-atomic whole-header memcpy in `alloc_bytecode` /
+`alloc_float` / `alloc_vector`) writes the header — no happens-before because
+the publication chain (symbol/cons/vector cell stores + the GC's reads) is all
+`Ordering::Relaxed`. BENIGN on x86-64 (TSO retires the memcpy before the
+Relaxed publication store; `tenured` is a single byte, cannot tear; a reused
+slot's prior occupant was non-tenured, so a stale read is still `false` →
+never misclassifies → no UAF). REAL UB on weak memory (ARM / Apple Silicon),
+where a StoreStore reorder could expose a torn/premature header. `run-gc-tsan.sh`
+therefore has ONE known-benign residual race on
 `gc_concurrent_leaked_subr_drop_under_pdump_verifiers` (the bytecode/float/vector
-tenured class). DEFERRED (a benign-on-x86 issue; owner decision 2026-07-04). Fix
-space when revived — needs a design + two-critic round (hot GC path): (A)
+tenured class). DEFERRED (benign-on-x86; owner decision 2026-07-04). Fix space
+when revived — needs a design + two-critic round (hot GC path): (A)
 Release/Acquire on the mutator publication stores + the GC-thread acquisition
 loads — FREE on x86 (Acquire-load/Release-store are plain `mov` under TSO), adds
-the required barriers on ARM, and unifies the whole class; (B) atomic-write only
-the concurrently-read header bytes (marked@0, tenured@2) in the arena alloc
-instead of the full-header `ptr::write` (contained to gc.rs/header.rs, but changes
-the full-header-write invariant + needs a stale-byte/Drop review); (C) a TSan
+the required barriers on ARM, unifies the whole class; (B) atomic-write only the
+concurrently-read header bytes (marked@0, tenured@2) in the arena alloc instead
+of the full-header `ptr::write` (contained to gc.rs/header.rs, but changes the
+full-header-write invariant + needs a stale-byte/Drop review); (C) a TSan
 suppression (cheap, hides the UB, x86-only). Repro: `run-gc-tsan.sh
 gc_concurrent_leaked_subr_drop_under_pdump_verifiers` with
 `TSAN_OPTIONS=halt_on_error=0`.

@@ -52,9 +52,11 @@ fn module_init_err(msg: String) -> CompileError {
 /// Encodes the `STATUS_*` return codes; the entry ABI shape (the unified
 /// 4-param entry `fn(vmctx, args, out, sidecar) -> i64`); the reloc-base,
 /// `DeoptCells`, and `LeafSidecar` layouts; and the `neovm_jit_*` shim name set
-/// (the imports the loader binds). Born `u32` in R1c; hardened to a `u128`
-/// ISA+layout hash in R3.4b. No epoch is ever encoded (epochs are re-derived
-/// from the live obarray at load — see the spec's cross-session invariants).
+/// (the imports the loader binds). It is a `u32` FNV-1a hash
+/// ([`compute_abi_tag`]), embedded in the entry symbol as `{ABI_TAG:08x}`; the
+/// DISTINCT per-leaf CONTENT hash ([`leaf_content_hash`]) is the `u128`. No
+/// epoch is ever encoded (epochs are re-derived from the live obarray at load —
+/// see the spec's cross-session invariants).
 pub(crate) const ABI_TAG: u32 = compute_abi_tag();
 
 /// Bump on ANY change to the entry ABI, `STATUS_*` codes, `DeoptCells`/reloc-base
