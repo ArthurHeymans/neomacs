@@ -335,6 +335,25 @@ pub struct FontMetricsService {
     /// `shaped_run_cache`.
     resolved_cluster_cache:
         HashMap<(MetricsCacheKey, String), Option<(Vec<ResolvedGlyph>, Vec<ResolvedFont>)>>,
+    /// Cache: `"{file}#{index}"` → a synthetic fontdb family name registered
+    /// for that exact face, so cosmic-text selects THAT file verbatim (see
+    /// [`Self::pin_file_as_family`]). NOT cleared by `clear_caches`: the
+    /// pinned faces live in the fontdb for the service's lifetime.
+    pinned_families: HashMap<String, &'static str>,
+    /// Cache: (family, weight, italic) → the synthetic family to use when
+    /// fontconfig's chosen file differs from cosmic-text's own pick
+    /// (`Some`), or `None` when they agree (the common case, no pinning).
+    /// See [`Self::pinned_primary_family`].
+    primary_pin_cache: HashMap<(String, u16, bool), Option<&'static str>>,
+}
+
+/// Whether primary-font pinning is enabled (default on). Pinning routes the
+/// primary font through fontconfig's file choice — matching GNU/`find-font`,
+/// which prefer a variable font over a same-family static face. Set
+/// `NEOMACS_DISABLE_FONT_PIN` to fall back to cosmic-text/fontdb selection.
+fn font_pin_enabled() -> bool {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ENABLED.get_or_init(|| std::env::var_os("NEOMACS_DISABLE_FONT_PIN").is_none())
 }
 
 impl FontMetricsService {
@@ -362,7 +381,50 @@ impl FontMetricsService {
             resolved_font_ids: HashMap::new(),
             resolved_char_font_cache: HashMap::new(),
             resolved_cluster_cache: HashMap::new(),
+            pinned_families: HashMap::new(),
+            primary_pin_cache: HashMap::new(),
         }
+    }
+
+    /// Register the exact font FILE (a specific face index of it) under a
+    /// unique synthetic fontdb family, so `Attrs::family(Family::Name(..))`
+    /// selects THAT face verbatim instead of cosmic-text re-picking among
+    /// every face that shares the real family name.
+    ///
+    /// This is how we pin the file fontconfig chose: GNU/fontconfig prefer a
+    /// variable font's named instance over a same-family static face, but
+    /// cosmic-text/fontdb would pick the static exact-weight face. We load
+    /// the file, clone the target face's metadata under a synthetic family,
+    /// and drop the freshly-loaded originals so the real family name is not
+    /// duplicated. Cached per `(file, index)`; returns the interned
+    /// synthetic family name, or `None` if the file can't be loaded.
+    fn pin_file_as_family(&mut self, file: &str, face_index: u32) -> Option<&'static str> {
+        let key = format!("{file}#{face_index}");
+        if let Some(&existing) = self.pinned_families.get(&key) {
+            return Some(existing);
+        }
+        let synthetic = format!("neomacs-pin-{}", self.pinned_families.len());
+        {
+            let db = self.font_system.db_mut();
+            let ids = db.load_font_source(fontdb::Source::File(file.into()));
+            let target = ids
+                .iter()
+                .copied()
+                .find(|&id| db.face(id).map(|f| f.index) == Some(face_index))
+                .or_else(|| ids.first().copied())?;
+            let mut info = db.face(target)?.clone();
+            // Drop the copies we just loaded; the file's real-family faces
+            // from the initial system scan stay untouched, so pinning never
+            // adds a duplicate "Noto Sans" the normal path could pick.
+            for id in &ids {
+                db.remove_face(*id);
+            }
+            info.families = vec![(synthetic.clone(), fontdb::Language::English_UnitedStates)];
+            db.push_face_info(info);
+        }
+        let interned = self.intern_family(&synthetic);
+        self.pinned_families.insert(key, interned);
+        Some(interned)
     }
 
     /// Resolve the effective font family name for a face.
@@ -388,7 +450,37 @@ impl FontMetricsService {
 
     /// Build cosmic-text `Attrs` from face parameters.
     /// Mirrors the logic in `glyph_atlas.rs:face_to_attrs()`.
+    ///
+    /// When fontconfig's authoritative file for this (family, weight, slant)
+    /// differs from what cosmic-text/fontdb would otherwise pick (a variable
+    /// vs same-family static face), we pin fontconfig's file under a
+    /// synthetic family so shaping and metrics use it — matching GNU. In the
+    /// common case (they agree) this is byte-identical to the plain path.
     fn build_attrs(&mut self, family: &str, weight: u16, slant: FontSlant) -> Attrs<'static> {
+        if let Some(synthetic) = self.pinned_primary_family(family, weight, slant.is_italic()) {
+            let effective_weight = crate::font_match::resolve_weight_in_family(
+                &self.font_system,
+                synthetic,
+                weight,
+                slant.is_italic(),
+            );
+            let mut attrs = Attrs::new()
+                .family(Family::Name(synthetic))
+                .weight(Weight(effective_weight));
+            if let Some(style) = font_slant_to_cosmic_style(slant) {
+                attrs = attrs.style(style);
+            }
+            return attrs;
+        }
+        self.build_attrs_unpinned(family, weight, slant)
+    }
+
+    fn build_attrs_unpinned(
+        &mut self,
+        family: &str,
+        weight: u16,
+        slant: FontSlant,
+    ) -> Attrs<'static> {
         let mut attrs = Attrs::new();
 
         attrs = match crate::font_match::select_cosmic_family(&self.font_system, family) {
@@ -417,6 +509,94 @@ impl FontMetricsService {
         }
 
         attrs
+    }
+
+    /// The synthetic family to shape a primary (family, weight, italic)
+    /// request through when fontconfig's file differs from cosmic-text's own
+    /// pick, else `None` (agree → no pinning, unchanged behavior). Cached.
+    fn pinned_primary_family(
+        &mut self,
+        family: &str,
+        weight: u16,
+        italic: bool,
+    ) -> Option<&'static str> {
+        if !font_pin_enabled() {
+            return None;
+        }
+        let key = (family.to_string(), weight, italic);
+        if let Some(&cached) = self.primary_pin_cache.get(&key) {
+            return cached;
+        }
+        let result = self.compute_primary_pin(family, weight, italic);
+        self.primary_pin_cache.insert(key, result);
+        result
+    }
+
+    fn compute_primary_pin(
+        &mut self,
+        family: &str,
+        weight: u16,
+        italic: bool,
+    ) -> Option<&'static str> {
+        let fc_file = self
+            .backend
+            .find_primary_font_file(family, weight, italic)?;
+        // What file would cosmic-text/fontdb pick on its own?
+        let cosmic_file = self.cosmic_probe_file(family, weight, italic)?;
+        // Surgical scope: only correct the specific divergence GNU/fontconfig
+        // cause — fontconfig opens a VARIABLE font's instance where fontdb
+        // picked a different, same-family STATIC face (the reverse never
+        // happens). If fontdb already agrees, or fontconfig's own choice is
+        // not a variable font, leave the selection to fontdb so this stays a
+        // targeted fix, not a wholesale font-selection swap.
+        if cosmic_file == fc_file {
+            return None;
+        }
+        if crate::font_probe::named_instance_wght_values(&fc_file, 0).is_empty() {
+            return None;
+        }
+        tracing::debug!(
+            target: "font_boundary",
+            family,
+            weight,
+            italic,
+            fontconfig_file = %fc_file,
+            cosmic_file = %cosmic_file,
+            "primary-font pin: fontconfig opens a variable font fontdb passed over; pinning it"
+        );
+        self.pin_file_as_family(&fc_file, 0)
+    }
+
+    /// The font file cosmic-text/fontdb selects on its own for this request
+    /// (probe by shaping a representative ASCII glyph, unpinned).
+    fn cosmic_probe_file(&mut self, family: &str, weight: u16, italic: bool) -> Option<String> {
+        let slant = if italic {
+            FontSlant::Italic
+        } else {
+            FontSlant::Normal
+        };
+        let attrs = self.build_attrs_unpinned(family, weight, slant);
+        let metrics = safe_metrics(24.0, 24.0 * 1.3);
+        let mut buffer = Buffer::new(&mut self.font_system, metrics);
+        buffer.set_size(&mut self.font_system, Some(96.0), Some(48.0));
+        buffer.set_text(
+            &mut self.font_system,
+            "n",
+            &attrs,
+            cosmic_text::Shaping::Advanced,
+            None,
+        );
+        buffer.shape_until_scroll(&mut self.font_system, false);
+        let font_id = buffer
+            .layout_runs()
+            .find_map(|run| run.glyphs.iter().next())?
+            .physical((0.0, 0.0), 1.0)
+            .cache_key
+            .font_id;
+        self.font_system
+            .db()
+            .face(font_id)
+            .and_then(fontdb_face_file)
     }
 
     fn selected_font_id_and_space_width(

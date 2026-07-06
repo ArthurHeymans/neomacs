@@ -34,6 +34,13 @@ pub trait FontBackend: Send {
         requested_weight: u16,
         italic: bool,
     ) -> Option<FontMatch>;
+
+    /// The font FILE the platform would open for a PRIMARY (family, weight,
+    /// slant) request — fontconfig's authoritative choice. This is what
+    /// `find-font` / GNU pick, and notably prefers a variable font over a
+    /// same-family static face. `None` on platforms without fontconfig (the
+    /// caller then keeps cosmic-text/fontdb's own selection).
+    fn find_primary_font_file(&self, family: &str, weight: u16, italic: bool) -> Option<String>;
 }
 
 /// Linux backend: fontconfig via [`crate::fontconfig`].
@@ -63,6 +70,23 @@ impl FontBackend for FontconfigBackend {
             requested_weight,
             italic,
         )
+    }
+
+    fn find_primary_font_file(&self, family: &str, weight: u16, italic: bool) -> Option<String> {
+        use neovm_core::face::{FontSlant, FontWeight};
+        let slant = if italic {
+            FontSlant::Italic
+        } else {
+            FontSlant::Normal
+        };
+        crate::fontconfig::find_font_for_spec(
+            Some(family),
+            None,
+            None,
+            Some(FontWeight::from_css_weight(weight)),
+            Some(slant),
+        )
+        .and_then(|matched| matched.file)
     }
 }
 

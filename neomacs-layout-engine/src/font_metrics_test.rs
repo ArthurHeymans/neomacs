@@ -1821,3 +1821,58 @@ fn realize_frame_fonts_publishes_shaped_clusters_for_composites() {
         );
     }
 }
+
+#[test]
+fn pin_file_as_family_forces_cosmic_to_that_exact_file() {
+    let variable = "/nix/store/7lrhms8rphrd8ywphjbvjyll57pkim64-noto-fonts-2025.11.01/share/fonts/noto/NotoSans[wdth,wght].ttf";
+    if !std::path::Path::new(variable).exists() {
+        eprintln!("skipping: {variable} not present");
+        return;
+    }
+    let mut svc = make_svc();
+
+    // Baseline: a plain bold "Noto Sans" request. With a static
+    // NotoSans-Bold.ttf present, cosmic may pick the static file.
+    let baseline = svc
+        .select_font_for_char('n', "Noto Sans", 700, false, 24.0)
+        .and_then(|s| s.file);
+
+    // Pin the VARIABLE file under a synthetic family and shape through it.
+    let synthetic = svc
+        .pin_file_as_family(variable, 0)
+        .expect("pin the variable file");
+    let attrs = cosmic_text::Attrs::new()
+        .family(cosmic_text::Family::Name(synthetic))
+        .weight(cosmic_text::Weight(700));
+    let metrics = safe_metrics(24.0, 24.0 * 1.3);
+    let mut buffer = cosmic_text::Buffer::new(&mut svc.font_system, metrics);
+    buffer.set_size(&mut svc.font_system, Some(96.0), Some(48.0));
+    buffer.set_text(
+        &mut svc.font_system,
+        "n",
+        &attrs,
+        cosmic_text::Shaping::Advanced,
+        None,
+    );
+    buffer.shape_until_scroll(&mut svc.font_system, false);
+    let font_id = buffer
+        .layout_runs()
+        .find_map(|run| run.glyphs.iter().next())
+        .map(|g| g.physical((0.0, 0.0), 1.0).cache_key.font_id)
+        .expect("shaped a glyph");
+    let pinned_file = svc
+        .font_system
+        .db()
+        .face(font_id)
+        .and_then(fontdb_face_file);
+
+    assert_eq!(
+        pinned_file.as_deref(),
+        Some(variable),
+        "pinned shaping must select the exact variable file (baseline picked {baseline:?})"
+    );
+
+    // Re-pinning the same (file, index) reuses the synthetic family.
+    let synthetic2 = svc.pin_file_as_family(variable, 0).unwrap();
+    assert_eq!(synthetic, synthetic2);
+}

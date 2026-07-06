@@ -223,6 +223,13 @@ pub struct WgpuGlyphAtlas {
     /// Valid for the fontdb's lifetime (fonts are only ever appended by
     /// priming); dropped by [`Self::clear`] with the rest of the caches.
     resolved_fontdb_ids: HashMap<ResolvedFontId, Option<fontdb::ID>>,
+    /// Cache: `"{file}#{index}"` → a synthetic family registered so
+    /// cosmic-text shapes with THAT exact file, matching the font layout
+    /// resolved. See [`Self::pin_file_as_family`].
+    pinned_families: HashMap<String, &'static str>,
+    /// Cache: font file path → whether it is a variable font (has fvar
+    /// named instances). Only variable resolved fonts are pinned.
+    variable_file_cache: HashMap<String, bool>,
     /// Total GUI text lookups whose face had no layout-resolved font and no
     /// font-file bridge — i.e. the renderer had to make a semantic font
     /// decision on its own (design §10 "emergency fallback"). Must stay 0
@@ -295,6 +302,8 @@ impl WgpuGlyphAtlas {
             frame_char_fonts: CharFontTable::new(),
             frame_shaped_clusters: ShapedClusterTable::new(),
             resolved_fontdb_ids: HashMap::new(),
+            pinned_families: HashMap::new(),
+            variable_file_cache: HashMap::new(),
             unresolved_face_text_total: 0,
             unresolved_face_warned: HashSet::new(),
             cache_hits_this_frame: 0,
@@ -842,6 +851,47 @@ impl WgpuGlyphAtlas {
     /// fontdb face the layout metrics came from. Primes the identity's font
     /// file first. No fontconfig, no weight re-resolution: the render thread
     /// makes no semantic font decision here.
+    /// Whether `file` is a variable font (has fvar named instances). Cached.
+    fn file_is_variable(&mut self, file: &str) -> bool {
+        if let Some(&cached) = self.variable_file_cache.get(file) {
+            return cached;
+        }
+        let is_var =
+            !neomacs_layout_engine::font_probe::named_instance_wght_values(file, 0).is_empty();
+        self.variable_file_cache.insert(file.to_string(), is_var);
+        is_var
+    }
+
+    /// Register `file`[`face_index`] under a unique synthetic family so
+    /// cosmic-text shapes with THAT exact file — the one layout resolved —
+    /// instead of re-picking a same-family static face. Mirrors the layout
+    /// service's pin. Cached per `(file, index)`.
+    fn pin_file_as_family(&mut self, file: &str, face_index: u32) -> Option<&'static str> {
+        let key = format!("{file}#{face_index}");
+        if let Some(&existing) = self.pinned_families.get(&key) {
+            return Some(existing);
+        }
+        let synthetic = format!("neomacs-pin-{}", self.pinned_families.len());
+        {
+            let db = self.font_system.db_mut();
+            let ids = db.load_font_source(fontdb::Source::File(file.into()));
+            let target = ids
+                .iter()
+                .copied()
+                .find(|&id| db.face(id).map(|f| f.index) == Some(face_index))
+                .or_else(|| ids.first().copied())?;
+            let mut info = db.face(target)?.clone();
+            for id in &ids {
+                db.remove_face(*id);
+            }
+            info.families = vec![(synthetic.clone(), fontdb::Language::English_UnitedStates)];
+            db.push_face_info(info);
+        }
+        let interned = self.intern_family(&synthetic);
+        self.pinned_families.insert(key, interned);
+        Some(interned)
+    }
+
     fn exact_attrs_for_resolved_font(
         &mut self,
         font: &ResolvedFont,
@@ -849,6 +899,20 @@ impl WgpuGlyphAtlas {
     ) -> Attrs<'static> {
         if let Some(path) = font.identity.file_path.as_deref() {
             let _ = self.font_file_cache.prime_file(&mut self.font_system, path);
+            // Variable fonts: pin the exact file so cosmic-text uses it (and
+            // applies the weight axis) rather than a same-family static face,
+            // keeping the render in sync with the font layout resolved.
+            if self.file_is_variable(path)
+                && let Some(synthetic) = self.pin_file_as_family(path, font.identity.face_index)
+            {
+                let mut attrs = Attrs::new()
+                    .family(Family::Name(synthetic))
+                    .weight(Weight(font.weight));
+                if let Some(style) = style {
+                    attrs = attrs.style(style);
+                }
+                return attrs;
+            }
         }
         let mut attrs = Attrs::new();
         attrs = match neomacs_layout_engine::font_match::select_cosmic_family(
