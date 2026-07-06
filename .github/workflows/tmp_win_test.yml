@@ -80,6 +80,42 @@ jobs:
           source scripts/windows-gstreamer-env.sh
           cargo xtask fresh-build --release
 
+      - name: GUI smoke (launch, frame snapshot, PNG readback)
+        shell: bash
+        timeout-minutes: 10
+        run: |
+          set -x
+          source scripts/windows-gstreamer-env.sh
+          mkdir -p gui-artifacts
+          export NEOMACS_GUI_FRAME_SNAPSHOT_JSON="$PWD/gui-artifacts/snapshot.json"
+          export NEOMACS_GUI_FRAME_SNAPSHOT_TXT="$PWD/gui-artifacts/snapshot.txt"
+          export NEOMACS_GUI_STATE_JSON="$PWD/gui-artifacts/gui-state.json"
+          export NEOMACS_DEBUG_FIRST_FRAME_READBACK=1
+          export NEOMACS_DEBUG_SURFACE_READBACK=1
+          export NEOMACS_DEBUG_SURFACE_READBACK_PNG="$PWD/gui-artifacts/frame.png"
+          export RUST_BACKTRACE=1
+          # The fixture self-terminates after ~2s; watchdog guards a wgpu hang.
+          ./target/release/neomacs.exe -Q -l neomacs-gui-tests/fixtures/startup-smoke.el \
+            > gui-artifacts/neomacs.log 2>&1 &
+          PID=$!
+          for _ in $(seq 1 60); do kill -0 "$PID" 2>/dev/null || break; sleep 1; done
+          kill "$PID" 2>/dev/null || taskkill //F //PID "$PID" 2>/dev/null || true
+          echo "=== artifacts ==="; ls -la gui-artifacts/ || true
+          echo "=== last of neomacs.log ==="; tail -60 gui-artifacts/neomacs.log || true
+          if [ -s gui-artifacts/snapshot.json ]; then
+            echo "SNAPSHOT OK ($(wc -c < gui-artifacts/snapshot.json) bytes)"
+          else
+            echo "NO FRAME SNAPSHOT PRODUCED - GUI did not render"; exit 1
+          fi
+
+      - name: Upload GUI smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-gui-smoke
+          path: gui-artifacts/
+          if-no-files-found: warn
+
       - name: Run Windows package script
         shell: bash
         timeout-minutes: 20
