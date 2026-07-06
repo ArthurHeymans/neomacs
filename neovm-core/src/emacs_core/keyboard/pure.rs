@@ -354,6 +354,50 @@ pub(crate) fn event_modifier_bit(symbol: &str) -> Option<i64> {
     }
 }
 
+fn parse_written_event_modifier(name: &str) -> Option<(i64, &str)> {
+    [
+        ("A-", KEY_CHAR_ALT),
+        ("C-", KEY_CHAR_CTRL),
+        ("H-", KEY_CHAR_HYPER),
+        ("M-", KEY_CHAR_META),
+        ("S-", KEY_CHAR_SHIFT),
+        ("s-", KEY_CHAR_SUPER),
+        ("double-", EVENT_MOD_DOUBLE),
+        ("triple-", EVENT_MOD_TRIPLE),
+        ("up-", EVENT_MOD_UP),
+        ("down-", EVENT_MOD_DOWN),
+        ("drag-", EVENT_MOD_DRAG),
+    ]
+    .into_iter()
+    .find_map(|(prefix, bit)| name.strip_prefix(prefix).map(|rest| (bit, rest)))
+}
+
+pub(crate) fn reorder_event_symbol_modifiers(value: Value) -> Value {
+    let Some(name) = value.as_symbol_name() else {
+        return value;
+    };
+
+    let mut rest = name;
+    let mut modifiers = 0;
+    let mut found_modifier = false;
+    while let Some((modifier, next)) = parse_written_event_modifier(rest) {
+        modifiers |= modifier;
+        rest = next;
+        found_modifier = true;
+    }
+
+    if !found_modifier {
+        return value;
+    }
+
+    let canonical = format!("{}{}", event_modifier_prefix(modifiers), rest);
+    if canonical == name {
+        value
+    } else {
+        Value::symbol(canonical)
+    }
+}
+
 fn lucid_symbol_char_base(symbol: &str) -> Option<i64> {
     let mut chars = symbol.chars();
     let ch = chars.next()?;

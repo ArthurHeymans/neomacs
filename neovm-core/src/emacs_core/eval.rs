@@ -6157,7 +6157,9 @@ impl Context {
             // interruptible by C-g — the sleep-for quit fix is preserved.
             let read_specpdl_count = self.specpdl.len();
             self.specbind(intern("inhibit-quit"), Value::T);
-            let read_result = self.read_key_sequence();
+            let read_result = self.read_key_sequence_with_options(
+                crate::keyboard::ReadKeySequenceOptions::new(Value::NIL, false, false, true),
+            );
             self.unbind_to(read_specpdl_count);
 
             let (keys, binding) = read_result?;

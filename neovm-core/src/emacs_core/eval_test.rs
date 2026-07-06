@@ -18570,6 +18570,80 @@ fn unbound_key_runs_undefined_command_and_per_command_hooks() {
     );
 }
 
+#[test]
+fn command_loop_dispatches_select_window_before_following_key() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = command_loop_test_context();
+
+    fn stop_command_loop_for_test(ctx: &mut Context, args: Vec<Value>) -> EvalResult {
+        assert!(args.is_empty(), "stop helper should not receive arguments");
+        ctx.command_loop.running = false;
+        Ok(Value::NIL)
+    }
+    ev.defsubr(
+        "neo-stop-command-loop-for-select-window-test",
+        stop_command_loop_for_test,
+        0,
+        Some(0),
+    );
+
+    let target_window = ev
+        .eval_str(
+            r#"(let* ((w1 (selected-window))
+                      (buf (get-buffer-create "select-window-command-loop-target"))
+                      (w2 (split-window-internal w1 nil nil nil)))
+                 (set-window-buffer w2 buf)
+                 (setq neo-select-window-target w2)
+                 w2)"#,
+        )
+        .expect("create second window");
+    let target_window_id = target_window
+        .as_window_id()
+        .expect("target value should be a window");
+
+    ev.eval_str(
+        r#"(progn
+             (setq neo-stop-selected-window nil)
+             (fset 'neo-handle-select-window-for-test
+                   (lambda (event)
+                     (interactive "e")
+                     (select-window
+                      (posn-window (event-start event)))))
+             (fset 'neo-stop-key-command
+                   (lambda ()
+                     (interactive)
+                     (setq neo-stop-selected-window (selected-window))
+                     (neo-stop-command-loop-for-select-window-test)))
+             (keymap-set global-map "<select-window>"
+                         'neo-handle-select-window-for-test)
+             (keymap-set global-map "a" 'neo-stop-key-command))"#,
+    )
+    .expect("install test commands");
+
+    ev.assign(
+        "unread-command-events",
+        Value::list(vec![
+            Value::list(vec![
+                Value::symbol("select-window"),
+                Value::list(vec![Value::make_window(target_window_id)]),
+            ]),
+            Value::fixnum('a' as i64),
+        ]),
+    );
+    ev.command_loop.running = true;
+
+    ev.recursive_edit_inner()
+        .expect("command loop should exit through the stop command");
+
+    assert_eq!(
+        ev.eval_symbol("neo-stop-selected-window")
+            .expect("stop selected window"),
+        Value::make_window(target_window_id),
+        "normal command-loop reads must return leading select-window events \
+         instead of delaying them past the following key"
+    );
+}
+
 /// Finding 2 — `deactivate-mark` handling must run AFTER
 /// `post-command-hook`, not before. GNU `command_loop_1` runs
 /// `safe_run_hooks (Qpost_command_hook)` at keyboard.c:1563 and only

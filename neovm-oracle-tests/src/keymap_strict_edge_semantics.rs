@@ -101,3 +101,69 @@ fn oracle_define_key_on_composed_keymap_mutates_first_component() {
     );
     assert_ok_eq("(image-next-line nil image-next-line)", &o, &n);
 }
+
+#[test]
+fn oracle_define_key_character_range_binds_each_character() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (range-cmd range-cmd range-cmd nil)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(let ((map (make-sparse-keymap)))
+            (define-key map [(?a . ?c)] 'range-cmd)
+            (list (lookup-key map [?a])
+                  (lookup-key map [?b])
+                  (lookup-key map [?c])
+                  (lookup-key map [?d])))"#,
+        expect,
+    );
+    assert_ok_eq("(range-cmd range-cmd range-cmd nil)", &o, &n);
+}
+
+#[test]
+fn oracle_define_key_character_range_replaces_existing_char_bindings() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (range-cmd range-cmd range-cmd nil)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(let ((map (make-sparse-keymap)))
+            (define-key map [?a] 'old-a)
+            (define-key map [?b] 'old-b)
+            (define-key map [(?a . ?c)] 'range-cmd)
+            (list (lookup-key map [?a])
+                  (lookup-key map [?b])
+                  (lookup-key map [?c])
+                  (lookup-key map [?d])))"#,
+        expect,
+    );
+    assert_ok_eq("(range-cmd range-cmd range-cmd nil)", &o, &n);
+}
+
+#[test]
+fn oracle_define_key_remove_preserves_neighbor_bindings() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (a-cmd nil c-cmd)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(let ((map (make-sparse-keymap)))
+            (define-key map "a" 'a-cmd)
+            (define-key map "b" 'b-cmd)
+            (define-key map "c" 'c-cmd)
+            (define-key map "b" nil t)
+            (list (lookup-key map "a")
+                  (lookup-key map "b")
+                  (lookup-key map "c")))"#,
+        expect,
+    );
+    assert_ok_eq("(a-cmd nil c-cmd)", &o, &n);
+}
+
+#[test]
+fn oracle_keymap_symbol_modifier_order_is_canonical() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (symbol-cmd symbol-cmd)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(let ((map (make-sparse-keymap)))
+            (define-key map [M-C-left] 'symbol-cmd)
+            (list (lookup-key map [C-M-left])
+                  (lookup-key map [M-C-left])))"#,
+        expect,
+    );
+    assert_ok_eq("(symbol-cmd symbol-cmd)", &o, &n);
+}

@@ -19,7 +19,7 @@ use super::intern::resolve_sym;
 use super::intern::{SymId, intern};
 use super::keyboard::pure::{
     KEY_CHAR_ALT, KEY_CHAR_CODE_MASK, KEY_CHAR_CTRL, KEY_CHAR_HYPER, KEY_CHAR_META,
-    KEY_CHAR_MOD_MASK, KEY_CHAR_SHIFT, KEY_CHAR_SUPER,
+    KEY_CHAR_MOD_MASK, KEY_CHAR_SHIFT, KEY_CHAR_SUPER, reorder_event_symbol_modifiers,
 };
 use super::symbol::Obarray;
 use super::value::{
@@ -1080,9 +1080,9 @@ fn compose_prefix_keymaps(first: &Value, second: &Value) -> Value {
 fn events_match(a: &Value, b: &Value) -> bool {
     let normalize = |value: &Value| {
         if value.is_cons() {
-            value.cons_car()
+            reorder_event_symbol_modifiers(value.cons_car())
         } else {
-            *value
+            reorder_event_symbol_modifiers(*value)
         }
     };
     let a = normalize(a);
@@ -1289,6 +1289,52 @@ pub fn list_keymap_remove(keymap: Value, event: Value) {
     store_in_keymap(keymap, event, Value::NIL, true);
 }
 
+fn keymap_character_range(event: &Value) -> Option<(i64, i64)> {
+    if !event.is_cons() {
+        return None;
+    }
+    let from = event.cons_car().as_fixnum()?;
+    let to = event.cons_cdr().as_fixnum()?;
+    (0..=KEY_CHAR_CODE_MASK).contains(&from).then_some(())?;
+    (0..=KEY_CHAR_CODE_MASK).contains(&to).then_some(())?;
+    (from <= to).then_some((from, to))
+}
+
+fn keymap_storage_event(event: Value) -> Value {
+    if event.is_cons() && keymap_character_range(&event).is_none() {
+        reorder_event_symbol_modifiers(event.cons_car())
+    } else {
+        reorder_event_symbol_modifiers(event)
+    }
+}
+
+fn keymap_char_table_store_value(def: Value, remove: bool) -> Value {
+    if remove {
+        Value::NIL
+    } else if def.is_nil() {
+        // nil has special meaning for char-tables (unbound), so use Qt for an
+        // explicitly nil key binding.
+        Value::T
+    } else {
+        def
+    }
+}
+
+fn keymap_delq_after(insertion_point: Value, elt: Value) {
+    let mut previous = insertion_point;
+    let mut cursor = insertion_point.cons_cdr();
+    while cursor.is_cons() {
+        let entry = cursor.cons_car();
+        let next = cursor.cons_cdr();
+        if eq_value(&entry, &elt) {
+            previous.set_cdr(next);
+            return;
+        }
+        previous = cursor;
+        cursor = next;
+    }
+}
+
 /// Core store/remove implementation matching GNU `store_in_keymap`.
 fn store_in_keymap(keymap: Value, event: Value, def: Value, remove: bool) {
     if !keymap.is_cons() {
@@ -1299,6 +1345,7 @@ fn store_in_keymap(keymap: Value, event: Value, def: Value, remove: bool) {
     if !KeymapMarker::Keymap.is_value(root_car) {
         return;
     }
+    let event = keymap_storage_event(event);
 
     // Scan the keymap for existing bindings, tracking insertion point.
     //
@@ -1331,7 +1378,7 @@ fn store_in_keymap(keymap: Value, event: Value, def: Value, remove: bool) {
         let entry_car = cursor.cons_car();
         let entry_cdr = cursor.cons_cdr();
 
-        // Char-table: handle plain character events (no modifier bits).
+        // Char-table: handle plain character events and character ranges.
         // GNU keymap.c:805-829
         if is_char_table(&entry_car) {
             if let Some(code) = event.as_fixnum() {
@@ -1339,21 +1386,16 @@ fn store_in_keymap(keymap: Value, event: Value, def: Value, remove: bool) {
                 if mods == 0 {
                     let base = code & KEY_CHAR_CODE_MASK;
                     if base >= 0 && base <= 0x3FFFFF {
-                        let store_val = if remove {
-                            Value::NIL
-                        } else if def.is_nil() {
-                            // nil has special meaning for char-tables (unbound),
-                            // so use Qt (Value::T) for explicitly nil binding.
-                            // GNU keymap.c:813-814
-                            Value::T
-                        } else {
-                            def
-                        };
+                        let store_val = keymap_char_table_store_value(def, remove);
                         let _ =
                             builtin_set_char_table_range(vec![entry_car, event, store_val], None);
                         return;
                     }
                 }
+            } else if event.is_cons() && keymap_character_range(&event).is_some() {
+                let store_val = keymap_char_table_store_value(def, remove);
+                let _ = builtin_set_char_table_range(vec![entry_car, event, store_val], None);
+                return;
             }
             // GNU keymap.c:829: char-table found, advance insertion_point
             // so a future prepend lands AFTER the char-table.
@@ -1362,7 +1404,8 @@ fn store_in_keymap(keymap: Value, event: Value, def: Value, remove: bool) {
             continue;
         }
 
-        // Vector element: check for matching index.
+        // Vector element: check for matching index or update the covered
+        // prefix of a character range.
         // GNU keymap.c:783-803
         if entry_car.is_vector() {
             if let Some(code) = event.as_fixnum() {
@@ -1373,6 +1416,18 @@ fn store_in_keymap(keymap: Value, event: Value, def: Value, remove: bool) {
                     && entry_car.set_vector_slot(idx, def);
                 if updated {
                     return;
+                }
+            } else if let Some((from, to)) = keymap_character_range(&event) {
+                if let Some(vec_data) = entry_car.as_vector_data() {
+                    if from < vec_data.len() as i64 {
+                        let last = to.min(vec_data.len() as i64 - 1);
+                        for code in from..=last {
+                            entry_car.set_vector_slot(code as usize, def);
+                        }
+                        if to == last {
+                            return;
+                        }
+                    }
                 }
             }
             // GNU keymap.c:803: vector found, advance insertion_point
@@ -1395,11 +1450,25 @@ fn store_in_keymap(keymap: Value, event: Value, def: Value, remove: bool) {
         // GNU keymap.c:842-849
         if entry_car.is_cons() {
             let binding_car = entry_car.cons_car();
-            if events_match(&binding_car, &event) {
+            if let Some((from, to)) = keymap_character_range(&event) {
+                if let Some(code) = binding_car.as_fixnum()
+                    && (from..=to).contains(&code)
+                {
+                    if remove {
+                        keymap_delq_after(insertion_point, entry_car);
+                    } else {
+                        entry_car.set_cdr(def);
+                    }
+                    if from == to {
+                        return;
+                    }
+                }
+            } else if events_match(&binding_car, &event) {
                 if remove {
-                    // Remove the entry: splice it out of the list.
-                    // Set insertion_point's cdr to skip this entry.
-                    insertion_point.set_cdr(entry_cdr);
+                    // GNU uses `Fdelq (elt, insertion_point)`: remove exactly
+                    // this binding cons while preserving earlier alist entries
+                    // that insertion_point intentionally skips over.
+                    keymap_delq_after(insertion_point, entry_car);
                 } else {
                     // Update in-place: set the cdr of the binding cons.
                     entry_car.set_cdr(def);
@@ -1428,7 +1497,14 @@ fn store_in_keymap(keymap: Value, event: Value, def: Value, remove: bool) {
     // `insertion_point`, matching GNU `keymap.c:898`:
     //   XSETCDR (insertion_point, Fcons (elt, XCDR (insertion_point)));
     if !remove {
-        let binding = Value::cons(event, def);
+        let binding = if event.is_cons() && keymap_character_range(&event).is_some() {
+            let char_table = make_char_table_value(KeymapMarker::Keymap.symbol_value(), Value::NIL);
+            let store_val = keymap_char_table_store_value(def, false);
+            let _ = builtin_set_char_table_range(vec![char_table, event, store_val], None);
+            char_table
+        } else {
+            Value::cons(event, def)
+        };
         let old_cdr = match insertion_point.kind() {
             ValueKind::Cons => insertion_point.cons_cdr(),
             _ => Value::NIL,

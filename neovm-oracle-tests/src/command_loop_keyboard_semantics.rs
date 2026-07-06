@@ -187,6 +187,46 @@ fn oracle_prop_this_command_keys_initially_empty() {
     assert_ok_eq("0", &o, &n);
 }
 
+#[test]
+fn oracle_unread_select_window_event_is_one_key_sequence_event() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let expect = expect_test::expect![[r#""OK (1 t t nil)""#]];
+    crate::common::assert_oracle_parity_expect(
+        r#"(let* ((event (list 'select-window (list (selected-window))))
+                  (unread-command-events (list event))
+                  (keys (read-key-sequence-vector nil nil nil t)))
+             (list (length keys)
+                   (eq (car (aref keys 0)) 'select-window)
+                   (windowp (car (cadr (aref keys 0))))
+                   unread-command-events))"#,
+        expect,
+    );
+}
+
+#[test]
+fn oracle_execute_kbd_macro_select_window_affects_following_key() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
+    crate::common::assert_oracle_parity_expect(
+        r#"(let* ((w1 (selected-window))
+                  (buf (get-buffer-create "oracle-select-window-target"))
+                  (w2 (split-window w1)))
+             (set-window-buffer w2 buf)
+             (setq oracle-selected-window-seen nil)
+             (fset 'oracle-record-selected-window
+                   (lambda ()
+                     (interactive)
+                     (setq oracle-selected-window-seen (selected-window))))
+             (keymap-set global-map "a" 'oracle-record-selected-window)
+             (execute-kbd-macro (vector (list 'select-window (list w2)) ?a))
+             (list (eq oracle-selected-window-seen w2)
+                   (eq (selected-window) w2)))"#,
+        expect,
+    );
+}
+
 // ---------------------------------------------------------------------------
 // this-single-command-keys in batch context
 // ---------------------------------------------------------------------------
