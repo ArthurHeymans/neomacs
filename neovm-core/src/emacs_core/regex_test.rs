@@ -2727,6 +2727,123 @@ fn regex_bench_compile(pattern: &str, case_fold: bool) -> regex_emacs::CompiledP
         .expect("bench pattern should compile")
 }
 
+/// The `SyntaxSpecSet` fusion peephole must (a) actually fire on the
+/// font-lock symbol patterns it targets, and (b) preserve match semantics
+/// byte-for-byte.  `SyntaxSpecSet` is opcode 33.
+#[test]
+fn regex_syntax_class_fusion() {
+    const SYNTAX_SPEC_SET: u8 = 33;
+    let syn = DefaultSyntaxLookup;
+
+    // (a) Fusion fires on the real font-lock alternations.
+    for pat in [
+        r"\(?:\w\|\s_\)",             // FinalBare: two positive branches
+        r"\(?:\w\|\s_\)+",            // ...inside a `+` loop
+        r"\(?:\w\|\s_\|\\.\)+",       // Chain: run of 2 + a non-syntax branch
+        r"(\(\(?:\w\|\s_\|\\.\)+\)\_>", // the sexp-head-kw bench pattern
+    ] {
+        let cp = regex_bench_compile(pat, false);
+        assert!(
+            cp.buffer.contains(&SYNTAX_SPEC_SET),
+            "fusion must emit SyntaxSpecSet for {pat:?}"
+        );
+    }
+
+    // Negated alternations must NOT fuse (set algebra differs): `\Sw\|\S_`
+    // matches every char, so a "not in {word,symbol}" set would be wrong.
+    let neg = regex_bench_compile(r"\(?:\Sw\|\S_\)+", false);
+    assert!(
+        !neg.buffer.contains(&SYNTAX_SPEC_SET),
+        "negated syntax alternations must not fuse"
+    );
+
+    // (b) Match equivalence: the fused pattern behaves exactly like the
+    // alternation it replaced across representative inputs.  `-` is symbol
+    // syntax, space is whitespace, `\` is escape.
+    let sym = regex_bench_compile(r"\_<\(?:\w\|\s_\|\\.\)+\_>", false);
+    for (text, want) in [
+        ("foo-bar", Some((0usize, 7usize))), // word + symbol run
+        ("a b", Some((0, 1))),               // stops at whitespace
+        ("x_y1", Some((0, 4))),              // word/symbol mix
+        (" 123", Some((1, 4))),              // leading space skipped
+    ] {
+        let bytes = text.as_bytes();
+        let got = regex_emacs::re_search(&sym, bytes, 0, bytes.len() as isize, &syn, 0)
+            .map(|(_p, r)| (r.start[0] as usize, r.end[0] as usize));
+        assert_eq!(got, want, "fused match mismatch for {text:?}");
+    }
+
+    // A single positive syntax branch stays a plain SyntaxSpec (nothing to
+    // fuse) and still matches.
+    let single = regex_bench_compile(r"\w+", false);
+    assert!(!single.buffer.contains(&SYNTAX_SPEC_SET));
+    let got = regex_emacs::re_search(&single, b"abc!", 0, 4, &syn, 0)
+        .map(|(_p, r)| (r.start[0], r.end[0]));
+    assert_eq!(got, Some((0, 3)));
+}
+
+/// Interleaved A/B benchmark of the `SyntaxSpecSet` fusion, immune to
+/// whole-machine timing noise: for each fused font-lock pattern it times the
+/// SAME pattern compiled fused vs unfused, alternating iterations in one
+/// process so both experience identical contention, and reports the min for
+/// each plus the speedup.  Fused must be at least as fast; match counts must
+/// be identical (proving semantics-preserving).
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn regex_bench_syntax_fusion_ab() {
+    crate::test_utils::init_test_tracing();
+    let hay = regex_bench_haystack();
+    let bytes = hay.as_bytes();
+    let iters = 15u32;
+
+    // The font-lock patterns that actually carry a `\w\|\s_\|\\.` alternation.
+    let fused_patterns = ["el-defs", "sexp-head-kw", "catch-throw", "quoted-symbol"];
+
+    let mut report = String::from("BENCH syntax-fusion A/B (fused vs unfused, interleaved):\n");
+    let mut tot_f = std::time::Duration::ZERO;
+    let mut tot_u = std::time::Duration::ZERO;
+    for (name, pat) in REGEX_BENCH_FONTLOCK_PATTERNS {
+        if !fused_patterns.contains(name) {
+            continue;
+        }
+        let cp_f = regex_bench_compile(pat, false);
+        let cp_u =
+            regex_emacs::with_syntax_fusion_disabled(|| regex_bench_compile(pat, false));
+        assert!(
+            cp_f.buffer.contains(&33u8) && !cp_u.buffer.contains(&33u8),
+            "A/B setup: fused must contain SyntaxSpecSet, unfused must not ({name})"
+        );
+        let mc_f = regex_bench_engine_scan(&cp_f, bytes);
+        let mc_u = regex_bench_engine_scan(&cp_u, bytes);
+        assert_eq!(mc_f, mc_u, "fused/unfused match count differs for {name}");
+
+        // Warm.
+        regex_bench_engine_scan(&cp_f, bytes);
+        regex_bench_engine_scan(&cp_u, bytes);
+        let mut best_f = std::time::Duration::MAX;
+        let mut best_u = std::time::Duration::MAX;
+        for _ in 0..iters {
+            let t = std::time::Instant::now();
+            assert_eq!(regex_bench_engine_scan(&cp_f, bytes), mc_f);
+            best_f = best_f.min(t.elapsed());
+            let t = std::time::Instant::now();
+            assert_eq!(regex_bench_engine_scan(&cp_u, bytes), mc_u);
+            best_u = best_u.min(t.elapsed());
+        }
+        tot_f += best_f;
+        tot_u += best_u;
+        report.push_str(&format!(
+            "  {name:<14} fused {best_f:>9.1?}  unfused {best_u:>9.1?}  speedup {:.2}x  ({mc_f} matches)\n",
+            best_u.as_secs_f64() / best_f.as_secs_f64(),
+        ));
+    }
+    report.push_str(&format!(
+        "  TOTAL          fused {tot_f:>9.1?}  unfused {tot_u:>9.1?}  speedup {:.2}x",
+        tot_u.as_secs_f64() / tot_f.as_secs_f64(),
+    ));
+    panic!("{report}");
+}
+
 /// Emulate the font-lock `(while (re-search-forward P nil t))` loop over
 /// `text` with the already-compiled pattern; returns the match count.
 fn regex_bench_engine_scan(cp: &regex_emacs::CompiledPattern, text: &[u8]) -> usize {
