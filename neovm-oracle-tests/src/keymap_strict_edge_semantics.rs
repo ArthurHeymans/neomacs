@@ -83,3 +83,21 @@ fn oracle_set_keymap_parent_returns_parent() {
     );
     assert_ok_eq("t", &o, &n);
 }
+
+#[test]
+fn oracle_define_key_on_composed_keymap_mutates_first_component() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    let expect = expect_test::expect![[r#""OK (image-next-line nil image-next-line)""#]];
+    let (o, n) = crate::common::eval_oracle_and_neovm_expect(
+        r#"(let* ((parent (make-sparse-keymap))
+                 (child (make-sparse-keymap))
+                 (composed (make-composed-keymap child parent)))
+            (define-key parent [remap evil-append] 'ignore)
+            (define-key composed [remap evil-next-line] 'image-next-line)
+            (list (lookup-key child [remap evil-next-line])
+                  (lookup-key parent [remap evil-next-line])
+                  (lookup-key composed [remap evil-next-line])))"#,
+        expect,
+    );
+    assert_ok_eq("(image-next-line nil image-next-line)", &o, &n);
+}

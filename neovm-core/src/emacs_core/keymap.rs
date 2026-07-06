@@ -1382,6 +1382,15 @@ fn store_in_keymap(keymap: Value, event: Value, def: Value, remove: bool) {
             continue;
         }
 
+        // Embedded sub-keymap in a composed keymap.  GNU retargets the write
+        // into this real component map because the containing map may be a
+        // temporary keymap produced by access_keymap/make-composed-keymap.
+        if entry_car.is_cons() && is_list_keymap(&entry_car) {
+            insertion_point = entry_car;
+            cursor = entry_car.cons_cdr();
+            continue;
+        }
+
         // Alist entry: (EVENT . DEF) — check for existing binding to update in-place.
         // GNU keymap.c:842-849
         if entry_car.is_cons() {
