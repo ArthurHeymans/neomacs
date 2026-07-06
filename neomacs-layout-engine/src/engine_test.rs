@@ -2403,6 +2403,73 @@ fn phase1_overlay_change_bails_to_full() {
     );
 }
 
+/// Phase 1 REGRESSION (split-window cursor clobber) — with TWO windows on the
+/// same buffer, a point move that drives the SELECTED window down the cursor-only
+/// fast path while the NON-selected window is also re-decorated cursor-only must
+/// leave the frame's single overwritable phys-cursor slot owned by the SELECTED
+/// window (filled box). The bug: the cursor-only path installed the FRAME
+/// phys_cursor UNCONDITIONALLY for every window, so a non-selected window taking
+/// the fast path clobbered the selected window's cursor → the selected window's
+/// caret vanished (C-x 3 then C-p C-p, live X11 repro). Production's full-rebuild
+/// path gates the frame phys_cursor strictly on `selected`; the fast path must
+/// match. Single-window goldens never exercised the clobber.
+#[test]
+fn phase1_split_window_frame_phys_cursor_stays_on_selected_window() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, selected_window) = incr_editing_frame(&text, 800, 600);
+    // C-x 3: split-window-right onto the SAME buffer; the original (left) window
+    // stays selected, the new (right) window is non-selected.
+    let _right_window = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            selected_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            buf_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split window onto the same buffer");
+
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        // C-p C-p: move point in the selected window only (no text edit, no tick
+        // move) so both same-buffer windows re-decorate down the cursor-only path.
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10));
+    });
+
+    // Both content windows re-decorate cursor-only (this is the case that clobbers).
+    assert!(
+        m.stats.cursor_only_windows >= 2,
+        "both same-buffer windows should take the cursor-only fast path (got {:?})",
+        m.stats
+    );
+
+    let phys = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state")
+        .phys_cursor
+        .clone()
+        .expect("frame phys cursor present");
+    assert_eq!(
+        phys.window_id.get(),
+        selected_window.0 as i64,
+        "frame phys_cursor must belong to the SELECTED window, not a non-selected \
+         window that clobbered it (got window {:?}, selected {:?}); style={:?}",
+        phys.window_id.get(),
+        selected_window.0,
+        phys.style,
+    );
+    assert_eq!(
+        phys.style,
+        CursorStyle::FilledBox,
+        "the selected window's frame cursor is a filled box, not a non-selected \
+         window's hollow box (clobber signature)",
+    );
+}
+
 /// Phase 1 — a `put-text-property` (face/display/invisible) co-moving with the
 /// cursor MUST bail: the props tick moved (the soundness hazard of spec §3, where
 /// a non-fontify text-property write would otherwise be invisible to redisplay).
