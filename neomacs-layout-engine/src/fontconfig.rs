@@ -463,7 +463,12 @@ pub fn find_font_for_spec(
 }
 
 pub fn points_to_pixels_for_dpi(points: f32, dpi: f32) -> f32 {
-    (points * dpi / 72.0).round()
+    // GNU POINT_TO_PIXEL (src/font.h): `POINT * DPI / PT_PER_INCH + 0.5`,
+    // truncated to an integer pixel size. PT_PER_INCH is the printer's point
+    // 72.27, NOT the desktop-publishing 72 — using 72 rounds a 22pt face at
+    // 100dpi to 31px where GNU gets 30. `f32::round` reproduces GNU's
+    // `+ 0.5`-then-truncate for the non-negative sizes fonts produce.
+    (points * dpi / 72.27).round()
 }
 
 fn fallback_frame_res_y(display_height_px: i32, display_height_mm: i32) -> f32 {

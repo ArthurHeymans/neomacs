@@ -269,6 +269,9 @@ fn points_to_pixels_rounds_like_gnu_point_to_pixel() {
     assert_eq!(points_to_pixels_for_dpi(10.0, 100.0), 14.0);
     assert_eq!(points_to_pixels_for_dpi(12.0, 100.0), 17.0);
     assert_eq!(points_to_pixels_for_dpi(16.0, 100.0), 22.0);
+    // 22pt @ 100dpi: GNU PT_PER_INCH=72.27 gives 30, not the 31 that a
+    // 72.0 divisor would (the font-selection oracle's h220 case).
+    assert_eq!(points_to_pixels_for_dpi(22.0, 100.0), 30.0);
 }
 
 #[test]
