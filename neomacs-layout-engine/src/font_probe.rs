@@ -19,11 +19,12 @@
 //! concrete font files; if a future font/hinting configuration diverges,
 //! the tests say so instead of the probe silently guessing.
 //!
-//! FreeType is only available on the fontconfig/FreeType platforms (Linux
-//! and other unix); Windows/macOS use their own font backends. The
-//! FreeType-backed probes live in a `cfg_select!` block with `None`/empty
-//! stubs for non-unix, so callers compile unchanged everywhere. The
-//! GSUB/GPOS `otf_capability` reader uses ttf-parser and is cross-platform.
+//! The FreeType-backed probes live in a `cfg_select!` block: the real
+//! implementations are compiled and used on `cfg(unix)` — i.e. BOTH Linux
+//! and macOS — while only Windows (`cfg(not(unix))`, no system FreeType)
+//! gets the `None`/empty stubs, so callers compile unchanged everywhere.
+//! The GSUB/GPOS `otf_capability` reader uses ttf-parser and is fully
+//! cross-platform (all three).
 
 /// Metrics of one font file probed at an exact pixel size, shaped like the
 /// `font-info` elements GNU fills in `ftcrfont_open` + `font_open_entity`.
@@ -40,8 +41,8 @@ pub struct FontPxMetrics {
     pub average_width: i32,
 }
 
-// FreeType is only available on the fontconfig/FreeType platforms (Linux and
-// other unix); Windows/macOS use their own font backends and get the stubs.
+// Real FreeType impls on `cfg(unix)` (Linux and macOS); only Windows
+// (`cfg(not(unix))`) gets the stubs.
 std::cfg_select! {
     unix => {
         use freetype::Library;
