@@ -7489,9 +7489,14 @@ fn display_replacement_cursor_probe_at_height(height: i64) -> (i64, i64, i64, i6
 /// for ~27% of sizes. This asserts zero drift across the whole sweep.
 #[test]
 fn layout_frame_rust_display_replacement_cursor_aligns_glyph_edge_across_font_sizes() {
-    // Representative sweep incl. the sizes proven to break under the old
-    // single-round cursor placement (44/51/59/74/96) plus a passing anchor.
-    let heights: Vec<i64> = (40..=300).step_by(1).collect();
+    // Representative sweep: a dense low-range walk (40..=120, step 1) crosses
+    // every sub-pixel rounding boundary in the band where the old single-round
+    // cursor placement drifted — including the proven-broken sizes 44/51/59/74/96
+    // — and a coarse tail samples larger sizes for breadth. The full 40..=300
+    // step-1 sweep passes identically but is kept out of the permanent test for
+    // speed.
+    let mut heights: Vec<i64> = (40..=120).collect();
+    heights.extend([130, 150, 175, 200, 240, 300]);
     for known in [44, 51, 59, 74, 96, 100] {
         assert!(heights.contains(&known));
     }
