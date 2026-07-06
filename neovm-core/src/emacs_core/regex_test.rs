@@ -2965,6 +2965,57 @@ fn regex_bench_fontlock_engine() {
     panic!("{report}");
 }
 
+/// A/B: the same font-lock fontify pass with the non-backtracking Pike VM
+/// (default for eligible patterns) vs the backtracker forced on.  Reports
+/// per-pattern + TOTAL time for both and asserts the MATCH COUNT is
+/// identical (semantics unchanged).  Run explicitly in release.
+#[test]
+#[ignore = "macro benchmark; run explicitly in release"]
+fn regex_bench_pike_vs_backtracker() {
+    crate::test_utils::init_test_tracing();
+    let hay = regex_bench_haystack();
+    let bytes = hay.as_bytes();
+    let kib = bytes.len() as f64 / 1024.0;
+    let iters = 7;
+
+    let mut report = format!("BENCH pike-vs-backtracker fontlock ({kib:.0} KiB subr.el):\n");
+    let mut tot_pike = std::time::Duration::ZERO;
+    let mut tot_bt = std::time::Duration::ZERO;
+    for (name, pat) in REGEX_BENCH_FONTLOCK_PATTERNS {
+        let cp = regex_bench_compile(pat, false);
+        let eligible = cp.pike_eligible;
+
+        // Match counts MUST agree between the two engines.
+        let mc_pike = regex_bench_engine_scan(&cp, bytes);
+        let mc_bt =
+            regex_emacs::with_backtracker_forced(|| regex_bench_engine_scan(&cp, bytes));
+        assert_eq!(mc_pike, mc_bt, "match count differs for {name}");
+
+        let t_pike = regex_bench_min(iters, || {
+            assert_eq!(regex_bench_engine_scan(&cp, bytes), mc_pike);
+        });
+        let t_bt = regex_bench_min(iters, || {
+            assert_eq!(
+                regex_emacs::with_backtracker_forced(|| regex_bench_engine_scan(&cp, bytes)),
+                mc_bt
+            );
+        });
+        // Only the Pike-eligible patterns actually use the fast path; count
+        // their times toward the total that reflects real behaviour.
+        tot_pike += t_pike;
+        tot_bt += t_bt;
+        report.push_str(&format!(
+            "  {name:<16} pike {t_pike:>9.1?}  backtrack {t_bt:>9.1?}  {:>5.2}x  eligible={eligible} ({mc_pike} matches)\n",
+            t_bt.as_secs_f64() / t_pike.as_secs_f64(),
+        ));
+    }
+    report.push_str(&format!(
+        "  TOTAL pike {tot_pike:.1?}  backtrack {tot_bt:.1?}  {:.2}x",
+        tot_bt.as_secs_f64() / tot_pike.as_secs_f64(),
+    ));
+    panic!("{report}");
+}
+
 /// Fastmap A/B: the same effective search (find `(defun` heads) with a
 /// syntax-free pattern (fastmap ON — skip loop over the first-byte table)
 /// vs a `\_>`-terminated pattern (uses_syntax → fastmap disabled →

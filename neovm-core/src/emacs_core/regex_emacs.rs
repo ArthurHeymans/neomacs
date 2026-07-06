@@ -297,6 +297,43 @@ pub(crate) struct CompiledPattern {
     /// but these bits preserve the runtime predicate for multibyte characters
     /// and for syntax-table-sensitive classes such as `word` and `space`.
     pub charset_class_bits: HashMap<usize, u32>,
+
+    /// True if the pattern used a non-greedy optional `??`.  Its
+    /// `OnFailureKeepStringJump` does NOT restore the string position on
+    /// backtrack, so the fallback resumes at the failure position rather
+    /// than the split position — semantics a Pike VM (which explores the
+    /// jump target from the CURRENT position) cannot reproduce.  The
+    /// smart-loop `OnFailureKeepStringJump` is safe (no-rewind ≡ rewind
+    /// under its mutual-exclusivity precondition), so only this `??`-sourced
+    /// form forces Pike ineligibility.  Set at the sole `??` emit site.
+    pub has_nongreedy_optional: bool,
+
+    /// True if this pattern is eligible for the non-backtracking Pike VM
+    /// fast path (see [`pike_match`]).  Computed once at compile time by
+    /// [`compute_pike_eligible`]: the bytecode must contain no
+    /// backreference (`Duplicate`), no interval-counter op
+    /// (`SucceedN`/`JumpN`/`SetNumberAt` from `\{n,m\}`), and the pattern
+    /// must not be POSIX-longest — every remaining op is simulated
+    /// byte-exactly by the Pike VM.  Ineligible patterns fall back to the
+    /// backtracker with identical output.
+    pub pike_eligible: bool,
+
+    /// Pike-only view of the bytecode: identical to `buffer` except that
+    /// smart keep-string loops (`OnFailureKeepStringJump` whose jump-back
+    /// targets the loop body) are de-optimized back to the equivalent
+    /// REWIND loop (`OnFailureJump` with the jump-back targeting the split).
+    ///
+    /// Keep-string jumps resume the loop EXIT at the position where the body
+    /// fails, which a Pike VM (each thread pinned to the current position)
+    /// cannot represent.  The rewind form re-evaluates the exit at every
+    /// position, which the Pike VM handles correctly and which is
+    /// semantically identical (the compiler only applies the keep-string
+    /// optimization when body and continuation are mutually exclusive).
+    /// The transform preserves byte LENGTH and all opcode positions, so the
+    /// position-keyed charset side tables stay valid.  `None` when the
+    /// pattern is ineligible or has no keep-string loop that needs the
+    /// rewrite (in which case the Pike VM reads `buffer` directly).
+    pub pike_buffer: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Debug)]
@@ -393,6 +430,9 @@ impl CompiledPattern {
             translate: None,
             multibyte_charsets: HashMap::new(),
             charset_class_bits: HashMap::new(),
+            has_nongreedy_optional: false,
+            pike_eligible: false,
+            pike_buffer: None,
         }
     }
 
@@ -598,6 +638,36 @@ fn clear_matcher_overflow() {
 /// fail-stack limit" (which GNU signals as an error).
 pub(crate) fn take_matcher_overflow() -> bool {
     MATCHER_OVERFLOW.with(|flag| flag.replace(false))
+}
+
+// Test-only switch to force the backtracking engine even for a
+// `pike_eligible` pattern, so the differential fuzzer can run the SAME
+// pattern through both engines and assert identical match-data.  In a
+// non-test build the Pike fast path is always taken for eligible patterns.
+#[cfg(test)]
+thread_local! {
+    static FORCE_BACKTRACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+#[inline]
+fn force_backtrack() -> bool {
+    FORCE_BACKTRACK.with(|f| f.get())
+}
+
+#[cfg(not(test))]
+#[inline]
+fn force_backtrack() -> bool {
+    false
+}
+
+/// Run `f` with the Pike fast path disabled (backtracker forced).  Test only.
+#[cfg(test)]
+pub(crate) fn with_backtracker_forced<R>(f: impl FnOnce() -> R) -> R {
+    FORCE_BACKTRACK.with(|flag| flag.set(true));
+    let r = f();
+    FORCE_BACKTRACK.with(|flag| flag.set(false));
+    r
 }
 
 // SyntaxClass is imported from crate::emacs_core::syntax.
@@ -1409,7 +1479,228 @@ pub(crate) fn regex_compile_lisp_with_translation(
     // (GNU `search.c:compile_pattern` + `used_syntax`).
     compile_fastmap(&mut buf, &DefaultSyntaxLookup);
 
+    // Decide once whether the non-backtracking Pike VM can simulate this
+    // bytecode byte-exactly (see `compute_pike_eligible`).
+    buf.pike_eligible = compute_pike_eligible(&buf);
+    if buf.pike_eligible {
+        // Build the Pike-only rewind view of any keep-string loops.  If a
+        // keep-string jump has an unexpected shape, fail closed (ineligible).
+        match build_pike_buffer(&buf) {
+            Some(pike_buf) => buf.pike_buffer = pike_buf,
+            None => buf.pike_eligible = false,
+        }
+    }
+
     Ok(buf)
+}
+
+/// Build the Pike-only bytecode view: de-optimize every keep-string smart
+/// loop (`OnFailureKeepStringJump` whose jump-back targets the loop body)
+/// into the equivalent rewind loop (`OnFailureJump` whose jump-back targets
+/// the split).  See [`CompiledPattern::pike_buffer`].
+///
+/// Returns `Some(None)` if no rewrite is needed (Pike reads `buffer`),
+/// `Some(Some(buf))` with the rewritten copy, or `None` if a keep-string
+/// jump does not match the expected smart-loop shape (the caller then marks
+/// the pattern ineligible — fail closed).  The pattern is already known not
+/// to contain a non-greedy `??` keep-string (that sets
+/// `has_nongreedy_optional`, which makes it ineligible before we get here),
+/// so every `OnFailureKeepStringJump` reaching this point must be a loop.
+#[allow(clippy::option_option)]
+fn build_pike_buffer(buf: &CompiledPattern) -> Option<Option<Vec<u8>>> {
+    let orig = &buf.buffer;
+    let mut rewritten: Option<Vec<u8>> = None;
+    let mut pc = 0usize;
+    while pc < orig.len() {
+        let op = RegexOp::from_byte(orig[pc])?;
+        if op == RegexOp::OnFailureKeepStringJump {
+            // Expected smart keep-string loop shape (after `resolve_smart_jumps`):
+            //   pc:      OnFailureKeepStringJump  → p2 (LEXIT)
+            //   pc+3:    <one-char body>
+            //   p2 - 3:  Jump                     → pc + 3 (body start)
+            //   p2:      <continuation>
+            let offset = extract_number(orig, pc + 1);
+            let p2 = (pc as i64 + 3 + offset as i64) as usize;
+            if p2 < pc + 6 || p2 > orig.len() {
+                return None;
+            }
+            let jump_at = p2 - 3;
+            if orig.get(jump_at).copied() != Some(RegexOp::Jump as u8) {
+                return None;
+            }
+            let jtarget = (jump_at as i64 + 3 + extract_number(orig, jump_at + 1) as i64) as usize;
+            if jtarget != pc + 3 {
+                return None;
+            }
+            // Rewrite: OFKSJ → OnFailureJump (same offset to LEXIT), and
+            // retarget the jump-back from the body (pc+3) to the split (pc).
+            let out = rewritten.get_or_insert_with(|| orig.clone());
+            out[pc] = RegexOp::OnFailureJump as u8;
+            let new_off = pc as i64 - (jump_at as i64 + 3);
+            store_number(out, jump_at + 1, new_off as i16);
+        }
+        pc += opcode_len(orig, pc)?;
+    }
+    Some(rewritten)
+}
+
+/// Walk the compiled bytecode and decide whether the Pike VM (see
+/// [`pike_match`]) can simulate it byte-exactly.
+///
+/// The Pike VM reproduces Emacs's leftmost-greedy NFA semantics by
+/// exploring the SAME bytecode the backtracker does, in the SAME priority
+/// order, but linearly.  These force a fall back to the backtracker:
+///   * `Duplicate` — a backreference is not a regular-language construct.
+///   * `SucceedN` / `JumpN` / `SetNumberAt` — `\{n,m\}` interval counters
+///     carry mutable per-position state that would break the Pike VM's
+///     `(pc)`-keyed thread dedup; conservatively excluded in Stage 1.
+///   * `OnFailureJumpNastyloop` — a non-greedy quantifier over a NULLABLE
+///     body (`\(?:a\|\)*?`).  It has no infinite-loop guard and its exact
+///     zero-progress ordering can't be validated against the backtracker
+///     (which itself does not terminate on some of these), so it is
+///     excluded.  (Non-greedy quantifiers over NON-nullable bodies use
+///     `OnFailureJump` and stay eligible.)
+///   * A non-greedy `??` (`has_nongreedy_optional`) — its
+///     `OnFailureKeepStringJump` has genuine keep-string semantics with no
+///     loop back-edge, unlike the smart-loop keep-string that
+///     [`build_pike_buffer`] de-optimizes.
+///   * POSIX-longest mode (`buf.posix`) — the Pike VM produces
+///     leftmost-greedy captures, not POSIX-longest, so it must not run
+///     for a POSIX pattern.
+///   * A **capture group inside a zero-consume (epsilon) cycle**, e.g.
+///     `\(a*\)*` or `\(.??\B\)+?`.  When a `*` / `+` body can iterate
+///     without consuming a character, GNU's `check_infinite_loop` takes
+///     exactly ONE zero-progress iteration and KEEPS that iteration's
+///     captures before forcing the loop exit; the Pike VM's `seen`-set
+///     prunes the zero-progress path entirely, losing those captures.
+///     Reproducing GNU's empty-loop capture semantics byte-exactly is out
+///     of scope for Stage 1.  Crucially this is checked PRECISELY (an
+///     actual epsilon cycle through a `StartMemory`/`StopMemory`), NOT by
+///     excluding `OnFailureJumpLoop` wholesale — that op is emitted
+///     conservatively for many NON-nullable bodies (e.g. the fontlock
+///     `\(?:\w\|\s_\|\\.\)+`), which the Pike VM handles correctly as a
+///     plain split.
+///
+/// Every other op the compiler can emit (literals, `.`, charsets,
+/// `* + ?` and their non-greedy forms, alternation, groups, anchors,
+/// boundaries, `\w \W \sC \SC` and the fused `SyntaxSpecSet`, categories,
+/// `\=`) is handled by the Pike VM.  Unknown/malformed bytes make the
+/// pattern ineligible (fail closed).
+fn compute_pike_eligible(buf: &CompiledPattern) -> bool {
+    if buf.posix {
+        return false;
+    }
+    // Non-greedy `??` uses a keep-string jump the Pike VM cannot model.
+    if buf.has_nongreedy_optional {
+        return false;
+    }
+    let bytecode = &buf.buffer;
+    let mut pc = 0usize;
+    while pc < bytecode.len() {
+        let Some(op) = RegexOp::from_byte(bytecode[pc]) else {
+            return false;
+        };
+        match op {
+            RegexOp::Duplicate
+            | RegexOp::SucceedN
+            | RegexOp::JumpN
+            | RegexOp::SetNumberAt
+            // A non-greedy quantifier whose body can match empty (`a*?`/`+?`
+            // with a nullable body) compiles to `OnFailureJumpNastyloop`,
+            // which has no infinite-loop guard.  Its exact zero-progress
+            // ordering is subtle and can't be validated against the
+            // backtracker (which itself does not terminate on some of these,
+            // e.g. `\(?:a\|\)*?b` on ""), so fall back conservatively.
+            | RegexOp::OnFailureJumpNastyloop => return false,
+            _ => {}
+        }
+        let Some(len) = opcode_len(bytecode, pc) else {
+            return false;
+        };
+        pc += len;
+    }
+    // Precise empty-loop-with-capture check (see doc above).
+    !has_capturing_epsilon_cycle(bytecode)
+}
+
+/// The non-consuming (epsilon) successors of the op at `pc`.  Consuming ops
+/// and `Succeed`/end-of-program are epsilon dead-ends (they break any
+/// zero-consume cycle).  Used only by the eligibility analysis.
+fn epsilon_successors(bytecode: &[u8], pc: usize) -> SmallVec<[usize; 2]> {
+    let mut out: SmallVec<[usize; 2]> = SmallVec::new();
+    let Some(op) = RegexOp::from_byte(bytecode[pc]) else {
+        return out;
+    };
+    match op {
+        RegexOp::NoOp
+        | RegexOp::BegLine
+        | RegexOp::EndLine
+        | RegexOp::BegBuf
+        | RegexOp::EndBuf
+        | RegexOp::AtDot
+        | RegexOp::WordBound
+        | RegexOp::NotWordBound
+        | RegexOp::WordBeg
+        | RegexOp::WordEnd
+        | RegexOp::SymBeg
+        | RegexOp::SymEnd => out.push(pc + 1),
+        RegexOp::StartMemory | RegexOp::StopMemory => out.push(pc + 2),
+        RegexOp::Jump => {
+            let offset = extract_number(bytecode, pc + 1);
+            out.push((pc as i64 + 3 + offset as i64) as usize);
+        }
+        RegexOp::OnFailureJump
+        | RegexOp::OnFailureKeepStringJump
+        | RegexOp::OnFailureJumpLoop
+        | RegexOp::OnFailureJumpNastyloop
+        | RegexOp::OnFailureJumpSmart => {
+            let offset = extract_number(bytecode, pc + 1);
+            out.push(pc + 3);
+            out.push((pc as i64 + 3 + offset as i64) as usize);
+        }
+        // Consuming ops, Succeed, and the ineligible ops break the cycle.
+        _ => {}
+    }
+    out
+}
+
+/// True if some `StartMemory` / `StopMemory` op lies on a zero-consume
+/// (epsilon-only) cycle — the precise condition under which GNU's
+/// empty-loop capture semantics diverge from the Pike VM.
+fn has_capturing_epsilon_cycle(bytecode: &[u8]) -> bool {
+    let mut pc = 0usize;
+    while pc < bytecode.len() {
+        let Some(op) = RegexOp::from_byte(bytecode[pc]) else {
+            return false;
+        };
+        if matches!(op, RegexOp::StartMemory | RegexOp::StopMemory)
+            && epsilon_node_on_cycle(bytecode, pc)
+        {
+            return true;
+        }
+        let Some(len) = opcode_len(bytecode, pc) else {
+            return false;
+        };
+        pc += len;
+    }
+    false
+}
+
+/// DFS over epsilon edges: can `start` reach itself without consuming?
+fn epsilon_node_on_cycle(bytecode: &[u8], start: usize) -> bool {
+    let mut stack: Vec<usize> = epsilon_successors(bytecode, start).to_vec();
+    let mut visited = vec![false; bytecode.len() + 1];
+    while let Some(n) = stack.pop() {
+        if n == start {
+            return true;
+        }
+        if n >= bytecode.len() || visited[n] {
+            continue;
+        }
+        visited[n] = true;
+        stack.extend(epsilon_successors(bytecode, n));
+    }
+    false
 }
 
 // ---------------------------------------------------------------------------
@@ -1754,7 +2045,12 @@ fn compile_repetition(
                 // From (laststart+3) → (laststart+3+expr_len), offset = expr_len
                 store_number(&mut buf.buffer, laststart + 1, expr_len as i16);
             } else {
-                // Non-greedy ??
+                // Non-greedy ??.  This `OnFailureKeepStringJump` has genuine
+                // keep-string semantics (fallback resumes at the failure
+                // position, not the split) that the Pike VM cannot model —
+                // flag the pattern ineligible.  Unlike the smart-loop
+                // keep-string, this one has no loop back-edge.
+                buf.has_nongreedy_optional = true;
                 buf.splice_bytecode(laststart, &[RegexOp::OnFailureKeepStringJump as u8, 0, 0]);
                 let expr_len = after_last - laststart;
                 store_number(&mut buf.buffer, laststart + 1, expr_len as i16);
@@ -3040,6 +3336,394 @@ fn posix_class_matches(code: u32, bits: u32, syntax: &dyn SyntaxLookup) -> bool 
         || (bits & CHARSET_CLASS_BIT_MULTIBYTE != 0 && byte.is_none())
 }
 
+// ---------------------------------------------------------------------------
+// Shared per-op character tests.
+//
+// These free functions hold the EXACT per-character predicates that both
+// the backtracking matcher (`re_match_internal`) and the non-backtracking
+// Pike VM (`pike_match`) execute.  Sharing one implementation is what
+// guarantees the Pike fast path is byte-exact with the backtracker on
+// case-fold, multibyte, charsets, syntax classes, categories and word /
+// symbol boundaries — every subtlety lives in one place.
+// ---------------------------------------------------------------------------
+
+/// Case-fold translate, mirroring the `tr` closure in `re_match_internal`.
+#[inline]
+fn re_tr(translate: &Option<CaseTranslation>, c: u32) -> u32 {
+    match translate {
+        Some(table) => table.translate(c),
+        None => c,
+    }
+}
+
+/// Decode the Emacs character at `pos` (mirrors the `text_char` closure).
+#[inline]
+fn re_text_char(text: &[u8], pos: usize, target_multibyte: bool) -> Option<(u32, usize)> {
+    if pos >= text.len() {
+        return None;
+    }
+    if target_multibyte {
+        Some(emacs_char::string_char(&text[pos..]))
+    } else {
+        Some((regex_unibyte_to_char(text[pos]), 1))
+    }
+}
+
+/// Start byte of the character before `pos` (mirrors `prev_char_start`).
+#[inline]
+fn re_prev_char_start(text: &[u8], pos: usize, target_multibyte: bool) -> Option<usize> {
+    if pos == 0 {
+        return None;
+    }
+    if !target_multibyte {
+        return Some(pos - 1);
+    }
+    let mut p = pos - 1;
+    while p > 0 && (text[p] & 0xC0) == 0x80 {
+        p -= 1;
+    }
+    Some(p)
+}
+
+/// `AnyChar` (`.`): match any character except newline.  Returns the byte
+/// length of the consumed char on success.  Mirrors the `AnyChar` arm.
+#[inline]
+fn match_anychar_at(
+    text: &[u8],
+    d: usize,
+    stop: usize,
+    target_multibyte: bool,
+    translate: &Option<CaseTranslation>,
+) -> Option<usize> {
+    if d >= stop {
+        return None;
+    }
+    let (buf_ch, buf_len) = re_text_char(text, d, target_multibyte)?;
+    if re_tr(translate, buf_ch) == '\n' as u32 {
+        return None;
+    }
+    Some(buf_len)
+}
+
+/// Match ONE character of an `Exactn` literal at literal byte offset
+/// `lit_off` against the input char at `d`.  Returns `(pattern_advance,
+/// text_advance)` on success.  Mirrors one iteration of the `Exactn` arm's
+/// inner loop, including the unibyte/multibyte + case-fold subtleties.
+#[inline]
+#[allow(clippy::too_many_arguments)] // mirrors the backtracker's Exactn arm state
+fn match_exactn_char_at(
+    lit: &[u8],
+    lit_off: usize,
+    pattern_multibyte: bool,
+    target_multibyte: bool,
+    translate: &Option<CaseTranslation>,
+    text: &[u8],
+    d: usize,
+    stop: usize,
+) -> Option<(usize, usize)> {
+    if d >= stop {
+        return None;
+    }
+    let (buf_ch, buf_len) = re_text_char(text, d, target_multibyte)?;
+    if target_multibyte {
+        let (pat_ch, pat_len) = if pattern_multibyte {
+            emacs_char::string_char(&lit[lit_off..])
+        } else {
+            (regex_unibyte_to_char(lit[lit_off]), 1)
+        };
+        if re_tr(translate, buf_ch) != pat_ch {
+            return None;
+        }
+        Some((pat_len, buf_len))
+    } else {
+        let (pat_byte, pat_advance) = if pattern_multibyte {
+            let (pat_ch, pat_len) = emacs_char::string_char(&lit[lit_off..]);
+            let byte = regex_char_to_unibyte(pat_ch)?;
+            (byte, pat_len)
+        } else {
+            (lit[lit_off], 1)
+        };
+        let buf_byte = text[d];
+        let mut translated = regex_unibyte_to_char(buf_byte);
+        if !emacs_char::char_byte8_p(translated) {
+            translated = re_tr(translate, translated);
+            if let Some(byte) = regex_char_to_unibyte(translated) {
+                translated = byte as u32;
+            } else {
+                translated = buf_byte as u32;
+            }
+        } else {
+            translated = buf_byte as u32;
+        }
+        if translated as u8 != pat_byte {
+            return None;
+        }
+        Some((pat_advance, 1))
+    }
+}
+
+/// `Charset` / `CharsetNot`: match the char at `d` against the bitmap +
+/// range-table + POSIX class bits of the charset opcode at
+/// `charset_op_pos`.  Returns consumed byte length on success.  Mirrors
+/// the `Charset | CharsetNot` arm exactly.
+#[inline]
+#[allow(clippy::too_many_arguments)] // mirrors GNU execute_charset's inputs
+fn match_charset_at(
+    pattern: &CompiledPattern,
+    charset_op_pos: usize,
+    text: &[u8],
+    d: usize,
+    stop: usize,
+    target_multibyte: bool,
+    translate: &Option<CaseTranslation>,
+    syntax: &dyn SyntaxLookup,
+) -> Option<usize> {
+    let bytecode = &pattern.buffer;
+    let negate = bytecode[charset_op_pos] == RegexOp::CharsetNot as u8;
+    let bitmap_len = bytecode[charset_op_pos + 1] as usize & 0x7F;
+    let bitmap_start = charset_op_pos + 2;
+
+    if d >= stop {
+        return None;
+    }
+    let (orig_ch, ch_len) = re_text_char(text, d, target_multibyte)?;
+    let mut ch = orig_ch;
+    let mut unibyte_char = false;
+
+    if target_multibyte {
+        ch = re_tr(translate, ch);
+        if let Some(byte) = regex_char_to_unibyte(ch) {
+            unibyte_char = true;
+            ch = byte as u32;
+        }
+    } else {
+        let mut converted = regex_unibyte_to_char(text[d]);
+        if !emacs_char::char_byte8_p(converted) {
+            converted = re_tr(translate, converted);
+            if let Some(byte) = regex_char_to_unibyte(converted) {
+                unibyte_char = true;
+                ch = byte as u32;
+            }
+        } else {
+            unibyte_char = true;
+            ch = text[d] as u32;
+        }
+    }
+
+    let in_set = if unibyte_char {
+        let c = ch as usize;
+        let bitmap_hit = if (c / 8) < bitmap_len {
+            let byte = bytecode[bitmap_start + c / 8];
+            (byte >> (c % 8)) & 1 != 0
+        } else {
+            false
+        };
+        bitmap_hit
+            || (ch < 0x80
+                && pattern
+                    .charset_class_bits
+                    .get(&charset_op_pos)
+                    .copied()
+                    .map(|bits| posix_class_matches(orig_ch, bits, syntax))
+                    .unwrap_or(false))
+    } else {
+        let range_hit = pattern
+            .multibyte_charsets
+            .get(&charset_op_pos)
+            .map(|ranges| {
+                let ch = regex_syntax_char(ch);
+                ranges.iter().any(|&(lo, hi)| ch >= lo && ch <= hi)
+            })
+            .unwrap_or(false);
+        range_hit
+            || pattern
+                .charset_class_bits
+                .get(&charset_op_pos)
+                .copied()
+                .map(|bits| posix_class_matches(orig_ch, bits, syntax))
+                .unwrap_or(false)
+    };
+
+    let matched = if negate { !in_set } else { in_set };
+    if matched {
+        Some(ch_len)
+    } else {
+        None
+    }
+}
+
+/// `SyntaxSpec` (`negate=false`) / `NotSyntaxSpec` (`negate=true`).
+#[inline]
+fn match_syntaxspec_at(
+    class_byte: u8,
+    negate: bool,
+    text: &[u8],
+    d: usize,
+    stop: usize,
+    target_multibyte: bool,
+    syntax: &dyn SyntaxLookup,
+) -> Option<usize> {
+    if d >= stop {
+        return None;
+    }
+    let (c, len) = re_text_char(text, d, target_multibyte)?;
+    let is = syntax.char_syntax(regex_syntax_char(c)) as u8 == class_byte;
+    if is != negate {
+        Some(len)
+    } else {
+        None
+    }
+}
+
+/// `SyntaxSpecSet`: char's syntax class is in the bitmask.
+#[inline]
+fn match_syntaxspecset_at(
+    mask: u16,
+    text: &[u8],
+    d: usize,
+    stop: usize,
+    target_multibyte: bool,
+    syntax: &dyn SyntaxLookup,
+) -> Option<usize> {
+    if d >= stop {
+        return None;
+    }
+    let (c, len) = re_text_char(text, d, target_multibyte)?;
+    let class = syntax.char_syntax(regex_syntax_char(c)) as u16;
+    if (mask >> class) & 1 != 0 {
+        Some(len)
+    } else {
+        None
+    }
+}
+
+/// `CategorySpec` (`negate=false`) / `NotCategorySpec` (`negate=true`).
+#[inline]
+fn match_categoryspec_at(
+    cat: u8,
+    negate: bool,
+    text: &[u8],
+    d: usize,
+    stop: usize,
+    target_multibyte: bool,
+    syntax: &dyn SyntaxLookup,
+) -> Option<usize> {
+    if d >= stop {
+        return None;
+    }
+    let (c, len) = re_text_char(text, d, target_multibyte)?;
+    let has = syntax.char_has_category(regex_syntax_char(c), cat);
+    if has != negate {
+        Some(len)
+    } else {
+        None
+    }
+}
+
+/// Is the char at `pos` a word constituent?  (`false` past the ends.)
+#[inline]
+fn re_char_is_word(
+    text: &[u8],
+    pos: usize,
+    target_multibyte: bool,
+    syntax: &dyn SyntaxLookup,
+) -> bool {
+    re_text_char(text, pos, target_multibyte)
+        .map(|(c, _)| syntax.char_syntax(regex_syntax_char(c)) == SyntaxClass::Word)
+        .unwrap_or(false)
+}
+
+/// Is the char at `pos` a word OR symbol constituent?  (`false` past the ends.)
+#[inline]
+fn re_char_is_symbol(
+    text: &[u8],
+    pos: usize,
+    target_multibyte: bool,
+    syntax: &dyn SyntaxLookup,
+) -> bool {
+    re_text_char(text, pos, target_multibyte)
+        .map(|(c, _)| {
+            let s = syntax.char_syntax(regex_syntax_char(c));
+            s == SyntaxClass::Word || s == SyntaxClass::Symbol
+        })
+        .unwrap_or(false)
+}
+
+/// `\b` word boundary (mirrors the `at_word_boundary` closure).
+#[inline]
+fn assert_word_boundary(
+    text: &[u8],
+    d: usize,
+    target_multibyte: bool,
+    syntax: &dyn SyntaxLookup,
+) -> bool {
+    let prev_word = re_prev_char_start(text, d, target_multibyte)
+        .map(|p| re_char_is_word(text, p, target_multibyte, syntax))
+        .unwrap_or(false);
+    let curr_word = re_char_is_word(text, d, target_multibyte, syntax);
+    prev_word != curr_word
+}
+
+/// `\<` word beginning.
+#[inline]
+fn assert_word_beg(
+    text: &[u8],
+    d: usize,
+    target_multibyte: bool,
+    syntax: &dyn SyntaxLookup,
+) -> bool {
+    let prev_word = re_prev_char_start(text, d, target_multibyte)
+        .map(|p| re_char_is_word(text, p, target_multibyte, syntax))
+        .unwrap_or(false);
+    let curr_word = re_char_is_word(text, d, target_multibyte, syntax);
+    !prev_word && curr_word
+}
+
+/// `\>` word end.
+#[inline]
+fn assert_word_end(
+    text: &[u8],
+    d: usize,
+    target_multibyte: bool,
+    syntax: &dyn SyntaxLookup,
+) -> bool {
+    let prev_word = re_prev_char_start(text, d, target_multibyte)
+        .map(|p| re_char_is_word(text, p, target_multibyte, syntax))
+        .unwrap_or(false);
+    let curr_word = re_char_is_word(text, d, target_multibyte, syntax);
+    prev_word && !curr_word
+}
+
+/// `\_<` symbol beginning.
+#[inline]
+fn assert_sym_beg(
+    text: &[u8],
+    d: usize,
+    target_multibyte: bool,
+    syntax: &dyn SyntaxLookup,
+) -> bool {
+    let prev_sym = re_prev_char_start(text, d, target_multibyte)
+        .map(|p| re_char_is_symbol(text, p, target_multibyte, syntax))
+        .unwrap_or(false);
+    let curr_sym = re_char_is_symbol(text, d, target_multibyte, syntax);
+    !prev_sym && curr_sym
+}
+
+/// `\_>` symbol end.
+#[inline]
+fn assert_sym_end(
+    text: &[u8],
+    d: usize,
+    target_multibyte: bool,
+    syntax: &dyn SyntaxLookup,
+) -> bool {
+    let prev_sym = re_prev_char_start(text, d, target_multibyte)
+        .map(|p| re_char_is_symbol(text, p, target_multibyte, syntax))
+        .unwrap_or(false);
+    let curr_sym = re_char_is_symbol(text, d, target_multibyte, syntax);
+    prev_sym && !curr_sym
+}
+
 /// Match a compiled pattern against input text.
 ///
 /// This is the core matching function, equivalent to GNU's `re_match_2_internal`.
@@ -3078,6 +3762,13 @@ fn re_match_candidate(
     syntax: &dyn SyntaxLookup,
     point: usize,
 ) -> Option<(usize, MatchRegisters)> {
+    // Non-backtracking Stage-1 fast path: byte-exact with the backtracker
+    // for eligible patterns (see `compute_pike_eligible` / `pike_match`),
+    // but linear — no catastrophic backtracking.  A test-only switch forces
+    // the backtracker so the differential fuzzer can compare both engines.
+    if pattern.pike_eligible && !force_backtrack() {
+        return pike_match(pattern, text, pos, stop, syntax, point);
+    }
     MATCH_SCRATCH.with(|cell| match cell.try_borrow_mut() {
         Ok(mut scratch) => re_match_internal(&mut scratch, pattern, text, pos, stop, syntax, point),
         // Defensive: if a syntax/category callback ever re-enters the
@@ -3164,88 +3855,18 @@ fn re_match_internal(
     let pattern_multibyte = pattern.multibyte;
     let target_multibyte = pattern.target_multibyte;
 
-    // Helper: translate a character for case-folding
+    // Helper: translate a character for case-folding.  All other
+    // per-character predicates (decode, charset, syntax/category tests,
+    // word/symbol boundaries) live in the shared free functions
+    // (`match_*_at`, `assert_*`) so the Pike fast path is byte-exact with
+    // this backtracker; `tr` remains local because only the `Duplicate`
+    // (backreference) arm — which the Pike VM never runs — still needs it.
     let tr = |c: u32| -> u32 {
         if let Some(table) = translate {
             table.translate(c)
         } else {
             c
         }
-    };
-
-    // Helper: get char at position in text (with bounds check)
-    let text_byte = |pos: usize| -> Option<u8> {
-        if pos < text.len() {
-            Some(text[pos])
-        } else {
-            None
-        }
-    };
-
-    let unibyte_to_emacs_char = regex_unibyte_to_char;
-    let syntax_char = regex_syntax_char;
-    let emacs_char_to_unibyte = regex_char_to_unibyte;
-    let posix_class_matches = |code: u32, bits: u32| posix_class_matches(code, bits, syntax);
-
-    // Helper: decode an Emacs character at position.
-    let text_char = |pos: usize| -> Option<(u32, usize)> {
-        if pos >= text.len() {
-            return None;
-        }
-        if target_multibyte {
-            Some(emacs_char::string_char(&text[pos..]))
-        } else {
-            Some((unibyte_to_emacs_char(text[pos]), 1))
-        }
-    };
-
-    // Helper: find the start of the character before `pos`.
-    let prev_char_start = |pos: usize| -> Option<usize> {
-        if pos == 0 {
-            return None;
-        }
-        if !target_multibyte {
-            return Some(pos - 1);
-        }
-        let mut p = pos - 1;
-        while p > 0 && (text[p] & 0xC0) == 0x80 {
-            p -= 1;
-        }
-        Some(p)
-    };
-
-    // Helper: is position at a word boundary?
-    let at_word_boundary = |pos: usize| -> bool {
-        let prev_word = if let Some(prev) = prev_char_start(pos) {
-            text_char(prev)
-                .map(|(c, _)| syntax.char_syntax(syntax_char(c)) == SyntaxClass::Word)
-                .unwrap_or(false)
-        } else {
-            false
-        };
-        let curr_word = text_char(pos)
-            .map(|(c, _)| syntax.char_syntax(syntax_char(c)) == SyntaxClass::Word)
-            .unwrap_or(false);
-        prev_word != curr_word
-    };
-
-    // Helper: is position at a symbol boundary?
-    let at_symbol_boundary = |pos: usize| -> bool {
-        let is_symbol_char = |c: u32| {
-            let syn = syntax.char_syntax(syntax_char(c));
-            syn == SyntaxClass::Word || syn == SyntaxClass::Symbol
-        };
-        let prev_sym = if let Some(prev) = prev_char_start(pos) {
-            text_char(prev)
-                .map(|(c, _)| is_symbol_char(c))
-                .unwrap_or(false)
-        } else {
-            false
-        };
-        let curr_sym = text_char(pos)
-            .map(|(c, _)| is_symbol_char(c))
-            .unwrap_or(false);
-        prev_sym != curr_sym
     };
 
     // `try_fail!()` is the in-function replacement for GNU's
@@ -3373,65 +3994,30 @@ fn re_match_internal(
             RegexOp::Exactn => {
                 let count = bytecode[pc] as usize;
                 pc += 1;
-                let mut matched = true;
                 let literal_start = pc;
                 let literal_end = literal_start + count;
-                let mut pat_pos = literal_start;
-                while pat_pos < literal_end {
-                    if d >= stop {
-                        matched = false;
-                        break;
-                    }
-
-                    let Some((buf_ch, buf_len)) = text_char(d) else {
-                        matched = false;
-                        break;
-                    };
-
-                    if target_multibyte {
-                        let (pat_ch, pat_len) = if pattern_multibyte {
-                            emacs_char::string_char(&bytecode[pat_pos..literal_end])
-                        } else {
-                            (unibyte_to_emacs_char(bytecode[pat_pos]), 1)
-                        };
-                        if tr(buf_ch) != pat_ch {
+                let lit = &bytecode[literal_start..literal_end];
+                let mut matched = true;
+                let mut lit_off = 0usize;
+                while lit_off < count {
+                    match match_exactn_char_at(
+                        lit,
+                        lit_off,
+                        pattern_multibyte,
+                        target_multibyte,
+                        translate,
+                        text,
+                        d,
+                        stop,
+                    ) {
+                        Some((pat_advance, text_advance)) => {
+                            lit_off += pat_advance;
+                            d += text_advance;
+                        }
+                        None => {
                             matched = false;
                             break;
                         }
-                        pat_pos += pat_len;
-                        d += buf_len;
-                    } else {
-                        let pat_byte = if pattern_multibyte {
-                            let (pat_ch, pat_len) =
-                                emacs_char::string_char(&bytecode[pat_pos..literal_end]);
-                            let Some(byte) = emacs_char_to_unibyte(pat_ch) else {
-                                matched = false;
-                                break;
-                            };
-                            pat_pos += pat_len;
-                            byte
-                        } else {
-                            let byte = bytecode[pat_pos];
-                            pat_pos += 1;
-                            byte
-                        };
-                        let buf_byte = text[d];
-                        let mut translated = unibyte_to_emacs_char(buf_byte);
-                        if !emacs_char::char_byte8_p(translated) {
-                            translated = tr(translated);
-                            if let Some(byte) = emacs_char_to_unibyte(translated) {
-                                translated = byte as u32;
-                            } else {
-                                translated = buf_byte as u32;
-                            }
-                        } else {
-                            translated = buf_byte as u32;
-                        }
-                        if translated as u8 != pat_byte {
-                            matched = false;
-                            break;
-                        }
-                        d += 1;
                     }
                 }
                 pc = literal_end;
@@ -3441,135 +4027,39 @@ fn re_match_internal(
             }
 
             RegexOp::AnyChar => {
-                if d >= stop {
-                    try_fail!('main_loop);
-                    continue;
+                match match_anychar_at(text, d, stop, target_multibyte, translate) {
+                    Some(len) => d += len,
+                    None => {
+                        try_fail!('main_loop);
+                    }
                 }
-                // Match any character except newline
-                let Some((buf_ch, buf_len)) = text_char(d) else {
-                    try_fail!('main_loop);
-                    continue;
-                };
-                if tr(buf_ch) == '\n' as u32 {
-                    try_fail!('main_loop);
-                    continue;
-                }
-                d += buf_len;
             }
 
             RegexOp::Charset | RegexOp::CharsetNot => {
-                let negate = op == RegexOp::CharsetNot;
                 let charset_op_pos = pc - 1; // bytecode position of the opcode
                 let bitmap_len = bytecode[pc] as usize & 0x7F;
                 pc += 1;
-
-                if d >= stop {
-                    pc += bitmap_len;
-                    try_fail!('main_loop);
-                    continue;
-                }
-
-                let Some((orig_ch, ch_len)) = text_char(d) else {
-                    pc += bitmap_len;
-                    try_fail!('main_loop);
-                    continue;
-                };
-                let mut ch = orig_ch;
-                let mut unibyte_char = false;
-
-                if target_multibyte {
-                    ch = tr(ch);
-                    if let Some(byte) = emacs_char_to_unibyte(ch) {
-                        unibyte_char = true;
-                        ch = byte as u32;
-                    }
-                } else {
-                    let mut converted = unibyte_to_emacs_char(text[d]);
-                    if !emacs_char::char_byte8_p(converted) {
-                        converted = tr(converted);
-                        if let Some(byte) = emacs_char_to_unibyte(converted) {
-                            unibyte_char = true;
-                            ch = byte as u32;
-                        }
-                    } else {
-                        unibyte_char = true;
-                        ch = text[d] as u32;
-                    }
-                }
-
-                // GNU `execute_charset` (regex-emacs.c:3756-3815) has two
-                // MUTUALLY EXCLUSIVE branches keyed on `unibyte_char`:
-                //   * `unibyte && c < 256`  -> consult the BITMAP ONLY
-                //     (regex-emacs.c:3773-3779).  The range-table class bits
-                //     (`BIT_MULTIBYTE`, `BIT_ALPHA`, ...) are NOT tested, so a
-                //     raw high byte in a unibyte target matches no POSIX class.
-                //   * otherwise (a true multibyte char) -> consult the
-                //     range-table CLASS BITS and explicit ranges
-                //     (regex-emacs.c:3781-3811).  The bitmap is NOT consulted.
-                // Replicating this split is what makes `[[:nonascii:]]` etc.
-                // match a multibyte char but NOT a unibyte raw byte.
-                //
-                // Caveat for the bitmap branch: GNU builds the bitmap at
-                // COMPILE time with `re_iswctype(c, cc)` over `c < 0x80`, which
-                // for the syntax-sensitive classes `[:word:]`/`[:space:]`
-                // reflects the buffer's syntax table (regex-emacs.c:2081-2101,
-                // `used_syntax`).  Neomacs uses a fixed standard-syntax ASCII
-                // bitmap, so it re-derives those syntax-sensitive ASCII bits at
-                // match time via `posix_class_matches`.  That union is applied
-                // ONLY for ASCII chars (`ch < 0x80`); a raw high byte is never
-                // tested against the class bits, preserving GNU's rule that no
-                // POSIX class matches a high byte in a unibyte string.
-                let in_set = if unibyte_char {
-                    let c = ch as usize;
-                    let bitmap_hit = if (c / 8) < bitmap_len {
-                        let byte = bytecode[pc + c / 8];
-                        (byte >> (c % 8)) & 1 != 0
-                    } else {
-                        false
-                    };
-                    // Re-derive syntax-sensitive ASCII class membership at
-                    // match time (the buffer syntax table may differ from the
-                    // hardcoded compile-time bitmap, e.g. `_` made a word
-                    // constituent).  Restricted to `ch < 0x80` so high bytes
-                    // stay bitmap-only and match no class.
-                    bitmap_hit
-                        || (ch < 0x80
-                            && pattern
-                                .charset_class_bits
-                                .get(&charset_op_pos)
-                                .copied()
-                                .map(|bits| posix_class_matches(orig_ch, bits))
-                                .unwrap_or(false))
-                } else {
-                    let range_hit = pattern
-                        .multibyte_charsets
-                        .get(&charset_op_pos)
-                        .map(|ranges| {
-                            let ch = syntax_char(ch);
-                            ranges.iter().any(|&(lo, hi)| ch >= lo && ch <= hi)
-                        })
-                        .unwrap_or(false);
-                    // Union with POSIX class bits, required for multibyte
-                    // `[:alnum:]`/`[:print:]` and syntax-sensitive
-                    // `[:word:]`/`[:space:]`.  Only reachable for true
-                    // multibyte chars, exactly as in GNU's `else if (rtp)`.
-                    range_hit
-                        || pattern
-                            .charset_class_bits
-                            .get(&charset_op_pos)
-                            .copied()
-                            .map(|bits| posix_class_matches(orig_ch, bits))
-                            .unwrap_or(false)
-                };
-
-                let matched = if negate { !in_set } else { in_set };
+                // The shared helper (see `match_charset_at`) holds the full
+                // GNU `execute_charset` logic — the mutually-exclusive
+                // unibyte-bitmap vs multibyte-range/class-bit branches — so
+                // the Pike fast path stays byte-exact with this arm.
+                let result = match_charset_at(
+                    pattern,
+                    charset_op_pos,
+                    text,
+                    d,
+                    stop,
+                    target_multibyte,
+                    translate,
+                    syntax,
+                );
                 pc += bitmap_len;
-
-                if !matched {
-                    try_fail!('main_loop);
-                    continue;
+                match result {
+                    Some(ch_len) => d += ch_len,
+                    None => {
+                        try_fail!('main_loop);
+                    }
                 }
-                d += ch_len;
             }
 
             RegexOp::StartMemory => {
@@ -3672,70 +4162,37 @@ fn re_match_internal(
             }
 
             RegexOp::WordBound => {
-                if !at_word_boundary(d) {
+                if !assert_word_boundary(text, d, target_multibyte, syntax) {
                     try_fail!('main_loop);
                 }
             }
 
             RegexOp::NotWordBound => {
-                if at_word_boundary(d) {
+                if assert_word_boundary(text, d, target_multibyte, syntax) {
                     try_fail!('main_loop);
                 }
             }
 
             RegexOp::WordBeg => {
-                // Word beginning: not in word before, in word after
-                let prev_word = prev_char_start(d)
-                    .and_then(|p| text_char(p))
-                    .map(|(c, _)| syntax.char_syntax(syntax_char(c)) == SyntaxClass::Word)
-                    .unwrap_or(false);
-                let curr_word = text_char(d)
-                    .map(|(c, _)| syntax.char_syntax(syntax_char(c)) == SyntaxClass::Word)
-                    .unwrap_or(false);
-                if prev_word || !curr_word {
+                if !assert_word_beg(text, d, target_multibyte, syntax) {
                     try_fail!('main_loop);
                 }
             }
 
             RegexOp::WordEnd => {
-                let prev_word = prev_char_start(d)
-                    .and_then(|p| text_char(p))
-                    .map(|(c, _)| syntax.char_syntax(syntax_char(c)) == SyntaxClass::Word)
-                    .unwrap_or(false);
-                let curr_word = text_char(d)
-                    .map(|(c, _)| syntax.char_syntax(syntax_char(c)) == SyntaxClass::Word)
-                    .unwrap_or(false);
-                if !prev_word || curr_word {
+                if !assert_word_end(text, d, target_multibyte, syntax) {
                     try_fail!('main_loop);
                 }
             }
 
             RegexOp::SymBeg => {
-                let is_sym = |c: u32| {
-                    let s = syntax.char_syntax(syntax_char(c));
-                    s == SyntaxClass::Word || s == SyntaxClass::Symbol
-                };
-                let prev_sym = prev_char_start(d)
-                    .and_then(|p| text_char(p))
-                    .map(|(c, _)| is_sym(c))
-                    .unwrap_or(false);
-                let curr_sym = text_char(d).map(|(c, _)| is_sym(c)).unwrap_or(false);
-                if prev_sym || !curr_sym {
+                if !assert_sym_beg(text, d, target_multibyte, syntax) {
                     try_fail!('main_loop);
                 }
             }
 
             RegexOp::SymEnd => {
-                let is_sym = |c: u32| {
-                    let s = syntax.char_syntax(syntax_char(c));
-                    s == SyntaxClass::Word || s == SyntaxClass::Symbol
-                };
-                let prev_sym = prev_char_start(d)
-                    .and_then(|p| text_char(p))
-                    .map(|(c, _)| is_sym(c))
-                    .unwrap_or(false);
-                let curr_sym = text_char(d).map(|(c, _)| is_sym(c)).unwrap_or(false);
-                if !prev_sym || curr_sym {
+                if !assert_sym_end(text, d, target_multibyte, syntax) {
                     try_fail!('main_loop);
                 }
             }
@@ -3743,37 +4200,25 @@ fn re_match_internal(
             RegexOp::SyntaxSpec => {
                 let class_byte = bytecode[pc];
                 pc += 1;
-                if d >= stop {
-                    try_fail!('main_loop);
-                    continue;
+                match match_syntaxspec_at(class_byte, false, text, d, stop, target_multibyte, syntax)
+                {
+                    Some(len) => d += len,
+                    None => {
+                        try_fail!('main_loop);
+                    }
                 }
-                let Some((c, len)) = text_char(d) else {
-                    try_fail!('main_loop);
-                    continue;
-                };
-                if syntax.char_syntax(syntax_char(c)) as u8 != class_byte {
-                    try_fail!('main_loop);
-                    continue;
-                }
-                d += len;
             }
 
             RegexOp::NotSyntaxSpec => {
                 let class_byte = bytecode[pc];
                 pc += 1;
-                if d >= stop {
-                    try_fail!('main_loop);
-                    continue;
+                match match_syntaxspec_at(class_byte, true, text, d, stop, target_multibyte, syntax)
+                {
+                    Some(len) => d += len,
+                    None => {
+                        try_fail!('main_loop);
+                    }
                 }
-                let Some((c, len)) = text_char(d) else {
-                    try_fail!('main_loop);
-                    continue;
-                };
-                if syntax.char_syntax(syntax_char(c)) as u8 == class_byte {
-                    try_fail!('main_loop);
-                    continue;
-                }
-                d += len;
             }
 
             RegexOp::SyntaxSpecSet => {
@@ -3784,56 +4229,34 @@ fn re_match_internal(
                 // `\sA\|\sB\|...` alternation.
                 let mask = extract_number_u16(bytecode, pc);
                 pc += 2;
-                if d >= stop {
-                    try_fail!('main_loop);
-                    continue;
+                match match_syntaxspecset_at(mask, text, d, stop, target_multibyte, syntax) {
+                    Some(len) => d += len,
+                    None => {
+                        try_fail!('main_loop);
+                    }
                 }
-                let Some((c, len)) = text_char(d) else {
-                    try_fail!('main_loop);
-                    continue;
-                };
-                let class = syntax.char_syntax(syntax_char(c)) as u16;
-                if (mask >> class) & 1 == 0 {
-                    try_fail!('main_loop);
-                    continue;
-                }
-                d += len;
             }
 
             RegexOp::CategorySpec => {
                 let cat = bytecode[pc];
                 pc += 1;
-                if d >= stop {
-                    try_fail!('main_loop);
-                    continue;
+                match match_categoryspec_at(cat, false, text, d, stop, target_multibyte, syntax) {
+                    Some(len) => d += len,
+                    None => {
+                        try_fail!('main_loop);
+                    }
                 }
-                let Some((c, len)) = text_char(d) else {
-                    try_fail!('main_loop);
-                    continue;
-                };
-                if !syntax.char_has_category(syntax_char(c), cat) {
-                    try_fail!('main_loop);
-                    continue;
-                }
-                d += len;
             }
 
             RegexOp::NotCategorySpec => {
                 let cat = bytecode[pc];
                 pc += 1;
-                if d >= stop {
-                    try_fail!('main_loop);
-                    continue;
+                match match_categoryspec_at(cat, true, text, d, stop, target_multibyte, syntax) {
+                    Some(len) => d += len,
+                    None => {
+                        try_fail!('main_loop);
+                    }
                 }
-                let Some((c, len)) = text_char(d) else {
-                    try_fail!('main_loop);
-                    continue;
-                };
-                if syntax.char_has_category(syntax_char(c), cat) {
-                    try_fail!('main_loop);
-                    continue;
-                }
-                d += len;
             }
 
             RegexOp::Jump => {
@@ -4012,6 +4435,491 @@ fn re_match_internal(
     }
 
     Some((d, regs))
+}
+
+// ---------------------------------------------------------------------------
+// Pike VM — non-backtracking NFA simulation (Stage 1 fast path).
+//
+// The Pike VM simulates the SAME compiled bytecode the backtracker runs, but
+// linearly: instead of a depth-first backtracking search it advances a set of
+// "threads" (each an NFA state = bytecode pc + capture slots) through the text
+// one character at a time, in the SAME priority order the backtracker would
+// explore.  Because every consuming test calls the SAME shared `match_*_at`
+// helpers and the epsilon-closure follows splits fall-through-first (exactly
+// mirroring the backtracker's "continue at the instruction, push the jump
+// target as a failure point"), the Pike VM reproduces Emacs's leftmost-greedy
+// captures BYTE-EXACTLY — while killing catastrophic backtracking (`a*a*b`
+// becomes linear).
+//
+// Only patterns with `pike_eligible == true` reach here (no backreference, no
+// `\{n,m\}` interval counters, not POSIX-longest).  See `compute_pike_eligible`.
+// ---------------------------------------------------------------------------
+
+/// A thread's capture slots: `start(g)` at index `2*g`, `end(g)` at `2*g+1`.
+/// Group 0 (the whole match) is filled in at finalize from the match span.
+type PikeCaps = SmallVec<[Option<u32>; 8]>;
+
+/// Sentinel `pc` for a thread that has reached the end of the program
+/// (a match).  `usize::MAX` can never be a real bytecode position.
+const PIKE_MATCH_PC: usize = usize::MAX;
+
+/// One live NFA thread.
+#[derive(Clone)]
+struct PikeThread {
+    /// Bytecode position of the consuming op this thread is waiting on, or
+    /// [`PIKE_MATCH_PC`] for a thread that has matched.
+    pc: usize,
+    /// Byte offset already consumed within a multi-character `Exactn`
+    /// literal; `0` for the first char and for every non-`Exactn` op.  A
+    /// literal is walked one input character per step, so a thread can sit
+    /// mid-literal across steps.
+    lit_off: usize,
+    /// Capture slots carried by this exploration path.
+    caps: PikeCaps,
+}
+
+/// Epsilon-closure: starting from `start_pc`, follow every non-consuming op
+/// (jumps, splits, group markers, zero-width assertions) and append the
+/// reached CONSUMING ops (and end-of-program matches) to `list` in priority
+/// order.  `seen`/`generation` deduplicate by bytecode pc so the closure is linear.
+///
+/// Splits (`OnFailureJump` and its variants) are explored fall-through
+/// FIRST, which is exactly the order the backtracker tries them (it
+/// continues at the fall-through and pushes the jump target as a failure
+/// point) — this is what preserves greedy / left-alternation priority.
+#[allow(clippy::too_many_arguments)]
+fn pike_add_thread(
+    bytecode: &[u8],
+    list: &mut Vec<PikeThread>,
+    seen: &mut [u32],
+    generation: u32,
+    start_pc: usize,
+    start_caps: PikeCaps,
+    text: &[u8],
+    d: usize,
+    point: usize,
+    target_multibyte: bool,
+    num_regs: usize,
+    syntax: &dyn SyntaxLookup,
+) {
+    // Explicit DFS stack (avoids unbounded recursion on deeply nested
+    // patterns).  Children are pushed in REVERSE priority so the highest
+    // priority is popped first — this reproduces the recursive pre-order
+    // closure, hence the backtracker's try-order.
+    let mut stack: SmallVec<[(usize, PikeCaps); 32]> = SmallVec::new();
+    stack.push((start_pc, start_caps));
+
+    while let Some((pc, caps)) = stack.pop() {
+        // pc == bytecode.len() is the end-of-program match position.
+        if seen[pc] == generation {
+            continue;
+        }
+        seen[pc] = generation;
+
+        if pc >= bytecode.len() {
+            list.push(PikeThread {
+                pc: PIKE_MATCH_PC,
+                lit_off: 0,
+                caps,
+            });
+            continue;
+        }
+
+        let Some(op) = RegexOp::from_byte(bytecode[pc]) else {
+            // Malformed opcode: drop this thread (eligibility guarantees
+            // this is unreachable for compiled patterns).
+            continue;
+        };
+
+        match op {
+            RegexOp::NoOp => stack.push((pc + 1, caps)),
+
+            RegexOp::Succeed => list.push(PikeThread {
+                pc: PIKE_MATCH_PC,
+                lit_off: 0,
+                caps,
+            }),
+
+            RegexOp::StartMemory => {
+                let group = bytecode[pc + 1] as usize;
+                let mut caps = caps;
+                if group < num_regs {
+                    caps[2 * group] = Some(d as u32);
+                }
+                stack.push((pc + 2, caps));
+            }
+
+            RegexOp::StopMemory => {
+                let group = bytecode[pc + 1] as usize;
+                let mut caps = caps;
+                if group < num_regs {
+                    caps[2 * group + 1] = Some(d as u32);
+                }
+                stack.push((pc + 2, caps));
+            }
+
+            RegexOp::BegLine => {
+                if d == 0 || (d > 0 && text[d - 1] == b'\n') {
+                    stack.push((pc + 1, caps));
+                }
+            }
+            RegexOp::EndLine => {
+                if d >= text.len() || text[d] == b'\n' {
+                    stack.push((pc + 1, caps));
+                }
+            }
+            RegexOp::BegBuf => {
+                if d == 0 {
+                    stack.push((pc + 1, caps));
+                }
+            }
+            RegexOp::EndBuf => {
+                if d == text.len() {
+                    stack.push((pc + 1, caps));
+                }
+            }
+            RegexOp::AtDot => {
+                if d == point {
+                    stack.push((pc + 1, caps));
+                }
+            }
+
+            RegexOp::WordBound => {
+                if assert_word_boundary(text, d, target_multibyte, syntax) {
+                    stack.push((pc + 1, caps));
+                }
+            }
+            RegexOp::NotWordBound => {
+                if !assert_word_boundary(text, d, target_multibyte, syntax) {
+                    stack.push((pc + 1, caps));
+                }
+            }
+            RegexOp::WordBeg => {
+                if assert_word_beg(text, d, target_multibyte, syntax) {
+                    stack.push((pc + 1, caps));
+                }
+            }
+            RegexOp::WordEnd => {
+                if assert_word_end(text, d, target_multibyte, syntax) {
+                    stack.push((pc + 1, caps));
+                }
+            }
+            RegexOp::SymBeg => {
+                if assert_sym_beg(text, d, target_multibyte, syntax) {
+                    stack.push((pc + 1, caps));
+                }
+            }
+            RegexOp::SymEnd => {
+                if assert_sym_end(text, d, target_multibyte, syntax) {
+                    stack.push((pc + 1, caps));
+                }
+            }
+
+            RegexOp::Jump => {
+                let offset = extract_number(bytecode, pc + 1);
+                let target = (pc as i64 + 3 + offset as i64) as usize;
+                stack.push((target, caps));
+            }
+
+            RegexOp::OnFailureJump
+            | RegexOp::OnFailureKeepStringJump
+            | RegexOp::OnFailureJumpLoop
+            | RegexOp::OnFailureJumpNastyloop
+            | RegexOp::OnFailureJumpSmart => {
+                // SPLIT.  Fall-through (pc+3) has higher priority than the
+                // jump target — same order the backtracker explores.  Push
+                // the lower-priority jump target first so the higher-priority
+                // fall-through is popped (explored) first.  Empty-loop cycles
+                // terminate via the `seen` dedup, so the loop variants need
+                // no special infinite-loop check here.
+                let offset = extract_number(bytecode, pc + 1);
+                let fall_through = pc + 3;
+                let jump_target = (pc as i64 + 3 + offset as i64) as usize;
+                stack.push((jump_target, caps.clone()));
+                stack.push((fall_through, caps));
+            }
+
+            // Consuming ops: the thread waits here for the next input char.
+            RegexOp::Exactn
+            | RegexOp::AnyChar
+            | RegexOp::Charset
+            | RegexOp::CharsetNot
+            | RegexOp::SyntaxSpec
+            | RegexOp::NotSyntaxSpec
+            | RegexOp::SyntaxSpecSet
+            | RegexOp::CategorySpec
+            | RegexOp::NotCategorySpec => {
+                list.push(PikeThread {
+                    pc,
+                    lit_off: 0,
+                    caps,
+                });
+            }
+
+            // Ineligible ops never reach the Pike VM (`compute_pike_eligible`).
+            RegexOp::Duplicate
+            | RegexOp::SucceedN
+            | RegexOp::JumpN
+            | RegexOp::SetNumberAt => {
+                debug_assert!(false, "Pike VM reached an ineligible op {op:?}");
+            }
+        }
+    }
+}
+
+/// Anchored leftmost-greedy match of an eligible pattern starting exactly at
+/// `pos`.  Byte-exact with `re_match_internal` for `pike_eligible` patterns.
+pub(crate) fn pike_match(
+    pattern: &CompiledPattern,
+    text: &[u8],
+    pos: usize,
+    stop: usize,
+    syntax: &dyn SyntaxLookup,
+    point: usize,
+) -> Option<(usize, MatchRegisters)> {
+    debug_assert!(pattern.pike_eligible);
+    // Read opcodes from the Pike-only rewind view when present (keep-string
+    // loops de-optimized); charset bitmaps are identical in both buffers so
+    // `match_charset_at` may keep reading `pattern.buffer`.
+    let bytecode = pattern.pike_buffer.as_deref().unwrap_or(&pattern.buffer);
+    let num_regs = pattern.re_nsub + 1;
+    let translate = &pattern.translate;
+    let pattern_multibyte = pattern.multibyte;
+    let target_multibyte = pattern.target_multibyte;
+
+    let mut clist: Vec<PikeThread> = Vec::new();
+    let mut nlist: Vec<PikeThread> = Vec::new();
+    // Generation-stamped dedup set; index by pc (bytecode.len() = match pos).
+    let mut seen = vec![0u32; bytecode.len() + 1];
+    let mut generation: u32 = 0;
+
+    // (match_end, captures) of the best (highest-priority) match found so far.
+    let mut matched: Option<(usize, PikeCaps)> = None;
+
+    let mut d = pos;
+
+    generation += 1;
+    let init_caps: PikeCaps = smallvec::smallvec![None; 2 * num_regs];
+    pike_add_thread(
+        bytecode,
+        &mut clist,
+        &mut seen,
+        generation,
+        0,
+        init_caps,
+        text,
+        d,
+        point,
+        target_multibyte,
+        num_regs,
+        syntax,
+    );
+
+    loop {
+        if clist.is_empty() {
+            break;
+        }
+
+        // Byte length of the input character at `d` (used to advance the
+        // scan).  Every consuming op that matches consumes exactly this
+        // char, so all surviving threads land at `d + cur_len`.
+        let cur_len = if d < stop {
+            re_text_char(text, d, target_multibyte).map(|(_, l)| l)
+        } else {
+            None
+        };
+
+        generation += 1; // closures added to nlist evaluate assertions at d + cur_len.
+        nlist.clear();
+
+        // Index-based walk: threads are processed in strict priority order and
+        // we push successors into `nlist` while reading `clist` — and cut the
+        // tail on a match — so a by-reference iterator does not fit.
+        #[allow(clippy::needless_range_loop)]
+        for idx in 0..clist.len() {
+            let pc = clist[idx].pc;
+
+            if pc == PIKE_MATCH_PC {
+                // A match is only valid if it ends within the search region.
+                // A multibyte character can straddle `stop` (consuming ops
+                // gate only on `d >= stop`, so a thread may land at `d >
+                // stop`); the backtracker rejects such a thread at its
+                // trailing `d > stop` check, so we do too — skip this thread
+                // and keep exploring lower-priority ones.
+                if d <= stop {
+                    // Highest-priority match at this position wins;
+                    // lower-priority threads (later in the list) are cut.
+                    matched = Some((d, clist[idx].caps.clone()));
+                    break;
+                }
+                continue;
+            }
+
+            let lit_off = clist[idx].lit_off;
+            let caps = clist[idx].caps.clone();
+            let next_d_close = |nlist: &mut Vec<PikeThread>,
+                                seen: &mut [u32],
+                                next_pc: usize,
+                                next_d: usize,
+                                caps: PikeCaps| {
+                pike_add_thread(
+                    bytecode,
+                    nlist,
+                    seen,
+                    generation,
+                    next_pc,
+                    caps,
+                    text,
+                    next_d,
+                    point,
+                    target_multibyte,
+                    num_regs,
+                    syntax,
+                );
+            };
+
+            match RegexOp::from_byte(bytecode[pc]) {
+                Some(RegexOp::Exactn) => {
+                    let count = bytecode[pc + 1] as usize;
+                    let lit = &bytecode[pc + 2..pc + 2 + count];
+                    if let Some((pat_advance, text_advance)) = match_exactn_char_at(
+                        lit,
+                        lit_off,
+                        pattern_multibyte,
+                        target_multibyte,
+                        translate,
+                        text,
+                        d,
+                        stop,
+                    ) {
+                        let new_off = lit_off + pat_advance;
+                        let next_d = d + text_advance;
+                        if new_off >= count {
+                            next_d_close(&mut nlist, &mut seen, pc + 2 + count, next_d, caps);
+                        } else {
+                            // Still mid-literal: keep consuming, no closure.
+                            nlist.push(PikeThread {
+                                pc,
+                                lit_off: new_off,
+                                caps,
+                            });
+                        }
+                    }
+                }
+                Some(RegexOp::AnyChar) => {
+                    if let Some(len) = match_anychar_at(text, d, stop, target_multibyte, translate) {
+                        next_d_close(&mut nlist, &mut seen, pc + 1, d + len, caps);
+                    }
+                }
+                Some(RegexOp::Charset | RegexOp::CharsetNot) => {
+                    if let Some(len) = match_charset_at(
+                        pattern,
+                        pc,
+                        text,
+                        d,
+                        stop,
+                        target_multibyte,
+                        translate,
+                        syntax,
+                    ) {
+                        let next_pc = pc + 2 + (bytecode[pc + 1] as usize & 0x7F);
+                        next_d_close(&mut nlist, &mut seen, next_pc, d + len, caps);
+                    }
+                }
+                Some(RegexOp::SyntaxSpec) => {
+                    if let Some(len) = match_syntaxspec_at(
+                        bytecode[pc + 1],
+                        false,
+                        text,
+                        d,
+                        stop,
+                        target_multibyte,
+                        syntax,
+                    ) {
+                        next_d_close(&mut nlist, &mut seen, pc + 2, d + len, caps);
+                    }
+                }
+                Some(RegexOp::NotSyntaxSpec) => {
+                    if let Some(len) = match_syntaxspec_at(
+                        bytecode[pc + 1],
+                        true,
+                        text,
+                        d,
+                        stop,
+                        target_multibyte,
+                        syntax,
+                    ) {
+                        next_d_close(&mut nlist, &mut seen, pc + 2, d + len, caps);
+                    }
+                }
+                Some(RegexOp::SyntaxSpecSet) => {
+                    let mask = extract_number_u16(bytecode, pc + 1);
+                    if let Some(len) =
+                        match_syntaxspecset_at(mask, text, d, stop, target_multibyte, syntax)
+                    {
+                        next_d_close(&mut nlist, &mut seen, pc + 3, d + len, caps);
+                    }
+                }
+                Some(RegexOp::CategorySpec) => {
+                    if let Some(len) = match_categoryspec_at(
+                        bytecode[pc + 1],
+                        false,
+                        text,
+                        d,
+                        stop,
+                        target_multibyte,
+                        syntax,
+                    ) {
+                        next_d_close(&mut nlist, &mut seen, pc + 2, d + len, caps);
+                    }
+                }
+                Some(RegexOp::NotCategorySpec) => {
+                    if let Some(len) = match_categoryspec_at(
+                        bytecode[pc + 1],
+                        true,
+                        text,
+                        d,
+                        stop,
+                        target_multibyte,
+                        syntax,
+                    ) {
+                        next_d_close(&mut nlist, &mut seen, pc + 2, d + len, caps);
+                    }
+                }
+                _ => {
+                    // Non-consuming op in clist is impossible (closure only
+                    // adds consuming ops / matches).
+                    debug_assert!(false, "non-consuming op in Pike clist");
+                }
+            }
+        }
+
+        std::mem::swap(&mut clist, &mut nlist);
+        match cur_len {
+            Some(len) if !clist.is_empty() => d += len,
+            _ => break,
+        }
+    }
+
+    let (end, caps) = matched?;
+    let mut regs = MatchRegisters::new(num_regs);
+    regs.start[0] = pos as i64;
+    regs.end[0] = end as i64;
+    for g in 1..num_regs {
+        regs.start[g] = caps
+            .get(2 * g)
+            .copied()
+            .flatten()
+            .map(|v| v as i64)
+            .unwrap_or(-1);
+        regs.end[g] = caps
+            .get(2 * g + 1)
+            .copied()
+            .flatten()
+            .map(|v| v as i64)
+            .unwrap_or(-1);
+    }
+    Some((end, regs))
 }
 
 /// GNU `CHECK_INFINITE_LOOP` (regex-emacs.c:1049-1069): walk down the

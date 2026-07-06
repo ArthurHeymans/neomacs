@@ -728,3 +728,592 @@ fn posix_blank_class_is_space_tab_only_independent_of_syntax() {
         );
     }
 }
+
+// ===========================================================================
+// Pike VM (non-backtracking fast path) — differential fuzzer + unit tests.
+//
+// The Pike VM MUST be byte-exact with the backtracker for every eligible
+// pattern.  These tests drive that: the differential fuzzer generates random
+// elisp-subset patterns + random buffers and asserts the two engines return
+// identical match-data (match/no-match AND every capture-group start/end)
+// for anchored `re_match` and forward/backward `re_search`.
+// ===========================================================================
+
+/// Tiny deterministic xorshift RNG so fuzz failures reproduce from a seed.
+struct FuzzRng(u64);
+
+impl FuzzRng {
+    fn new(seed: u64) -> Self {
+        FuzzRng(seed ^ 0x9E3779B97F4A7C15)
+    }
+    fn next_u64(&mut self) -> u64 {
+        let mut x = self.0;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.0 = x;
+        x.wrapping_mul(0x2545F4914F6CDD1D)
+    }
+    fn below(&mut self, n: usize) -> usize {
+        if n == 0 {
+            0
+        } else {
+            (self.next_u64() % n as u64) as usize
+        }
+    }
+    /// True with probability `num/den`.
+    fn chance(&mut self, num: u64, den: u64) -> bool {
+        self.next_u64() % den < num
+    }
+    fn pick_char(&mut self, xs: &[char]) -> char {
+        xs[self.below(xs.len())]
+    }
+    fn pick_str<'a>(&mut self, xs: &[&'a str]) -> &'a str {
+        xs[self.below(xs.len())]
+    }
+}
+
+/// Normalised match result: `(match_start, group_starts, group_ends)` or
+/// `None`.  Comparing these across engines is the byte-exactness assertion.
+type FuzzResult = Option<(usize, Vec<i64>, Vec<i64>)>;
+
+fn norm(r: Option<(usize, MatchRegisters)>) -> FuzzResult {
+    r.map(|(pos, regs)| (pos, regs.start.clone(), regs.end.clone()))
+}
+
+/// Run the two engines for an anchored match and a forward/backward search;
+/// return `(label, backtracker_result, pike_result)` for the first that
+/// diverges, or `None` if all agree.
+fn diff_engines(
+    cp: &CompiledPattern,
+    text: &[u8],
+    start: usize,
+    point: usize,
+) -> Option<(&'static str, FuzzResult, FuzzResult)> {
+    let syn = DefaultSyntaxLookup;
+    let len = text.len();
+
+    // Run the forced backtracker; if it aborted on the fail-stack limit
+    // (catastrophic backtracking) it returns a spurious `None`, so the
+    // comparison is meaningless — signal "skip".  The Pike VM never
+    // overflows (it is linear).
+    macro_rules! compare {
+        ($label:expr, $call:expr) => {{
+            let _ = take_matcher_overflow();
+            let bt = norm(with_backtracker_forced(|| $call));
+            if take_matcher_overflow() {
+                return None; // backtracker overflowed — skip this comparison
+            }
+            let pk = norm($call);
+            if bt != pk {
+                return Some(($label, bt, pk));
+            }
+        }};
+    }
+
+    // Anchored (`re_match` / looking-at) at `start`.
+    compare!("re_match", re_match(cp, text, start, len, &syn, point));
+    // Forward search from `start`.
+    let range = (len - start) as isize;
+    compare!("re_search_fwd", re_search(cp, text, start, range, &syn, point));
+    // Backward search from `start` back to 0.
+    let brange = -(start as isize);
+    compare!("re_search_bwd", re_search(cp, text, start, brange, &syn, point));
+
+    None
+}
+
+/// True if this (pattern, case_fold, text, start, point) diverges — used by
+/// the shrinker.
+fn fuzz_diverges(pat: &str, case_fold: bool, text: &[u8], start: usize, point: usize) -> bool {
+    match regex_compile(pat, false, case_fold) {
+        Ok(cp) => {
+            if !cp.pike_eligible {
+                return false;
+            }
+            let start = start.min(text.len());
+            let point = point.min(text.len());
+            diff_engines(&cp, text, start, point).is_some()
+        }
+        Err(_) => false,
+    }
+}
+
+// ---- random pattern generation (eligible subset only) --------------------
+
+const FUZZ_LITERALS: &[char] = &[
+    'a', 'b', 'c', 'A', 'Z', '0', '1', ' ', '_', '-', '!', ':', '\n', 'é', '中', '\u{2018}',
+    '\u{2019}',
+];
+const FUZZ_QUANTIFIERS: &[&str] = &["*", "+", "?", "*?", "+?", "??"];
+const FUZZ_SYNTAX: &[&str] = &["\\w", "\\W", "\\sw", "\\s_", "\\s-", "\\s.", "\\Sw", "\\S_"];
+const FUZZ_ANCHORS: &[&str] = &["^", "$", "\\`", "\\'"];
+const FUZZ_BOUNDARIES: &[&str] = &["\\b", "\\B", "\\<", "\\>", "\\_<", "\\_>"];
+const FUZZ_POSIX: &[&str] = &[
+    "[:alpha:]", "[:digit:]", "[:alnum:]", "[:space:]", "[:upper:]", "[:punct:]", "[:word:]",
+];
+
+fn gen_literal(rng: &mut FuzzRng, out: &mut String) {
+    let c = rng.pick_char(FUZZ_LITERALS);
+    // Escape regex metacharacters so they stay literal.
+    if "\\.*+?[]^$".contains(c) {
+        out.push('\\');
+    }
+    out.push(c);
+}
+
+fn gen_charclass(rng: &mut FuzzRng, out: &mut String) {
+    out.push('[');
+    if rng.chance(1, 3) {
+        out.push('^');
+    }
+    let items = 1 + rng.below(3);
+    for _ in 0..items {
+        match rng.below(4) {
+            0 => {
+                // range x-y (keep ordered, ASCII letters/digits)
+                let bases = [('a', 'z'), ('A', 'Z'), ('0', '9')];
+                let (lo, hi) = bases[rng.below(bases.len())];
+                let a = (lo as u8) + rng.below((hi as u8 - lo as u8) as usize + 1) as u8;
+                let b = a + rng.below((hi as u8 - a) as usize + 1) as u8;
+                out.push(a as char);
+                out.push('-');
+                out.push(b as char);
+            }
+            1 => out.push_str(rng.pick_str(FUZZ_POSIX)),
+            _ => {
+                // plain class char (avoid ] \ [ - ^ to keep the class valid)
+                let safe = ['a', 'q', 'Z', '3', '_', '中', 'é'];
+                out.push(rng.pick_char(&safe));
+            }
+        }
+    }
+    out.push(']');
+}
+
+/// Generate a quantifiable atom.  Returns true if the atom may take a
+/// postfix quantifier.
+///
+/// Two flags keep the forced-backtracker ORACLE tractable (the Pike VM is
+/// linear regardless; the constraint is only about the oracle used to check
+/// it), by never generating a quantifier over a body that can iterate with
+/// zero progress — the sole source of *exponential* backtracking:
+///   * `allow_quant` — FALSE inside a quantified atom, so quantifiers never
+///     nest (`\(a*\)*`).
+///   * `must_consume` — TRUE inside a quantified atom, so its body cannot be
+///     nullable: zero-width atoms (anchors / boundaries) are excluded, so
+///     every arm consumes ≥1 char (`\(?:A[中]\|\<\)*` is never generated).
+///
+/// Everything else is still covered: single quantifiers, non-nullable
+/// `\(?:\w\|\s_\)+`, the O(n^2) `a*a*b`, alternation, captures, anchors and
+/// boundaries at non-quantified positions, case-fold and multibyte.
+/// (Nullable non-capturing loops are covered separately by targeted unit
+/// tests on short input where the backtracker stays fast.)
+fn gen_atom(
+    rng: &mut FuzzRng,
+    out: &mut String,
+    depth: u32,
+    allow_quant: bool,
+    must_consume: bool,
+) -> bool {
+    let choices = if depth == 0 { 5 } else { 8 };
+    // When the atom must consume, remap the two zero-width choices (4, 5)
+    // onto consuming atoms.
+    let pick = match rng.below(choices) {
+        4 | 5 if must_consume => rng.below(4),
+        n => n,
+    };
+    match pick {
+        0 => {
+            gen_literal(rng, out);
+            true
+        }
+        1 => {
+            out.push('.');
+            true
+        }
+        2 => {
+            gen_charclass(rng, out);
+            true
+        }
+        3 => {
+            out.push_str(rng.pick_str(FUZZ_SYNTAX));
+            true
+        }
+        4 => {
+            out.push_str(rng.pick_str(FUZZ_BOUNDARIES));
+            false
+        }
+        5 => {
+            out.push_str(rng.pick_str(FUZZ_ANCHORS));
+            false
+        }
+        6 => {
+            // shy group
+            out.push_str("\\(?:");
+            gen_regex(rng, out, depth - 1, allow_quant, must_consume);
+            out.push_str("\\)");
+            true
+        }
+        _ => {
+            // capturing group
+            out.push_str("\\(");
+            gen_regex(rng, out, depth - 1, allow_quant, must_consume);
+            out.push_str("\\)");
+            true
+        }
+    }
+}
+
+fn gen_term(rng: &mut FuzzRng, out: &mut String, depth: u32, allow_quant: bool, must_consume: bool) {
+    let will_quant = allow_quant && rng.chance(1, 2);
+    // A quantified atom's body must not quantify (no nesting) and must
+    // consume (no nullable loop body).
+    let quantifiable = gen_atom(
+        rng,
+        out,
+        depth,
+        allow_quant && !will_quant,
+        must_consume || will_quant,
+    );
+    if will_quant && quantifiable {
+        out.push_str(rng.pick_str(FUZZ_QUANTIFIERS));
+    }
+}
+
+fn gen_concat(
+    rng: &mut FuzzRng,
+    out: &mut String,
+    depth: u32,
+    allow_quant: bool,
+    must_consume: bool,
+) {
+    let terms = 1 + rng.below(4);
+    for _ in 0..terms {
+        gen_term(rng, out, depth, allow_quant, must_consume);
+    }
+}
+
+fn gen_regex(
+    rng: &mut FuzzRng,
+    out: &mut String,
+    depth: u32,
+    allow_quant: bool,
+    must_consume: bool,
+) {
+    let arms = 1 + rng.below(3);
+    for i in 0..arms {
+        if i > 0 {
+            out.push_str("\\|");
+        }
+        gen_concat(rng, out, depth, allow_quant, must_consume);
+    }
+}
+
+// ---- random buffer generation --------------------------------------------
+
+fn gen_text(rng: &mut FuzzRng, max_len: usize) -> Vec<u8> {
+    let len = rng.below(max_len);
+    let mut v = Vec::with_capacity(len);
+    for _ in 0..len {
+        match rng.below(10) {
+            0 => v.push(b'\n'),
+            1 => v.push(b' '),
+            2 => v.push(b'_'),
+            3 => v.push(b'-'),
+            4 => v.push(b"abcABZ019:!"[rng.below(11)]),
+            5 => v.extend_from_slice("é".as_bytes()),
+            6 => v.extend_from_slice("中".as_bytes()),
+            7 => v.extend_from_slice("\u{2018}".as_bytes()),
+            8 => v.push(0x80 + rng.below(0x80) as u8), // raw high byte
+            _ => v.push(b'a' + rng.below(26) as u8),
+        }
+    }
+    v
+}
+
+/// Greedily shrink a failing case for a readable report.
+fn shrink(
+    pat: &str,
+    case_fold: bool,
+    text: &[u8],
+    start: usize,
+    point: usize,
+) -> (String, Vec<u8>, usize, usize) {
+    let mut pat = pat.to_string();
+    let mut text = text.to_vec();
+    let mut start = start.min(text.len());
+    let mut point = point.min(text.len());
+
+    // Bound the total number of `fuzz_diverges` probes (each recompiles the
+    // pattern) so a large case can't make shrinking run for minutes.
+    let mut budget: u32 = 3000;
+    macro_rules! probe {
+        ($pat:expr, $text:expr, $s:expr, $p:expr) => {{
+            if budget == 0 {
+                false
+            } else {
+                budget -= 1;
+                fuzz_diverges($pat, case_fold, $text, $s, $p)
+            }
+        }};
+    }
+
+    // Shrink text (drop bytes while still diverging, keeping valid indices).
+    let mut changed = true;
+    while changed && budget > 0 {
+        changed = false;
+        let mut i = 0;
+        while i < text.len() {
+            let mut cand = text.clone();
+            cand.remove(i);
+            let s = start.min(cand.len());
+            let p = point.min(cand.len());
+            if probe!(&pat, &cand, s, p) {
+                text = cand;
+                start = s;
+                point = p;
+                changed = true;
+            } else {
+                i += 1;
+            }
+        }
+    }
+    // Shrink start / point toward 0.
+    while start > 0 && probe!(&pat, &text, start - 1, point) {
+        start -= 1;
+    }
+    while point > 0 && probe!(&pat, &text, start, point - 1) {
+        point -= 1;
+    }
+    // Shrink pattern by trying to drop single chars (best-effort; may break
+    // group balance, in which case the divergence check fails and we skip).
+    changed = true;
+    while changed && budget > 0 {
+        changed = false;
+        let chars: Vec<char> = pat.chars().collect();
+        for i in 0..chars.len() {
+            let cand: String = chars
+                .iter()
+                .enumerate()
+                .filter(|(j, _)| *j != i)
+                .map(|(_, c)| *c)
+                .collect();
+            if probe!(&cand, &text, start, point) {
+                pat = cand;
+                changed = true;
+                break;
+            }
+        }
+    }
+    (pat, text, start, point)
+}
+
+fn run_fuzz(cases: usize, base_seed: u64, text_max: usize) {
+    let mut eligible = 0usize;
+    let mut compiled = 0usize;
+    for i in 0..cases {
+        let seed = base_seed.wrapping_add(i as u64);
+        let mut rng = FuzzRng::new(seed);
+        let case_fold = rng.chance(1, 3);
+        let mut pat = String::new();
+        let depth = 2 + rng.below(2) as u32;
+        gen_regex(&mut rng, &mut pat, depth, true, false);
+
+        let cp = match regex_compile(&pat, false, case_fold) {
+            Ok(cp) => cp,
+            Err(_) => continue, // invalid random pattern; skip
+        };
+        compiled += 1;
+        if !cp.pike_eligible {
+            continue;
+        }
+        eligible += 1;
+
+        let text = gen_text(&mut rng, text_max);
+        let start = rng.below(text.len() + 1);
+        let point = rng.below(text.len() + 1);
+
+        if let Some((label, bt, pk)) = diff_engines(&cp, &text, start, point) {
+            // Print the RAW case first so it survives even if shrinking is slow.
+            eprintln!(
+                "PIKE/BACKTRACKER DIVERGENCE ({label}) at seed {seed}: pattern={pat:?} \
+                 case_fold={case_fold} text={text:?} start={start} point={point} bt={bt:?} pike={pk:?}"
+            );
+            let (spat, stext, sstart, spoint) = shrink(&pat, case_fold, &text, start, point);
+            panic!(
+                "PIKE/BACKTRACKER DIVERGENCE ({label}) at seed {seed}:\n\
+                 pattern   = {pat:?}  (case_fold={case_fold})\n\
+                 text      = {text:?}\n\
+                 start={start} point={point}\n\
+                 backtrack = {bt:?}\n\
+                 pike      = {pk:?}\n\
+                 --- shrunk ---\n\
+                 pattern   = {spat:?}\n\
+                 text      = {stext:?}\n\
+                 start={sstart} point={spoint}"
+            );
+        }
+    }
+    // Sanity: the generator should still exercise the Pike path on a large
+    // fraction of cases (many random patterns are legitimately ineligible —
+    // `??`, `\{n,m\}`, nullable non-greedy loops, capture-in-nullable-loop).
+    assert!(
+        eligible * 4 > compiled,
+        "fuzzer should exercise the Pike path on many cases (eligible={eligible} compiled={compiled})"
+    );
+    assert!(eligible > cases / 8, "too few eligible cases: {eligible}/{cases}");
+}
+
+/// Fast differential fuzz that runs on every `cargo test` — a few thousand
+/// cases is enough to catch gross divergences quickly.
+#[test]
+fn pike_fuzz_smoke() {
+    crate::test_utils::init_test_tracing();
+    // Short texts keep the forced-backtracker oracle fast (catastrophic
+    // patterns stay bounded), so the smoke run finishes in seconds.
+    run_fuzz(4_000, 0x1234_5678, 16);
+}
+
+/// The full 100k+ differential fuzz — the primary correctness gate.  Ignored
+/// by default (slow); run explicitly with `--ignored`.
+#[test]
+#[ignore = "long-running differential fuzz; run explicitly"]
+fn pike_fuzz_differential() {
+    crate::test_utils::init_test_tracing();
+    // Two independent seed streams for broader coverage (>>100k cases).
+    run_fuzz(200_000, 0xF00D_BEEF, 28);
+    run_fuzz(120_000, 0x0BAD_C0DE, 20);
+}
+
+// ---- targeted unit tests: Pike vs backtracker byte-exactness -------------
+
+/// Assert both engines agree on a concrete (pattern, text) case.
+fn assert_engines_agree(pat: &str, case_fold: bool, text: &[u8]) {
+    let cp = regex_compile(pat, false, case_fold).expect("compile");
+    assert!(cp.pike_eligible, "pattern {pat:?} should be pike-eligible");
+    for start in 0..=text.len() {
+        if let Some((label, bt, pk)) = diff_engines(&cp, text, start, start) {
+            panic!("{label} divergence for {pat:?} @ {start}: bt={bt:?} pike={pk:?}");
+        }
+    }
+}
+
+#[test]
+fn pike_greedy_and_captures() {
+    // NB: `a??` (non-greedy optional) is intentionally Pike-INELIGIBLE (its
+    // keep-string jump can't be modelled), so it is not asserted here.
+    for p in [
+        "a*", "a+", "a?", "a*?", "a+?", "\\(a*\\)\\(a*\\)", "\\(a\\|ab\\)\\(c\\|bcd\\)",
+        "\\(?:ab\\)+", "a.*b", "a.*?b", "\\(a+\\)+", "\\(.*\\)\\(.*\\)",
+    ] {
+        assert_engines_agree(p, false, b"aaabcaabcd");
+        assert_engines_agree(p, false, b"");
+        assert_engines_agree(p, false, b"abababab");
+    }
+}
+
+#[test]
+fn pike_alternation_priority() {
+    // Leftmost-greedy: left arm wins when both can match.
+    assert_engines_agree("\\(a\\|ab\\)", false, b"ab");
+    assert_engines_agree("\\(ab\\|a\\)", false, b"ab");
+    assert_engines_agree("a\\|ab\\|abc", false, b"abc");
+}
+
+#[test]
+fn pike_anchors_boundaries() {
+    for p in ["^ab", "ab$", "\\<ab\\>", "\\_<a_b\\_>", "\\bword\\b", "\\`start", "end\\'"] {
+        assert_engines_agree(p, false, b"ab word a_b start end\nab");
+        assert_engines_agree(p, false, b"xx ab\nword\n");
+    }
+}
+
+#[test]
+fn pike_charsets_syntax_multibyte_casefold() {
+    assert_engines_agree("[a-z]+", false, b"Hello World");
+    assert_engines_agree("[^a-z ]+", false, b"Hello World 123");
+    assert_engines_agree("[[:alpha:]]+", false, b"abc123 def");
+    assert_engines_agree("\\w+", false, b"foo_bar baz");
+    assert_engines_agree("\\(?:\\w\\|\\s_\\)+", false, b"a-b_c d");
+    assert_engines_agree("[A-Z]+", true, b"hello WORLD"); // case fold
+    assert_engines_agree("\u{2018}\\(\\w+\\)\u{2019}", false, "\u{2018}sym\u{2019}".as_bytes());
+    assert_engines_agree("é+", false, "café ééé".as_bytes());
+}
+
+/// `a*a*b` — the classic catastrophic-backtracking pattern — must be handled
+/// by the Pike VM in LINEAR time (was cubic in the backtracker).  This test
+/// would blow up / time out if it ever fell back to the backtracker.
+#[test]
+fn pike_no_catastrophic_backtracking() {
+    let cp = regex_compile("a*a*b", false, false).expect("compile");
+    assert!(cp.pike_eligible, "a*a*b must be pike-eligible");
+
+    // Linear check: a growing run of 'a' with no trailing 'b' fails FAST.
+    // The backtracker is O(n^3) here; the Pike VM is O(n*m).  A generous
+    // wall-clock ceiling that only the linear engine can meet.
+    let syn = DefaultSyntaxLookup;
+    let n = 20_000usize;
+    let mut text = vec![b'a'; n];
+    text.push(b'!');
+    let t0 = std::time::Instant::now();
+    assert!(re_match(&cp, &text, 0, text.len(), &syn, 0).is_none());
+    let elapsed = t0.elapsed();
+    assert!(
+        elapsed < std::time::Duration::from_secs(2),
+        "a*a*b over {n} a's took {elapsed:?} — not linear (Pike path not taken?)"
+    );
+
+    // And it still finds the real match when a 'b' is present.
+    let mut text2 = vec![b'a'; 500];
+    text2.push(b'b');
+    let r = re_match(&cp, &text2, 0, text2.len(), &syn, 0);
+    assert_eq!(r.map(|(e, _)| e), Some(501));
+}
+
+
+
+
+/// Nullable NON-capturing loops (empty-matchable body, no capture in the
+/// cycle) stay Pike-eligible — the `seen`-set handles termination and there
+/// are no captures to lose.  These are excluded from the fuzzer (the
+/// backtracker oracle is catastrophically slow on them) so pin them here on
+/// short input where the backtracker stays fast.  Any capture INSIDE the
+/// loop makes the pattern ineligible (see `has_capturing_epsilon_cycle`).
+#[test]
+fn pike_nullable_noncapturing_loops() {
+    for p in [
+        "\\(?:a\\|\\)*b",
+        "\\(?:\\<\\)*a",
+        "\\(?:x*\\)*y",   // inner star, outer star, shy — nullable, no capture
+        "\\(?:\\b\\)*.",
+        "\\(?:a\\|b\\|\\)+c",
+    ] {
+        let cp = regex_compile(p, false, false).expect("compile");
+        // These are eligible ONLY because the epsilon cycle carries no
+        // capture group; assert that so the test documents the boundary.
+        assert!(cp.pike_eligible, "{p:?} should be pike-eligible (no capture in cycle)");
+        // Keep texts SHORT (<=3 chars): these nullable-loop patterns blow up
+        // exponentially in the forced-backtracker oracle on longer input.
+        for text in [&b""[..], b"a", b"b", b"ab", b"ba", b"xy", b"c", b"axy"] {
+            if let Some((label, bt, pk)) = diff_engines(&cp, text, 0, 0) {
+                panic!("{label} divergence for {p:?} on {text:?}: bt={bt:?} pike={pk:?}");
+            }
+        }
+    }
+}
+
+/// The dual: a capture INSIDE a nullable loop is Pike-INELIGIBLE (GNU's
+/// empty-loop capture semantics), so it must fall back to the backtracker.
+#[test]
+fn pike_capture_in_nullable_loop_is_ineligible() {
+    for p in ["\\(a*\\)*", "\\(a\\|\\)*", "\\(?:\\(x*\\)\\)*", "\\(.??\\)+"] {
+        let cp = regex_compile(p, false, false).expect("compile");
+        assert!(
+            !cp.pike_eligible,
+            "{p:?} has a capture in a nullable loop; must be Pike-ineligible"
+        );
+    }
+}
+
+
