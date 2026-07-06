@@ -7394,6 +7394,133 @@ fn layout_frame_rust_preserves_logical_cursor_when_window_cursor_is_nil() {
     assert_eq!(logical_cursor.col, point.col);
 }
 
+/// Lay out "abcXYZdef" with a `display` property replacing "XYZ" and point
+/// inside the replacement, at the given default-face `:height`, then return
+/// `(cursor.x, c.x + c.width, cursor.row, c.row)` where `c` is the glyph point
+/// for buffer position 3 (the "c" immediately preceding the replacement slot).
+///
+/// Used by the font-size sweep below to prove the display-replacement cursor's
+/// x stays byte-identical to the preceding glyph's already-rounded right edge
+/// for EVERY font size (no ±1px double-rounding drift).
+fn display_replacement_cursor_probe_at_height(height: i64) -> (i64, i64, i64, i64) {
+    let mut eval = Context::new();
+    let buf_id = eval
+        .buffer_manager()
+        .current_buffer()
+        .expect("current buffer")
+        .id();
+    let text = "abcXYZdef";
+    let repl_byte_start = text.find("XYZ").expect("replacement start");
+    let repl_byte_end = repl_byte_start + "XYZ".len();
+    let point_pos = repl_byte_start + 2;
+    {
+        let buf = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buf.insert(text);
+        buf.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(point_pos - 1));
+        buf.put_text_property(
+            repl_byte_start,
+            repl_byte_end,
+            Value::symbol("display"),
+            Value::string("R"),
+        );
+    }
+
+    let frame_id = eval
+        .frame_manager_mut()
+        .create_frame("layout-display-cursor-sweep", 800, 400, buf_id);
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.set_window_system(Some(Value::symbol("neo")));
+        frame.install_gnu_gui_default_parameters();
+    }
+    assert!(eval.frame_manager_mut().select_frame(frame_id));
+    let results = eval.eval_str_each(&format!(
+        "(internal-set-lisp-face-attribute 'default :height {height} (selected-frame))"
+    ));
+    assert!(
+        results.iter().all(Result::is_ok),
+        "height {height}: default face height should realize, got {results:?}"
+    );
+
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        let window = frame
+            .find_window_mut(selected_window)
+            .expect("selected window");
+        if let neovm_core::window::Window::Leaf {
+            window_start,
+            point,
+            ..
+        } = window
+        {
+            *window_start = LispCharPos1::ONE;
+            *point = LispCharPos1::from_one_based_usize(point_pos);
+        }
+    }
+
+    let mut engine = LayoutEngine::new();
+    engine.layout_frame_rust(&mut eval, frame_id);
+
+    let frame = eval.frame_manager().get(frame_id).expect("frame");
+    let snapshot = frame
+        .window_display_snapshot(selected_window)
+        .expect("display snapshot");
+    let cursor = snapshot
+        .phys_cursor
+        .as_ref()
+        .unwrap_or_else(|| panic!("height {height}: cursor"));
+    let c = snapshot
+        .point_for_buffer_pos(LispCharPos1::from_one_based_usize(3))
+        .unwrap_or_else(|| panic!("height {height}: c"));
+    (cursor.x, c.x + c.width, cursor.row, c.row)
+}
+
+/// The display-replacement cursor's x is placed by deriving from the preceding
+/// glyph's already-rounded x-position (like GNU `set_cursor_from_row` reading
+/// the glyph matrix), NOT by independently rounding a sub-pixel accumulation.
+/// Sweeping the font size exercises every sub-pixel fraction: a single-round
+/// cursor `round(x+w)` diverges ±1px from the glyph edge `round(x)+round(w)`
+/// for ~27% of sizes. This asserts zero drift across the whole sweep.
+#[test]
+fn layout_frame_rust_display_replacement_cursor_aligns_glyph_edge_across_font_sizes() {
+    // Representative sweep incl. the sizes proven to break under the old
+    // single-round cursor placement (44/51/59/74/96) plus a passing anchor.
+    let heights: Vec<i64> = (40..=300).step_by(1).collect();
+    for known in [44, 51, 59, 74, 96, 100] {
+        assert!(heights.contains(&known));
+    }
+    let mut mismatches: Vec<(i64, i64, i64)> = Vec::new();
+    let mut row_mismatches: Vec<(i64, i64, i64)> = Vec::new();
+    for &height in &heights {
+        let (cursor_x, glyph_edge, cursor_row, c_row) =
+            display_replacement_cursor_probe_at_height(height);
+        if cursor_x != glyph_edge {
+            mismatches.push((height, cursor_x, glyph_edge));
+        }
+        if cursor_row != c_row {
+            row_mismatches.push((height, cursor_row, c_row));
+        }
+    }
+    assert!(
+        mismatches.is_empty(),
+        "cursor.x must equal the preceding glyph edge (c.x + c.width) for every \
+         font size; {} of {} sizes drifted (height, cursor.x, glyph_edge): {:?}",
+        mismatches.len(),
+        heights.len(),
+        &mismatches[..mismatches.len().min(12)],
+    );
+    assert!(
+        row_mismatches.is_empty(),
+        "cursor.row must equal c.row for every font size; drift: {:?}",
+        &row_mismatches[..row_mismatches.len().min(12)],
+    );
+}
+
 #[test]
 fn layout_frame_rust_captures_cursor_at_display_replacement_slot_without_rescan() {
     let mut eval = Context::new();
