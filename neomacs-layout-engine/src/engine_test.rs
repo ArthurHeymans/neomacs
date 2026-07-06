@@ -2470,6 +2470,66 @@ fn phase1_split_window_frame_phys_cursor_stays_on_selected_window() {
     );
 }
 
+/// Phase 1 REGRESSION (reverse window order) — same clobber hazard as
+/// [`phase1_split_window_frame_phys_cursor_stays_on_selected_window`] but with the
+/// RIGHT window selected, so the non-selected window renders in the opposite
+/// order. The frame phys_cursor must still end up owned by the selected (right)
+/// window regardless of which window the render loop visits last.
+#[test]
+fn phase1_split_window_frame_phys_cursor_stays_on_selected_window_reverse_order() {
+    let text = "(defun f (a b) (+ a b))\n".repeat(40);
+    let (mut eval, frame_id, buf_id, selected_window) = incr_editing_frame(&text, 800, 600);
+    let right_window = eval
+        .frame_manager_mut()
+        .split_window(
+            frame_id,
+            selected_window,
+            neovm_core::window::SplitDirection::Horizontal,
+            buf_id,
+            None,
+            neovm_core::window::SplitPlacement::AfterTarget,
+        )
+        .expect("split window onto the same buffer");
+    // Select the RIGHT window: now the LEFT (original) window is non-selected and
+    // renders in the opposite order relative to the selected one.
+    assert!(
+        eval.frame_manager_mut()
+            .get_mut(frame_id)
+            .expect("frame")
+            .select_window(right_window),
+        "select the right window",
+    );
+
+    let mut engine = LayoutEngine::new();
+    let m = measure_incremental_relayout(&mut engine, &mut eval, frame_id, |eval| {
+        let buffer = eval.buffer_manager_mut().get_mut(buf_id).expect("buffer");
+        buffer.goto_emacs_byte_pos(neovm_core::buffer::EmacsBytePos::new(10));
+    });
+    assert!(
+        m.stats.cursor_only_windows >= 2,
+        "both same-buffer windows should take the cursor-only fast path (got {:?})",
+        m.stats
+    );
+
+    let phys = engine
+        .last_frame_display_state
+        .as_ref()
+        .expect("frame display state")
+        .phys_cursor
+        .clone()
+        .expect("frame phys cursor present");
+    assert_eq!(
+        phys.window_id.get(),
+        right_window.0 as i64,
+        "frame phys_cursor must belong to the SELECTED (right) window (got {:?}, \
+         selected {:?}); style={:?}",
+        phys.window_id.get(),
+        right_window.0,
+        phys.style,
+    );
+    assert_eq!(phys.style, CursorStyle::FilledBox);
+}
+
 /// Phase 1 — a `put-text-property` (face/display/invisible) co-moving with the
 /// cursor MUST bail: the props tick moved (the soundness hazard of spec §3, where
 /// a non-fontify text-property write would otherwise be invisible to redisplay).

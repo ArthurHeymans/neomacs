@@ -16,8 +16,6 @@ use crate::display_buffer_window_geometry::{BufferWindowGeometry, BufferWindowLo
 use crate::display_buffer_window_source::BufferWindowSource;
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
 use crate::display_face_id::FrameFaceIdAllocator;
-use crate::display_output_install_request::OutputFrameArtifactInstallRequest;
-use crate::display_output_row_request::OutputRowLifecycleRequest;
 use crate::display_row_append_context::DisplayRowAppendSurface;
 use crate::display_row_face_state::{DisplayRowActiveFaceState, DisplayRowMeasurementPolicy};
 use crate::display_row_geometry::{DisplayRowLimit, DisplayRowVisibilityLimit};
@@ -32,8 +30,8 @@ use crate::incremental_layout::{CursorOnlyReplay, ScrollReplay};
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, RustBufferAccess};
 use crate::types::WindowParams;
 use crate::window_output::{
-    TextWindowOutputTarget, TextWindowRedisplayPositions, WindowOutputEmitter,
-    record_text_window_display_range, render_window_chrome_rows,
+    TextWindowCursor, TextWindowOutputTarget, TextWindowRedisplayPositions, WindowOutputEmitter,
+    publish_text_window_cursor, record_text_window_display_range, render_window_chrome_rows,
 };
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
@@ -41,7 +39,7 @@ use neomacs_display_protocol::frame_glyphs::{
 use neomacs_display_protocol::glyph_matrix::{FaceFillItem, GlyphArea};
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::buffer::BufferId;
-use neovm_core::window::{FrameId, WindowCursorKind, WindowCursorSnapshot, WindowId};
+use neovm_core::window::{FrameId, WindowId};
 
 pub(crate) struct BufferSourceOutputSetup {
     begin_request: TextWindowBeginRequest,
@@ -98,10 +96,58 @@ pub(crate) struct BufferSourceDefaultFacePlan {
     measurement_policy: DisplayRowMeasurementPolicy,
 }
 
+/// Publish a fast-path (cursor-only / scroll / edit) window's re-decorated cursor
+/// through the SAME production machinery a full rebuild uses
+/// ([`publish_text_window_cursor`] → [`TextWindowCursorPublication`]), so the
+/// frame's single overwritable phys-cursor slot is stored ONLY for the selected
+/// window while a non-selected window gets its per-window (hollow) cursor
+/// artifact instead — never the reverse.
+///
+/// The frame phys_cursor is one slot per frame; installing it unconditionally for
+/// every fast-path window let a non-selected window clobber the selected window's
+/// caret (split-window `C-x 3` + `C-p`: the selected window's cursor vanished).
+/// Routing through the shared publication keeps the fast paths from drifting from
+/// the full-rebuild `selected` gating in `window_output.rs`.
+///
+/// The column has already been resolved on the installed grid rows, so
+/// `glyph_row_resolved` is set to skip a redundant re-resolve.
+fn publish_fast_path_cursor(
+    output: &mut TextWindowOutputTarget<'_>,
+    output_emitter: &mut WindowOutputEmitter,
+    cursor: PhysCursor,
+    selected: bool,
+    text_area_left: f32,
+    window_top: f32,
+) {
+    publish_text_window_cursor(
+        output.reborrow(),
+        output_emitter,
+        TextWindowCursor {
+            selected,
+            window_id: cursor.window_id.get(),
+            charpos: cursor.charpos,
+            slot_id: cursor.slot_id,
+            x: cursor.x,
+            y: cursor.y,
+            width: cursor.width,
+            height: cursor.height,
+            ascent: cursor.ascent,
+            style: cursor.style,
+            color: cursor.color,
+            cursor_fg: cursor.cursor_fg,
+            text_area_left,
+            window_top,
+            glyph_row_resolved: true,
+        },
+    );
+}
+
 /// Re-decorate a window's cursor for the current point on an already-installed
 /// grid row (Phase 2 scroll fast path). Reads the row geometry from the grid,
 /// resolves the visual column, and writes the cursor onto the matrix row + the
-/// window snapshot + the frame phys-cursor artifact. Mirrors the Phase 1
+/// window snapshot, then publishes the cursor via the shared selected-gated
+/// machinery (see [`publish_fast_path_cursor`]) so a non-selected window's cursor
+/// never clobbers the selected window's frame phys-cursor. Mirrors the Phase 1
 /// cursor-only branch but sources the row from the grid (the cursor may land in a
 /// reused or a newly-exposed row).
 #[allow(clippy::too_many_arguments)]
@@ -112,6 +158,7 @@ fn decorate_window_cursor(
     cursor_row: usize,
     point: usize,
     style: CursorStyle,
+    selected: bool,
     text_area_left: f32,
     window_top: f32,
     char_w: f32,
@@ -158,32 +205,14 @@ fn decorate_window_cursor(
         placement.apply_to(&mut cursor);
     }
     cursor.x = text_area_left + cursor.col as f32 * char_w;
-    let live = WindowCursorSnapshot {
-        kind: match cursor.style {
-            CursorStyle::FilledBox => WindowCursorKind::FilledBox,
-            CursorStyle::Hollow => WindowCursorKind::HollowBox,
-            CursorStyle::Bar(_) => WindowCursorKind::Bar,
-            CursorStyle::Hbar(_) => WindowCursorKind::Hbar,
-        },
-        x: (cursor.x - text_area_left).round() as i64,
-        y: (cursor.y - window_top).round() as i64,
-        width: cursor.width.round() as i64,
-        height: cursor.height.round() as i64,
-        ascent: cursor.ascent.round() as i64,
-        row: cursor.row as i64,
-        col: i64::from(cursor.col),
-    };
-    output_emitter.set_phys_cursor(live);
-    output
-        .builder()
-        .install_output_row_lifecycle(OutputRowLifecycleRequest::cursor(
-            cursor.row,
-            cursor.col,
-            cursor.style,
-        ));
-    output
-        .builder()
-        .install_output_frame_artifact(OutputFrameArtifactInstallRequest::phys_cursor(cursor));
+    publish_fast_path_cursor(
+        output,
+        output_emitter,
+        cursor,
+        selected,
+        text_area_left,
+        window_top,
+    );
 }
 
 impl BufferSourceOutputSetup {
@@ -618,31 +647,16 @@ impl BufferSourceOutputSetup {
             }
             let char_w = geometry.char_width.max(1.0);
             cursor.x = walk_setup.text_area_left + cursor.col as f32 * char_w;
-            let live = WindowCursorSnapshot {
-                kind: match cursor.style {
-                    CursorStyle::FilledBox => WindowCursorKind::FilledBox,
-                    CursorStyle::Hollow => WindowCursorKind::HollowBox,
-                    CursorStyle::Bar(_) => WindowCursorKind::Bar,
-                    CursorStyle::Hbar(_) => WindowCursorKind::Hbar,
-                },
-                x: (cursor.x - walk_setup.text_area_left).round() as i64,
-                y: (cursor.y - walk_setup.window_top).round() as i64,
-                width: cursor.width.round() as i64,
-                height: cursor.height.round() as i64,
-                ascent: cursor.ascent.round() as i64,
-                row: cursor.row as i64,
-                col: i64::from(cursor.col),
-            };
-            output_emitter.set_phys_cursor(live);
-            output
-                .builder()
-                .install_output_row_lifecycle(OutputRowLifecycleRequest::cursor(
-                    cursor.row,
-                    cursor.col,
-                    cursor.style,
-                ));
-            output.builder().install_output_frame_artifact(
-                OutputFrameArtifactInstallRequest::phys_cursor(cursor),
+            // Publish through the shared selected-gated machinery so a non-selected
+            // window in a split never clobbers the selected window's frame
+            // phys-cursor (see `publish_fast_path_cursor`).
+            publish_fast_path_cursor(
+                &mut output,
+                &mut output_emitter,
+                cursor,
+                params.selected,
+                walk_setup.text_area_left,
+                walk_setup.window_top,
             );
 
             // Chrome is always re-walked (mode/header/tab lines are point-dependent).
@@ -813,6 +827,7 @@ impl BufferSourceOutputSetup {
                     cursor_row,
                     scroll.new_point as usize,
                     scroll.cursor_style,
+                    params.selected,
                     walk_setup.text_area_left,
                     walk_setup.window_top,
                     geometry.char_width,
