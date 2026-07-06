@@ -640,13 +640,37 @@ pub(crate) fn take_matcher_overflow() -> bool {
     MATCHER_OVERFLOW.with(|flag| flag.replace(false))
 }
 
-// Test-only switch to force the backtracking engine even for a
-// `pike_eligible` pattern, so the differential fuzzer can run the SAME
-// pattern through both engines and assert identical match-data.  In a
-// non-test build the Pike fast path is always taken for eligible patterns.
+// Engine routing (production): the backtracker runs by DEFAULT — it is
+// faster on the well-behaved patterns that dominate real workloads
+// (font-lock, search).  For a `pike_eligible` pattern the backtracker runs
+// under a LINEAR backtracking-step budget; if a single match blows past it
+// (catastrophic backtracking, e.g. `a*a*b`), it sets `PIKE_FALLBACK` and the
+// caller re-runs the match on the linear, byte-exact Pike VM.  This keeps
+// the common-case speed while eliminating catastrophic blow-up.
+//
+// Two test-only switches let the differential fuzzer pin ONE engine so it
+// can compare them directly (bypassing the budget heuristic).
+thread_local! {
+    /// Set by the budgeted backtracker when it gives up so the caller
+    /// re-runs the match on the Pike VM.
+    static PIKE_FALLBACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn set_pike_fallback() {
+    PIKE_FALLBACK.with(|f| f.set(true));
+}
+
+/// Read-and-clear the Pike-fallback flag.
+fn take_pike_fallback() -> bool {
+    PIKE_FALLBACK.with(|f| f.replace(false))
+}
+
 #[cfg(test)]
 thread_local! {
+    /// Pin the backtracker (no budget, no Pike) — the fuzzer's oracle side.
     static FORCE_BACKTRACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Pin the Pike VM for eligible patterns — the fuzzer's engine side.
+    static FORCE_PIKE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 #[cfg(test)]
@@ -661,12 +685,33 @@ fn force_backtrack() -> bool {
     false
 }
 
-/// Run `f` with the Pike fast path disabled (backtracker forced).  Test only.
+#[cfg(test)]
+#[inline]
+fn force_pike() -> bool {
+    FORCE_PIKE.with(|f| f.get())
+}
+
+#[cfg(not(test))]
+#[inline]
+fn force_pike() -> bool {
+    false
+}
+
+/// Run `f` with the pure backtracker forced (no budget/Pike).  Test only.
 #[cfg(test)]
 pub(crate) fn with_backtracker_forced<R>(f: impl FnOnce() -> R) -> R {
     FORCE_BACKTRACK.with(|flag| flag.set(true));
     let r = f();
     FORCE_BACKTRACK.with(|flag| flag.set(false));
+    r
+}
+
+/// Run `f` with the Pike VM forced for eligible patterns.  Test only.
+#[cfg(test)]
+pub(crate) fn with_pike_forced<R>(f: impl FnOnce() -> R) -> R {
+    FORCE_PIKE.with(|flag| flag.set(true));
+    let r = f();
+    FORCE_PIKE.with(|flag| flag.set(false));
     r
 }
 
@@ -3762,15 +3807,20 @@ fn re_match_candidate(
     syntax: &dyn SyntaxLookup,
     point: usize,
 ) -> Option<(usize, MatchRegisters)> {
-    // Non-backtracking Stage-1 fast path: byte-exact with the backtracker
-    // for eligible patterns (see `compute_pike_eligible` / `pike_match`),
-    // but linear — no catastrophic backtracking.  A test-only switch forces
-    // the backtracker so the differential fuzzer can compare both engines.
-    if pattern.pike_eligible && !force_backtrack() {
+    // Test hook: pin the Pike VM (fuzzer engine side).
+    if pattern.pike_eligible && force_pike() {
         return pike_match(pattern, text, pos, stop, syntax, point);
     }
-    MATCH_SCRATCH.with(|cell| match cell.try_borrow_mut() {
-        Ok(mut scratch) => re_match_internal(&mut scratch, pattern, text, pos, stop, syntax, point),
+
+    // Production default: run the backtracker.  For an eligible pattern it
+    // runs under a linear step budget so catastrophic backtracking trips the
+    // Pike fallback below.  Ineligible patterns (and the forced-backtracker
+    // test hook) run the backtracker with no budget — unchanged behaviour.
+    let budgeted = pattern.pike_eligible && !force_backtrack();
+    let result = MATCH_SCRATCH.with(|cell| match cell.try_borrow_mut() {
+        Ok(mut scratch) => {
+            re_match_internal(&mut scratch, pattern, text, pos, stop, syntax, point, budgeted)
+        }
         // Defensive: if a syntax/category callback ever re-enters the
         // matcher, fall back to fresh (allocating) state for the nested
         // match rather than corrupting the outer one.
@@ -3782,10 +3832,18 @@ fn re_match_candidate(
             stop,
             syntax,
             point,
+            budgeted,
         ),
-    })
+    });
+    // The budgeted backtracker gave up on a catastrophic match: recompute it
+    // linearly (and byte-exactly) with the Pike VM.
+    if budgeted && take_pike_fallback() {
+        return pike_match(pattern, text, pos, stop, syntax, point);
+    }
+    result
 }
 
+#[allow(clippy::too_many_arguments)]
 fn re_match_internal(
     scratch: &mut MatchScratch,
     pattern: &CompiledPattern,
@@ -3794,9 +3852,25 @@ fn re_match_internal(
     stop: usize,
     syntax: &dyn SyntaxLookup,
     point: usize,
+    // When true, abort with `set_pike_fallback()` if backtracking exceeds a
+    // linear budget — the caller then re-runs on the Pike VM.  Only set for
+    // `pike_eligible` patterns (the fallback is byte-exact there).
+    enable_pike_fallback: bool,
 ) -> Option<(usize, MatchRegisters)> {
     let bytecode = &pattern.buffer;
     let num_regs = pattern.re_nsub + 1;
+
+    // Linear work budget: total bytecode-op executions for a single anchored
+    // match.  A well-behaved pattern does O(region) work; catastrophic
+    // backtracking does O(region^2)+ (the cost is in re-matching between
+    // backtracks, not the pops themselves), so it blows past a generous
+    // linear budget — bail and let the caller re-run on the Pike VM.
+    let step_budget: u64 = if enable_pike_fallback {
+        64u64.saturating_mul((stop.saturating_sub(pos)) as u64) + 65_536
+    } else {
+        u64::MAX
+    };
+    let mut step_count: u64 = 0;
 
     let MatchScratch {
         frames,
@@ -3922,6 +3996,16 @@ fn re_match_internal(
     }
 
     'main_loop: loop {
+        // Catastrophic-backtracking guard (only when the Pike fallback is
+        // enabled): count every op executed and bail past a linear budget.
+        if enable_pike_fallback {
+            step_count += 1;
+            if step_count > step_budget {
+                set_pike_fallback();
+                return None;
+            }
+        }
+
         // End of pattern = potential match.
         //
         // GNU regex-emacs.c:4272-4345: if we haven't consumed the
@@ -4667,9 +4751,53 @@ fn pike_add_thread(
     }
 }
 
+/// Reusable per-thread Pike VM state.  `re_search` runs `pike_match` once per
+/// candidate start; allocating the `seen` set and the two thread lists afresh
+/// for every candidate was the dominant cost.  The `seen` set uses a
+/// monotonic generation stamp so it is neither reallocated nor cleared
+/// between candidates — a stale entry from an earlier candidate simply
+/// carries an older generation.
+#[derive(Default)]
+struct PikeScratch {
+    seen: Vec<u32>,
+    generation: u32,
+    clist: Vec<PikeThread>,
+    nlist: Vec<PikeThread>,
+}
+
+thread_local! {
+    static PIKE_SCRATCH: std::cell::RefCell<PikeScratch> =
+        std::cell::RefCell::new(PikeScratch::default());
+}
+
 /// Anchored leftmost-greedy match of an eligible pattern starting exactly at
 /// `pos`.  Byte-exact with `re_match_internal` for `pike_eligible` patterns.
 pub(crate) fn pike_match(
+    pattern: &CompiledPattern,
+    text: &[u8],
+    pos: usize,
+    stop: usize,
+    syntax: &dyn SyntaxLookup,
+    point: usize,
+) -> Option<(usize, MatchRegisters)> {
+    PIKE_SCRATCH.with(|cell| match cell.try_borrow_mut() {
+        Ok(mut scratch) => pike_match_inner(&mut scratch, pattern, text, pos, stop, syntax, point),
+        // Defensive: a syntax/category callback re-entering the matcher gets
+        // fresh (allocating) state rather than corrupting the outer scan.
+        Err(_) => pike_match_inner(
+            &mut PikeScratch::default(),
+            pattern,
+            text,
+            pos,
+            stop,
+            syntax,
+            point,
+        ),
+    })
+}
+
+fn pike_match_inner(
+    scratch: &mut PikeScratch,
     pattern: &CompiledPattern,
     text: &[u8],
     pos: usize,
@@ -4687,11 +4815,22 @@ pub(crate) fn pike_match(
     let pattern_multibyte = pattern.multibyte;
     let target_multibyte = pattern.target_multibyte;
 
-    let mut clist: Vec<PikeThread> = Vec::new();
-    let mut nlist: Vec<PikeThread> = Vec::new();
-    // Generation-stamped dedup set; index by pc (bytecode.len() = match pos).
-    let mut seen = vec![0u32; bytecode.len() + 1];
-    let mut generation: u32 = 0;
+    // Reuse the scratch buffers (cheap Vec-header swaps); cleared, not freed.
+    let mut clist = std::mem::take(&mut scratch.clist);
+    let mut nlist = std::mem::take(&mut scratch.nlist);
+    let mut seen = std::mem::take(&mut scratch.seen);
+    clist.clear();
+    nlist.clear();
+    if seen.len() < bytecode.len() + 1 {
+        seen.resize(bytecode.len() + 1, 0);
+    }
+    // Generation-stamped dedup: bump per step (each `nlist` closure dedups at
+    // its own position).  Reset the stamps only if a bump would overflow.
+    let mut generation = scratch.generation;
+    if generation as u64 + text.len() as u64 + 4 >= u32::MAX as u64 {
+        seen.iter_mut().for_each(|x| *x = 0);
+        generation = 0;
+    }
 
     // (match_end, captures) of the best (highest-priority) match found so far.
     let mut matched: Option<(usize, PikeCaps)> = None;
@@ -4900,6 +5039,12 @@ pub(crate) fn pike_match(
             _ => break,
         }
     }
+
+    // Return the reusable buffers to the scratch for the next candidate.
+    scratch.clist = clist;
+    scratch.nlist = nlist;
+    scratch.seen = seen;
+    scratch.generation = generation;
 
     let (end, caps) = matched?;
     let mut regs = MatchRegisters::new(num_regs);

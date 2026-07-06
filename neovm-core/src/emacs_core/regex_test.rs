@@ -2985,14 +2985,17 @@ fn regex_bench_pike_vs_backtracker() {
         let cp = regex_bench_compile(pat, false);
         let eligible = cp.pike_eligible;
 
-        // Match counts MUST agree between the two engines.
-        let mc_pike = regex_bench_engine_scan(&cp, bytes);
+        // Match counts MUST agree between the two engines (both pinned).
+        let mc_pike = regex_emacs::with_pike_forced(|| regex_bench_engine_scan(&cp, bytes));
         let mc_bt =
             regex_emacs::with_backtracker_forced(|| regex_bench_engine_scan(&cp, bytes));
         assert_eq!(mc_pike, mc_bt, "match count differs for {name}");
 
         let t_pike = regex_bench_min(iters, || {
-            assert_eq!(regex_bench_engine_scan(&cp, bytes), mc_pike);
+            assert_eq!(
+                regex_emacs::with_pike_forced(|| regex_bench_engine_scan(&cp, bytes)),
+                mc_pike
+            );
         });
         let t_bt = regex_bench_min(iters, || {
             assert_eq!(

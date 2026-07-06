@@ -793,10 +793,10 @@ fn diff_engines(
     let syn = DefaultSyntaxLookup;
     let len = text.len();
 
-    // Run the forced backtracker; if it aborted on the fail-stack limit
-    // (catastrophic backtracking) it returns a spurious `None`, so the
-    // comparison is meaningless — signal "skip".  The Pike VM never
-    // overflows (it is linear).
+    // Compare the two engines directly by pinning each one (bypassing the
+    // production step-budget heuristic): the pure backtracker (oracle) vs the
+    // pure Pike VM.  If the backtracker aborts on the fail-stack limit
+    // (catastrophic backtracking) it returns a spurious `None`, so skip.
     macro_rules! compare {
         ($label:expr, $call:expr) => {{
             let _ = take_matcher_overflow();
@@ -804,7 +804,7 @@ fn diff_engines(
             if take_matcher_overflow() {
                 return None; // backtracker overflowed — skip this comparison
             }
-            let pk = norm($call);
+            let pk = norm(with_pike_forced(|| $call));
             if bt != pk {
                 return Some(($label, bt, pk));
             }
