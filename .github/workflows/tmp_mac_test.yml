@@ -39,3 +39,37 @@ jobs:
 
       - name: Run fresh build
         run: cargo xtask fresh-build --release
+
+      - name: GUI smoke (launch, frame snapshot, PNG readback)
+        run: |
+          set -x
+          mkdir -p gui-artifacts
+          export NEOMACS_GUI_FRAME_SNAPSHOT_JSON="$PWD/gui-artifacts/snapshot.json"
+          export NEOMACS_GUI_FRAME_SNAPSHOT_TXT="$PWD/gui-artifacts/snapshot.txt"
+          export NEOMACS_GUI_STATE_JSON="$PWD/gui-artifacts/gui-state.json"
+          export NEOMACS_DEBUG_FIRST_FRAME_READBACK=1
+          export NEOMACS_DEBUG_SURFACE_READBACK=1
+          export NEOMACS_DEBUG_SURFACE_READBACK_PNG="$PWD/gui-artifacts/frame.png"
+          export RUST_BACKTRACE=1
+          # The fixture self-terminates after ~2s (run-at-time kill-emacs);
+          # background + watchdog guards against a wgpu-init hang.
+          ./target/release/neomacs -Q -l neomacs-gui-tests/fixtures/startup-smoke.el \
+            > gui-artifacts/neomacs.log 2>&1 &
+          PID=$!
+          for _ in $(seq 1 60); do kill -0 "$PID" 2>/dev/null || break; sleep 1; done
+          kill "$PID" 2>/dev/null || true
+          echo "=== artifacts ==="; ls -la gui-artifacts/ || true
+          echo "=== last of neomacs.log ==="; tail -60 gui-artifacts/neomacs.log || true
+          if [ -s gui-artifacts/snapshot.json ]; then
+            echo "SNAPSHOT OK ($(wc -c < gui-artifacts/snapshot.json) bytes)"
+          else
+            echo "NO FRAME SNAPSHOT PRODUCED — GUI did not render"; exit 1
+          fi
+
+      - name: Upload GUI smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-gui-smoke
+          path: gui-artifacts/
+          if-no-files-found: warn
