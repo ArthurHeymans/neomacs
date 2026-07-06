@@ -815,10 +815,16 @@ fn diff_engines(
     compare!("re_match", re_match(cp, text, start, len, &syn, point));
     // Forward search from `start`.
     let range = (len - start) as isize;
-    compare!("re_search_fwd", re_search(cp, text, start, range, &syn, point));
+    compare!(
+        "re_search_fwd",
+        re_search(cp, text, start, range, &syn, point)
+    );
     // Backward search from `start` back to 0.
     let brange = -(start as isize);
-    compare!("re_search_bwd", re_search(cp, text, start, brange, &syn, point));
+    compare!(
+        "re_search_bwd",
+        re_search(cp, text, start, brange, &syn, point)
+    );
 
     None
 }
@@ -850,7 +856,13 @@ const FUZZ_SYNTAX: &[&str] = &["\\w", "\\W", "\\sw", "\\s_", "\\s-", "\\s.", "\\
 const FUZZ_ANCHORS: &[&str] = &["^", "$", "\\`", "\\'"];
 const FUZZ_BOUNDARIES: &[&str] = &["\\b", "\\B", "\\<", "\\>", "\\_<", "\\_>"];
 const FUZZ_POSIX: &[&str] = &[
-    "[:alpha:]", "[:digit:]", "[:alnum:]", "[:space:]", "[:upper:]", "[:punct:]", "[:word:]",
+    "[:alpha:]",
+    "[:digit:]",
+    "[:alnum:]",
+    "[:space:]",
+    "[:upper:]",
+    "[:punct:]",
+    "[:word:]",
 ];
 
 fn gen_literal(rng: &mut FuzzRng, out: &mut String) {
@@ -965,7 +977,13 @@ fn gen_atom(
     }
 }
 
-fn gen_term(rng: &mut FuzzRng, out: &mut String, depth: u32, allow_quant: bool, must_consume: bool) {
+fn gen_term(
+    rng: &mut FuzzRng,
+    out: &mut String,
+    depth: u32,
+    allow_quant: bool,
+    must_consume: bool,
+) {
     let will_quant = allow_quant && rng.chance(1, 2);
     // A quantified atom's body must not quantify (no nesting) and must
     // consume (no nullable loop body).
@@ -1162,7 +1180,10 @@ fn run_fuzz(cases: usize, base_seed: u64, text_max: usize) {
         eligible * 4 > compiled,
         "fuzzer should exercise the Pike path on many cases (eligible={eligible} compiled={compiled})"
     );
-    assert!(eligible > cases / 8, "too few eligible cases: {eligible}/{cases}");
+    assert!(
+        eligible > cases / 8,
+        "too few eligible cases: {eligible}/{cases}"
+    );
 }
 
 /// Fast differential fuzz that runs on every `cargo test` — a few thousand
@@ -1204,8 +1225,18 @@ fn pike_greedy_and_captures() {
     // NB: `a??` (non-greedy optional) is intentionally Pike-INELIGIBLE (its
     // keep-string jump can't be modelled), so it is not asserted here.
     for p in [
-        "a*", "a+", "a?", "a*?", "a+?", "\\(a*\\)\\(a*\\)", "\\(a\\|ab\\)\\(c\\|bcd\\)",
-        "\\(?:ab\\)+", "a.*b", "a.*?b", "\\(a+\\)+", "\\(.*\\)\\(.*\\)",
+        "a*",
+        "a+",
+        "a?",
+        "a*?",
+        "a+?",
+        "\\(a*\\)\\(a*\\)",
+        "\\(a\\|ab\\)\\(c\\|bcd\\)",
+        "\\(?:ab\\)+",
+        "a.*b",
+        "a.*?b",
+        "\\(a+\\)+",
+        "\\(.*\\)\\(.*\\)",
     ] {
         assert_engines_agree(p, false, b"aaabcaabcd");
         assert_engines_agree(p, false, b"");
@@ -1223,7 +1254,15 @@ fn pike_alternation_priority() {
 
 #[test]
 fn pike_anchors_boundaries() {
-    for p in ["^ab", "ab$", "\\<ab\\>", "\\_<a_b\\_>", "\\bword\\b", "\\`start", "end\\'"] {
+    for p in [
+        "^ab",
+        "ab$",
+        "\\<ab\\>",
+        "\\_<a_b\\_>",
+        "\\bword\\b",
+        "\\`start",
+        "end\\'",
+    ] {
         assert_engines_agree(p, false, b"ab word a_b start end\nab");
         assert_engines_agree(p, false, b"xx ab\nword\n");
     }
@@ -1237,7 +1276,11 @@ fn pike_charsets_syntax_multibyte_casefold() {
     assert_engines_agree("\\w+", false, b"foo_bar baz");
     assert_engines_agree("\\(?:\\w\\|\\s_\\)+", false, b"a-b_c d");
     assert_engines_agree("[A-Z]+", true, b"hello WORLD"); // case fold
-    assert_engines_agree("\u{2018}\\(\\w+\\)\u{2019}", false, "\u{2018}sym\u{2019}".as_bytes());
+    assert_engines_agree(
+        "\u{2018}\\(\\w+\\)\u{2019}",
+        false,
+        "\u{2018}sym\u{2019}".as_bytes(),
+    );
     assert_engines_agree("é+", false, "café ééé".as_bytes());
 }
 
@@ -1271,9 +1314,6 @@ fn pike_no_catastrophic_backtracking() {
     assert_eq!(r.map(|(e, _)| e), Some(501));
 }
 
-
-
-
 /// Nullable NON-capturing loops (empty-matchable body, no capture in the
 /// cycle) stay Pike-eligible — the `seen`-set handles termination and there
 /// are no captures to lose.  These are excluded from the fuzzer (the
@@ -1285,14 +1325,17 @@ fn pike_nullable_noncapturing_loops() {
     for p in [
         "\\(?:a\\|\\)*b",
         "\\(?:\\<\\)*a",
-        "\\(?:x*\\)*y",   // inner star, outer star, shy — nullable, no capture
+        "\\(?:x*\\)*y", // inner star, outer star, shy — nullable, no capture
         "\\(?:\\b\\)*.",
         "\\(?:a\\|b\\|\\)+c",
     ] {
         let cp = regex_compile(p, false, false).expect("compile");
         // These are eligible ONLY because the epsilon cycle carries no
         // capture group; assert that so the test documents the boundary.
-        assert!(cp.pike_eligible, "{p:?} should be pike-eligible (no capture in cycle)");
+        assert!(
+            cp.pike_eligible,
+            "{p:?} should be pike-eligible (no capture in cycle)"
+        );
         // Keep texts SHORT (<=3 chars): these nullable-loop patterns blow up
         // exponentially in the forced-backtracker oracle on longer input.
         for text in [&b""[..], b"a", b"b", b"ab", b"ba", b"xy", b"c", b"axy"] {
@@ -1307,7 +1350,12 @@ fn pike_nullable_noncapturing_loops() {
 /// empty-loop capture semantics), so it must fall back to the backtracker.
 #[test]
 fn pike_capture_in_nullable_loop_is_ineligible() {
-    for p in ["\\(a*\\)*", "\\(a\\|\\)*", "\\(?:\\(x*\\)\\)*", "\\(.??\\)+"] {
+    for p in [
+        "\\(a*\\)*",
+        "\\(a\\|\\)*",
+        "\\(?:\\(x*\\)\\)*",
+        "\\(.??\\)+",
+    ] {
         let cp = regex_compile(p, false, false).expect("compile");
         assert!(
             !cp.pike_eligible,
@@ -1315,8 +1363,6 @@ fn pike_capture_in_nullable_loop_is_ineligible() {
         );
     }
 }
-
-
 
 /// The production routing is backtracker-by-default with a Pike fallback that
 /// triggers ONLY on catastrophic backtracking: a well-behaved pattern must

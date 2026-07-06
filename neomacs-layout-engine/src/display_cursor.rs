@@ -830,12 +830,15 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
         // slot start) otherwise disagree by ±1px for ~27% of font sizes. Only the
         // integer snapshot/logical position is affected — the GUI renderer keeps
         // drawing the caret at the sub-pixel `resolved_cursor.x`.
-        let cursor_display_row = self.display_text_row_base as i64 + cursor.display_row_offset as i64;
-        let grid_x_override = cursor.display_replacement_anchor_charpos.and_then(|anchor| {
-            let point = output_emitter
-                .point_for_lisp_buffer_pos(layout_i64_char_pos_to_lisp_char_pos(anchor))?;
-            (point.row == cursor_display_row).then_some(point.x + point.width)
-        });
+        let cursor_display_row =
+            self.display_text_row_base as i64 + cursor.display_row_offset as i64;
+        let grid_x_override = cursor
+            .display_replacement_anchor_charpos
+            .and_then(|anchor| {
+                let point = output_emitter
+                    .point_for_lisp_buffer_pos(layout_i64_char_pos_to_lisp_char_pos(anchor))?;
+                (point.row == cursor_display_row).then_some(point.x + point.width)
+            });
 
         let mut logical_cursor = cursor.logical_cursor_position(
             row_metric,

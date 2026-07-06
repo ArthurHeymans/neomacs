@@ -2737,9 +2737,9 @@ fn regex_syntax_class_fusion() {
 
     // (a) Fusion fires on the real font-lock alternations.
     for pat in [
-        r"\(?:\w\|\s_\)",             // FinalBare: two positive branches
-        r"\(?:\w\|\s_\)+",            // ...inside a `+` loop
-        r"\(?:\w\|\s_\|\\.\)+",       // Chain: run of 2 + a non-syntax branch
+        r"\(?:\w\|\s_\)",               // FinalBare: two positive branches
+        r"\(?:\w\|\s_\)+",              // ...inside a `+` loop
+        r"\(?:\w\|\s_\|\\.\)+",         // Chain: run of 2 + a non-syntax branch
         r"(\(\(?:\w\|\s_\|\\.\)+\)\_>", // the sexp-head-kw bench pattern
     ] {
         let cp = regex_bench_compile(pat, false);
@@ -2807,8 +2807,7 @@ fn regex_bench_syntax_fusion_ab() {
             continue;
         }
         let cp_f = regex_bench_compile(pat, false);
-        let cp_u =
-            regex_emacs::with_syntax_fusion_disabled(|| regex_bench_compile(pat, false));
+        let cp_u = regex_emacs::with_syntax_fusion_disabled(|| regex_bench_compile(pat, false));
         assert!(
             cp_f.buffer.contains(&33u8) && !cp_u.buffer.contains(&33u8),
             "A/B setup: fused must contain SyntaxSpecSet, unfused must not ({name})"
@@ -2988,11 +2987,16 @@ fn regex_bench_pike_vs_backtracker() {
 
         // Match counts MUST agree between all three routings.
         let mc_pike = regex_emacs::with_pike_forced(|| regex_bench_engine_scan(&cp, bytes));
-        let mc_bt =
-            regex_emacs::with_backtracker_forced(|| regex_bench_engine_scan(&cp, bytes));
+        let mc_bt = regex_emacs::with_backtracker_forced(|| regex_bench_engine_scan(&cp, bytes));
         let mc_def = regex_bench_engine_scan(&cp, bytes); // production routing
-        assert_eq!(mc_pike, mc_bt, "pike/backtrack match count differs for {name}");
-        assert_eq!(mc_def, mc_bt, "default/backtrack match count differs for {name}");
+        assert_eq!(
+            mc_pike, mc_bt,
+            "pike/backtrack match count differs for {name}"
+        );
+        assert_eq!(
+            mc_def, mc_bt,
+            "default/backtrack match count differs for {name}"
+        );
 
         let t_pike = regex_bench_min(iters, || {
             assert_eq!(
@@ -3742,4 +3746,3 @@ fn regex_search_across_mid_buffer_gap() {
         .expect("backward search");
     assert_eq!(back.as_int(), Some(15));
 }
-

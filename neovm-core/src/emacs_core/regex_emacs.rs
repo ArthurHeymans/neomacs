@@ -3601,11 +3601,7 @@ fn match_charset_at(
     };
 
     let matched = if negate { !in_set } else { in_set };
-    if matched {
-        Some(ch_len)
-    } else {
-        None
-    }
+    if matched { Some(ch_len) } else { None }
 }
 
 /// `SyntaxSpec` (`negate=false`) / `NotSyntaxSpec` (`negate=true`).
@@ -3624,11 +3620,7 @@ fn match_syntaxspec_at(
     }
     let (c, len) = re_text_char(text, d, target_multibyte)?;
     let is = syntax.char_syntax(regex_syntax_char(c)) as u8 == class_byte;
-    if is != negate {
-        Some(len)
-    } else {
-        None
-    }
+    if is != negate { Some(len) } else { None }
 }
 
 /// `SyntaxSpecSet`: char's syntax class is in the bitmask.
@@ -3669,11 +3661,7 @@ fn match_categoryspec_at(
     }
     let (c, len) = re_text_char(text, d, target_multibyte)?;
     let has = syntax.char_has_category(regex_syntax_char(c), cat);
-    if has != negate {
-        Some(len)
-    } else {
-        None
-    }
+    if has != negate { Some(len) } else { None }
 }
 
 /// Is the char at `pos` a word constituent?  (`false` past the ends.)
@@ -3829,9 +3817,16 @@ fn re_match_candidate(
     // test hook) run the backtracker with no budget — unchanged behaviour.
     let budgeted = pattern.pike_eligible && !force_backtrack();
     let result = MATCH_SCRATCH.with(|cell| match cell.try_borrow_mut() {
-        Ok(mut scratch) => {
-            re_match_internal(&mut scratch, pattern, text, pos, stop, syntax, point, budgeted)
-        }
+        Ok(mut scratch) => re_match_internal(
+            &mut scratch,
+            pattern,
+            text,
+            pos,
+            stop,
+            syntax,
+            point,
+            budgeted,
+        ),
         // Defensive: if a syntax/category callback ever re-enters the
         // matcher, fall back to fresh (allocating) state for the nested
         // match rather than corrupting the outer one.
@@ -4298,8 +4293,15 @@ fn re_match_internal(
             RegexOp::SyntaxSpec => {
                 let class_byte = bytecode[pc];
                 pc += 1;
-                match match_syntaxspec_at(class_byte, false, text, d, stop, target_multibyte, syntax)
-                {
+                match match_syntaxspec_at(
+                    class_byte,
+                    false,
+                    text,
+                    d,
+                    stop,
+                    target_multibyte,
+                    syntax,
+                ) {
                     Some(len) => d += len,
                     None => {
                         try_fail!('main_loop);
@@ -4755,10 +4757,7 @@ fn pike_add_thread(
             }
 
             // Ineligible ops never reach the Pike VM (`compute_pike_eligible`).
-            RegexOp::Duplicate
-            | RegexOp::SucceedN
-            | RegexOp::JumpN
-            | RegexOp::SetNumberAt => {
+            RegexOp::Duplicate | RegexOp::SucceedN | RegexOp::JumpN | RegexOp::SetNumberAt => {
                 debug_assert!(false, "Pike VM reached an ineligible op {op:?}");
             }
         }
@@ -4960,7 +4959,8 @@ fn pike_match_inner(
                     }
                 }
                 Some(RegexOp::AnyChar) => {
-                    if let Some(len) = match_anychar_at(text, d, stop, target_multibyte, translate) {
+                    if let Some(len) = match_anychar_at(text, d, stop, target_multibyte, translate)
+                    {
                         next_d_close(&mut nlist, &mut seen, pc + 1, d + len, caps);
                     }
                 }

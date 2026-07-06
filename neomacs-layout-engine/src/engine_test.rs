@@ -7426,9 +7426,9 @@ fn display_replacement_cursor_probe_at_height(height: i64) -> (i64, i64, i64, i6
         );
     }
 
-    let frame_id = eval
-        .frame_manager_mut()
-        .create_frame("layout-display-cursor-sweep", 800, 400, buf_id);
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("layout-display-cursor-sweep", 800, 400, buf_id);
     {
         let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
         frame.set_window_system(Some(Value::symbol("neo")));
