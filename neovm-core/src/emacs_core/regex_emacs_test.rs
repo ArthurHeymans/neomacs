@@ -1317,3 +1317,39 @@ fn pike_capture_in_nullable_loop_is_ineligible() {
 }
 
 
+
+/// The production routing is backtracker-by-default with a Pike fallback that
+/// triggers ONLY on catastrophic backtracking: a well-behaved pattern must
+/// never fall back (so it keeps the backtracker's speed), while `a*a*b` on a
+/// long non-matching run must fall back to the linear Pike VM.
+#[test]
+fn pike_fallback_only_on_catastrophe() {
+    let syn = DefaultSyntaxLookup;
+
+    // Well-behaved patterns over ordinary text: no fallback.
+    for (pat, text) in [
+        ("\\(foo\\|bar\\)+baz", &b"foobarbaz foo bar"[..]),
+        ("[a-z]+\\_>", b"hello world twelve"),
+        ("a.*b", b"axxxxxxxxxxb and more"),
+    ] {
+        let cp = regex_compile(pat, false, false).unwrap();
+        let before = pike_fallback_count();
+        let _ = re_search(&cp, text, 0, text.len() as isize, &syn, 0);
+        assert_eq!(
+            pike_fallback_count(),
+            before,
+            "{pat:?} should not trip the catastrophe fallback"
+        );
+    }
+
+    // `a*a*b` over a long non-matching run: MUST fall back to Pike.
+    let cp = regex_compile("a*a*b", false, false).unwrap();
+    let mut text = vec![b'a'; 4000];
+    text.push(b'!');
+    let before = pike_fallback_count();
+    assert!(re_match(&cp, &text, 0, text.len(), &syn, 0).is_none());
+    assert!(
+        pike_fallback_count() > before,
+        "a*a*b over a long run should trip the catastrophe fallback"
+    );
+}

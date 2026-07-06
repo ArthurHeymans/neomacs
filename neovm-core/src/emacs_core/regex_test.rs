@@ -2981,15 +2981,18 @@ fn regex_bench_pike_vs_backtracker() {
     let mut report = format!("BENCH pike-vs-backtracker fontlock ({kib:.0} KiB subr.el):\n");
     let mut tot_pike = std::time::Duration::ZERO;
     let mut tot_bt = std::time::Duration::ZERO;
+    let mut tot_def = std::time::Duration::ZERO;
     for (name, pat) in REGEX_BENCH_FONTLOCK_PATTERNS {
         let cp = regex_bench_compile(pat, false);
         let eligible = cp.pike_eligible;
 
-        // Match counts MUST agree between the two engines (both pinned).
+        // Match counts MUST agree between all three routings.
         let mc_pike = regex_emacs::with_pike_forced(|| regex_bench_engine_scan(&cp, bytes));
         let mc_bt =
             regex_emacs::with_backtracker_forced(|| regex_bench_engine_scan(&cp, bytes));
-        assert_eq!(mc_pike, mc_bt, "match count differs for {name}");
+        let mc_def = regex_bench_engine_scan(&cp, bytes); // production routing
+        assert_eq!(mc_pike, mc_bt, "pike/backtrack match count differs for {name}");
+        assert_eq!(mc_def, mc_bt, "default/backtrack match count differs for {name}");
 
         let t_pike = regex_bench_min(iters, || {
             assert_eq!(
@@ -3003,18 +3006,21 @@ fn regex_bench_pike_vs_backtracker() {
                 mc_bt
             );
         });
-        // Only the Pike-eligible patterns actually use the fast path; count
-        // their times toward the total that reflects real behaviour.
+        // Production default routing (backtracker + catastrophe budget).
+        let t_def = regex_bench_min(iters, || {
+            assert_eq!(regex_bench_engine_scan(&cp, bytes), mc_def);
+        });
         tot_pike += t_pike;
         tot_bt += t_bt;
+        tot_def += t_def;
         report.push_str(&format!(
-            "  {name:<16} pike {t_pike:>9.1?}  backtrack {t_bt:>9.1?}  {:>5.2}x  eligible={eligible} ({mc_pike} matches)\n",
-            t_bt.as_secs_f64() / t_pike.as_secs_f64(),
+            "  {name:<16} default {t_def:>9.1?}  backtrack {t_bt:>9.1?}  pike {t_pike:>9.1?}  eligible={eligible} ({mc_pike} matches)\n",
         ));
     }
     report.push_str(&format!(
-        "  TOTAL pike {tot_pike:.1?}  backtrack {tot_bt:.1?}  {:.2}x",
-        tot_bt.as_secs_f64() / tot_pike.as_secs_f64(),
+        "  TOTAL default {tot_def:.1?}  backtrack {tot_bt:.1?}  pike {tot_pike:.1?}  (default/backtrack {:.2}x, pike/backtrack {:.2}x)",
+        tot_def.as_secs_f64() / tot_bt.as_secs_f64(),
+        tot_pike.as_secs_f64() / tot_bt.as_secs_f64(),
     ));
     panic!("{report}");
 }
@@ -3736,3 +3742,4 @@ fn regex_search_across_mid_buffer_gap() {
         .expect("backward search");
     assert_eq!(back.as_int(), Some(15));
 }
+

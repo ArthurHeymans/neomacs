@@ -656,8 +656,19 @@ thread_local! {
     static PIKE_FALLBACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
+#[cfg(test)]
+thread_local! {
+    pub(crate) static PIKE_FALLBACK_COUNT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+#[cfg(test)]
+pub(crate) fn pike_fallback_count() -> u64 {
+    PIKE_FALLBACK_COUNT.with(|c| c.get())
+}
+
 fn set_pike_fallback() {
     PIKE_FALLBACK.with(|f| f.set(true));
+    #[cfg(test)]
+    PIKE_FALLBACK_COUNT.with(|c| c.set(c.get() + 1));
 }
 
 /// Read-and-clear the Pike-fallback flag.
@@ -3860,17 +3871,22 @@ fn re_match_internal(
     let bytecode = &pattern.buffer;
     let num_regs = pattern.re_nsub + 1;
 
-    // Linear work budget: total bytecode-op executions for a single anchored
-    // match.  A well-behaved pattern does O(region) work; catastrophic
-    // backtracking does O(region^2)+ (the cost is in re-matching between
-    // backtracks, not the pops themselves), so it blows past a generous
-    // linear budget — bail and let the caller re-run on the Pike VM.
-    let step_budget: u64 = if enable_pike_fallback {
-        64u64.saturating_mul((stop.saturating_sub(pos)) as u64) + 65_536
+    // Catastrophic-backtracking budget: a CONSTANT cap on the number of
+    // backtracks (failure-stack pops) in a single anchored match.  A
+    // well-behaved pattern backtracks a number of times bounded by its own
+    // structure (alternation arms, quantifier boundaries) — independent of
+    // input length — so it never approaches the cap.  A pathological pattern
+    // (`a*a*b`, `.*x` with no `x`) backtracks a number of times that grows
+    // with the input, blows past the cap, and is handed to the linear Pike
+    // VM.  Counting only at backtracks (not every op) keeps the well-behaved
+    // hot path free of per-op overhead.
+    const BACKTRACK_BUDGET: u64 = 8_000;
+    let backtrack_budget: u64 = if enable_pike_fallback {
+        BACKTRACK_BUDGET
     } else {
         u64::MAX
     };
-    let mut step_count: u64 = 0;
+    let mut backtrack_count: u64 = 0;
 
     let MatchScratch {
         frames,
@@ -3957,6 +3973,14 @@ fn re_match_internal(
     // passed in explicitly as a `lifetime` metavariable.
     macro_rules! try_fail {
         ($label:lifetime) => {
+            // Catastrophic-backtracking guard: past the constant backtrack
+            // budget, bail so the caller re-runs on the Pike VM.  Cheap —
+            // evaluated only at backtracks, not per op.
+            backtrack_count += 1;
+            if backtrack_count > backtrack_budget {
+                set_pike_fallback();
+                return None;
+            }
             if goto_fail(&mut pc, &mut d, frames, undo, regstart, regend, counters).is_none() {
                 total_failure = true;
                 break $label;
@@ -3996,16 +4020,6 @@ fn re_match_internal(
     }
 
     'main_loop: loop {
-        // Catastrophic-backtracking guard (only when the Pike fallback is
-        // enabled): count every op executed and bail past a linear budget.
-        if enable_pike_fallback {
-            step_count += 1;
-            if step_count > step_budget {
-                set_pike_fallback();
-                return None;
-            }
-        }
-
         // End of pattern = potential match.
         //
         // GNU regex-emacs.c:4272-4345: if we haven't consumed the
