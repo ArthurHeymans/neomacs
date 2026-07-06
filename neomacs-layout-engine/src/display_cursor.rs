@@ -30,6 +30,14 @@ pub(crate) struct CapturedCursorInfo {
     pub(crate) slot_width: Option<f32>,
     pub(crate) stretch_like: bool,
     pub(crate) glyph_row_resolved: bool,
+    /// For a cursor sitting at a `display`-property replacement slot: the 1-based
+    /// buffer position of the real glyph immediately preceding the slot (the
+    /// replaced region's start minus one). The cursor's integer/grid x is derived
+    /// from that glyph's already-rounded display point (`x + width`) rather than
+    /// re-rounding the accumulated sub-pixel slot start, so it stays byte-identical
+    /// to the glyph edge for every font size. `None` for ordinary cursors and for a
+    /// replacement at the very start of the buffer (no preceding glyph).
+    pub(crate) display_replacement_anchor_charpos: Option<i64>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -378,6 +386,7 @@ impl CapturedCursorInfo {
             slot_width: Some(placement.slot_width.resolve(visual_state.face_width)),
             stretch_like: placement.stretch_like,
             glyph_row_resolved: false,
+            display_replacement_anchor_charpos: None,
         }
     }
 
@@ -586,8 +595,9 @@ pub(crate) fn display_property_replacement_cursor_info(
     policy: DisplayPropertyReplacementCursorPolicy,
     active_face_state: &DisplayRowActiveFaceState,
     position: DisplayRowTextPosition,
+    preceding_charpos: Option<i64>,
 ) -> CapturedCursorInfo {
-    match policy {
+    let mut info = match policy {
         DisplayPropertyReplacementCursorPolicy::TextSlot {
             width_px,
             stretch_like,
@@ -623,7 +633,9 @@ pub(crate) fn display_property_replacement_cursor_info(
                 ),
             )
         }
-    }
+    };
+    info.display_replacement_anchor_charpos = preceding_charpos;
+    info
 }
 
 pub(crate) fn row_metrics_for_cursor(
@@ -807,12 +819,34 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
             self.display_text_row_base + cursor.display_row_offset,
             fallback_row_metric,
         );
-        output_emitter.set_logical_cursor(cursor.logical_cursor_position(
+
+        // For a cursor at a `display`-property replacement slot, derive its
+        // integer grid x from the already-rounded display point of the glyph
+        // immediately before the slot (`x + width`, both text-area-relative)
+        // rather than re-rounding the accumulated sub-pixel slot start. GNU's
+        // `set_cursor_from_row` reads the glyph's accumulated integer x from the
+        // glyph matrix, so the caret aligns to the glyph edge by construction;
+        // `round(x) + round(w)` (the glyph point) and `round(x + w)` (the raw
+        // slot start) otherwise disagree by ±1px for ~27% of font sizes. Only the
+        // integer snapshot/logical position is affected — the GUI renderer keeps
+        // drawing the caret at the sub-pixel `resolved_cursor.x`.
+        let cursor_display_row = self.display_text_row_base as i64 + cursor.display_row_offset as i64;
+        let grid_x_override = cursor.display_replacement_anchor_charpos.and_then(|anchor| {
+            let point = output_emitter
+                .point_for_lisp_buffer_pos(layout_i64_char_pos_to_lisp_char_pos(anchor))?;
+            (point.row == cursor_display_row).then_some(point.x + point.width)
+        });
+
+        let mut logical_cursor = cursor.logical_cursor_position(
             row_metric,
             self.display_text_row_base,
             self.text_area_left,
             self.window_top,
-        ));
+        );
+        if let Some(grid_x) = grid_x_override {
+            logical_cursor.x = grid_x;
+        }
+        output_emitter.set_logical_cursor(logical_cursor);
 
         let Some(style) = cursor_style_for_window(self.params) else {
             return CapturedTextWindowCursorPublishOutcome::NoWindowCursor;
@@ -859,6 +893,7 @@ impl<'a> CapturedTextWindowCursorPublishContext<'a> {
                 text_area_left: self.text_area_left,
                 window_top: self.window_top,
                 glyph_row_resolved: cursor.glyph_row_resolved,
+                grid_x_override,
             },
         );
 

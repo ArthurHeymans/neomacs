@@ -138,6 +138,7 @@ fn publish_fast_path_cursor(
             text_area_left,
             window_top,
             glyph_row_resolved: true,
+            grid_x_override: None,
         },
     );
 }

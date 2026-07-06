@@ -603,6 +603,13 @@ pub(crate) struct TextWindowCursor {
     pub(crate) text_area_left: f32,
     pub(crate) window_top: f32,
     pub(crate) glyph_row_resolved: bool,
+    /// Integer/grid x (relative to the text area) to publish instead of rounding
+    /// the sub-pixel `x`. Set for a cursor at a `display`-replacement slot so the
+    /// snapshot x is derived from the preceding glyph's already-rounded display
+    /// point (`x + width`), staying byte-identical to the glyph edge across font
+    /// sizes. `None` rounds `x` as before. Affects only the integer snapshot, not
+    /// the sub-pixel `x` the GUI renderer draws the caret at.
+    pub(crate) grid_x_override: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -636,7 +643,9 @@ impl TextWindowCursor {
     fn window_snapshot(self) -> WindowCursorSnapshot {
         WindowCursorSnapshot {
             kind: window_cursor_kind(self.style),
-            x: (self.x - self.text_area_left).round() as i64,
+            x: self
+                .grid_x_override
+                .unwrap_or_else(|| (self.x - self.text_area_left).round() as i64),
             y: (self.y - self.window_top).round() as i64,
             width: self.width.round() as i64,
             height: self.height.round() as i64,

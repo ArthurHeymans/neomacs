@@ -318,6 +318,13 @@ impl BufferDisplayPropertyTextReplacementOutcome {
     ) {
         if cursor_info.is_missing() && self.point_in_replacement(point_charpos, start_charpos) {
             let start_position = self.start_position();
+            // The cursor sits at the slot's left edge, i.e. the right edge of the
+            // real glyph immediately before the replaced region (1-based buffer
+            // position `start_charpos - 1`). Anchoring the cursor's grid x on that
+            // glyph's already-rounded display point keeps it byte-identical to the
+            // glyph edge for every font size (no round(x+w) vs round(x)+round(w)
+            // drift). `None` when the replacement starts the buffer.
+            let preceding_charpos = (start_charpos > 1).then_some(start_charpos - 1);
             capture_cursor_info(
                 cursor_info,
                 self.cursor_info(
@@ -327,6 +334,7 @@ impl BufferDisplayPropertyTextReplacementOutcome {
                         byte_idx,
                         start_position.col(),
                     ),
+                    preceding_charpos,
                 ),
             );
         }
@@ -350,8 +358,10 @@ impl BufferDisplayPropertyTextReplacementOutcome {
         self,
         active_face_state: &DisplayRowActiveFaceState,
         position: DisplayRowTextPosition,
+        preceding_charpos: Option<i64>,
     ) -> CapturedCursorInfo {
-        self.replacement.cursor_info(active_face_state, position)
+        self.replacement
+            .cursor_info(active_face_state, position, preceding_charpos)
     }
 
     pub(crate) fn apply_to_progress_and_cursor(

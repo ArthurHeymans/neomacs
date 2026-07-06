@@ -7377,6 +7377,7 @@ fn buffer_text_window_tail_finalize_request_publishes_cursor_and_finishes_row() 
         slot_width: Some(8.0),
         stretch_like: false,
         glyph_row_resolved: false,
+        display_replacement_anchor_charpos: None,
     });
     let mut hit_row_range = HitRowRangeTracker::new(0);
 
@@ -9890,6 +9891,7 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
             0,
             outcome.start_position().col(),
         ),
+        None,
     );
     assert_eq!(cursor.x, 24.0);
     assert_eq!(cursor.slot_width, Some(16.0));

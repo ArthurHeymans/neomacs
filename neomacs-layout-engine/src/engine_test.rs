@@ -486,6 +486,7 @@ fn cursor_capture_state_captures_once_and_refines_matching_main_char_width() {
         slot_width: None,
         stretch_like: false,
         glyph_row_resolved: false,
+        display_replacement_anchor_charpos: None,
     };
     let second = CapturedCursorInfo {
         x: 9.0,

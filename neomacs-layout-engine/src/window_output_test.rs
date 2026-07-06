@@ -723,6 +723,7 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
             text_area_left: 16.0,
             window_top: 8.0,
             glyph_row_resolved: false,
+            grid_x_override: None,
         },
     );
 

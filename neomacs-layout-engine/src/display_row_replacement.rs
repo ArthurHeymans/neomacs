@@ -757,8 +757,14 @@ impl DisplayPropertyReplacementAppendOutcome {
         self,
         active_face_state: &DisplayRowActiveFaceState,
         position: DisplayRowTextPosition,
+        preceding_charpos: Option<i64>,
     ) -> CapturedCursorInfo {
-        display_property_replacement_cursor_info(self.cursor_policy, active_face_state, position)
+        display_property_replacement_cursor_info(
+            self.cursor_policy,
+            active_face_state,
+            position,
+            preceding_charpos,
+        )
     }
 }
 
