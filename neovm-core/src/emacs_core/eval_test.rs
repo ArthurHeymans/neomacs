@@ -3022,10 +3022,17 @@ fn special_event_map_bootstraps_delete_frame_and_focus_handlers() {
         &[Value::symbol("focus-out")],
         true,
     );
+    let file_notify = crate::emacs_core::keymap::lookup_key_in_keymaps_in_obarray(
+        ev.obarray(),
+        &[special_event_map],
+        &[Value::symbol("file-notify")],
+        true,
+    );
 
     assert_eq!(delete_frame, Value::symbol("handle-delete-frame"));
     assert_eq!(focus_in, Value::symbol("handle-focus-in"));
     assert_eq!(focus_out, Value::symbol("handle-focus-out"));
+    assert_eq!(file_notify, Value::symbol("file-notify-handle-event"));
 }
 
 #[test]

@@ -2284,7 +2284,7 @@ impl crate::emacs_core::eval::Context {
         None
     }
 
-    fn special_event_binding(&self, event: &Value) -> Option<Value> {
+    pub(crate) fn special_event_binding(&self, event: &Value) -> Option<Value> {
         let special_event_map = self.obarray.symbol_value("special-event-map").copied()?;
         // GNU `read_char` calls `access_keymap` on the event head, so a
         // full lispy event like `(focus-in FRAME)` must match a keymap entry

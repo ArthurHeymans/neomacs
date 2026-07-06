@@ -2289,9 +2289,9 @@ pub(crate) fn builtin_discard_input(
 
 /// `(insert-special-event EVENT)` -> nil
 ///
-/// Prepend EVENT to the front of `unread-command-events`, so that
-/// the next key-reading operation consumes it immediately without
-/// waiting for a user keystroke.
+/// Insert EVENT into the low-level special-event queue, so that the next
+/// key-reading operation handles it through `special-event-map` instead of
+/// returning it as ordinary user input.
 ///
 /// Mirrors GNU `Finsert_special_event` at
 /// `src/keyboard.c:12060`:
@@ -2299,18 +2299,19 @@ pub(crate) fn builtin_discard_input(
 ///   DEFUN ("insert-special-event", Finsert_special_event, ...)
 ///     (Lisp_Object event)
 ///   {
-///     kbd_buffer_store_event (event);
+///     CHECK_CONS (event);
+///     if (NILP (access_keymap (... Vspecial_event_map ..., event, ...)))
+///       signal_error ("Invalid event kind", XCAR (event));
+///     kbd_buffer_store_event (&ie);
 ///     return Qnil;
 ///   }
 ///
 /// GNU pushes into the kernel kbd_buffer (which is a ring of
 /// `struct input_event` records) so the event is delivered via the
-/// same path as hardware input. neomacs does not keep a separate
-/// kbd_buffer ring — every lisp-visible event funnels through
-/// `unread-command-events`, so we route insertions there. This is
-/// the same choice made elsewhere in the reader (`read-event`,
-/// `push_unread_command_event`, etc.), and preserves the observable
-/// "run this event next" semantic that callers rely on.
+/// same special-event path as hardware input. Neomacs keeps this queue in the
+/// keyboard runtime (`unread_events`), not in `unread-command-events`: callers
+/// like file notification rely on `read-event` consuming the event internally
+/// and running the `special-event-map` handler.
 ///
 /// Keyboard audit Finding 16 in
 /// `drafts/keyboard-command-loop-audit.md`.
@@ -2320,7 +2321,19 @@ pub(crate) fn builtin_insert_special_event(
 ) -> EvalResult {
     expect_args("insert-special-event", &args, 1)?;
     let event = args[0];
-    ctx.push_unread_command_event(event);
+    if !event.is_cons() {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("consp"), event],
+        ));
+    }
+    if ctx.special_event_binding(&event).is_none() {
+        return Err(signal(
+            "error",
+            vec![Value::string("Invalid event kind"), event.cons_car()],
+        ));
+    }
+    ctx.queue_special_event(event);
     Ok(Value::NIL)
 }
 

@@ -3246,6 +3246,13 @@ impl Context {
                 Value::symbol("dbus-handle-event"),
             );
         }
+        // GNU keyboard.c installs file notification events in
+        // `special-event-map` when file notification support is present.
+        list_keymap_define(
+            special_event_map,
+            Value::symbol("file-notify"),
+            Value::symbol("file-notify-handle-event"),
+        );
 
         let standard_syntax_table = super::syntax::builtin_standard_syntax_table(Vec::new())
             .expect("startup seeding requires standard syntax table");

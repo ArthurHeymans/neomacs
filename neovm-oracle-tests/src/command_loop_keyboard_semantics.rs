@@ -227,6 +227,41 @@ fn oracle_execute_kbd_macro_select_window_affects_following_key() {
     );
 }
 
+#[test]
+fn oracle_insert_special_event_file_notify_uses_special_event_map_handler() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let expect = expect_test::expect![[
+        r#""OK (file-notify-handle-event (42 stopped \"/tmp/x\") nil nil nil)""#
+    ]];
+    crate::common::assert_oracle_parity_expect(
+        r#"(progn
+             (require 'filenotify)
+             (setq oracle-file-notify-hit nil
+                   oracle-file-notify-read nil
+                   oracle-file-notify-error nil)
+             (fset 'oracle-file-notify-callback
+                   (lambda (event)
+                     (setq oracle-file-notify-hit event)))
+             (let ((binding (lookup-key special-event-map [file-notify])))
+               (condition-case err
+                   (progn
+                     (insert-special-event
+                      (make-file-notify
+                       :-event '(42 stopped "/tmp/x")
+                       :-callback #'oracle-file-notify-callback))
+                     (setq oracle-file-notify-read
+                           (read-event nil nil 0.01)))
+                 (error (setq oracle-file-notify-error err)))
+               (list binding
+                     oracle-file-notify-hit
+                     oracle-file-notify-read
+                     oracle-file-notify-error
+                     unread-command-events)))"#,
+        expect,
+    );
+}
+
 // ---------------------------------------------------------------------------
 // this-single-command-keys in batch context
 // ---------------------------------------------------------------------------

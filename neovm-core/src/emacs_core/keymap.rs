@@ -1041,7 +1041,7 @@ fn list_keymap_access_impl(
                         let parent_binding =
                             list_keymap_access_impl(&parent, event, false, t_ok, resolve_keyelt);
                         if is_list_keymap(&parent_binding) {
-                            return compose_prefix_keymaps(&binding, &parent_binding);
+                            return compose_prefix_with_parent_keymap(&binding, &parent_binding);
                         }
                     }
                 }
@@ -1070,10 +1070,29 @@ fn accumulate_prefix_keymap(existing: Option<Value>, next: Value) -> Value {
     }
 }
 
-/// Compose prefix keymaps with earlier maps taking precedence, matching GNU
-/// `access_keymap_1`'s temporary `(keymap MAP1 MAP2 ...)` prefix chains.
+/// Compose prefix keymaps found at the same keymap level.  GNU
+/// `access_keymap_1` keeps those as separate embedded members:
+/// `(keymap MAP1 MAP2 ...)`.
 fn compose_prefix_keymaps(first: &Value, second: &Value) -> Value {
     Value::list(vec![KeymapMarker::Keymap.symbol_value(), *first, *second])
+}
+
+/// Compose a direct prefix map with an inherited parent prefix map.  GNU
+/// `access_keymap_1` keeps the inherited keymap marker as the tail boundary,
+/// just like `make-composed-keymap` in `subr.el`: `(keymap CHILD . PARENT)`.
+///
+/// This distinction matters for `define-key` on a composed prefix map:
+/// `access_keymap(..., noinherit=true)` must stop at the parent boundary so the
+/// write goes into CHILD rather than mutating an inherited map.
+fn compose_prefix_with_parent_keymap(child: &Value, parent: &Value) -> Value {
+    if is_list_keymap(parent) {
+        Value::cons(
+            KeymapMarker::Keymap.symbol_value(),
+            Value::cons(*child, *parent),
+        )
+    } else {
+        compose_prefix_keymaps(child, parent)
+    }
 }
 
 /// Check if two event values match for keymap lookup purposes.
