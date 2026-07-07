@@ -6588,24 +6588,13 @@ fn vm_sqlite_runtime_uses_direct_dispatch() {
         vm_eval_str(
             r##"(list
                  (sqlite-available-p)
-                 (stringp (sqlite-version))
-                 (let ((db (sqlite-open)))
-                  (list
-                    (sqlitep db)
-                    (= (sqlite-execute db "create table t (x integer)") 0)
-                    (sqlite-execute-batch db "insert into t values (1);")
-                    (equal (sqlite-select db "select * from t") '((1)))
-                    (sqlite-pragma db "foreign_keys")
-                    (sqlite-transaction db)
-                    (sqlite-commit db)
-                    (sqlite-transaction db)
-                    (sqlite-rollback db)
-                    (condition-case nil
-                        (sqlite-load-extension db "missing")
-                      (sqlite-error t))
-                    (sqlite-close db))))"##
+                 (fboundp 'sqlitep)
+                 (fboundp 'sqlite-open)
+                 (condition-case e
+                     (sqlite-open)
+                   (void-function (car e))))"##
         ),
-        r#"OK (t t (t t t t t t t t t t t))"#
+        r#"OK (nil t nil void-function)"#
     );
 }
 

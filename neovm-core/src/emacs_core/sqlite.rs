@@ -511,10 +511,19 @@ fn check_rusqlite(err: rusqlite::Error) -> Flow {
 // Builtin functions
 // ---------------------------------------------------------------------------
 
-/// (sqlite-available-p) → t
+/// Lisp-visible SQLite support follows GNU's HAVE_SQLITE3 build option.
+///
+/// The native Rust implementation stays compiled for internal coverage, but
+/// the public Lisp API must expose the same configured surface as the GNU
+/// oracle binary.  That binary was built without HAVE_SQLITE3, so only
+/// `sqlitep' and `sqlite-available-p' are registered and both report no
+/// SQLite object/support.
+pub(crate) const SQLITE3_LISP_API_AVAILABLE: bool = false;
+
+/// (sqlite-available-p) → t or nil
 pub(crate) fn builtin_sqlite_available_p(args: Vec<Value>) -> EvalResult {
     super::builtins::expect_args("sqlite-available-p", &args, 0)?;
-    Ok(Value::T)
+    Ok(Value::bool_val(SQLITE3_LISP_API_AVAILABLE))
 }
 
 /// (sqlite-version) → version string
@@ -526,7 +535,9 @@ pub(crate) fn builtin_sqlite_version(args: Vec<Value>) -> EvalResult {
 /// (sqlitep OBJECT) → t or nil
 pub(crate) fn builtin_sqlitep(args: Vec<Value>) -> EvalResult {
     super::builtins::expect_args("sqlitep", &args, 1)?;
-    Ok(Value::bool_val(args[0].is_sqlite()))
+    Ok(Value::bool_val(
+        SQLITE3_LISP_API_AVAILABLE && args[0].is_sqlite(),
+    ))
 }
 
 /// (sqlite-open &optional FILE READONLY DISABLE-URI) → db-handle

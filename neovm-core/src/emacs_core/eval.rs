@@ -3490,6 +3490,16 @@ impl Context {
             Value::list(vec![Value::string(std::env::consts::DLL_SUFFIX)]),
         );
         obarray.make_special("dynamic-library-suffixes");
+        obarray.set_symbol_value("dynamic-library-alist", Value::NIL);
+        obarray.make_special("dynamic-library-alist");
+        let dynamic_library_alist = intern("dynamic-library-alist");
+        obarray
+            .put_property_id(
+                dynamic_library_alist,
+                intern("risky-local-variable"),
+                Value::T,
+            )
+            .expect("setting dynamic-library-alist property should not fail");
         // load-file-rep-suffixes: suffixes for alternate representations of
         // the same file (e.g., compressed ".gz").  Default is just ("").
         obarray.set_symbol_value(

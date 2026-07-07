@@ -6764,96 +6764,98 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         0,
         Some(0),
     );
-    ctx.defsubr(
-        "sqlite-close",
-        |_ctx, args| super::sqlite::builtin_sqlite_close(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "sqlite-columns",
-        |_ctx, args| super::sqlite::builtin_sqlite_columns(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "sqlite-commit",
-        |_ctx, args| super::sqlite::builtin_sqlite_commit(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "sqlite-execute",
-        |_ctx, args| super::sqlite::builtin_sqlite_execute(args),
-        2,
-        Some(3),
-    );
-    ctx.defsubr(
-        "sqlite-execute-batch",
-        |ctx, args| super::sqlite::builtin_sqlite_execute_batch(ctx, args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "sqlite-finalize",
-        |_ctx, args| super::sqlite::builtin_sqlite_finalize(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "sqlite-load-extension",
-        |ctx, args| super::sqlite::builtin_sqlite_load_extension(ctx, args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "sqlite-more-p",
-        |_ctx, args| super::sqlite::builtin_sqlite_more_p(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "sqlite-next",
-        |_ctx, args| super::sqlite::builtin_sqlite_next(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "sqlite-open",
-        |_ctx, args| super::sqlite::builtin_sqlite_open(args),
-        0,
-        Some(3),
-    );
-    ctx.defsubr(
-        "sqlite-pragma",
-        |_ctx, args| super::sqlite::builtin_sqlite_pragma(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
-        "sqlite-rollback",
-        |_ctx, args| super::sqlite::builtin_sqlite_rollback(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "sqlite-select",
-        |_ctx, args| super::sqlite::builtin_sqlite_select(args),
-        2,
-        Some(4),
-    );
-    ctx.defsubr(
-        "sqlite-transaction",
-        |_ctx, args| super::sqlite::builtin_sqlite_transaction(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "sqlite-version",
-        |_ctx, args| super::sqlite::builtin_sqlite_version(args),
-        0,
-        Some(0),
-    );
+    if super::sqlite::SQLITE3_LISP_API_AVAILABLE {
+        ctx.defsubr(
+            "sqlite-close",
+            |_ctx, args| super::sqlite::builtin_sqlite_close(args),
+            1,
+            Some(1),
+        );
+        ctx.defsubr(
+            "sqlite-columns",
+            |_ctx, args| super::sqlite::builtin_sqlite_columns(args),
+            1,
+            Some(1),
+        );
+        ctx.defsubr(
+            "sqlite-commit",
+            |_ctx, args| super::sqlite::builtin_sqlite_commit(args),
+            1,
+            Some(1),
+        );
+        ctx.defsubr(
+            "sqlite-execute",
+            |_ctx, args| super::sqlite::builtin_sqlite_execute(args),
+            2,
+            Some(3),
+        );
+        ctx.defsubr(
+            "sqlite-execute-batch",
+            |ctx, args| super::sqlite::builtin_sqlite_execute_batch(ctx, args),
+            2,
+            Some(2),
+        );
+        ctx.defsubr(
+            "sqlite-finalize",
+            |_ctx, args| super::sqlite::builtin_sqlite_finalize(args),
+            1,
+            Some(1),
+        );
+        ctx.defsubr(
+            "sqlite-load-extension",
+            |ctx, args| super::sqlite::builtin_sqlite_load_extension(ctx, args),
+            2,
+            Some(2),
+        );
+        ctx.defsubr(
+            "sqlite-more-p",
+            |_ctx, args| super::sqlite::builtin_sqlite_more_p(args),
+            1,
+            Some(1),
+        );
+        ctx.defsubr(
+            "sqlite-next",
+            |_ctx, args| super::sqlite::builtin_sqlite_next(args),
+            1,
+            Some(1),
+        );
+        ctx.defsubr(
+            "sqlite-open",
+            |_ctx, args| super::sqlite::builtin_sqlite_open(args),
+            0,
+            Some(3),
+        );
+        ctx.defsubr(
+            "sqlite-pragma",
+            |_ctx, args| super::sqlite::builtin_sqlite_pragma(args),
+            2,
+            Some(2),
+        );
+        ctx.defsubr(
+            "sqlite-rollback",
+            |_ctx, args| super::sqlite::builtin_sqlite_rollback(args),
+            1,
+            Some(1),
+        );
+        ctx.defsubr(
+            "sqlite-select",
+            |_ctx, args| super::sqlite::builtin_sqlite_select(args),
+            2,
+            Some(4),
+        );
+        ctx.defsubr(
+            "sqlite-transaction",
+            |_ctx, args| super::sqlite::builtin_sqlite_transaction(args),
+            1,
+            Some(1),
+        );
+        ctx.defsubr(
+            "sqlite-version",
+            |_ctx, args| super::sqlite::builtin_sqlite_version(args),
+            0,
+            Some(0),
+        );
+    }
     ctx.defsubr(
         "sqlitep",
         |_ctx, args| super::sqlite::builtin_sqlitep(args),

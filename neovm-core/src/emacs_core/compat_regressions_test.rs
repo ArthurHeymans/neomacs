@@ -776,10 +776,31 @@ fn gpm_mouse_start_signals_console_only_error() {
 }
 
 #[test]
+fn dynamic_library_alist_is_gnu_bound_nil_variable() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::Context::new();
+    let out = ev
+        .eval_str(
+            "(list (boundp 'dynamic-library-alist) \
+                   dynamic-library-alist \
+                   (get 'dynamic-library-alist 'risky-local-variable))",
+        )
+        .unwrap();
+    assert_eq!(out, Value::list(vec![Value::T, Value::NIL, Value::T]));
+}
+
+#[test]
 fn sqlite_version_returns_string() {
     crate::test_utils::init_test_tracing();
     let out = crate::emacs_core::sqlite::builtin_sqlite_version(vec![]).unwrap();
     assert!(out.is_string());
+}
+
+#[test]
+fn sqlite_available_p_matches_gnu_without_sqlite3() {
+    crate::test_utils::init_test_tracing();
+    let out = crate::emacs_core::sqlite::builtin_sqlite_available_p(vec![]).unwrap();
+    assert_eq!(out, Value::NIL);
 }
 
 #[test]
@@ -794,7 +815,7 @@ fn sqlite_open_and_close_round_trip() {
     crate::test_utils::init_test_tracing();
     let db = crate::emacs_core::sqlite::builtin_sqlite_open(vec![]).unwrap();
     let sqlitep = crate::emacs_core::sqlite::builtin_sqlitep(vec![db]).unwrap();
-    assert_eq!(sqlitep, Value::T);
+    assert_eq!(sqlitep, Value::NIL);
     let closed = crate::emacs_core::sqlite::builtin_sqlite_close(vec![db]).unwrap();
     assert_eq!(closed, Value::T);
 }
