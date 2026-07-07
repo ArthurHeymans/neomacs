@@ -1,10 +1,8 @@
 //! Generator (iter) divergences (generator.el CPS vs neovm-core).
 //!
-//! Confirmed entry point: iter-next end-of-sequence signaling differs — GNU
-//! signals the default "Iteration terminated", neomacs propagates the
-//! generator body's return value as the end-of-sequence signal. Probes
-//! iter-yield/iter-next variants, iter-do, iter-close, iter-defun, yield-from,
-//! cleanup-on-close, and repeated-next-past-end.
+//! Confirmed entry point: generator end-of-sequence signaling and iterator
+//! protocol details. Probes iter-yield/iter-next variants, iter-do, iter-close,
+//! iter-defun, yield-from, cleanup-on-close, and repeated-next-past-end.
 
 use super::common::assert_oracle_parity;
 use super::common::return_if_neovm_enable_oracle_proptest_not_set;
@@ -29,12 +27,17 @@ fn div_agen_basic_yield_next_end() {
 #[test]
 fn div_agen_iter_next_explicit_end_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    crate::common::assert_oracle_parity(
+    let expect = expect_test::expect![[r#""OK (1 2 (:eos . :eof))""#]];
+    crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'generator)
   (let ((g (funcall (iter-lambda () (iter-yield 1) (iter-yield 2)))))
-    (list (iter-next g) (iter-next g) (iter-next g :eof))))
+    (list (iter-next g) (iter-next g)
+          (condition-case e (iter-next g :eof)
+            (iter-end-of-sequence (cons :eos (cdr e)))
+            (error (cons :err (car e)))))))
 "##,
+        expect,
     );
 }
 

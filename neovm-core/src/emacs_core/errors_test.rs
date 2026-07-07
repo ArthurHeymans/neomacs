@@ -733,6 +733,58 @@ fn builtin_error_message_string_error_with_string_and_extra() {
 }
 
 #[test]
+fn builtin_error_message_string_ignores_dotted_error_data_tails() {
+    crate::test_utils::init_test_tracing();
+    let mut evaluator = super::super::eval::Context::new();
+    init_standard_errors(&mut evaluator.obarray);
+    put_error_properties(
+        &mut evaluator.obarray,
+        "iter-end-of-sequence",
+        "Iteration terminated",
+        vec!["iter-end-of-sequence"],
+    );
+
+    let generator_eof = Value::cons(Value::symbol("iter-end-of-sequence"), Value::symbol(":eof"));
+    let generator_result = builtin_error_message_string(&mut evaluator, vec![generator_eof]);
+    assert!(generator_result.is_ok());
+    assert_eq!(
+        generator_result.unwrap().as_utf8_str(),
+        Some("Iteration terminated")
+    );
+
+    let error_string_dotted = Value::cons(
+        Value::symbol("error"),
+        Value::cons(Value::string("a"), Value::symbol(":b")),
+    );
+    let error_string_result =
+        builtin_error_message_string(&mut evaluator, vec![error_string_dotted]);
+    assert!(error_string_result.is_ok());
+    assert_eq!(error_string_result.unwrap().as_utf8_str(), Some("a"));
+
+    let error_extra_dotted = Value::cons(
+        Value::symbol("error"),
+        Value::cons(
+            Value::string("a"),
+            Value::cons(Value::symbol(":b"), Value::symbol(":c")),
+        ),
+    );
+    let error_extra_result = builtin_error_message_string(&mut evaluator, vec![error_extra_dotted]);
+    assert!(error_extra_result.is_ok());
+    assert_eq!(error_extra_result.unwrap().as_utf8_str(), Some("a: :b"));
+
+    let unknown_dotted = Value::cons(
+        Value::symbol("foo"),
+        Value::cons(Value::symbol(":a"), Value::symbol(":b")),
+    );
+    let unknown_result = builtin_error_message_string(&mut evaluator, vec![unknown_dotted]);
+    assert!(unknown_result.is_ok());
+    assert_eq!(
+        unknown_result.unwrap().as_utf8_str(),
+        Some("peculiar error: :a")
+    );
+}
+
+#[test]
 fn builtin_error_message_string_user_error_variants() {
     crate::test_utils::init_test_tracing();
     let mut evaluator = super::super::eval::Context::new();

@@ -5917,17 +5917,7 @@ impl Context {
                 }
                 let rendered = super::error::format_signal_data_with_eval(self, &sig);
                 tracing::warn!("command_loop_top_level_1: top-level SIGNALED: {}", rendered);
-                let data_str = sig
-                    .data
-                    .iter()
-                    .map(|value| format!("{value}"))
-                    .collect::<Vec<_>>()
-                    .join(" ");
-                let error_msg = if data_str.is_empty() {
-                    sig.symbol_name().to_string()
-                } else {
-                    format!("{}: {}", sig.symbol_name(), data_str)
-                };
+                let error_msg = self.display_command_error(&sig);
                 if cfg!(test) {
                     let last_phase = self
                         .obarray
@@ -5946,11 +5936,6 @@ impl Context {
                         error_msg, last_phase, last_call
                     );
                 }
-                let _ = super::builtins::dispatch_builtin(
-                    self,
-                    "message",
-                    vec![Value::string(&error_msg)],
-                );
                 self.log_startup_state("top-level-signal");
                 tracing::warn!("Top-level startup error: {}", error_msg);
                 if self.command_loop_noninteractive() {

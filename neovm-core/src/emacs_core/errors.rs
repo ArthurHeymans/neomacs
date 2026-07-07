@@ -828,11 +828,7 @@ pub(crate) fn builtin_error_message_string(
                 Some(name) => name.to_string(),
                 None => return Ok(Value::string("peculiar error")),
             };
-            let rest = match pair_cdr.kind() {
-                ValueKind::Nil => vec![],
-                ValueKind::Cons => list_to_vec(&pair_cdr).unwrap_or_else(|| vec![pair_cdr]),
-                _ => vec![pair_cdr],
-            };
+            let rest = error_data_tail_to_vec(pair_cdr);
             (sym, rest)
         }
         ValueKind::Nil => return Ok(Value::heap_string(lisp_lit("peculiar error"))),
@@ -964,6 +960,15 @@ pub(crate) fn builtin_error_message_string(
     Ok(Value::heap_string(
         base_message.concat(&lisp_lit(": ")).concat(&detail),
     ))
+}
+
+fn error_data_tail_to_vec(mut tail: Value) -> Vec<Value> {
+    let mut data = Vec::new();
+    while tail.is_cons() {
+        data.push(tail.cons_car());
+        tail = tail.cons_cdr();
+    }
+    data
 }
 
 /// Issue #131: render an error-data argument as a faithful LispString (Emacs
