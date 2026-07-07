@@ -598,6 +598,8 @@ pub(crate) fn builtin_image_size_in_context(eval: &mut Context, args: Vec<Value>
         ));
     }
 
+    require_image_window_system_frame(eval, "image-size", args.get(2))?;
+
     let Some(display_host) = eval.display_host.as_ref() else {
         return Err(signal(
             "error",

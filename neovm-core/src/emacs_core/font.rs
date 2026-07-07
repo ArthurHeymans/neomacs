@@ -6671,6 +6671,17 @@ pub(crate) fn builtin_font_info(eval: &mut super::eval::Context, args: Vec<Value
     expect_min_args("font-info", &args, 1)?;
     expect_max_args("font-info", &args, 2)?;
 
+    if !(args[0].is_string()
+        || is_font(&args[0])
+        || is_font_entity(&args[0])
+        || is_font_object(&args[0]))
+    {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("stringp"), args[0]],
+        ));
+    }
+
     let frame_id = match args.get(1) {
         None => super::window_cmds::ensure_selected_frame_id(eval),
         Some(v) if v.is_nil() => super::window_cmds::ensure_selected_frame_id(eval),
@@ -6717,10 +6728,7 @@ pub(crate) fn builtin_font_info(eval: &mut super::eval::Context, args: Vec<Value
             &args[0], frame, capability,
         ))
     } else {
-        Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("stringp"), args[0]],
-        ))
+        Ok(Value::NIL)
     }
 }
 

@@ -1538,7 +1538,7 @@ fn test_window_text_pixel_size_from_t_starts_at_first_non_empty_line() {
 
     let result = builtin_window_text_pixel_size_ctx(
         &mut eval,
-        vec![Value::fixnum(selected_window), Value::T],
+        vec![Value::make_window(selected_window as u64), Value::T],
     )
     .unwrap();
     assert!(result.is_cons(), "expected cons, got {:?}", result.kind());
@@ -1554,8 +1554,11 @@ fn test_window_text_pixel_size_eval_window_validation() {
     let frame_id = eval.frames.create_frame("xdisp-test", 80, 24, buf_id);
     let selected_window = eval.frames.get(frame_id).expect("frame").selected_window.0 as i64;
 
-    let ok = builtin_window_text_pixel_size_ctx(&mut eval, vec![Value::fixnum(selected_window)])
-        .unwrap();
+    let ok = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![Value::make_window(selected_window as u64)],
+    )
+    .unwrap();
     match ok.kind() {
         ValueKind::Cons => {}
         other => panic!("expected cons return, got {other:?}"),
@@ -1591,7 +1594,7 @@ fn test_window_text_pixel_size_tty_frame_uses_char_cell_metrics() {
     let result = builtin_window_text_pixel_size_ctx(
         &mut eval,
         vec![
-            Value::fixnum(selected_window),
+            Value::make_window(selected_window as u64),
             Value::NIL,
             Value::T,
             Value::NIL,
@@ -1627,7 +1630,7 @@ fn test_window_text_pixel_size_ctx_coerces_bignum_positions_like_gnu() {
 
     let result = builtin_window_text_pixel_size_ctx(
         &mut eval,
-        vec![Value::fixnum(selected_window), positive_big],
+        vec![Value::make_window(selected_window as u64), positive_big],
     )
     .expect("GNU clips bignum FROM with fix_position");
     assert!(result.is_cons());
@@ -1635,7 +1638,7 @@ fn test_window_text_pixel_size_ctx_coerces_bignum_positions_like_gnu() {
     let result = builtin_window_text_pixel_size_ctx(
         &mut eval,
         vec![
-            Value::fixnum(selected_window),
+            Value::make_window(selected_window as u64),
             Value::fixnum(1),
             positive_big,
         ],
@@ -1663,9 +1666,11 @@ fn test_window_text_pixel_size_matches_gnu_trailing_line_semantics() {
     }
     let selected_window = eval.frames.get(frame_id).expect("frame").selected_window.0 as i64;
 
-    let result =
-        builtin_window_text_pixel_size_ctx(&mut eval, vec![Value::fixnum(selected_window)])
-            .unwrap();
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![Value::make_window(selected_window as u64)],
+    )
+    .unwrap();
     assert!(result.is_cons(), "expected cons, got {:?}", result.kind());
     assert_eq!(result.cons_car(), Value::fixnum(5));
     assert_eq!(result.cons_cdr(), Value::fixnum(3));
@@ -1673,7 +1678,7 @@ fn test_window_text_pixel_size_matches_gnu_trailing_line_semantics() {
     let result = builtin_window_text_pixel_size_ctx(
         &mut eval,
         vec![
-            Value::fixnum(selected_window),
+            Value::make_window(selected_window as u64),
             Value::NIL,
             Value::T,
             Value::NIL,
@@ -1713,7 +1718,7 @@ fn test_window_text_pixel_size_uses_char_positions_for_multibyte_range() {
     let result = builtin_window_text_pixel_size_ctx(
         &mut eval,
         vec![
-            Value::fixnum(selected_window),
+            Value::make_window(selected_window as u64),
             Value::fixnum(3),
             Value::fixnum(5),
         ],
@@ -1775,9 +1780,11 @@ fn test_window_text_pixel_size_honors_display_align_to_column() {
     )
     .expect("put display align-to property");
 
-    let result =
-        builtin_window_text_pixel_size_ctx(&mut eval, vec![Value::fixnum(selected_window)])
-            .expect("window-text-pixel-size");
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![Value::make_window(selected_window as u64)],
+    )
+    .expect("window-text-pixel-size");
     assert!(result.is_cons(), "expected cons, got {:?}", result.kind());
     // char_width == 1.0, so pixels == columns.  Without the fix this would be
     // ~5 (2 chars + 1 space + 2 chars); with align-to honored it is 82.
@@ -1820,9 +1827,11 @@ fn test_window_text_pixel_size_honors_display_align_to_plus_left() {
     )
     .expect("put display align-to (+ left N) property");
 
-    let result =
-        builtin_window_text_pixel_size_ctx(&mut eval, vec![Value::fixnum(selected_window)])
-            .expect("window-text-pixel-size");
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![Value::make_window(selected_window as u64)],
+    )
+    .expect("window-text-pixel-size");
     assert_eq!(result.cons_car(), Value::fixnum(82));
 }
 
@@ -1853,9 +1862,11 @@ fn test_window_text_pixel_size_honors_display_space_width() {
     )
     .expect("put display :width property");
 
-    let result =
-        builtin_window_text_pixel_size_ctx(&mut eval, vec![Value::fixnum(selected_window)])
-            .expect("window-text-pixel-size");
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![Value::make_window(selected_window as u64)],
+    )
+    .expect("window-text-pixel-size");
     assert_eq!(
         result.cons_car(),
         Value::fixnum(24),
@@ -1950,9 +1961,11 @@ fn test_window_text_pixel_size_measures_overlay_before_string_at_point_max() {
     )
     .expect("set before-string");
 
-    let result =
-        builtin_window_text_pixel_size_ctx(&mut eval, vec![Value::fixnum(selected_window)])
-            .expect("window-text-pixel-size");
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![Value::make_window(selected_window as u64)],
+    )
+    .expect("window-text-pixel-size");
     let width = result.cons_car().as_int().expect("width");
     // char_width == 1.0, so pixels == columns.  With align-to honored, each
     // candidate line reaches column 40 + len("desc-a") == 46.  Without the fix
@@ -1977,9 +1990,11 @@ fn test_window_text_pixel_size_plain_text_unchanged_by_fix() {
         .get_mut(buf_id)
         .expect("buffer")
         .insert("hello\nworld!");
-    let result =
-        builtin_window_text_pixel_size_ctx(&mut eval, vec![Value::fixnum(selected_window)])
-            .expect("window-text-pixel-size");
+    let result = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![Value::make_window(selected_window as u64)],
+    )
+    .expect("window-text-pixel-size");
     // Widest line is "world!" => 6 columns.
     assert_eq!(result.cons_car(), Value::fixnum(6));
     assert_eq!(result.cons_cdr(), Value::fixnum(2));
@@ -2002,8 +2017,11 @@ fn window_text_pixel_size_backend_trace(kind: BufferTextBackendKind) -> (i64, i6
     }
     let selected_window = eval.frames.get(frame_id).expect("frame").selected_window.0 as i64;
 
-    let size = builtin_window_text_pixel_size_ctx(&mut eval, vec![Value::fixnum(selected_window)])
-        .expect("window-text-pixel-size");
+    let size = builtin_window_text_pixel_size_ctx(
+        &mut eval,
+        vec![Value::make_window(selected_window as u64)],
+    )
+    .expect("window-text-pixel-size");
     assert!(size.is_cons(), "expected cons, got {:?}", size.kind());
     (
         size.cons_car().as_int().expect("pixel width integer"),

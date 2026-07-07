@@ -3640,14 +3640,7 @@ fn resolve_live_window_for_text_pixel_size(
     }
 
     let value = window.expect("non-nil window argument");
-    let wid = if let Some(id) = value.as_window_id() {
-        Some(WindowId(id))
-    } else {
-        value
-            .as_fixnum()
-            .filter(|id| *id >= 0)
-            .map(|id| WindowId(id as u64))
-    };
+    let wid = value.as_window_id().map(WindowId);
     let Some(wid) = wid else {
         return Err(signal(
             "wrong-type-argument",

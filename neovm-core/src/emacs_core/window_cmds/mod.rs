@@ -7755,6 +7755,16 @@ fn frame_parameter_value(frame: &crate::window::Frame, param_key: FrameParamKey)
                 .map(super::font::public_frame_font_parameter_value)
                 .unwrap_or(Value::NIL);
         }
+        FrameParamKey::Known(FrameParam::LineSpacing) => {
+            return frame
+                .known_parameter(FrameParam::LineSpacing)
+                .unwrap_or(Value::fixnum(0));
+        }
+        FrameParamKey::Known(FrameParam::Unsplittable)
+            if frame.effective_window_system().is_none() && frame.parent_frame.is_nil() =>
+        {
+            return Value::NIL;
+        }
         _ => {}
     }
 
@@ -8163,8 +8173,15 @@ pub(crate) fn builtin_modify_frame_parameters(
                         }
                         FrameParamKey::Known(FrameParam::Unsplittable) => {
                             if let Some(frame) = eval.frames.get_mut(fid) {
-                                frame.no_split = pair_cdr.is_truthy();
-                                frame.set_known_parameter(FrameParam::Unsplittable, pair_cdr);
+                                if frame.effective_window_system().is_none()
+                                    && frame.parent_frame.is_nil()
+                                {
+                                    frame.no_split = false;
+                                    frame.set_known_parameter(FrameParam::Unsplittable, Value::NIL);
+                                } else {
+                                    frame.no_split = pair_cdr.is_truthy();
+                                    frame.set_known_parameter(FrameParam::Unsplittable, pair_cdr);
+                                }
                             }
                         }
                         FrameParamKey::Known(
