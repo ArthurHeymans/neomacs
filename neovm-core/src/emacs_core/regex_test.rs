@@ -2940,26 +2940,48 @@ fn regex_bench_fontlock_engine() {
     let kib = bytes.len() as f64 / 1024.0;
     let iters = 7;
 
-    let mut report = format!("BENCH regex fontlock engine ({kib:.0} KiB subr.el):\n");
-    let mut total = std::time::Duration::ZERO;
+    let mut report = format!(
+        "BENCH regex fontlock engine ({kib:.0} KiB subr.el):\n  \
+         {:<16} {:>12} {:>12}  {:>5}  prefilter\n",
+        "pattern", "fastmap-only", "prefilter", "matches"
+    );
+    // TOTAL over both configs so the net payoff is visible in one number.
+    let mut total_off = std::time::Duration::ZERO; // fastmap-only (baseline)
+    let mut total_on = std::time::Duration::ZERO; //  prefilter-enabled
     for (name, pat) in REGEX_BENCH_FONTLOCK_PATTERNS {
+        // Prefilter-enabled compile (this branch's default).
         let cp = regex_bench_compile(pat, false);
+        // Same pattern with the prefilter cleared → the fastmap-only baseline
+        // (identical match engine + fastmap; the ONLY difference is the SIMD
+        // multi-literal skip), so this is an apples-to-apples before/after.
+        let mut cp_off = cp.clone();
+        cp_off.prefilter = None;
+
         let matches = regex_bench_engine_scan(&cp, bytes);
-        let t = regex_bench_min(iters, || {
+        // Semantics unchanged: the prefilter must never alter the match count.
+        assert_eq!(
+            regex_bench_engine_scan(&cp_off, bytes),
+            matches,
+            "prefilter changed match count for {name}"
+        );
+
+        let t_off = regex_bench_min(iters, || {
+            assert_eq!(regex_bench_engine_scan(&cp_off, bytes), matches);
+        });
+        let t_on = regex_bench_min(iters, || {
             assert_eq!(regex_bench_engine_scan(&cp, bytes), matches);
         });
-        total += t;
+        total_off += t_off;
+        total_on += t_on;
         report.push_str(&format!(
-            "  {name:<16} {t:>10.1?}  {matches:>5} matches  fastmap={} uses_syntax={} ({:.1} MiB/s)\n",
-            // The actual `re_search` gate (GNU regex-emacs.c:3483):
-            // syntax use no longer disables the fastmap.
-            !cp.can_be_null && cp.fastmap_accurate,
-            cp.uses_syntax,
-            kib / 1024.0 / t.as_secs_f64(),
+            "  {name:<16} {t_off:>12.1?} {t_on:>12.1?}  {matches:>5}  {}\n",
+            if cp.prefilter.is_some() { "YES" } else { "none" },
         ));
     }
     report.push_str(&format!(
-        "  TOTAL one fontify pass over all patterns: {total:.1?}"
+        "  {:<16} {total_off:>12.1?} {total_on:>12.1?}   TOTAL one fontify pass  ({:+.1}%)",
+        "TOTAL",
+        (total_on.as_secs_f64() / total_off.as_secs_f64() - 1.0) * 100.0,
     ));
     panic!("{report}");
 }

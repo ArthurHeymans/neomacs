@@ -28,6 +28,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::emacs_core::{emacs_char, syntax::SyntaxClass};
+use regex_automata::util::prefilter::Prefilter as RaPrefilter;
+use regex_automata::{MatchKind, Span};
 use smallvec::SmallVec;
 
 const INLINE_REGEX_REGISTERS: usize = 8;
@@ -334,6 +336,33 @@ pub(crate) struct CompiledPattern {
     /// pattern is ineligible or has no keep-string loop that needs the
     /// rewrite (in which case the Pike VM reads `buffer` directly).
     pub pike_buffer: Option<Vec<u8>>,
+
+    /// Multi-literal SIMD prefilter that AUGMENTS (never replaces) the
+    /// backtracker's search skip loop.  When `Some`, `re_search`'s forward
+    /// path uses `regex-automata`'s `Prefilter` (memchr / Teddy /
+    /// Aho-Corasick, auto-selected) to jump straight to the next position
+    /// whose text provably contains a required match literal, instead of the
+    /// single-byte fastmap scan.  The backtracker still verifies every
+    /// candidate, so the ONLY correctness requirement is that the literals be
+    /// SOUND: every match must contain one of them at `LiteralPrefilter.offset`
+    /// bytes from the match start (see `build_literal_prefilter`).  `None` when
+    /// no such literal set could be proven (fall back to the fastmap — always
+    /// correct).  Never set for case-fold patterns or patterns whose only
+    /// required literals are single bytes (the fastmap's memchr already handles
+    /// those).
+    pub prefilter: Option<LiteralPrefilter>,
+}
+
+/// A sound multi-literal prefilter for a compiled pattern.  See
+/// [`CompiledPattern::prefilter`] and [`build_literal_prefilter`].
+#[derive(Clone)]
+pub(crate) struct LiteralPrefilter {
+    /// `regex-automata`'s SIMD literal scanner over the needle set.
+    pf: RaPrefilter,
+    /// Byte offset of the found literal within the match: a literal found at
+    /// text index `j` means a candidate match may start at `j - offset`.
+    /// Currently always `0` (see `build_literal_prefilter`).
+    offset: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -433,6 +462,7 @@ impl CompiledPattern {
             has_nongreedy_optional: false,
             pike_eligible: false,
             pike_buffer: None,
+            prefilter: None,
         }
     }
 
@@ -1534,6 +1564,12 @@ pub(crate) fn regex_compile_lisp_with_translation(
     // rebake via `recompute_fastmap` and key their cache by table
     // (GNU `search.c:compile_pattern` + `used_syntax`).
     compile_fastmap(&mut buf, &DefaultSyntaxLookup);
+
+    // Build the multi-literal SIMD prefilter (AUGMENTS the fastmap; the
+    // backtracker still verifies every candidate).  Depends only on the
+    // bytecode's required-literal structure, which is syntax-table
+    // independent, so it survives `recompute_fastmap` cloning unchanged.
+    buf.prefilter = build_literal_prefilter(&buf);
 
     // Decide once whether the non-backtracking Pike VM can simulate this
     // bytecode byte-exactly (see `compute_pike_eligible`).
@@ -6112,6 +6148,219 @@ fn compile_fastmap(pattern: &mut CompiledPattern, syntax: &dyn SyntaxLookup) {
     pattern.fastmap_accurate = true;
 }
 
+// ---------------------------------------------------------------------------
+// Multi-literal SIMD prefilter (sound literal extraction)
+// ---------------------------------------------------------------------------
+
+/// Cap on the number of distinct required literals handed to the prefilter.
+/// Big keyword alternations (`el-defs` has ~40 `def*` heads) must fit; beyond
+/// this, bail to the fastmap (the needle set stops being a useful filter).
+const PREFILTER_MAX_LITERALS: usize = 128;
+/// Cap on a single literal's length.  Reaching it finalizes the required
+/// prefix early — a SHORTER required prefix is still a sound required literal
+/// (every match on that path still starts with it), so this only trades
+/// specificity for a bounded needle, never correctness.
+const PREFILTER_MAX_LITERAL_LEN: usize = 64;
+/// Total opcode-visit budget for the extraction walk; guarantees termination
+/// on pathological bytecode (returns `None`, i.e. no prefilter — always safe).
+const PREFILTER_BUDGET: usize = 16_384;
+
+/// Build a SOUND multi-literal prefilter from the compiled bytecode, or
+/// `None` when no required-literal set can be proven (then `re_search` keeps
+/// the byte fastmap — always correct).
+///
+/// SOUNDNESS is the only correctness requirement: the backtracker verifies
+/// every candidate the prefilter surfaces, so a prefilter is correct as long
+/// as **every match contains one of the returned literals at
+/// `offset` bytes from the match start**.  A prefilter that skips *past* a
+/// real match (an unsound literal) is a bug caught by the differential fuzzer.
+///
+/// The extraction enumerates the required *offset-0* prefix set of the
+/// pattern (`collect_prefix_literals`): a run of leading `Exactn`s (with
+/// zero-width assertions / group markers skipped) forms a forced prefix, and
+/// a leading alternation whose every arm begins with an `Exactn` splits that
+/// prefix across the arms (`(\(catch\|throw\|require\)` → `["(catch",
+/// "(throw", "(require"]`).  If ANY reachable path can begin a match without a
+/// literal byte at offset 0 (a leading `\w` / charset / `.` / nullable arm),
+/// extraction bails — no prefilter.  Offset is always `0`: a required literal
+/// at a fixed byte offset k>0 would need a fixed-byte-width non-literal prefix,
+/// which is fragile under multibyte, so it is deliberately not attempted
+/// (conservative = sound).
+///
+/// Case-fold patterns are skipped (the fastmap already handles them via
+/// `TRANSLATE` indexing; folding every literal into the needle set is left as
+/// a future refinement).  Patterns whose only required literals are single
+/// bytes are skipped too — the fastmap's `memchr` already covers those, so a
+/// prefilter would add cost without narrowing the candidate set.
+fn build_literal_prefilter(pattern: &CompiledPattern) -> Option<LiteralPrefilter> {
+    // Case-fold: skip (sound + simple).  See doc comment.
+    if pattern.translate.is_some() {
+        return None;
+    }
+    // Nullable patterns match the empty string, so no non-empty literal is
+    // required.  `re_search` also disables the fastmap skip for these
+    // (GNU regex-emacs.c:3483) — keep the same gate.
+    if pattern.can_be_null {
+        return None;
+    }
+    if pattern.buffer.is_empty() {
+        return None;
+    }
+
+    let mut literals: Vec<Vec<u8>> = Vec::new();
+    let mut budget = PREFILTER_BUDGET;
+    let mut visited: Vec<usize> = Vec::new();
+    // A `None` here means some match path has no proven offset-0 literal —
+    // extraction is unsound to use, so no prefilter at all.
+    collect_prefix_literals(
+        pattern,
+        0,
+        Vec::new(),
+        &mut literals,
+        &mut budget,
+        &mut visited,
+    )?;
+
+    if literals.is_empty() {
+        return None;
+    }
+    // Deduplicate (nested alternations can re-derive the same prefix).
+    literals.sort();
+    literals.dedup();
+    // If every required literal is a single byte, the fastmap's memchr scan
+    // already skips exactly these positions — a prefilter buys nothing.
+    if literals.iter().all(|l| l.len() <= 1) {
+        return None;
+    }
+
+    // `regex-automata` auto-selects memchr / memmem / Teddy / Aho-Corasick.
+    let pf = RaPrefilter::new(MatchKind::LeftmostFirst, &literals)?;
+    // Only adopt it when the crate deems the scan actually fast (otherwise the
+    // fastmap path is at least as good).
+    if !pf.is_fast() {
+        return None;
+    }
+    Some(LiteralPrefilter { pf, offset: 0 })
+}
+
+/// Finalize a branch's accumulated required prefix.  An EMPTY prefix means the
+/// path can begin a match without any offset-0 literal, so the whole pattern
+/// is un-prefilterable (return `None`); a non-empty prefix is a sound required
+/// literal for every match on this path.
+fn finalize_prefix(prefix: Vec<u8>, out: &mut Vec<Vec<u8>>) -> Option<()> {
+    if prefix.is_empty() {
+        return None;
+    }
+    out.push(prefix);
+    Some(())
+}
+
+/// Walk the bytecode from `pc`, accumulating the forced literal `prefix`
+/// (offset 0), branching at alternation / quantifier `on_failure_jump`s.  On
+/// every terminal (a non-literal consuming op, end-of-pattern, `succeed`, a
+/// jump, or a loop back-edge) the accumulated prefix is finalized as one
+/// required literal.  Returns `None` (bail the whole prefilter) if any path
+/// finalizes with an empty prefix, if the budget/literal caps are exceeded, or
+/// if the bytecode is malformed.
+fn collect_prefix_literals(
+    buf: &CompiledPattern,
+    mut pc: usize,
+    mut prefix: Vec<u8>,
+    out: &mut Vec<Vec<u8>>,
+    budget: &mut usize,
+    visited: &mut Vec<usize>,
+) -> Option<()> {
+    let bytecode = &buf.buffer;
+    loop {
+        if *budget == 0 {
+            return None;
+        }
+        *budget -= 1;
+        if out.len() > PREFILTER_MAX_LITERALS {
+            return None;
+        }
+        // End of pattern: a match may end here.  The prefix is required iff
+        // non-empty (empty => a nullable/empty-arm path => unsound).
+        if pc >= bytecode.len() {
+            return finalize_prefix(prefix, out);
+        }
+        // Loop back-edge already on this path: stop and finalize.  The
+        // accumulated prefix (>= one body iteration's literal) is still
+        // required on the "took the loop" path; the exit branch (enumerated at
+        // the loop's on_failure_jump) covers the "skipped it" path.
+        if visited.contains(&pc) {
+            return finalize_prefix(prefix, out);
+        }
+        visited.push(pc);
+
+        let op = RegexOp::from_byte(bytecode[pc])?;
+        match op {
+            RegexOp::Exactn => {
+                let count = *bytecode.get(pc + 1)? as usize;
+                if count == 0 || pc + 2 + count > bytecode.len() {
+                    return None;
+                }
+                prefix.extend_from_slice(&bytecode[pc + 2..pc + 2 + count]);
+                if prefix.len() >= PREFILTER_MAX_LITERAL_LEN {
+                    // Sound early cut: a shorter required prefix still holds.
+                    return finalize_prefix(prefix, out);
+                }
+                pc += 2 + count;
+            }
+
+            // Zero-width assertions and bookkeeping: do not consume input or
+            // shift the offset — walk through them, offset unchanged.
+            RegexOp::BegLine
+            | RegexOp::EndLine
+            | RegexOp::BegBuf
+            | RegexOp::EndBuf
+            | RegexOp::AtDot
+            | RegexOp::WordBound
+            | RegexOp::NotWordBound
+            | RegexOp::WordBeg
+            | RegexOp::WordEnd
+            | RegexOp::SymBeg
+            | RegexOp::SymEnd
+            | RegexOp::NoOp => {
+                pc += 1;
+            }
+
+            RegexOp::StartMemory | RegexOp::StopMemory => {
+                pc += 2;
+            }
+
+            // Alternation / quantifier split: BOTH the fallthrough arm and the
+            // jump target can begin a match, and every match takes exactly one
+            // path, so the UNION of both arms' required literals is sound.
+            RegexOp::OnFailureJump
+            | RegexOp::OnFailureKeepStringJump
+            | RegexOp::OnFailureJumpLoop
+            | RegexOp::OnFailureJumpNastyloop
+            | RegexOp::OnFailureJumpSmart => {
+                if pc + 2 >= bytecode.len() {
+                    return None;
+                }
+                let offset = extract_number(bytecode, pc + 1) as i64;
+                let target = ((pc as i64) + 3 + offset) as usize;
+                let fallthrough = pc + 3;
+                let mut v1 = visited.clone();
+                collect_prefix_literals(buf, fallthrough, prefix.clone(), out, budget, &mut v1)?;
+                let mut v2 = visited.clone();
+                return collect_prefix_literals(buf, target, prefix, out, budget, &mut v2);
+            }
+
+            // Every other op either consumes NON-literal input (AnyChar,
+            // Charset(Not), Syntax/Category specs, Duplicate) or is a control
+            // terminal for this analysis (Succeed, Jump, SucceedN, JumpN,
+            // SetNumberAt).  In all cases the required prefix so far is
+            // finalized; a non-literal consuming op after a non-empty prefix is
+            // fine (the prefix is still required), and reaching one with an
+            // empty prefix means no offset-0 literal is required => bail.
+            _ => return finalize_prefix(prefix, out),
+        }
+    }
+}
+
 // Test-only escape hatch: force `re_search` down the no-fastmap path so
 // equivalence tests can assert that fastmap skipping never changes match
 // results (position + registers) for any pattern/haystack pair.
@@ -6124,6 +6373,19 @@ thread_local! {
 #[cfg(test)]
 fn fastmap_force_disabled() -> bool {
     FORCE_DISABLE_FASTMAP.with(|flag| flag.get())
+}
+
+/// Run `f` with the fastmap AND prefilter search-skips disabled, so
+/// `re_search` scans every position through the pure backtracker/Pike matcher.
+/// This is the ORACLE for the prefilter differential fuzzer: comparing it
+/// against the normal (prefilter-enabled) search proves the prefilter never
+/// changes match results.  Test only.
+#[cfg(test)]
+pub(crate) fn with_fastmap_disabled<R>(f: impl FnOnce() -> R) -> R {
+    FORCE_DISABLE_FASTMAP.with(|flag| flag.set(true));
+    let r = f();
+    FORCE_DISABLE_FASTMAP.with(|flag| flag.set(false));
+    r
 }
 
 #[cfg(not(test))]
@@ -6220,7 +6482,53 @@ pub(crate) fn re_search(
         let end = (start + range as usize).min(text_len);
         let mut pos = start;
         if use_fastmap {
-            if let Some(table) = translate {
+            if let Some(pref) = &pattern.prefilter {
+                // SIMD multi-literal skip: jump straight to the next position
+                // whose text provably contains a required match literal, far
+                // more aggressively than the single-byte fastmap.  The
+                // backtracker still verifies every candidate, so correctness
+                // rests only on the literal set being SOUND — every match
+                // contains one of the needles at `off` bytes from its start
+                // (see `build_literal_prefilter`).  The prefilter is only ever
+                // built for non-case-fold patterns, so `translate` is None
+                // here.
+                let off = pref.offset;
+                // The literal for a match starting at `m` sits at
+                // `text[m + off ..]`; the earliest candidate is `start`, whose
+                // literal begins at `start + off`.
+                let mut next_lit = start.saturating_add(off).min(text_len);
+                while next_lit <= text_len {
+                    let Some(span) = pref.pf.find(text, Span { start: next_lit, end: text_len })
+                    else {
+                        break;
+                    };
+                    let lit_at = span.start;
+                    let cand = lit_at.saturating_sub(off);
+                    if cand > end {
+                        break;
+                    }
+                    // Advance past this literal occurrence for the next probe,
+                    // regardless of whether this candidate matches — keeps the
+                    // scan strictly monotonic (no infinite loop).
+                    next_lit = lit_at + 1;
+                    if cand < start {
+                        // Literal too early to back up to an in-range start.
+                        continue;
+                    }
+                    // A match cannot start inside a multibyte character; the
+                    // needle bytes are exact, so a continuation-byte candidate
+                    // is never a real match — skip it.
+                    if pattern.target_multibyte
+                        && cand < text_len
+                        && (text[cand] & 0xC0) == 0x80
+                    {
+                        continue;
+                    }
+                    if let Some(result) = try_candidate!(cand, end) {
+                        return Some((cand, result.1));
+                    }
+                }
+            } else if let Some(table) = translate {
                 while pos <= end {
                     if pos > text_len {
                         break;

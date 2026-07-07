@@ -1399,3 +1399,364 @@ fn pike_fallback_only_on_catastrophe() {
         "a*a*b over a long run should trip the catastrophe fallback"
     );
 }
+
+// ===========================================================================
+// Multi-literal SIMD prefilter — differential fuzzer
+//
+// The prefilter AUGMENTS the backtracker: it skips to candidate positions,
+// which the backtracker still verifies.  So the ONLY correctness requirement
+// is that the extracted literals are SOUND — every match provably contains one
+// at a known offset.  An unsound skip drops a real match, which this fuzzer
+// catches by comparing, over random elisp-subset patterns × buffers:
+//   * ORACLE   = `re_search` with the fastmap/prefilter skip DISABLED
+//                (every position scanned by the pure matcher), and
+//   * CANDIDATE = `re_search` with the prefilter ENABLED.
+// Same match engine on both sides (the production heuristic); only the skip
+// mechanism differs, so any divergence pinpoints the prefilter.
+// ===========================================================================
+
+/// Literal alphabet for prefilter patterns: ASCII letters + Emacs-literal
+/// punctuation (`(` `)` `_` `-` `:` `!` are non-special) + multibyte, to stress
+/// byte-exact needle handling and multibyte char-boundary skipping.
+const PF_LIT_CHARS: &[char] =
+    &['a', 'b', 'c', 'd', 'e', 'f', 'g', '(', ')', '_', '-', ':', '!', 'é', '中'];
+
+/// Emit a literal run into `out`, escaping regex metacharacters, and record the
+/// raw (unescaped) bytes as a keyword so the buffer generator can plant hits.
+fn pf_emit_literal(rng: &mut FuzzRng, out: &mut String, kw: &mut String) {
+    let n = 1 + rng.below(6);
+    for _ in 0..n {
+        let c = rng.pick_char(PF_LIT_CHARS);
+        if ".*+?[]^$\\".contains(c) {
+            out.push('\\');
+        }
+        out.push(c);
+        kw.push(c);
+    }
+}
+
+/// Generate a pattern that stresses the prefilter's literal extraction:
+/// a literal prefix, optionally a `\(alt\|...\)` whose arms are mostly literal
+/// (some deliberately non-literal / empty to exercise the soundness bail),
+/// optional quantifiers, and an optional non-literal suffix.  Returns the
+/// pattern and the literal keywords used (for planting real matches).
+fn pf_gen_pattern(rng: &mut FuzzRng) -> (String, Vec<String>) {
+    let mut out = String::new();
+    let mut keywords: Vec<String> = Vec::new();
+
+    // Leading literal prefix (sometimes empty to force alternation-first).
+    let mut prefix_kw = String::new();
+    if rng.chance(4, 5) {
+        pf_emit_literal(rng, &mut out, &mut prefix_kw);
+        // Optional quantifier on the last prefix char (tests optional/loop
+        // branch handling): rewrite as `pre(?:lastchar)?`-ish by appending.
+        if rng.chance(1, 4) {
+            out.push_str(rng.pick_str(&["?", "*", "+"]));
+        }
+    }
+
+    // Alternation.
+    if prefix_kw.is_empty() || rng.chance(3, 4) {
+        out.push_str("\\(");
+        let arms = 2 + rng.below(4);
+        for i in 0..arms {
+            if i > 0 {
+                out.push_str("\\|");
+            }
+            match rng.below(10) {
+                0 => { /* empty arm — nullable, must make the prefilter bail */ }
+                1 => out.push_str("\\w+"), // non-literal head — must bail
+                2 => {
+                    out.push('.'); // AnyChar head — must bail
+                    let mut kw = String::new();
+                    pf_emit_literal(rng, &mut out, &mut kw);
+                }
+                3 => {
+                    out.push_str("[a-c]"); // charset head — must bail
+                    let mut kw = String::new();
+                    pf_emit_literal(rng, &mut out, &mut kw);
+                }
+                _ => {
+                    let mut kw = String::new();
+                    pf_emit_literal(rng, &mut out, &mut kw);
+                    keywords.push(format!("{prefix_kw}{kw}"));
+                }
+            }
+        }
+        out.push_str("\\)");
+    } else if !prefix_kw.is_empty() {
+        keywords.push(prefix_kw.clone());
+    }
+
+    // Optional suffix.
+    if rng.chance(1, 2) {
+        out.push_str(rng.pick_str(&["", "\\_>", "\\w*", "[ \t]*", "\\(?:\\w\\|\\s_\\)+", ":"]));
+    }
+
+    (out, keywords)
+}
+
+/// Build a buffer that mixes random noise (from the literal alphabet, so
+/// partial matches occur often) with whole planted keywords (so full matches —
+/// the prefilter's positive/verify path — are exercised, not just misses).
+fn pf_gen_text(rng: &mut FuzzRng, keywords: &[String], max_len: usize) -> Vec<u8> {
+    let mut v: Vec<u8> = Vec::with_capacity(max_len);
+    while v.len() < max_len {
+        match rng.below(12) {
+            0 if !keywords.is_empty() => {
+                let kw = &keywords[rng.below(keywords.len())];
+                v.extend_from_slice(kw.as_bytes());
+            }
+            1 => v.push(b' '),
+            2 => v.push(b'\n'),
+            3 => v.extend_from_slice("é".as_bytes()),
+            4 => v.extend_from_slice("中".as_bytes()),
+            5 => v.push(0x80 + rng.below(0x80) as u8), // raw high byte
+            _ => {
+                let c = PF_LIT_CHARS[rng.below(PF_LIT_CHARS.len())];
+                let mut buf = [0u8; 4];
+                v.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+            }
+        }
+    }
+    v
+}
+
+/// Compare oracle (skip disabled) vs candidate (prefilter enabled) for a
+/// forward search and an anchored match.  Returns the diverging label +
+/// results, or `None` if all agree (or a matcher overflow makes the case
+/// non-comparable).
+fn pf_diff(
+    cp: &CompiledPattern,
+    text: &[u8],
+    start: usize,
+) -> Option<(&'static str, FuzzResult, FuzzResult)> {
+    let syn = DefaultSyntaxLookup;
+    let len = text.len();
+
+    // Forward search.
+    let range = (len - start) as isize;
+    let _ = take_matcher_overflow();
+    let oracle = norm(with_fastmap_disabled(|| re_search(cp, text, start, range, &syn, start)));
+    if take_matcher_overflow() {
+        return None;
+    }
+    let cand = norm(re_search(cp, text, start, range, &syn, start));
+    if take_matcher_overflow() {
+        return None;
+    }
+    if oracle != cand {
+        return Some(("fwd", oracle, cand));
+    }
+
+    // Anchored match (re_match never uses the prefilter — a regression guard).
+    let _ = take_matcher_overflow();
+    let oracle = norm(with_fastmap_disabled(|| re_match(cp, text, start, len, &syn, start)));
+    if take_matcher_overflow() {
+        return None;
+    }
+    let cand = norm(re_match(cp, text, start, len, &syn, start));
+    if take_matcher_overflow() {
+        return None;
+    }
+    if oracle != cand {
+        return Some(("anchored", oracle, cand));
+    }
+
+    None
+}
+
+/// Core prefilter fuzz loop.  Returns `(compiled, with_prefilter)` counts.
+fn run_prefilter_fuzz(cases: usize, base_seed: u64, text_max: usize) -> (usize, usize) {
+    let mut compiled = 0usize;
+    let mut with_prefilter = 0usize;
+    for i in 0..cases {
+        let seed = base_seed.wrapping_add(i as u64);
+        let mut rng = FuzzRng::new(seed);
+
+        // 60% targeted literal/alternation shapes, 40% general breadth.
+        let (pat, keywords) = if rng.chance(3, 5) {
+            pf_gen_pattern(&mut rng)
+        } else {
+            let mut p = String::new();
+            let depth = 2 + rng.below(2) as u32;
+            gen_regex(&mut rng, &mut p, depth, true, false);
+            (p, Vec::new())
+        };
+
+        let cp = match regex_compile(&pat, false, false) {
+            Ok(cp) => cp,
+            Err(_) => continue,
+        };
+        compiled += 1;
+        if cp.prefilter.is_some() {
+            with_prefilter += 1;
+        }
+
+        // Two buffers: a planted-keyword mix and pure gen_text noise.
+        let texts = [
+            pf_gen_text(&mut rng, &keywords, text_max),
+            gen_text(&mut rng, text_max),
+        ];
+        for text in &texts {
+            for &start in &[0usize, text.len() / 2, text.len()] {
+                let start = start.min(text.len());
+                if let Some((label, oracle, cand)) = pf_diff(&cp, text, start) {
+                    panic!(
+                        "PREFILTER DIVERGENCE ({label}) at seed {seed}:\n\
+                         pattern      = {pat:?}\n\
+                         has_prefilter= {}\n\
+                         text         = {text:?}\n\
+                         start        = {start}\n\
+                         oracle(skip-off) = {oracle:?}\n\
+                         candidate(prefilter) = {cand:?}",
+                        cp.prefilter.is_some()
+                    );
+                }
+            }
+        }
+    }
+    (compiled, with_prefilter)
+}
+
+/// Fast smoke run on every `cargo test`.
+#[test]
+fn prefilter_fuzz_smoke() {
+    crate::test_utils::init_test_tracing();
+    let (compiled, with_pf) = run_prefilter_fuzz(3_000, 0x5EED_1234, 24);
+    // The generator must actually exercise the prefilter on a real fraction.
+    assert!(
+        with_pf > compiled / 20,
+        "prefilter fuzz should build a prefilter on many cases \
+         (with_prefilter={with_pf} compiled={compiled})"
+    );
+}
+
+/// The full ≥320k-case prefilter differential fuzz — the primary soundness
+/// gate.  Ignored by default (slow); run with `--ignored`.  Each case runs 2
+/// buffers × 3 start positions × (forward + anchored) comparisons, so this is
+/// well over 320k forward-search comparisons.
+#[test]
+#[ignore = "long-running prefilter differential fuzz; run explicitly"]
+fn prefilter_fuzz_differential() {
+    crate::test_utils::init_test_tracing();
+    let (c1, p1) = run_prefilter_fuzz(220_000, 0xF00D_D001, 40);
+    let (c2, p2) = run_prefilter_fuzz(140_000, 0x0BAD_F11E, 28);
+    let compiled = c1 + c2;
+    let with_pf = p1 + p2;
+    eprintln!("prefilter fuzz: compiled={compiled} with_prefilter={with_pf}");
+    assert!(
+        with_pf > compiled / 20,
+        "prefilter fuzz should build a prefilter on many cases \
+         (with_prefilter={with_pf} compiled={compiled})"
+    );
+}
+
+// ---- prefilter: targeted extraction-shape unit tests ---------------------
+
+/// Search with the prefilter enabled must equal search with it disabled, for a
+/// concrete (pattern, text) pair, at every start position.
+fn assert_prefilter_equiv(pat: &str, case_fold: bool, text: &[u8]) {
+    let cp = regex_compile(pat, false, case_fold).expect("compile");
+    let syn = DefaultSyntaxLookup;
+    for start in 0..=text.len() {
+        let range = (text.len() - start) as isize;
+        let oracle = norm(with_fastmap_disabled(|| re_search(&cp, text, start, range, &syn, start)));
+        let cand = norm(re_search(&cp, text, start, range, &syn, start));
+        assert_eq!(oracle, cand, "prefilter diverged for {pat:?} @ start={start}");
+    }
+}
+
+#[test]
+fn prefilter_built_for_leading_literal() {
+    // A plain multi-byte literal → a single-needle prefilter (memmem).
+    let cp = regex_compile("unread-command-events", false, false).expect("compile");
+    assert!(cp.prefilter.is_some(), "leading literal should get a prefilter");
+    assert_prefilter_equiv(
+        "unread-command-events",
+        false,
+        b"xx unread-command-events yy unread-command-events",
+    );
+}
+
+#[test]
+fn prefilter_built_for_keyword_alternation() {
+    // The real font-lock shapes with literal keyword alternations.
+    for pat in [
+        "(\\(catch\\|throw\\|featurep\\|provide\\|require\\)\\_>",
+        "(\\(cl-\\(?:assert\\|check-type\\)\\|error\\|signal\\|user-error\\|warn\\)\\_>",
+    ] {
+        let cp = regex_compile(pat, false, false).expect("compile");
+        assert!(
+            cp.prefilter.is_some(),
+            "keyword alternation should get a prefilter: {pat:?}"
+        );
+    }
+    assert_prefilter_equiv(
+        "(\\(catch\\|throw\\|require\\)\\_>",
+        false,
+        b"(throw x) (require 'foo) (catch 'tag) (provide 'bar) (defun f ())",
+    );
+}
+
+#[test]
+fn prefilter_none_for_syntax_class_head() {
+    // sexp-head-kw: after `(`, the group starts with `\w`/`\s_` — no required
+    // literal beyond the common `(`, so the single-byte set is rejected (the
+    // fastmap's memchr already covers it).
+    let cp = regex_compile("(\\(\\(?:\\w\\|\\s_\\|\\\\.\\)+\\)\\_>", false, false).expect("compile");
+    assert!(
+        cp.prefilter.is_none(),
+        "single-byte `(` prefix must not build a prefilter (fastmap suffices)"
+    );
+}
+
+#[test]
+fn prefilter_none_for_leading_nonliteral() {
+    for pat in ["\\w+foo", ".*bar", "[a-z]+baz", "\\(?:\\w\\|x\\)y"] {
+        let cp = regex_compile(pat, false, false).expect("compile");
+        assert!(
+            cp.prefilter.is_none(),
+            "leading non-literal must have no prefilter: {pat:?}"
+        );
+    }
+}
+
+#[test]
+fn prefilter_none_for_casefold() {
+    // regex_compile(pattern, posix, case_fold).
+    let cp = regex_compile("defun", false, true).expect("compile");
+    assert!(
+        cp.prefilter.is_none(),
+        "case-fold patterns are deliberately skipped"
+    );
+}
+
+#[test]
+fn prefilter_none_for_alternation_with_nonliteral_arm() {
+    // One arm has no literal head → the whole pattern has a match with no
+    // offset-0 literal → no prefilter (soundness bail).
+    for pat in [
+        "(\\(catch\\|\\w+\\)",  // second arm `\w+` — non-literal head
+        "(\\(catch\\|\\|throw\\)", // empty middle arm — nullable path
+    ] {
+        let cp = regex_compile(pat, false, false).expect("compile");
+        assert!(
+            cp.prefilter.is_none(),
+            "alternation with a non-literal/empty arm must bail: {pat:?}"
+        );
+    }
+    // But the equivalent all-literal alternation still works and is correct.
+    assert_prefilter_equiv("(\\(catch\\|throw\\)", false, b"(catch (throw x)) \\w+ throw");
+}
+
+#[test]
+fn prefilter_multibyte_needles_char_boundary() {
+    // Multibyte literal keywords; candidate positions inside a multibyte char
+    // must be rejected (char-boundary skip), and matches stay byte-exact.
+    assert_prefilter_equiv(
+        "\\(中文\\|éxx\\)",
+        false,
+        "a中文b éxx 中éxx中文".as_bytes(),
+    );
+}

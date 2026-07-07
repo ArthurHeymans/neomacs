@@ -3209,6 +3209,7 @@ dependencies = [
  "proptest",
  "quick-xml 0.37.5",
  "regex",
+ "regex-automata",
  "rodio",
  "rusqlite",
  "rustc-hash 2.1.2",

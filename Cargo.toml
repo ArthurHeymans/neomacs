@@ -66,6 +66,11 @@ x509-parser = "0.18"
 
 # Misc
 regex = "1"
+# Direct dep for the regex-emacs multi-literal SIMD prefilter
+# (`util::prefilter::Prefilter` — memchr/Teddy/Aho-Corasick auto-select).
+# Only the literal-prefilter machinery is needed, so skip the heavy
+# nfa/dfa/meta/syntax layers (feature-unified with `regex`'s copy anyway).
+regex-automata = { version = "0.4", default-features = false, features = ["std", "perf-literal"] }
 memchr = "2"
 rustc-hash = "2"
 num_enum = "0.7.6"
