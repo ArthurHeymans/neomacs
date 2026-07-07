@@ -486,6 +486,101 @@ fn weak_value_hash_table_drops_entry_when_value_unreachable() {
 }
 
 #[test]
+fn weak_key_hash_table_keeps_entry_for_same_sequence_eval_args() {
+    // GNU's exact observable behavior comes from eval.c stack slots: evaluated
+    // subr arguments remain visible to conservative GC until the surrounding
+    // Fprogn returns.
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::Context::new();
+    assert_eq!(
+        ev.eval_str(
+            "(let ((ht (make-hash-table :test 'eq :weakness 'key))) \
+               (puthash (cons 1 2) :val ht) \
+               (garbage-collect) \
+               (hash-table-count ht))",
+        )
+        .unwrap()
+        .as_fixnum(),
+        Some(1)
+    );
+}
+
+#[test]
+fn weak_key_hash_table_drops_entry_after_inner_sequence_returns() {
+    // The same temporary key is no longer kept once the inner Fprogn frame has
+    // returned before GC runs in the outer sequence.
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::Context::new();
+    assert_eq!(
+        ev.eval_str(
+            "(let ((ht (make-hash-table :test 'eq :weakness 'key))) \
+               (progn (puthash (cons 1 2) :val ht)) \
+               (garbage-collect) \
+               (hash-table-count ht))",
+        )
+        .unwrap()
+        .as_fixnum(),
+        Some(0)
+    );
+}
+
+#[test]
+fn weak_key_hash_table_keeps_entry_for_active_let_init_temp() {
+    // GNU Flet keeps its SAFE_ALLOCA temps array until SAFE_FREE_UNBIND_TO,
+    // after the body and dynamic/lexical unbinding complete.
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::Context::new();
+    assert_eq!(
+        ev.eval_str(
+            "(let ((ht (make-hash-table :test 'eq :weakness 'key))) \
+               (let ((obj (cons 1 2))) \
+                 (progn (puthash obj :val ht)) \
+                 (setq obj nil) \
+                 (garbage-collect) \
+                 (hash-table-count ht)))",
+        )
+        .unwrap()
+        .as_fixnum(),
+        Some(1)
+    );
+}
+
+#[test]
+fn weak_key_hash_table_let_star_temp_matches_gnu_last_value_only() {
+    // GNU FletX has a single `val` local, so a one-binding let* keeps OBJ, but
+    // a later binding overwrites that transient root before the body.
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::emacs_core::Context::new();
+    assert_eq!(
+        ev.eval_str(
+            "(let ((ht (make-hash-table :test 'eq :weakness 'key))) \
+               (let* ((obj (cons 1 2))) \
+                 (progn (puthash obj :val ht)) \
+                 (setq obj nil) \
+                 (garbage-collect) \
+                 (hash-table-count ht)))",
+        )
+        .unwrap()
+        .as_fixnum(),
+        Some(1)
+    );
+    assert_eq!(
+        ev.eval_str(
+            "(let ((ht (make-hash-table :test 'eq :weakness 'key))) \
+               (let* ((obj (cons 1 2)) \
+                      (dummy 0)) \
+                 (progn (puthash obj :val ht)) \
+                 (setq obj nil) \
+                 (garbage-collect) \
+                 (hash-table-count ht)))",
+        )
+        .unwrap()
+        .as_fixnum(),
+        Some(0)
+    );
+}
+
+#[test]
 fn non_weak_hash_table_keeps_entry_after_gc() {
     // Control: a non-weak table traces its entries, so an entry with an
     // otherwise-unreachable key survives.

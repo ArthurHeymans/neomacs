@@ -2041,6 +2041,12 @@ pub struct Context {
     /// store an argument pointer/count; keep Neomacs' hot specpdl entry
     /// similarly compact while this side stack owns the exact-GC roots.
     backtrace_args_stack: Vec<LispArgVec>,
+    /// Exact-GC mirror of GNU eval.c's transient C stack Lisp_Object slots.
+    /// Examples include `Fprogn` seeing just-returned eval_sub argument arrays
+    /// through conservative stack scanning, and `Flet` retaining its `temps`
+    /// array until `SAFE_FREE_UNBIND_TO`.
+    eval_temp_roots: Vec<Value>,
+    sequence_temp_root_depth: usize,
     /// Contiguous bytecode stack buffer, matching GNU Emacs's bc_thread_state.
     /// All bytecode frames share this single buffer. GC scans it directly.
     pub(crate) bc_buf: Vec<Value>,
@@ -2335,6 +2341,16 @@ pub(crate) struct ActiveLambdaCallState {
 
 pub(crate) struct ActiveMacroExpansionScopeState {
     saved_specpdl_len: usize,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct EvalTempRootScopeState {
+    saved_len: usize,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SequenceTempRootScopeState {
+    saved_len: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -5060,6 +5076,8 @@ impl Context {
             gc_runtime_settings_cache: GcRuntimeSettingsCache::default(),
             vm_root_frames: Vec::new(),
             backtrace_args_stack: Vec::new(),
+            eval_temp_roots: Vec::new(),
+            sequence_temp_root_depth: 0,
             bc_buf: Vec::with_capacity(4096),
             bc_frames: Vec::new(),
             condition_stack: Vec::new(),
@@ -5243,6 +5261,8 @@ impl Context {
             gc_runtime_settings_cache: GcRuntimeSettingsCache::default(),
             vm_root_frames: Vec::new(),
             backtrace_args_stack: Vec::new(),
+            eval_temp_roots: Vec::new(),
+            sequence_temp_root_depth: 0,
             bc_buf: Vec::with_capacity(4096),
             bc_frames: Vec::new(),
             condition_stack: Vec::new(),
@@ -5336,6 +5356,10 @@ impl Context {
             for root in frame.roots.iter().copied() {
                 visit(root);
             }
+        }
+        group("eval_temp");
+        for root in self.eval_temp_roots.iter().copied() {
+            visit(root);
         }
         group("treesit");
         for root in self.treesit.roots() {
@@ -9115,6 +9139,7 @@ impl Context {
         let dispatch_result =
             self.eval_sub_cons_dispatch(original_fun, original_args, outer_bt_count);
         let result = self.dispatch_signal_result_if_needed(dispatch_result);
+        self.record_sequence_temp_roots_from_backtrace(outer_bt_count);
         self.unbind_to_with_result(outer_bt_count, result)
     }
 
@@ -10382,8 +10407,13 @@ impl Context {
             self.specbind(*sym_id, *value);
         }
 
+        let temp_scope = self.save_eval_temp_roots();
+        for (_, value) in lexical_bindings.iter().chain(dynamic_sym_ids.iter()) {
+            self.push_eval_temp_root(*value);
+        }
         let result = self.sf_progn_value(body);
         self.unbind_to(specpdl_count);
+        self.restore_eval_temp_roots(temp_scope);
         result
     }
 
@@ -10414,6 +10444,8 @@ impl Context {
             });
         }
 
+        let temp_scope = self.save_eval_temp_roots();
+        let val_temp_slot = self.push_eval_temp_root_slot(Value::NIL);
         let init_result: Result<(), Flow> = (|| {
             let mut bindings = varlist;
             while bindings.is_cons() {
@@ -10457,6 +10489,7 @@ impl Context {
                         vec![Value::symbol("listp"), binding],
                     ));
                 };
+                self.set_eval_temp_root_slot(val_temp_slot, value);
 
                 if let Some(name) = let_constant_error_name(&self.obarray, id) {
                     return Err(signal("setting-constant", vec![Value::symbol(&name)]));
@@ -10482,11 +10515,13 @@ impl Context {
         })();
         if let Err(error) = init_result {
             self.unbind_to(specpdl_count);
+            self.restore_eval_temp_roots(temp_scope);
             return Err(error);
         }
 
         let result = self.sf_progn_value(body);
         self.unbind_to(specpdl_count);
+        self.restore_eval_temp_roots(temp_scope);
         result
     }
 
@@ -10694,16 +10729,21 @@ impl Context {
     }
 
     fn sf_progn_value(&mut self, forms: Value) -> EvalResult {
-        let mut cursor = forms;
-        let mut last = Value::NIL;
-        while cursor.is_cons() {
-            last = self.eval_sub(cursor.cons_car())?;
-            cursor = cursor.cons_cdr();
-        }
-        if !cursor.is_nil() {
-            return Err(self.listp_error(forms));
-        }
-        Ok(last)
+        let temp_scope = self.save_sequence_temp_roots();
+        let result = (|| {
+            let mut cursor = forms;
+            let mut last = Value::NIL;
+            while cursor.is_cons() {
+                last = self.eval_sub(cursor.cons_car())?;
+                cursor = cursor.cons_cdr();
+            }
+            if !cursor.is_nil() {
+                return Err(self.listp_error(forms));
+            }
+            Ok(last)
+        })();
+        self.restore_sequence_temp_roots(temp_scope);
+        result
     }
 
     fn sf_prog1_value(&mut self, tail: Value) -> EvalResult {
@@ -12020,6 +12060,59 @@ impl Context {
 
     pub(crate) fn push_specpdl_root(&mut self, value: Value) {
         self.specpdl.push(SpecBinding::GcRoot { value });
+    }
+
+    fn save_eval_temp_roots(&self) -> EvalTempRootScopeState {
+        EvalTempRootScopeState {
+            saved_len: self.eval_temp_roots.len(),
+        }
+    }
+
+    fn restore_eval_temp_roots(&mut self, scope: EvalTempRootScopeState) {
+        self.eval_temp_roots.truncate(scope.saved_len);
+    }
+
+    fn push_eval_temp_root(&mut self, value: Value) {
+        self.eval_temp_roots.push(value);
+    }
+
+    fn push_eval_temp_root_slot(&mut self, value: Value) -> usize {
+        let slot = self.eval_temp_roots.len();
+        self.eval_temp_roots.push(value);
+        slot
+    }
+
+    fn set_eval_temp_root_slot(&mut self, slot: usize, value: Value) {
+        if let Some(root) = self.eval_temp_roots.get_mut(slot) {
+            *root = value;
+        }
+    }
+
+    fn save_sequence_temp_roots(&mut self) -> SequenceTempRootScopeState {
+        self.sequence_temp_root_depth += 1;
+        SequenceTempRootScopeState {
+            saved_len: self.eval_temp_roots.len(),
+        }
+    }
+
+    fn restore_sequence_temp_roots(&mut self, scope: SequenceTempRootScopeState) {
+        debug_assert!(self.sequence_temp_root_depth > 0);
+        self.eval_temp_roots.truncate(scope.saved_len);
+        self.sequence_temp_root_depth = self.sequence_temp_root_depth.saturating_sub(1);
+    }
+
+    fn record_sequence_temp_roots_from_backtrace(&mut self, count: usize) {
+        if self.sequence_temp_root_depth == 0 {
+            return;
+        }
+        let Some(SpecBinding::Backtrace { args, .. }) = self.specpdl.get(count) else {
+            return;
+        };
+        if args.is_unevalled() {
+            return;
+        }
+        let values = self.backtrace_args_values(args);
+        self.eval_temp_roots.extend(values);
     }
 
     pub(crate) fn record_save_excursion(&mut self) -> Option<usize> {
