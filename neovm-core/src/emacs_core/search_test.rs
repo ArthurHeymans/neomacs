@@ -1,8 +1,9 @@
 use super::*;
 use crate::buffer::LispCharPos1;
 use crate::emacs_core::builtins::search::{
-    builtin_looking_at, builtin_match_data, builtin_match_string, builtin_re_search_forward,
-    builtin_set_match_data, builtin_string_match, builtin_string_match_p,
+    builtin_looking_at, builtin_match_data, builtin_match_data_translate, builtin_match_string,
+    builtin_re_search_forward, builtin_replace_match, builtin_set_match_data, builtin_string_match,
+    builtin_string_match_p,
 };
 use crate::emacs_core::marker;
 use crate::emacs_core::search::builtin_replace_regexp_in_string;
@@ -447,6 +448,81 @@ fn match_string_preserves_raw_unibyte_bytes_with_explicit_string() {
         .expect("match-string should return string");
     assert!(!string.is_multibyte());
     assert_eq!(string.as_bytes(), &[0xFF]);
+}
+
+#[test]
+fn explicit_string_match_uses_public_register_positions_after_buffer_search() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let buffer_id = eval.buffers.create_buffer("explicit-string-buffer-match");
+    eval.buffers.set_current(buffer_id);
+    eval.buffers
+        .insert_into_buffer(buffer_id, "abcdef")
+        .expect("insert test text");
+    eval.buffers
+        .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(0))
+        .expect("rewind point");
+
+    builtin_re_search_forward(&mut eval, vec![Value::string("bc")]).expect("regexp should match");
+
+    assert_eq!(
+        builtin_match_string(&mut eval, vec![Value::fixnum(0), Value::string("abcdef")])
+            .expect("match-string should succeed"),
+        Value::string("cd")
+    );
+    assert_eq!(
+        builtin_replace_match(
+            &mut eval,
+            vec![
+                Value::string("X"),
+                Value::NIL,
+                Value::NIL,
+                Value::string("abcdef"),
+            ],
+        )
+        .expect("replace-match should succeed"),
+        Value::string("abXef")
+    );
+}
+
+#[test]
+fn translated_buffer_match_data_expands_backrefs_in_explicit_string() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let buffer_id = eval
+        .buffers
+        .create_buffer("translated-explicit-string-backrefs");
+    eval.buffers.set_current(buffer_id);
+    eval.buffers
+        .insert_into_buffer(buffer_id, "a1b2c3")
+        .expect("insert test text");
+    eval.buffers
+        .goto_buffer_emacs_byte_pos(buffer_id, crate::buffer::EmacsBytePos::new(0))
+        .expect("rewind point");
+
+    builtin_re_search_forward(&mut eval, vec![Value::string("\\(.\\)\\(.\\)")])
+        .expect("regexp should match");
+    builtin_match_data_translate(&mut eval, vec![Value::fixnum(-1)])
+        .expect("match data translation should succeed");
+
+    assert_eq!(
+        builtin_match_string(&mut eval, vec![Value::fixnum(0), Value::string("a1")])
+            .expect("match-string should succeed"),
+        Value::string("a1")
+    );
+    assert_eq!(
+        builtin_replace_match(
+            &mut eval,
+            vec![
+                Value::string("[\\1\\2]"),
+                Value::NIL,
+                Value::NIL,
+                Value::string("a1"),
+            ],
+        )
+        .expect("replace-match should succeed"),
+        Value::string("[a1]")
+    );
 }
 
 #[test]

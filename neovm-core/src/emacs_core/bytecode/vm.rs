@@ -4241,6 +4241,7 @@ impl<'a> Vm<'a> {
 
     fn builtin_match_data_translate_shared(&mut self, args: &[Value]) -> EvalResult {
         crate::emacs_core::builtins::search::builtin_match_data_translate_with_state(
+            &self.ctx.buffers,
             &mut self.ctx.match_data,
             args,
         )

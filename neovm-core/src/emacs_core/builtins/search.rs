@@ -38,6 +38,28 @@ fn buffer_byte_to_lisp_char(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos)
     buf.emacs_byte_pos_to_lisp_char_pos(byte_pos).as_i64()
 }
 
+fn match_data_for_explicit_string_arg(
+    buffers: &crate::buffer::BufferManager,
+    md: &super::regex::MatchData,
+) -> super::regex::MatchData {
+    let mut converted = md.clone();
+    if md.uses_buffer_byte_positions()
+        && let Some(buf) = md
+            .searched_buffer_id()
+            .and_then(|buffer_id| buffers.get(buffer_id))
+    {
+        for group in &mut converted.groups {
+            if let Some(group) = group {
+                let start = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(group.start()));
+                let end = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(group.end()));
+                *group = MatchGroup::new(start.max(0) as usize, end.max(0) as usize);
+            }
+        }
+    }
+    converted.set_string_source(None);
+    converted
+}
+
 fn buffer_byte_to_char_pos(buf: &crate::buffer::Buffer, byte_pos: EmacsBytePos) -> CharPos0 {
     buf.emacs_byte_pos_to_char_pos_clamped(byte_pos)
 }
@@ -1198,21 +1220,21 @@ pub(crate) fn builtin_match_string(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_range_args("match-string", &args, 1, 2)?;
-    let group = expect_int(&args[0])?;
-    if group < 0 {
+    let group_index = expect_int(&args[0])?;
+    if group_index < 0 {
         return Err(signal(
             "args-out-of-range",
-            vec![Value::fixnum(group), Value::fixnum(0)],
+            vec![Value::fixnum(group_index), Value::fixnum(0)],
         ));
     }
-    let group = group as usize;
+    let group_index = group_index as usize;
 
     let md = match &eval.match_data {
         Some(md) => md,
         None => return Ok(Value::NIL),
     };
 
-    let group = match md.groups.get(group) {
+    let group = match md.groups.get(group_index) {
         Some(Some(group)) => *group,
         _ => return Ok(Value::NIL),
     };
@@ -1237,24 +1259,27 @@ pub(crate) fn builtin_match_string(
 
     // If an optional second arg is a string, use that first.
     if args.len() > 1 {
+        let explicit_md = match_data_for_explicit_string_arg(&eval.buffers, md);
+        let Some(Some(group)) = explicit_md.groups.get(group_index) else {
+            return Ok(Value::NIL);
+        };
+        let start = group.start();
+        let end = group.end();
         if let Some(string) = args[1].as_lisp_string() {
-            if let Some(slice) = slice_lisp_string(string, md.is_string_match()) {
-                return Ok(slice);
+            let (byte_start, byte_end) = (
+                char_pos_to_byte_lisp_string(string, start),
+                char_pos_to_byte_lisp_string(string, end),
+            );
+            if byte_end <= string.byte_len() && byte_start <= byte_end {
+                if let Some(slice) = string.slice(byte_start, byte_end).map(Value::heap_string) {
+                    return Ok(slice);
+                }
             }
             return Ok(Value::NIL);
         }
 
         if let Some(s) = args[1].as_utf8_str() {
-            let (byte_start, byte_end) = if md.is_string_match() {
-                (char_pos_to_byte(s, start), char_pos_to_byte(s, end))
-            } else {
-                (
-                    crate::emacs_core::string_escape::storage_logical_byte_to_storage_byte(
-                        s, start,
-                    ),
-                    crate::emacs_core::string_escape::storage_logical_byte_to_storage_byte(s, end),
-                )
-            };
+            let (byte_start, byte_end) = (char_pos_to_byte(s, start), char_pos_to_byte(s, end));
             if byte_end <= s.len() && byte_start <= byte_end {
                 return Ok(Value::string(&s[byte_start..byte_end]));
             }
@@ -1701,11 +1726,30 @@ fn translate_match_data(match_data: &mut Option<super::regex::MatchData>, delta:
 }
 
 pub(crate) fn builtin_match_data_translate_with_state(
+    buffers: &crate::buffer::BufferManager,
     match_data: &mut Option<super::regex::MatchData>,
     args: &[Value],
 ) -> EvalResult {
     expect_args("match-data--translate", args, 1)?;
     let delta = expect_fixnum(&args[0])?;
+    if let Some(md) = match_data
+        && md.uses_buffer_byte_positions()
+    {
+        let buffer_id = md.searched_buffer_id();
+        if let Some(buf) = buffer_id.and_then(|buffer_id| buffers.get(buffer_id)) {
+            for group in &mut md.groups {
+                if let Some(group) = group {
+                    let start = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(group.start()));
+                    let end = buffer_byte_to_lisp_char(buf, EmacsBytePos::new(group.end()));
+                    *group = MatchGroup::new(start.max(0) as usize, end.max(0) as usize);
+                }
+            }
+            md.source = super::regex::MatchSource::Buffer {
+                id: buffer_id,
+                positions: super::regex::BufferMatchPositions::LispChars,
+            };
+        }
+    }
     translate_match_data(match_data, delta);
     Ok(Value::NIL)
 }
@@ -1714,7 +1758,7 @@ pub(crate) fn builtin_match_data_translate(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    builtin_match_data_translate_with_state(&mut eval.match_data, &args)
+    builtin_match_data_translate_with_state(&eval.buffers, &mut eval.match_data, &args)
 }
 
 fn update_match_data_after_buffer_replace(
@@ -1852,13 +1896,16 @@ pub(crate) fn builtin_replace_match_with_state_and_flags(
                 ],
             ));
         }
+        let string_md_snapshot = md_snapshot
+            .as_ref()
+            .map(|md| match_data_for_explicit_string_arg(buffers, md));
         return match crate::emacs_core::search::replace_match_lisp_string_with_syntax(
             source,
             newtext_lisp,
             fixedcase,
             literal,
             subexp,
-            &md_snapshot,
+            &string_md_snapshot,
         ) {
             Ok(result) => Ok(Value::heap_string(result)),
             Err(msg) if msg == missing_subexp_error => Err(missing_subexp_signal(raw_subexp)),
