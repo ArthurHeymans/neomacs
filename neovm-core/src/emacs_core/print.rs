@@ -253,6 +253,7 @@ pub(crate) struct PrintState<'a> {
     pub circle: Option<&'a mut PrintCircleState>,
     pub buffers: Option<&'a crate::buffer::BufferManager>,
     pub depth: i64,
+    default_print_stack: Vec<Option<u64>>,
     object_stack: Vec<u64>,
 }
 
@@ -709,6 +710,7 @@ pub(crate) fn print_value_stateful_with_buffers(
             },
             buffers,
             depth: 0,
+            default_print_stack: Vec::new(),
             object_stack: Vec::new(),
         };
         write_value_stateful(value, &mut out, &mut state);
@@ -718,6 +720,7 @@ pub(crate) fn print_value_stateful_with_buffers(
             circle: None,
             buffers,
             depth: 0,
+            default_print_stack: Vec::new(),
             object_stack: Vec::new(),
         };
         write_value_stateful(value, &mut out, &mut state);
@@ -768,6 +771,11 @@ fn with_default_cycle_guard(
     state: &mut PrintState,
     render: impl FnOnce(&mut String, &mut PrintState),
 ) {
+    if !state.options.print_circle {
+        render(out, state);
+        return;
+    }
+
     if let Some(index) = default_cycle_stack_index(value, state) {
         write!(out, "#{index}").unwrap();
         return;
@@ -782,6 +790,28 @@ fn with_default_cycle_guard(
 /// Core stateful print routine. Writes the printed representation of `value`
 /// into `out`, respecting print-circle, print-level, and print-length.
 fn write_value_stateful(value: &Value, out: &mut String, state: &mut PrintState) {
+    if !state.options.print_circle {
+        let key = default_cycle_candidate_key(value);
+        if let Some(key) = key
+            && let Some(index) = state
+                .default_print_stack
+                .iter()
+                .position(|entry| *entry == Some(key))
+        {
+            write!(out, "#{index}").unwrap();
+            return;
+        }
+
+        state.default_print_stack.push(key);
+        write_value_stateful_inner(value, out, state);
+        state.default_print_stack.pop();
+        return;
+    }
+
+    write_value_stateful_inner(value, out, state);
+}
+
+fn write_value_stateful_inner(value: &Value, out: &mut String, state: &mut PrintState) {
     if let Some(handle) = print_special_handle(value, state.buffers) {
         out.push_str(&handle);
         return;

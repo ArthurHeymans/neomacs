@@ -53,9 +53,7 @@ fn div_cx127_eieio_cl_defgeneric_argument_precedence_order() {
 #[test]
 fn div_cx127_eieio_cl_defgeneric_declares_generic() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (t #s(cl--generic neo-cx127-declared nil nil nil #[128 \"\\303\\300\\304\\300!\t>\\204\u{11}\\0\\305\\306\\307\\300D\\\"\\210\\300\\310H\\304\\300!\t>\\204#\\0\\305\\306\\307\\300D\\\"\\210\\300\\311H#\\304\\300!\t>\\2046\\0\\305\\306\\307\\300D\\\"\\210\\300\\312H\\313\u{1}K!\\211<\\203H\\0\\314\u{3}\u{2}\\315#\\210\u{1}K\\203U\\0\\315\u{1a}\\316\u{2}\u{4}\\\")\\210\\317\u{3}\u{5}\\\"\\207\" [#1 cl-struct-cl--generic-tags current-load-list cl--generic-make-next-function type-of signal wrong-type-argument cl--generic 2 3 1 get-advertised-calling-convention set-advertised-calling-convention nil defalias apply] 8 \"\n\n(fn &rest ARGS)\"]) nil)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t t t t \"\n\n(fn &rest ARGS)\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -63,9 +61,14 @@ fn div_cx127_eieio_cl_defgeneric_declares_generic() {
       (require 'eieio)
       (defclass neo-cx127-d () ())
       (cl-defgeneric neo-cx127-declared (obj))
-      (list (fboundp 'neo-cx127-declared)
-            (cl-generic-p 'neo-cx127-declared)
-            (fboundp 'neo-cx127-not-declared)))
+      (let* ((generic (cl-generic-p 'neo-cx127-declared))
+             (lazy-fn (and generic (cl--generic-lazy-function generic))))
+        (list (fboundp 'neo-cx127-declared)
+              (eq (cl--generic-name generic) 'neo-cx127-declared)
+              (functionp lazy-fn)
+              (documentation-stringp (aref lazy-fn 4))
+              (documentation lazy-fn t)
+              (fboundp 'neo-cx127-not-declared))))
   (error (list :errored (car e))))
 "##,
         expect,
