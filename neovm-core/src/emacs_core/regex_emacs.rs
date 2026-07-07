@@ -1152,7 +1152,13 @@ pub(crate) fn regex_compile_lisp_with_translation(
                         let assigned = if let Some(n) = explicit_group {
                             Some(n)
                         } else if !is_shy {
-                            Some(regnum + 1)
+                            // GNU `regex-emacs.c:2246`: an auto-numbered group is
+                            // `regnum = ++bufp->re_nsub`, i.e. one past the highest
+                            // group number seen so far - NOT `regnum + 1`.  After an
+                            // explicit `\(?N:...\)` lowered `regnum` below `re_nsub`
+                            // (e.g. `\(?2:\(?1:\)\)\(\)`), `regnum + 1` reused an
+                            // already-assigned number; `re_nsub + 1` matches GNU.
+                            Some(buf.re_nsub + 1)
                         } else {
                             None
                         };
@@ -1195,8 +1201,10 @@ pub(crate) fn regex_compile_lisp_with_translation(
                             emit_op!(RegexOp::StartMemory);
                             emit!(n as u8);
                         } else if !is_shy {
-                            regnum += 1;
+                            // Auto group: number = ++re_nsub (GNU
+                            // regex-emacs.c:2246), kept in sync with `assigned`.
                             buf.re_nsub += 1;
+                            regnum = buf.re_nsub;
                             emit_op!(RegexOp::StartMemory);
                             emit!(regnum as u8);
                         }

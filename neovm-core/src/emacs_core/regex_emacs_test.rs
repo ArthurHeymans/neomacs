@@ -180,6 +180,29 @@ fn test_explicit_group_number_collision_with_open_group() {
 }
 
 #[test]
+fn test_auto_group_number_after_explicit_uses_re_nsub() {
+    // Regression: an auto-numbered `\(...\)` following an explicit
+    // `\(?N:...\)` that lowered the running regnum below re_nsub used to reuse
+    // an already-assigned number (`regnum + 1`) instead of GNU's `++re_nsub`.
+    // For `\(?2:\(?1:x\)\)\(y\)` on "xy" GNU numbers the trailing `\(y\)`
+    // as group 3 -> match-data (0 2 0 1 0 1 1 2); neomacs used to mislabel it 2.
+    crate::test_utils::init_test_tracing();
+    let syn = DefaultSyntaxLookup;
+    let (pos, regs) = search_pattern("\\(?2:\\(?1:x\\)\\)\\(y\\)", "xy", 0, false, &syn, 0)
+        .expect("compile")
+        .expect("should match");
+    assert_eq!(pos, 0);
+    assert_eq!((regs.start[0], regs.end[0]), (0, 2));
+    assert_eq!((regs.start[1], regs.end[1]), (0, 1), "explicit group 1 = x");
+    assert_eq!((regs.start[2], regs.end[2]), (0, 1), "explicit group 2 = x");
+    assert_eq!(
+        (regs.start[3], regs.end[3]),
+        (1, 2),
+        "auto group must be numbered 3 (= ++re_nsub), not colliding with 2"
+    );
+}
+
+#[test]
 fn test_charset() {
     crate::test_utils::init_test_tracing();
     let syn = DefaultSyntaxLookup;
