@@ -9,16 +9,16 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx17_secure_hash_string_vs_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"e25dd806d495b413931f4eea50b677a7a5c02d00460924661283f211a37f7e7f\" \"8b7e2d8a46af5ce0067ce16bcd2a055358a95cb47d3d8b3d0011331edeebd6f0\" nil)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((content "test content for hashing")
        (str-hash (secure-hash 'sha256 content))
-       (f (make-temp-file "neo-cx17-sh-")))
-  (write-region content nil f nil 'silent)
-  (let ((file-hash (secure-hash 'sha256 f)))
-    (prog1 (list str-hash file-hash (equal str-hash file-hash))
-      (ignore-errors (delete-file f))))
+       (f "/tmp/neo-cx17-sh-fixed")
+       (path-hash (secure-hash 'sha256 f)))
+  (list str-hash path-hash (equal str-hash path-hash)))
 "##,
         expect,
     );

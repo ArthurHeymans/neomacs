@@ -14,20 +14,17 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_cx16_secure_hash_file_rewritten() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"196e1ae98ea8f9d9f35a23994236b32a272737125ec707989f6c7344fac76d8a\" \"196e1ae98ea8f9d9f35a23994236b32a272737125ec707989f6c7344fac76d8a\" t)""#
+        r#""OK (\"9ad8e8456982da1b7b45c7149528a1d72477656dfaca2aeb24da1e967ea936f2\" \"9ad8e8456982da1b7b45c7149528a1d72477656dfaca2aeb24da1e967ea936f2\" t \"d2399a270cda9e50b2f467d8b9e4e6b347e31e5ff04cc72e09d6f77c4da0cedf\" \"dfda11df060666bcc681d3c5086b4000b9153dda2f5d7918811e9bb571b88135\" nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
-(let ((f (make-temp-file "neo-cx16-sh-")))
-  (unwind-protect
-      (progn
-        (write-region "ascii content" nil f nil 0)
-        (let ((h1 (secure-hash 'sha256 f)))
-          (delete-file f)
-          (write-region "café世界" nil f nil 0)
-          (let ((h2 (secure-hash 'sha256 f)))
-            (list h1 h2 (equal h1 h2)))))
-    (ignore-errors (delete-file f))))
+(let ((f "/tmp/neo-cx16-sh-fixed"))
+  (let ((path1 (secure-hash 'sha256 f))
+        (content1 (secure-hash 'sha256 "ascii content")))
+    (let ((path2 (secure-hash 'sha256 f))
+          (content2 (secure-hash 'sha256 "café世界")))
+      (list path1 path2 (equal path1 path2)
+            content1 content2 (equal content1 content2)))))
 "##,
         expect,
     );

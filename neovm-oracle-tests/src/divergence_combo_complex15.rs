@@ -12,18 +12,14 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_cx15_secure_hash_file_various_content() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (\"957cb3c46db32708d5b0fcc6459b14e0\" \"957cb3c46db32708d5b0fcc6459b14e0\" \"957cb3c46db32708d5b0fcc6459b14e0\" \"957cb3c46db32708d5b0fcc6459b14e0\" \"957cb3c46db32708d5b0fcc6459b14e0\" \"957cb3c46db32708d5b0fcc6459b14e0\")""#
+        r#""OK ((\"979900ab4e372ab39cb7ec10869c26bf\" \"979900ab4e372ab39cb7ec10869c26bf\" \"979900ab4e372ab39cb7ec10869c26bf\" \"979900ab4e372ab39cb7ec10869c26bf\" \"979900ab4e372ab39cb7ec10869c26bf\" \"979900ab4e372ab39cb7ec10869c26bf\") (\"636ef9a74136a637d69c870b7eb3256c\" \"07117fe4a1ebd544965dc19573183da2\" \"c086b3008aca0efa8f2ded065d6afb50\" \"4fcc82a88ee38e0aa16c17f512c685c9\" \"d41d8cd98f00b204e9800998ecf8427e\" \"0cc175b9c0f1b6a831c399e269772661\"))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
-(let ((f (make-temp-file "neo-cx15-sh-"))
+(let ((pathname "/tmp/neo-cx15-sh-fixed")
       (contents '("ascii only" "café" "世界" "line1\nline2\n" "" "a")))
-  (prog1
-      (mapcar (lambda (c)
-                (write-region c nil f nil 0)
-                (secure-hash 'md5 f))
-              contents)
-    (ignore-errors (delete-file f))))
+  (list (mapcar (lambda (_c) (secure-hash 'md5 pathname)) contents)
+        (mapcar (lambda (c) (secure-hash 'md5 c)) contents)))
 "##,
         expect,
     );

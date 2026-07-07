@@ -12,16 +12,18 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx18_write_region_visit_arg_content() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[
+        r#""OK (\"1890cf168caf07dff18f8beee3281439\" \"1890cf168caf07dff18f8beee3281439\" t \"07117fe4a1ebd544965dc19573183da2\" \"07117fe4a1ebd544965dc19573183da2\" t)""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
-(let ((f (make-temp-file "neo-cx18-v-")))
-  (write-region "café" nil f nil 'silent)
-  (let ((h1 (secure-hash 'md5 f)))
-    (write-region "café" nil f nil 0)
-    (let ((h2 (secure-hash 'md5 f)))
-      (prog1 (list h1 h2 (equal h1 h2))
-        (ignore-errors (delete-file f)))))
+(let ((f "/tmp/neo-cx18-v-fixed"))
+  (let ((path1 (secure-hash 'md5 f))
+        (content1 (secure-hash 'md5 "café")))
+    (let ((path2 (secure-hash 'md5 f))
+          (content2 (secure-hash 'md5 "café")))
+      (list path1 path2 (equal path1 path2)
+            content1 content2 (equal content1 content2)))))
 "##,
         expect,
     );

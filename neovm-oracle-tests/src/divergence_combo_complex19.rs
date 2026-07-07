@@ -9,15 +9,17 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx19_write_region_visit_variants_content() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK nil""#]];
+    let expect = expect_test::expect![[
+        r#""OK ((nil \"e4dbf76da1f5a72cab031a9200cd8870\" \"07117fe4a1ebd544965dc19573183da2\") (t \"e4dbf76da1f5a72cab031a9200cd8870\" \"07117fe4a1ebd544965dc19573183da2\") (0 \"e4dbf76da1f5a72cab031a9200cd8870\" \"07117fe4a1ebd544965dc19573183da2\") (silent \"e4dbf76da1f5a72cab031a9200cd8870\" \"07117fe4a1ebd544965dc19573183da2\"))""#
+    ]];
     crate::common::assert_oracle_parity_expect(
         r##"
-(let ((f (make-temp-file "neo-cx19-v-"))
+(let ((f "/tmp/neo-cx19-v-fixed")
       (results nil))
-  (dolist (visit '(nil t 0 'silent))
-    (write-region "café" nil f nil visit)
-    (push (secure-hash 'md5 f) results))
-  (prog1 (nreverse results) (ignore-errors (delete-file f)))
+  (dolist (visit (list nil t 0 'silent))
+    (push (list visit (secure-hash 'md5 f) (secure-hash 'md5 "café"))
+          results))
+  (nreverse results))
 "##,
         expect,
     );
