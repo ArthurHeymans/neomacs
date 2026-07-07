@@ -1126,11 +1126,11 @@ pub(crate) fn builtin_run_window_scroll_functions(
     })?;
     let window_start = super::window_cmds::builtin_window_start(eval, vec![window_arg])?;
     let hook_sym = hook_runtime::hook_symbol_by_name(eval, "window-scroll-functions");
-    let hook_value = hook_runtime::hook_value_by_id(eval, hook_sym).unwrap_or(Value::NIL);
     let saved_buffer_id = eval.buffers.current_buffer_id();
     if let Some(buffer_id) = window_buffer_id_in_state(eval, frame_id, window_id) {
         let _ = eval.switch_current_buffer(buffer_id);
     }
+    let hook_value = hook_runtime::hook_value_by_id(eval, hook_sym).unwrap_or(Value::NIL);
     let result = hook_runtime::run_hook_value(
         eval,
         hook_sym,

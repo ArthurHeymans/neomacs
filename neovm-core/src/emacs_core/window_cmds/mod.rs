@@ -2269,8 +2269,6 @@ pub(crate) fn builtin_set_window_start(
             }
         }
     };
-    // Run window-scroll-functions hook after setting window start
-    let _ = builtin_run_window_scroll_functions(eval, vec![]);
     Ok(result)
 }
 /// `(set-window-group-start WINDOW POS &optional NOFORCE)` -> POS.
@@ -4721,6 +4719,7 @@ pub(crate) fn builtin_set_window_buffer(
             buffer.last_selected_window = Some(wid);
         }
     }
+    builtin_run_window_scroll_functions(eval, vec![window_value(wid)])?;
     Ok(Value::NIL)
 }
 
@@ -5912,12 +5911,13 @@ pub(crate) fn builtin_recenter(eval: &mut super::eval::Context, args: Vec<Value>
                 buffer_id, point, ..
             } => {
                 if buffers.current_buffer_id() != Some(*buffer_id) {
-                    return Err(signal(
-                        "error",
-                        vec![Value::string(
-                            "`recenter'ing a window that does not display current-buffer",
-                        )],
-                    ));
+                    let quoting_style =
+                        crate::emacs_core::coding::effective_text_quoting_style(&eval.obarray);
+                    let message = crate::emacs_core::coding::requote_c_error_message(
+                        "`recenter'ing a window that does not display current-buffer",
+                        quoting_style,
+                    );
+                    return Err(signal("error", vec![Value::string(message)]));
                 }
                 let point = buffers
                     .get(*buffer_id)

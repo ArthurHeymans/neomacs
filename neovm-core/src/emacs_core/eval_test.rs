@@ -9270,6 +9270,69 @@ fn run_window_scroll_functions_uses_scrolled_window_buffer_context() {
 }
 
 #[test]
+fn run_window_scroll_functions_reads_displayed_buffer_local_hook() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        "(progn
+           (setq hook-log nil)
+           (let* ((buf1 (get-buffer-create \"scroll-local-a\"))
+                  (buf2 (get-buffer-create \"scroll-local-b\")))
+             (set-buffer buf1)
+               (set-window-buffer (selected-window) buf1)
+               (let ((w2 (split-window-internal (selected-window) nil nil nil)))
+                 (set-window-buffer w2 buf2)
+               (let ((orig (current-buffer)))
+                 (set-buffer buf2)
+                 (make-local-variable 'window-scroll-functions)
+                 (setq window-scroll-functions
+                       (list (lambda (w start)
+                               (setq hook-log
+                                     (list (buffer-name)
+                                           (buffer-name (window-buffer w))
+                                           start)))))
+                 (set-buffer orig))
+               (set-buffer buf1)
+               (run-window-scroll-functions w2)
+               (list hook-log (buffer-name)))))",
+    );
+    assert_eq!(
+        result,
+        "OK ((\"scroll-local-b\" \"scroll-local-b\" 1) \"scroll-local-a\")"
+    );
+}
+
+#[test]
+fn set_window_buffer_runs_window_scroll_functions_in_new_buffer_context() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        "(progn
+           (setq hook-log nil)
+             (let* ((buf1 (get-buffer-create \"swb-scroll-a\"))
+                    (buf2 (get-buffer-create \"swb-scroll-b\")))
+               (set-buffer buf1)
+               (set-window-buffer (selected-window) buf1)
+             (let ((orig (current-buffer)))
+               (set-buffer buf2)
+               (make-local-variable 'window-scroll-functions)
+               (setq window-scroll-functions
+                     (list (lambda (w start)
+                             (setq hook-log
+                                   (list (buffer-name)
+                                         (buffer-name (window-buffer w))
+                                         start)))))
+               (set-buffer orig))
+             (set-window-buffer (selected-window) buf2)
+             (list hook-log
+                   (buffer-name)
+                   (buffer-name (window-buffer (selected-window))))))",
+    );
+    assert_eq!(
+        result,
+        "OK ((\"swb-scroll-b\" \"swb-scroll-b\" 1) \"swb-scroll-a\" \"swb-scroll-b\")"
+    );
+}
+
+#[test]
 fn point_motion_hooks_follow_gnu_interval_boundary_order() {
     crate::test_utils::init_test_tracing();
     let result = eval_one(
