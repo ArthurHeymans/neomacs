@@ -81,13 +81,16 @@ fn div_cx14_char_table_parent_map_iteration() {
 fn div_cx14_secure_hash_file() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK \"9ac37c5068f2fc84f2f252d22eee98596b0d8be27ee80634decdae8cdcd3f18a\"""#
+        r#""OK (\"0614fd732131f1cde1e8b8e1fbd62bbb923ae6e9505d8db59010d2e51334656b\" \"e25dd806d495b413931f4eea50b677a7a5c02d00460924661283f211a37f7e7f\" nil)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
-(let ((f (make-temp-file "neo-cx14-shf-")))
-  (write-region "test content for hashing" nil f nil 0)
-  (prog1 (secure-hash 'sha256 f)
+(let* ((f "/tmp/neo-cx14-shf-fixed")
+       (content "test content for hashing")
+       (path-hash (secure-hash 'sha256 f))
+       (content-hash (secure-hash 'sha256 content)))
+  (ignore-errors (write-region content nil f nil 'silent))
+  (prog1 (list path-hash content-hash (equal path-hash content-hash))
     (ignore-errors (delete-file f))))
 "##,
         expect,
