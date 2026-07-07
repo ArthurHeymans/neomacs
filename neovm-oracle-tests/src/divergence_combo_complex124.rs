@@ -136,13 +136,16 @@ fn div_cx124_drag_event_decomposition() {
 #[test]
 fn div_cx124_mouse_position_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t #<frame F1 0x555555b46708> nil)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t t nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let ((mp (mouse-position)))
       (list (consp mp)
-            (car mp)
+            (framep (car mp))
+            (frame-live-p (car mp))
+            (or (null (cadr mp)) (integerp (cadr mp)))
+            (or (null (cddr mp)) (integerp (cddr mp)))
             (consp (cddr mp))))
   (error (list :errored (car e))))
 "##,
