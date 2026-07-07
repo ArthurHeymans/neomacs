@@ -896,6 +896,17 @@ fn window_body_width_pixelwise() {
 }
 
 #[test]
+fn batch_window_body_width_excludes_margins() {
+    crate::test_utils::init_test_tracing();
+    let r = eval_one_with_frame(
+        "(progn
+           (set-window-margins nil 3 2)
+           (list (window-total-width) (window-body-width) (window-body-width nil t)))",
+    );
+    assert_eq!(r, "OK (100 95 760)");
+}
+
+#[test]
 fn gui_window_body_geometry_excludes_fringes_and_margins() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

@@ -60,23 +60,30 @@ fn define_via_eval(eval: &mut Context, form: &str) -> Value {
     eval.eval_str(form).expect("define-fringe-bitmap eval")
 }
 
+fn fringe_index(eval: &mut Context, symbol: &str) -> u32 {
+    eval.eval_str(&format!("(get '{symbol} 'fringe)"))
+        .expect("get fringe prop")
+        .as_fixnum()
+        .expect("index") as u32
+}
+
 #[test]
-fn define_fringe_bitmap_stores_bits_and_returns_index() {
+fn define_fringe_bitmap_stores_bits_and_returns_symbol() {
     let mut eval = Context::new();
-    let index_val = define_via_eval(
+    let result = define_via_eval(
         &mut eval,
         "(define-fringe-bitmap 'magit-fringe-bitmap> [#b01100000 #b00110000 #b00011000 \
          #b00001100 #b00011000 #b00110000 #b01100000 #b00000000])",
     );
-    let index = index_val.as_fixnum().expect("index is an integer");
-    // User bitmaps start at index 25.
-    assert!(index >= 25, "user index {index} should be >= 25");
+    assert_eq!(result, Value::symbol("magit-fringe-bitmap>"));
 
-    // The `'fringe` property was set to the same index.
+    // The `'fringe` property stores the registry index.
     let prop = eval
         .eval_str("(get 'magit-fringe-bitmap> 'fringe)")
         .expect("get fringe prop");
-    assert_eq!(prop.as_fixnum(), Some(index));
+    let index = prop.as_fixnum().expect("fringe property is an integer");
+    // User bitmaps start at index 25.
+    assert!(index >= 25, "user index {index} should be >= 25");
 
     // The registry has the bits, MSB-aligned, with default width 8, height 8.
     let bitmap = eval
@@ -94,11 +101,15 @@ fn define_fringe_bitmap_stores_bits_and_returns_index() {
 fn define_fringe_bitmap_string_bits_parse_msb_first() {
     let mut eval = Context::new();
     // A unibyte string row "\140" == 0x60; same as the vector form above.
-    let index_val = define_via_eval(
+    define_via_eval(
         &mut eval,
         "(define-fringe-bitmap 'test-str-bitmap \"\\140\\060\" nil 8)",
     );
-    let index = index_val.as_fixnum().expect("index") as u32;
+    let index = eval
+        .eval_str("(get 'test-str-bitmap 'fringe)")
+        .expect("get fringe prop")
+        .as_fixnum()
+        .expect("index") as u32;
     let bitmap = eval.fringe_bitmaps.get_by_index(index).expect("entry");
     assert_eq!(bitmap.width, 8);
     assert_eq!(bitmap.bits[0], 0x6000, "0x60 -> MSB-aligned 0x6000");
@@ -108,18 +119,24 @@ fn define_fringe_bitmap_string_bits_parse_msb_first() {
 #[test]
 fn define_fringe_bitmap_redefine_keeps_index() {
     let mut eval = Context::new();
-    let first = define_via_eval(
+    define_via_eval(
         &mut eval,
         "(define-fringe-bitmap 'redef-bitmap [#b10000000])",
-    )
-    .as_fixnum()
-    .expect("first index");
-    let second = define_via_eval(
+    );
+    let first = eval
+        .eval_str("(get 'redef-bitmap 'fringe)")
+        .expect("first index")
+        .as_fixnum()
+        .expect("first index");
+    define_via_eval(
         &mut eval,
         "(define-fringe-bitmap 'redef-bitmap [#b11000000 #b11000000])",
-    )
-    .as_fixnum()
-    .expect("second index");
+    );
+    let second = eval
+        .eval_str("(get 'redef-bitmap 'fringe)")
+        .expect("second index")
+        .as_fixnum()
+        .expect("second index");
     assert_eq!(first, second, "redefining keeps the same index");
     let bitmap = eval
         .fringe_bitmaps
@@ -131,23 +148,21 @@ fn define_fringe_bitmap_redefine_keeps_index() {
 #[test]
 fn define_fringe_bitmap_align_top_and_bottom_parse() {
     let mut eval = Context::new();
-    let top = define_via_eval(
+    define_via_eval(
         &mut eval,
         "(define-fringe-bitmap 'top-bitmap [#b10000000] nil 8 'top)",
-    )
-    .as_fixnum()
-    .expect("top index") as u32;
+    );
+    let top = fringe_index(&mut eval, "top-bitmap");
     assert_eq!(
         eval.fringe_bitmaps.get_by_index(top).expect("top").align,
         FringeBitmapAlign::Top
     );
 
-    let bottom = define_via_eval(
+    define_via_eval(
         &mut eval,
         "(define-fringe-bitmap 'bottom-bitmap [#b10000000] nil 8 'bottom)",
-    )
-    .as_fixnum()
-    .expect("bottom index") as u32;
+    );
+    let bottom = fringe_index(&mut eval, "bottom-bitmap");
     assert_eq!(
         eval.fringe_bitmaps
             .get_by_index(bottom)
@@ -160,12 +175,11 @@ fn define_fringe_bitmap_align_top_and_bottom_parse() {
 #[test]
 fn define_fringe_bitmap_periodic_align_sets_period() {
     let mut eval = Context::new();
-    let index = define_via_eval(
+    define_via_eval(
         &mut eval,
         "(define-fringe-bitmap 'periodic-bitmap [#b10101010 #b01010101] nil 8 '(top t))",
-    )
-    .as_fixnum()
-    .expect("periodic index") as u32;
+    );
+    let index = fringe_index(&mut eval, "periodic-bitmap");
     let bitmap = eval.fringe_bitmaps.get_by_index(index).expect("entry");
     assert_eq!(bitmap.period, 2, "period == natural row count");
     assert_eq!(bitmap.height, 255, "periodic height forced to 255");
@@ -175,9 +189,8 @@ fn define_fringe_bitmap_periodic_align_sets_period() {
 #[test]
 fn destroy_fringe_bitmap_removes_entry() {
     let mut eval = Context::new();
-    let index = define_via_eval(&mut eval, "(define-fringe-bitmap 'doomed [#b10000000])")
-        .as_fixnum()
-        .expect("index") as u32;
+    define_via_eval(&mut eval, "(define-fringe-bitmap 'doomed [#b10000000])");
+    let index = fringe_index(&mut eval, "doomed");
     assert!(eval.fringe_bitmaps.get_by_index(index).is_some());
     eval.eval_str("(destroy-fringe-bitmap 'doomed)")
         .expect("destroy");
@@ -302,9 +315,11 @@ fn standard_empty_line_is_periodic() {
 #[test]
 fn user_bitmaps_stay_above_standard_range() {
     let mut eval = Context::new();
+    eval.eval_str("(define-fringe-bitmap 'vm-above-std [#b10000000])")
+        .expect("define");
     let index = eval
-        .eval_str("(define-fringe-bitmap 'vm-above-std [#b10000000])")
-        .expect("define")
+        .eval_str("(get 'vm-above-std 'fringe)")
+        .expect("get fringe prop")
         .as_fixnum()
         .expect("index");
     assert_eq!(
@@ -318,9 +333,11 @@ fn user_bitmaps_stay_above_standard_range() {
 #[test]
 fn redefining_standard_bitmap_keeps_standard_index() {
     let mut eval = Context::new();
+    eval.eval_str("(define-fringe-bitmap 'right-arrow [#b11000000 #b11000000])")
+        .expect("redefine right-arrow");
     let index = eval
-        .eval_str("(define-fringe-bitmap 'right-arrow [#b11000000 #b11000000])")
-        .expect("redefine right-arrow")
+        .eval_str("(get 'right-arrow 'fringe)")
+        .expect("get fringe prop")
         .as_fixnum()
         .expect("index");
     assert_eq!(
@@ -396,9 +413,8 @@ fn indicator_and_cursor_alist_referenced_bitmaps_are_registered() {
 #[test]
 fn set_fringe_bitmap_face_records_override() {
     let mut eval = Context::new();
-    let index = define_via_eval(&mut eval, "(define-fringe-bitmap 'faced [#b10000000])")
-        .as_fixnum()
-        .expect("index") as u32;
+    define_via_eval(&mut eval, "(define-fringe-bitmap 'faced [#b10000000])");
+    let index = fringe_index(&mut eval, "faced");
     eval.eval_str("(set-fringe-bitmap-face 'faced 'magit-section-heading)")
         .expect("set-fringe-bitmap-face");
     let bitmap = eval.fringe_bitmaps.get_by_index(index).expect("entry");

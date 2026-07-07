@@ -1214,7 +1214,7 @@ pub(crate) fn builtin_define_fringe_bitmap(
         symbols_with_pos_enabled,
     )?;
 
-    Ok(Value::fixnum(index as i64))
+    Ok(args[0])
 }
 
 pub(crate) fn builtin_destroy_fringe_bitmap(

@@ -947,17 +947,19 @@ fn window_body_horizontal_offsets_pixels(
     let Some(frame) = frames.get(fid) else {
         return (0, 0);
     };
-    if frame.effective_window_system().is_none() {
-        return (0, 0);
-    }
     match w {
         Window::Leaf { margins, .. } => {
             let char_width = frame.char_width.max(1.0);
             let left_margin = (margins.left() as f32 * char_width).round().max(0.0) as i64;
             let right_margin = (margins.right() as f32 * char_width).round().max(0.0) as i64;
-            let (left_fringe, right_fringe, _, _) = frames
-                .window_fringes(w.id())
-                .unwrap_or((0, 0, false, false));
+            let (left_fringe, right_fringe) = if frame.effective_window_system().is_some() {
+                let (left, right, _, _) = frames
+                    .window_fringes(w.id())
+                    .unwrap_or((0, 0, false, false));
+                (left, right)
+            } else {
+                (0, 0)
+            };
             let left_scroll_bar = frames.window_left_scroll_bar_area_width(w.id());
             let right_scroll_bar = frames.window_right_scroll_bar_area_width(w.id());
             (

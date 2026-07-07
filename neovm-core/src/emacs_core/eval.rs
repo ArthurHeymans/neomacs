@@ -1099,6 +1099,11 @@ pub(crate) fn feature_present_in_state(
 pub(crate) fn add_feature_in_state(obarray: &mut Obarray, features: &mut Vec<SymId>, name: &str) {
     refresh_features_from_variable_in_state(obarray, features);
     let id = intern(name);
+    add_feature_id_in_state(obarray, features, id);
+}
+
+pub(crate) fn add_feature_id_in_state(obarray: &mut Obarray, features: &mut Vec<SymId>, id: SymId) {
+    refresh_features_from_variable_in_state(obarray, features);
     if features.iter().any(|feature| *feature == id) {
         return;
     }
@@ -1131,7 +1136,6 @@ pub(crate) fn provide_value_in_state(
             vec![Value::symbol("symbolp"), feature],
         )
     })?;
-    let name = resolve_sym(sym_id).to_owned();
     if let Some(value) = subfeatures {
         if crate::emacs_core::value::list_to_vec(&value).is_none() {
             return Err(signal(
@@ -1140,12 +1144,12 @@ pub(crate) fn provide_value_in_state(
             ));
         }
         if value.is_nil() {
-            add_feature_in_state(obarray, features, &name);
+            add_feature_id_in_state(obarray, features, sym_id);
             return Ok(feature);
         }
-        obarray.put_property(&name, "subfeatures", value)?;
+        obarray.put_property_id(sym_id, intern("subfeatures"), value)?;
     }
-    add_feature_in_state(obarray, features, &name);
+    add_feature_id_in_state(obarray, features, sym_id);
     Ok(feature)
 }
 

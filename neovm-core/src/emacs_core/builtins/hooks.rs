@@ -1148,13 +1148,17 @@ pub(crate) fn builtin_featurep(eval: &mut super::eval::Context, args: Vec<Value>
     expect_min_args("featurep", &args, 1)?;
     expect_max_args("featurep", &args, 2)?;
     let feature = eval.unwrap_symbol(args[0]);
-    let name = feature.as_symbol_name().ok_or_else(|| {
+    let sym_id = feature.as_symbol_id().ok_or_else(|| {
         signal(
             "wrong-type-argument",
             vec![Value::symbol("symbolp"), args[0]],
         )
     })?;
-    if !crate::emacs_core::eval::feature_present_in_state(&eval.obarray, &mut eval.features, name) {
+    crate::emacs_core::eval::refresh_features_from_variable_in_state(
+        &eval.obarray,
+        &mut eval.features,
+    );
+    if !eval.features.iter().any(|feature| *feature == sym_id) {
         return Ok(Value::NIL);
     }
 
@@ -1167,7 +1171,7 @@ pub(crate) fn builtin_featurep(eval: &mut super::eval::Context, args: Vec<Value>
 
     let subfeatures = eval
         .obarray
-        .get_property(name, "subfeatures")
+        .get_property_id(sym_id, crate::emacs_core::intern::intern("subfeatures"))
         .unwrap_or(Value::NIL);
     let items = list_to_vec(&subfeatures).ok_or_else(|| {
         signal(

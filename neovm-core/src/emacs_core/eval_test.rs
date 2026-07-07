@@ -8135,6 +8135,21 @@ fn provide_require() {
 }
 
 #[test]
+fn provide_preserves_uninterned_feature_identity() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((s (make-symbol "neo-x"))
+                 (same-name (make-symbol "neo-x")))
+             (provide s)
+             (list (featurep s)
+                   (and (memq s features) t)
+                   (featurep same-name)
+                   (memq same-name features)))"#,
+    );
+    assert_eq!(result, "OK (t t nil nil)");
+}
+
+#[test]
 fn provide_stores_subfeatures_list() {
     crate::test_utils::init_test_tracing();
     // GNU provide stores the SUBFEATURES list via (put FEATURE 'subfeatures LIST).
