@@ -196,7 +196,7 @@ fn div_cx17_process_sentinel_with_buffer_content() {
   (let ((p (make-process :name "neo-cx17-sl" :command '("echo" "output")
                          :buffer buf
                          :sentinel (lambda (proc event) (setq sentinel-ev event)))))
-    (accept-process-output p 1))
+    (while (accept-process-output p 1)))
   (list (with-current-buffer buf (buffer-string))
         (if sentinel-ev (string-match "finished" sentinel-ev) nil)))
 "##,
