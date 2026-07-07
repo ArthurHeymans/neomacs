@@ -9503,6 +9503,89 @@ fn vm_vertical_motion_does_not_count_missing_previous_line_like_gnu() {
 }
 
 #[test]
+fn vm_vertical_motion_wraps_long_screen_lines_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_str(
+            r#"(progn
+                 (delete-other-windows)
+                 (insert (make-string 300 ?x))
+                 (goto-char 1)
+                 (let ((forward (list (window-body-width)
+                                      (vertical-motion 2)
+                                      (point)
+                                      (current-column))))
+                   (vertical-motion -1)
+                   (list forward
+                         (point)
+                         (current-column))))"#
+        ),
+        "OK ((80 2 159 158) 80 79)"
+    );
+}
+
+#[test]
+fn vm_vertical_motion_large_downward_motion_lands_at_eob_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_str(
+            r#"(progn
+                 (delete-other-windows)
+                 (insert (make-string 200 ?x))
+                 (goto-char 1)
+                 (list (window-body-width)
+                       (buffer-size)
+                       (vertical-motion (buffer-size))
+                       (point)))"#
+        ),
+        "OK (80 200 2 201)"
+    );
+}
+
+#[test]
+fn vm_vertical_motion_zero_moves_to_current_screen_line_start() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_str(
+            r#"(progn
+                 (delete-other-windows)
+                 (insert (make-string 200 ?x))
+                 (goto-char 81)
+                 (list (current-column)
+                       (vertical-motion 0)
+                       (point)
+                       (current-column)))"#
+        ),
+        "OK (80 0 80 79)"
+    );
+}
+
+#[test]
+fn vm_split_window_inherits_selected_buffer_point_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    assert_eq!(
+        vm_eval_str(
+            r#"(let ((b (get-buffer-create " *probe-wrap-narrow*")))
+                 (unwind-protect
+                     (progn
+                       (delete-other-windows)
+                       (switch-to-buffer b)
+                       (erase-buffer)
+                       (insert (make-string 200 ?x))
+                       (let ((w2 (split-window-internal nil 40 'right nil)))
+                         (list (window-point w2)
+                               (progn
+                                 (select-window w2)
+                                 (point)))))
+                   (if (buffer-live-p b)
+                       (kill-buffer b))
+                   (delete-other-windows)))"#
+        ),
+        "OK (201 201)"
+    );
+}
+
+#[test]
 fn vm_region_bounds_use_shared_mark_state() {
     crate::test_utils::init_test_tracing();
     assert_eq!(

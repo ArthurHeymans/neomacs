@@ -213,6 +213,14 @@ struct ColumnScan {
     previous_code: Option<u32>,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DisplayAdvance {
+    pub(crate) next_byte: usize,
+    pub(crate) width: usize,
+    pub(crate) hard_newline: bool,
+    pub(crate) unbreakable_wide: bool,
+}
+
 fn line_bounds(buf: &Buffer, point: EmacsBytePos) -> EmacsByteRange {
     let accessible = buf.accessible_emacs_byte_region();
     let begv = accessible.start();
@@ -257,6 +265,114 @@ fn next_column_for_code(column: usize, code: u32, width: usize, tab_width: usize
 
 fn raw_unibyte_display_width(byte: u8) -> usize {
     if byte < 0o40 || byte >= 0o177 { 4 } else { 1 }
+}
+
+pub(crate) fn display_advance_at(
+    ctx: &mut super::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    byte: usize,
+    column: usize,
+) -> Result<Option<DisplayAdvance>, Flow> {
+    let (end, tab_width, display_table) = {
+        let buf = match ctx.buffers.get(buffer_id) {
+            Some(buf) => buf,
+            None => return Ok(None),
+        };
+        let display_table = dynamic_buffer_or_global_symbol_value(
+            &ctx.obarray,
+            &[],
+            Some(buf),
+            "buffer-display-table",
+        )
+        .filter(|v| !v.is_nil())
+        .or_else(|| ctx.obarray.symbol_value("standard-display-table").copied())
+        .filter(|v| !v.is_nil());
+        (
+            buf.accessible_emacs_byte_region().end().get(),
+            tab_width_in_state(&ctx.obarray, &[], Some(buf)),
+            display_table,
+        )
+    };
+    if byte >= end {
+        return Ok(None);
+    }
+
+    if let Some(next_visible) =
+        super::xdisp::zero_width_invisible_run_end_byte(ctx, buffer_id, byte)?
+    {
+        if next_visible > byte {
+            return Ok(Some(DisplayAdvance {
+                next_byte: next_visible.min(end),
+                width: 0,
+                hard_newline: false,
+                unbreakable_wide: false,
+            }));
+        }
+    }
+
+    if let Some((disp_width, run_end_byte)) = display_run_at(ctx, buffer_id, byte, column) {
+        if run_end_byte > byte {
+            return Ok(Some(DisplayAdvance {
+                next_byte: run_end_byte.min(end),
+                width: disp_width,
+                hard_newline: false,
+                unbreakable_wide: false,
+            }));
+        }
+    }
+
+    if let Some((comp_width, comp_end)) = composition_run_at(ctx, buffer_id, byte) {
+        if comp_end > byte {
+            return Ok(Some(DisplayAdvance {
+                next_byte: comp_end.min(end),
+                width: comp_width,
+                hard_newline: false,
+                unbreakable_wide: false,
+            }));
+        }
+    }
+
+    let (code, char_len, width) = {
+        let buf = match ctx.buffers.get(buffer_id) {
+            Some(buf) => buf,
+            None => return Ok(None),
+        };
+        let scan_pos = EmacsBytePos::new(byte);
+        let Some(code) = buf.char_code_after_emacs_byte_pos(scan_pos) else {
+            return Ok(None);
+        };
+        let char_len = buf
+            .char_after_emacs_byte_len(scan_pos)
+            .map(|len| len.max(EmacsByteLen::new(1)))
+            .unwrap_or(EmacsByteLen::new(1));
+        let width = buffer_char_display_width(buf, scan_pos, code);
+        (code, char_len, width)
+    };
+
+    let next_byte = byte.saturating_add(char_len.get()).min(end);
+    if code == b'\n' as u32 {
+        return Ok(Some(DisplayAdvance {
+            next_byte,
+            width: 0,
+            hard_newline: true,
+            unbreakable_wide: false,
+        }));
+    }
+
+    let next_column = match display_table
+        .as_ref()
+        .and_then(|dt| display_table_glyph_width(dt, code))
+    {
+        Some(glyph_width) => column.saturating_add(glyph_width),
+        None => next_column_for_code(column, code, width, tab_width),
+    };
+
+    Ok(Some(DisplayAdvance {
+        next_byte,
+        width: next_column.saturating_sub(column),
+        hard_newline: false,
+        unbreakable_wide: code > 0x7f && width > 1 && char_len.get() > 1,
+    }))
 }
 
 /// Compute the column width of a `(space ...)` display spec, mirroring GNU's

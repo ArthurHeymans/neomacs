@@ -2875,6 +2875,32 @@ fn window_tree_navigation_and_normal_size_match_gnu_runtime() {
 }
 
 #[test]
+fn vertical_motion_truncates_partial_width_split_windows_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_one_with_frame(
+        r#"(let ((b (get-buffer-create " *probe-truncate-narrow*")))
+             (unwind-protect
+                 (progn
+                   (delete-other-windows)
+                   (switch-to-buffer b)
+                   (erase-buffer)
+                   (insert (make-string 200 ?x))
+                   (let ((w2 (split-window nil 40 'right)))
+                     (select-window w2)
+                     (goto-char (point-min))
+                     (list (window-body-width)
+                           (truncated-partial-width-window-p)
+                           (vertical-motion 1)
+                           (point)
+                           (count-screen-lines (point-min) (point-max)))))
+               (if (buffer-live-p b)
+                   (kill-buffer b))
+               (delete-other-windows)))"#,
+    );
+    assert_eq!(result, "OK (40 t 0 201 0)");
+}
+
+#[test]
 fn raw_context_does_not_prebind_window_inside_aliases() {
     crate::test_utils::init_test_tracing();
     let eval = super::super::eval::Context::new();

@@ -931,6 +931,75 @@ fn window_width_cols(w: &Window, char_width: f32) -> i64 {
     }
 }
 
+pub(crate) fn window_truncates_lines_for_motion(
+    eval: &mut super::eval::Context,
+    window: Option<Value>,
+    current_buffer_id: BufferId,
+) -> bool {
+    let _ = ensure_selected_frame_id_in_state(&mut eval.frames, &mut eval.buffers);
+    let Ok((fid, wid)) = resolve_window_id_with_pred_in_state(
+        &mut eval.frames,
+        &mut eval.buffers,
+        window.as_ref(),
+        "window-live-p",
+    ) else {
+        return false;
+    };
+    let current_buffer = eval.buffers.get(current_buffer_id);
+    let read = |name: &str| {
+        crate::emacs_core::indent::dynamic_buffer_or_global_symbol_value(
+            &eval.obarray,
+            &[],
+            current_buffer,
+            name,
+        )
+    };
+
+    if read("truncate-lines").is_some_and(|value| !value.is_nil()) {
+        return true;
+    }
+    let hscroll_nonzero = eval
+        .frames
+        .get(fid)
+        .and_then(|frame| frame.find_window(wid))
+        .is_some_and(|window| matches!(window, Window::Leaf { hscroll, .. } if *hscroll != 0));
+    if hscroll_nonzero {
+        return true;
+    }
+
+    let root_wid = match eval.frames.get(fid) {
+        Some(frame) => frame.root_window.id(),
+        None => return false,
+    };
+    let window_cols =
+        window_total_width_impl(&mut eval.frames, &mut eval.buffers, vec![window_value(wid)])
+            .ok()
+            .and_then(|value| value.as_fixnum())
+            .unwrap_or(0);
+    let root_cols = window_total_width_impl(
+        &mut eval.frames,
+        &mut eval.buffers,
+        vec![window_value(root_wid)],
+    )
+    .ok()
+    .and_then(|value| value.as_fixnum())
+    .unwrap_or(window_cols);
+    if window_cols >= root_cols {
+        return false;
+    }
+
+    match eval
+        .obarray
+        .symbol_value("truncate-partial-width-windows")
+        .copied()
+    {
+        Some(value) if value.is_nil() => false,
+        Some(value) if value.is_fixnum() => window_cols < value.as_fixnum().unwrap(),
+        Some(_) => true,
+        None => false,
+    }
+}
+
 fn window_height_pixels(w: &Window) -> i64 {
     w.bounds().height.max(0.0) as i64
 }
@@ -3852,6 +3921,11 @@ pub(crate) fn split_window_internal_impl_in_state_with_normal(
     normal_size: Value,
 ) -> EvalResult {
     let (fid, wid) = resolve_window_id_or_error_in_state(frames, buffers, Some(&window))?;
+
+    // GNU's `window_point` reads the selected window's live buffer point.  Keep
+    // the leaf cache in sync before cloning the window tree so a same-buffer
+    // split inherits that effective point, not a stale marker value.
+    remember_selected_window_point_in_state(frames, buffers, fid);
 
     // GNU `Fsplit_window_internal` treats SIDE t as `right`, nil as
     // `below`, and unknown symbols like the vertical/default side.

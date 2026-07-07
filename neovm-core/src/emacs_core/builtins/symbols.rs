@@ -1919,53 +1919,32 @@ pub(crate) fn builtin_suspend_emacs(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-fn char_len_at(buf: &crate::buffer::buffer::Buffer, pos: EmacsBytePos) -> EmacsByteLen {
-    buf.char_after_emacs_byte_len(pos)
-        .map(|len| len.max(EmacsByteLen::new(1)))
-        .unwrap_or(EmacsByteLen::new(1))
-}
-
 fn next_visible_line_start(
     eval: &mut super::eval::Context,
     buffer_id: crate::buffer::BufferId,
-    mut pos: EmacsBytePos,
-) -> Result<Option<EmacsBytePos>, Flow> {
-    let point_max = match eval.buffers.get(buffer_id) {
-        Some(buf) => buf.accessible_emacs_byte_region().end(),
-        None => return Ok(None),
+    pos: EmacsBytePos,
+    screen_width: usize,
+    truncate_lines: bool,
+) -> Result<Option<ScreenLineStep>, Flow> {
+    let Some(step) =
+        next_screen_line_start_from(eval, buffer_id, pos, screen_width, truncate_lines)?
+    else {
+        return Ok(None);
     };
+    Ok(Some(step))
+}
 
-    while pos < point_max {
-        if let Some(next_visible) =
-            xdisp::zero_width_invisible_run_end_byte(eval, buffer_id, pos.get())?
-        {
-            let next_visible = EmacsBytePos::new(next_visible);
-            if next_visible > pos {
-                pos = next_visible.min(point_max);
-                continue;
-            }
-        }
-
-        let (code, len) = match eval.buffers.get(buffer_id) {
-            Some(buf) => match buf.char_code_after_emacs_byte_pos(pos) {
-                Some(code) => (code, char_len_at(buf, pos)),
-                None => return Ok(None),
-            },
-            None => return Ok(None),
-        };
-        pos = pos.add_len(len);
-        if code == b'\n' as u32 {
-            return Ok(Some(pos));
-        }
-    }
-
-    Ok(None)
+#[derive(Clone, Copy, Debug)]
+struct ScreenLineStep {
+    next: EmacsBytePos,
+    counts_line: bool,
 }
 
 fn previous_visible_line_start(
     eval: &mut super::eval::Context,
     buffer_id: crate::buffer::BufferId,
     pos: EmacsBytePos,
+    screen_width: usize,
 ) -> Result<Option<(EmacsBytePos, bool)>, Flow> {
     let (point_min, point_max) = match eval.buffers.get(buffer_id) {
         Some(buf) => {
@@ -1978,43 +1957,161 @@ fn previous_visible_line_start(
         return Ok(None);
     }
 
+    let current_screen_start =
+        current_screen_line_start(eval, buffer_id, pos, screen_width)?.unwrap_or(point_min);
+    if current_screen_start <= point_min {
+        return Ok(None);
+    }
+
     let mut scan = point_min;
     let mut previous_start = None;
     let mut current_start = point_min;
-    while scan < point_max && scan < pos {
-        if let Some(next_visible) =
-            xdisp::zero_width_invisible_run_end_byte(eval, buffer_id, scan.get())?
-        {
-            let next_visible = EmacsBytePos::new(next_visible);
-            if next_visible > scan {
-                scan = next_visible.min(point_max);
-                continue;
-            }
-        }
-
-        let (code, len) = match eval.buffers.get(buffer_id) {
-            Some(buf) => match buf.char_code_after_emacs_byte_pos(scan) {
-                Some(code) => (code, char_len_at(buf, scan)),
-                None => break,
-            },
-            None => return Ok(None),
+    while scan < point_max && current_start < current_screen_start {
+        let Some(step) =
+            next_screen_line_start_from(eval, buffer_id, current_start, screen_width, false)?
+        else {
+            break;
         };
-        scan = scan.add_len(len);
-        if code == b'\n' as u32 {
-            let next_start = scan;
-            if next_start <= pos {
-                previous_start = Some(current_start);
-                current_start = next_start;
-            } else {
-                break;
-            }
+        if step.next <= current_screen_start {
+            previous_start = Some(current_start);
+            current_start = step.next;
+            scan = step.next;
+        } else {
+            break;
         }
     }
 
     if let Some(previous_start) = previous_start {
         Ok(Some((previous_start, true)))
-    } else if pos > current_start {
-        Ok(Some((current_start, false)))
+    } else {
+        Ok(None)
+    }
+}
+
+fn vertical_motion_screen_width(eval: &mut super::eval::Context, window: Option<Value>) -> usize {
+    let window_arg = window.unwrap_or(Value::NIL);
+    super::window_cmds::builtin_window_body_width(eval, vec![window_arg, Value::NIL])
+        .ok()
+        .and_then(|v| v.as_fixnum())
+        .filter(|n| *n > 1)
+        .map(|n| (n as usize).saturating_sub(1))
+        .unwrap_or(79)
+        .max(1)
+}
+
+fn line_start_at_or_before(buf: &crate::buffer::buffer::Buffer, pos: EmacsBytePos) -> EmacsBytePos {
+    let accessible = buf.accessible_emacs_byte_region();
+    let begv = accessible.start();
+    let mut bol = accessible.clamp(pos);
+    while bol > begv
+        && buf.emacs_byte_at_pos(bol.saturating_sub_len(EmacsByteLen::new(1))) != Some(b'\n')
+    {
+        bol = bol.saturating_sub_len(EmacsByteLen::new(1));
+    }
+    bol
+}
+
+fn current_screen_line_start(
+    eval: &mut super::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    pos: EmacsBytePos,
+    screen_width: usize,
+) -> Result<Option<EmacsBytePos>, Flow> {
+    current_screen_line_start_with_truncation(eval, buffer_id, pos, screen_width, false)
+}
+
+fn current_screen_line_start_with_truncation(
+    eval: &mut super::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    pos: EmacsBytePos,
+    screen_width: usize,
+    truncate_lines: bool,
+) -> Result<Option<EmacsBytePos>, Flow> {
+    let Some(buf) = eval.buffers.get(buffer_id) else {
+        return Ok(None);
+    };
+    let accessible = buf.accessible_emacs_byte_region();
+    let target = accessible.clamp(pos);
+    let mut current = line_start_at_or_before(buf, target);
+
+    loop {
+        let Some(step) =
+            next_screen_line_start_from(eval, buffer_id, current, screen_width, truncate_lines)?
+        else {
+            return Ok(Some(current));
+        };
+        if step.next <= target && step.counts_line {
+            current = step.next;
+        } else {
+            return Ok(Some(current));
+        }
+    }
+}
+
+fn next_screen_line_start_from(
+    eval: &mut super::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    start: EmacsBytePos,
+    screen_width: usize,
+    truncate_lines: bool,
+) -> Result<Option<ScreenLineStep>, Flow> {
+    let point_max = match eval.buffers.get(buffer_id) {
+        Some(buf) => buf.accessible_emacs_byte_region().end(),
+        None => return Ok(None),
+    };
+    let mut scan = start;
+    let mut column = 0usize;
+
+    while scan < point_max {
+        let Some(advance) = indent::display_advance_at(eval, buffer_id, scan.get(), column)? else {
+            return Ok(None);
+        };
+        if advance.next_byte <= scan.get() {
+            return Ok(None);
+        }
+        let next = EmacsBytePos::new(advance.next_byte);
+        if advance.hard_newline {
+            return Ok(Some(ScreenLineStep {
+                next,
+                counts_line: true,
+            }));
+        }
+        if truncate_lines && column.saturating_add(advance.width) > screen_width {
+            return Ok(Some(ScreenLineStep {
+                next: point_max,
+                counts_line: false,
+            }));
+        }
+        if advance.unbreakable_wide
+            && scan > start
+            && column.saturating_add(advance.width) > screen_width
+        {
+            return Ok(Some(ScreenLineStep {
+                next: scan,
+                counts_line: true,
+            }));
+        }
+        scan = next;
+        column = column.saturating_add(advance.width);
+        if column >= screen_width {
+            if truncate_lines {
+                return Ok(Some(ScreenLineStep {
+                    next: point_max,
+                    counts_line: false,
+                }));
+            }
+            return Ok(Some(ScreenLineStep {
+                next: scan,
+                counts_line: true,
+            }));
+        }
+    }
+
+    if start < point_max {
+        Ok(Some(ScreenLineStep {
+            next: point_max,
+            counts_line: false,
+        }))
     } else {
         Ok(None)
     }
@@ -2082,34 +2179,57 @@ pub(crate) fn builtin_vertical_motion(
     let accessible = buf.accessible_emacs_byte_region();
     let pt = accessible.clamp(buf.point_emacs_byte_pos());
     let begv = accessible.start();
+    let screen_width = vertical_motion_screen_width(eval, args.get(1).copied());
+    let truncate_lines = super::window_cmds::window_truncates_lines_for_motion(
+        eval,
+        args.get(1).copied(),
+        current_id,
+    );
 
     if lines == 0 && cols.is_none() {
-        // Move to beginning of current screen line (= beginning of line).
-        let mut bol = pt;
-        while bol > begv
-            && buf.emacs_byte_at_pos(bol.saturating_sub_len(EmacsByteLen::new(1))) != Some(b'\n')
-        {
-            bol = bol.saturating_sub_len(EmacsByteLen::new(1));
-        }
+        // Move to beginning of current screen line.
+        let bol = current_screen_line_start_with_truncation(
+            eval,
+            current_id,
+            pt,
+            screen_width,
+            truncate_lines,
+        )?
+        .unwrap_or(begv);
         let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, bol);
         return Ok(Value::fixnum(0));
     }
 
-    let mut pos = pt;
+    let mut pos = current_screen_line_start_with_truncation(
+        eval,
+        current_id,
+        pt,
+        screen_width,
+        truncate_lines,
+    )?
+    .unwrap_or(pt);
     let mut moved: i64 = 0;
 
     if lines > 0 {
         for _ in 0..lines {
-            let Some(next) = next_visible_line_start(eval, current_id, pos)? else {
+            let Some(step) =
+                next_visible_line_start(eval, current_id, pos, screen_width, truncate_lines)?
+            else {
                 break;
             };
-            pos = next;
-            moved += 1;
+            pos = step.next;
+            if step.counts_line {
+                moved += 1;
+            }
+            if !step.counts_line {
+                break;
+            }
         }
     } else if lines < 0 {
         let target = (-lines) as usize;
         for _ in 0..target {
-            let Some((prev, line_moved)) = previous_visible_line_start(eval, current_id, pos)?
+            let Some((prev, line_moved)) =
+                previous_visible_line_start(eval, current_id, pos, screen_width)?
             else {
                 break;
             };
@@ -2121,16 +2241,15 @@ pub(crate) fn builtin_vertical_motion(
             }
         }
     } else {
-        // lines == 0 but cols is Some: stay on current line, go to BOL first
-        while pos > begv
-            && eval
-                .buffers
-                .get(current_id)
-                .and_then(|buf| buf.emacs_byte_at_pos(pos.saturating_sub_len(EmacsByteLen::new(1))))
-                != Some(b'\n')
-        {
-            pos = pos.saturating_sub_len(EmacsByteLen::new(1));
-        }
+        // lines == 0 but cols is Some: stay on current screen line.
+        pos = current_screen_line_start_with_truncation(
+            eval,
+            current_id,
+            pt,
+            screen_width,
+            truncate_lines,
+        )?
+        .unwrap_or(begv);
     }
 
     // Now pos is at beginning of target line.

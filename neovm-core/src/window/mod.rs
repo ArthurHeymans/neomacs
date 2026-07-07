@@ -3529,23 +3529,41 @@ fn split_window_in_tree(
                 ..
             } = &mut new_leaf
             {
+                let same_buffer = new_buffer_id == buf_id;
+                let inherited_window_start = *window_start;
+                let inherited_point = *point;
+                let inherited_old_point = *old_point;
+                let inherited_vscroll = *vscroll;
+                let inherited_preserve_vscroll_p = *preserve_vscroll_p;
                 *id = new_id;
                 *buffer_id = new_buffer_id;
                 *bounds = new_leaf_bounds;
                 parameters.clear();
                 *history = WindowHistoryState::default();
-                *window_start = LispCharPos1::ONE;
+                *window_start = if same_buffer {
+                    inherited_window_start
+                } else {
+                    LispCharPos1::ONE
+                };
                 *start_marker_id = None;
                 *window_end_pos = 0;
                 *window_end_bytepos = 0;
                 *window_end_vpos = 0;
                 *window_end_valid = false;
-                *point = LispCharPos1::ONE;
+                *point = if same_buffer {
+                    inherited_point
+                } else {
+                    LispCharPos1::ONE
+                };
                 *point_marker_id = None;
-                *old_point = LispCharPos1::ONE;
+                *old_point = if same_buffer {
+                    inherited_old_point
+                } else {
+                    LispCharPos1::ONE
+                };
                 *old_point_marker_id = None;
-                *vscroll = 0;
-                *preserve_vscroll_p = false;
+                *vscroll = if same_buffer { inherited_vscroll } else { 0 };
+                *preserve_vscroll_p = same_buffer && inherited_preserve_vscroll_p;
             }
 
             // Capture the old leaf's pre-split normal-size
