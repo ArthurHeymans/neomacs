@@ -281,12 +281,27 @@ pub(crate) fn describe_single_key_value(value: &Value, no_angles: bool) -> Resul
 pub(crate) fn key_sequence_values(value: &Value) -> Result<Vec<Value>, Flow> {
     match value.kind() {
         ValueKind::Nil => Ok(vec![]),
-        ValueKind::String => Ok(crate::emacs_core::builtins::lisp_string_char_codes(
-            value.as_lisp_string().expect("string"),
-        )
-        .into_iter()
-        .map(|code| Value::fixnum(code as i64))
-        .collect()),
+        ValueKind::String => {
+            let string = value.as_lisp_string().expect("string");
+            if !string.is_multibyte() {
+                return Ok(string
+                    .as_bytes()
+                    .iter()
+                    .map(|&byte| {
+                        let code = if byte & 0x80 != 0 {
+                            KEY_CHAR_META | i64::from(byte & 0x7f)
+                        } else {
+                            i64::from(byte)
+                        };
+                        Value::fixnum(code)
+                    })
+                    .collect());
+            }
+            Ok(crate::emacs_core::builtins::lisp_string_char_codes(string)
+                .into_iter()
+                .map(|code| Value::fixnum(code as i64))
+                .collect())
+        }
         ValueKind::Veclike(VecLikeType::Vector) => {
             let elems = value.as_vector_data().unwrap().clone();
             // Convert any Lucid-style event lists inside the vector

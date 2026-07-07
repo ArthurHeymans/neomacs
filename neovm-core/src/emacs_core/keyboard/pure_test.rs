@@ -98,6 +98,24 @@ fn key_sequence_values_string() {
 }
 
 #[test]
+fn key_sequence_values_unibyte_meta_bytes() {
+    crate::test_utils::init_test_tracing();
+    let val = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
+        0x80, 0x9b, 0xf8, 0xff,
+    ]));
+    let keys = key_sequence_values(&val).unwrap();
+    assert_eq!(
+        keys,
+        vec![
+            Value::fixnum(KEY_CHAR_META),
+            Value::fixnum(KEY_CHAR_META | 27),
+            Value::fixnum(KEY_CHAR_META | i64::from(b'x')),
+            Value::fixnum(KEY_CHAR_META | 127),
+        ]
+    );
+}
+
+#[test]
 fn key_sequence_values_vector() {
     crate::test_utils::init_test_tracing();
     let val = Value::vector(vec![Value::fixnum(1), Value::fixnum(2)]);

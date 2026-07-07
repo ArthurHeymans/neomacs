@@ -1345,9 +1345,11 @@ fn key_description_integer_modifier_and_nonunicode_edges_match_emacs() {
 #[test]
 fn key_description_accepts_raw_unibyte_string_sequences() {
     crate::test_utils::init_test_tracing();
-    let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xFF]));
+    let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
+        0x80, 0x9b, 0xf8, 0xff,
+    ]));
     let described = builtin_key_description(vec![raw]).expect("key-description should succeed");
-    assert!(described.is_string());
+    assert_eq!(described, Value::string("C-M-@ M-ESC M-x M-DEL"));
 }
 
 #[test]
