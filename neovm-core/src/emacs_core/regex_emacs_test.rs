@@ -1566,89 +1566,140 @@ fn pf_diff(
     None
 }
 
-/// Core prefilter fuzz loop.  Returns `(compiled, with_prefilter)` counts.
-fn run_prefilter_fuzz(cases: usize, base_seed: u64, text_max: usize) -> (usize, usize) {
-    let mut compiled = 0usize;
-    let mut with_prefilter = 0usize;
+/// Result counters from one fuzz stream.
+#[derive(Default, Clone, Copy)]
+struct PfFuzzCounts {
+    compiled: usize,
+    with_prefilter: usize,
+    /// Forward differential comparisons that actually ran the PREFILTER path
+    /// (candidate had `prefilter.is_some()`).  This is the number that matters
+    /// for the soundness gate — every one asserts prefilter-on == skip-off.
+    pf_forward_cmp: usize,
+}
+
+/// Run one prefilter fuzz stream.  Only cases that actually BUILD a prefilter
+/// exercise the feature, so they get the exhaustive comparison (2 buffers × 3
+/// starts × forward+anchored); the backtracker verifies every candidate, so a
+/// divergence there = an unsound literal skip.  Cases with NO prefilter can't
+/// diverge on the prefilter path, so they are only lightly sampled (a cheap
+/// forward comparison that also keeps the fastmap path honest) — this keeps the
+/// run fast enough to fit the test timeout while still driving ≥320k prefilter
+/// comparisons.  `general_1_in` (0 = never) mixes in arbitrary `gen_regex`
+/// patterns for breadth.
+fn run_prefilter_fuzz(
+    cases: usize,
+    base_seed: u64,
+    text_max: usize,
+    general_1_in: u32,
+) -> PfFuzzCounts {
+    let mut c = PfFuzzCounts::default();
     for i in 0..cases {
         let seed = base_seed.wrapping_add(i as u64);
         let mut rng = FuzzRng::new(seed);
 
-        // 60% targeted literal/alternation shapes, 40% general breadth.
-        let (pat, keywords) = if rng.chance(3, 5) {
-            pf_gen_pattern(&mut rng)
-        } else {
+        let (pat, keywords) = if general_1_in > 0 && rng.chance(1, general_1_in as u64) {
             let mut p = String::new();
             let depth = 2 + rng.below(2) as u32;
             gen_regex(&mut rng, &mut p, depth, true, false);
             (p, Vec::new())
+        } else {
+            pf_gen_pattern(&mut rng)
         };
 
         let cp = match regex_compile(&pat, false, false) {
             Ok(cp) => cp,
             Err(_) => continue,
         };
-        compiled += 1;
-        if cp.prefilter.is_some() {
-            with_prefilter += 1;
+        c.compiled += 1;
+        let has_pf = cp.prefilter.is_some();
+        if has_pf {
+            c.with_prefilter += 1;
         }
 
-        // Two buffers: a planted-keyword mix and pure gen_text noise.
-        let texts = [
-            pf_gen_text(&mut rng, &keywords, text_max),
-            gen_text(&mut rng, text_max),
-        ];
-        for text in &texts {
-            for &start in &[0usize, text.len() / 2, text.len()] {
-                let start = start.min(text.len());
-                if let Some((label, oracle, cand)) = pf_diff(&cp, text, start) {
-                    panic!(
-                        "PREFILTER DIVERGENCE ({label}) at seed {seed}:\n\
-                         pattern      = {pat:?}\n\
-                         has_prefilter= {}\n\
-                         text         = {text:?}\n\
-                         start        = {start}\n\
-                         oracle(skip-off) = {oracle:?}\n\
-                         candidate(prefilter) = {cand:?}",
-                        cp.prefilter.is_some()
-                    );
+        let panic_diff = |text: &[u8], start: usize| {
+            if let Some((label, oracle, cand)) = pf_diff(&cp, text, start) {
+                panic!(
+                    "PREFILTER DIVERGENCE ({label}) at seed {seed}:\n\
+                     pattern      = {pat:?}\n\
+                     has_prefilter= {has_pf}\n\
+                     text         = {text:?}\n\
+                     start        = {start}\n\
+                     oracle(skip-off) = {oracle:?}\n\
+                     candidate(prefilter) = {cand:?}"
+                );
+            }
+        };
+
+        if has_pf {
+            // The gate: exercise the prefilter over planted-keyword + noise
+            // buffers at head/middle/tail starts.
+            let texts = [
+                pf_gen_text(&mut rng, &keywords, text_max),
+                gen_text(&mut rng, text_max),
+            ];
+            for text in &texts {
+                for &start in &[0usize, text.len() / 2, text.len()] {
+                    let start = start.min(text.len());
+                    panic_diff(text, start);
+                    c.pf_forward_cmp += 1;
                 }
             }
+        } else if rng.chance(1, 6) {
+            // No prefilter → can't diverge on the prefilter path; a light
+            // sampled forward comparison still guards the fastmap path cheaply.
+            let text = gen_text(&mut rng, text_max);
+            panic_diff(&text, 0);
         }
     }
-    (compiled, with_prefilter)
+    c
 }
 
 /// Fast smoke run on every `cargo test`.
 #[test]
 fn prefilter_fuzz_smoke() {
     crate::test_utils::init_test_tracing();
-    let (compiled, with_pf) = run_prefilter_fuzz(3_000, 0x5EED_1234, 24);
+    // Mix in general patterns (1-in-3) for breadth on the cheap smoke path.
+    let c = run_prefilter_fuzz(4_000, 0x5EED_1234, 24, 3);
+    eprintln!(
+        "prefilter smoke: compiled={} with_prefilter={} pf_forward_cmp={}",
+        c.compiled, c.with_prefilter, c.pf_forward_cmp
+    );
     // The generator must actually exercise the prefilter on a real fraction.
     assert!(
-        with_pf > compiled / 20,
+        c.with_prefilter > c.compiled / 20,
         "prefilter fuzz should build a prefilter on many cases \
-         (with_prefilter={with_pf} compiled={compiled})"
+         (with_prefilter={} compiled={})",
+        c.with_prefilter,
+        c.compiled
     );
 }
 
-/// The full ≥320k-case prefilter differential fuzz — the primary soundness
-/// gate.  Ignored by default (slow); run with `--ignored`.  Each case runs 2
-/// buffers × 3 start positions × (forward + anchored) comparisons, so this is
-/// well over 320k forward-search comparisons.
+/// The full prefilter differential fuzz — the primary soundness gate.  Ignored
+/// by default (slow); run with `--ignored`.  Targeted literal/alternation
+/// shapes only (the patterns that actually build a prefilter), so every
+/// prefilter case is compared exhaustively.  Asserts ≥320k FORWARD comparisons
+/// actually ran through the prefilter path (an unsound literal skip → a missed
+/// match → immediate panic).
 #[test]
 #[ignore = "long-running prefilter differential fuzz; run explicitly"]
 fn prefilter_fuzz_differential() {
     crate::test_utils::init_test_tracing();
-    let (c1, p1) = run_prefilter_fuzz(220_000, 0xF00D_D001, 40);
-    let (c2, p2) = run_prefilter_fuzz(140_000, 0x0BAD_F11E, 28);
-    let compiled = c1 + c2;
-    let with_pf = p1 + p2;
-    eprintln!("prefilter fuzz: compiled={compiled} with_prefilter={with_pf}");
+    // Two independent seed streams, targeted-only (general_1_in = 0), varied
+    // buffer sizes.  Prefilter patterns are literal-ish (mostly Pike-linear),
+    // so this stays well within the per-test timeout.
+    let a = run_prefilter_fuzz(200_000, 0xF00D_D001, 40, 0);
+    let b = run_prefilter_fuzz(160_000, 0x0BAD_F11E, 28, 0);
+    let compiled = a.compiled + b.compiled;
+    let with_pf = a.with_prefilter + b.with_prefilter;
+    let pf_fwd = a.pf_forward_cmp + b.pf_forward_cmp;
+    eprintln!(
+        "prefilter fuzz: compiled={compiled} with_prefilter={with_pf} \
+         prefilter_forward_comparisons={pf_fwd}"
+    );
     assert!(
-        with_pf > compiled / 20,
-        "prefilter fuzz should build a prefilter on many cases \
-         (with_prefilter={with_pf} compiled={compiled})"
+        pf_fwd >= 320_000,
+        "prefilter fuzz must run >=320k prefilter forward comparisons \
+         (got {pf_fwd}; with_prefilter={with_pf} compiled={compiled})"
     );
 }
 
