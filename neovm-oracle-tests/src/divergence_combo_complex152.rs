@@ -128,20 +128,20 @@ fn div_cx152_dired_mode_buffer_creation() {
 #[test]
 fn div_cx152_dired_filename_quoting() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((\"file with spaces.txt\") (\"/tmp/nix-shell.XcUf3d/neo-cx152-quoteKTsceP/file with spaces.txt\"))""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t \"file with spaces.txt\" t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((dir (make-temp-file "neo-cx152-quote" t))
        (weird-name "file with spaces.txt")
        (weird-path (expand-file-name weird-name dir)))
   (write-region "x" nil weird-path nil 'silent)
-  (let ((entries (directory-files dir nil))
-        (full-entries (directory-files dir t)))
+  (let* ((entries (directory-files dir nil))
+         (full-entries (directory-files dir t))
+         (full-hit (car (member weird-path full-entries))))
     (delete-directory dir t)
-    (list (member weird-name entries)
-          (member weird-path full-entries))))
+    (list (not (null (member weird-name entries)))
+          (and full-hit (file-name-nondirectory full-hit))
+          (and full-hit (file-name-absolute-p full-hit)))))
 "##,
         expect,
     );
