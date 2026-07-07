@@ -660,8 +660,29 @@ impl WaitBlockActivity {
         self.input_wakeup
     }
 
+    fn has_external_activity(&self) -> bool {
+        self.input_wakeup || matches!(self.process_service, WaitProcessService::Ready(_))
+    }
+
     fn into_process_service(self) -> WaitProcessService {
         self.process_service
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct WaitTimeoutChoice {
+    duration: Duration,
+    finite_deadline_timeout: bool,
+    shortened_by_timer: bool,
+}
+
+impl WaitTimeoutChoice {
+    fn run_timers_after_block(self, activity: &WaitBlockActivity, deadline_elapsed: bool) -> bool {
+        if deadline_elapsed {
+            return false;
+        }
+
+        self.shortened_by_timer || !self.finite_deadline_timeout || activity.has_external_activity()
     }
 }
 
@@ -900,8 +921,8 @@ impl super::eval::Context {
                 return Ok(WaitCompletion::DeadlineElapsed);
             }
 
-            let wait_time = self.next_wait_request_timeout(&request, now);
-            let activity = self.block_for_wait_request(&request, wait_time)?;
+            let wait_timeout = self.next_wait_request_timeout(&request, now);
+            let activity = self.block_for_wait_request(&request, wait_timeout.duration)?;
             // GNU services a wake in [read fds] → [loop-top deadline check] →
             // [timer_check] order, so when the deadline elapses during the
             // block, ready process output is still drained but ripe timers are
@@ -911,8 +932,8 @@ impl super::eval::Context {
             // than GNU (e.g. 21 vs 20 fires for a 1ms timer in `(sit-for
             // 0.02)`).
             let deadline_elapsed = request.deadline_elapsed(Instant::now());
-            outcome =
-                self.service_wait_request_block_activity(&request, activity, !deadline_elapsed)?;
+            let run_timers = wait_timeout.run_timers_after_block(&activity, deadline_elapsed);
+            outcome = self.service_wait_request_block_activity(&request, activity, run_timers)?;
 
             if let Some(completion) = request.completion_for(outcome) {
                 return Ok(completion);
@@ -1013,12 +1034,32 @@ impl super::eval::Context {
         }
     }
 
-    fn next_wait_request_timeout(&self, request: &WaitRequest, now: Instant) -> Duration {
-        let mut timeout = request.base_timeout(now);
+    fn next_gnu_timer_timeout(&self) -> Option<Duration> {
+        let ordinary = self.next_ordinary_gnu_timer_timeout();
+        let idle = self.next_idle_gnu_timer_timeout();
+
+        match (ordinary, idle) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (Some(timeout), None) | (None, Some(timeout)) => Some(timeout),
+            (None, None) => None,
+        }
+    }
+
+    fn next_wait_request_timeout(&self, request: &WaitRequest, now: Instant) -> WaitTimeoutChoice {
+        let base_timeout = request.base_timeout(now);
+        let mut timeout = base_timeout;
+        let mut shortened_by_timer = false;
 
         if request.runs_timers() {
-            if let Some(next) = self.next_input_wait_timeout() {
-                timeout = timeout.min(next);
+            if let Some(next) = self.next_gnu_timer_timeout()
+                && next < timeout
+            {
+                timeout = next;
+                shortened_by_timer = true;
+            }
+
+            if !self.processes.live_process_ids().is_empty() {
+                timeout = timeout.min(Duration::from_millis(100));
             }
         }
         if request.services_process_output()
@@ -1028,7 +1069,11 @@ impl super::eval::Context {
             timeout = timeout.min(next);
         }
 
-        timeout
+        WaitTimeoutChoice {
+            duration: timeout,
+            finite_deadline_timeout: request.deadline_is_finite() && timeout == base_timeout,
+            shortened_by_timer,
+        }
     }
 
     /// Choose how to block for one wait-loop iteration. See [`WaitBlock`].
@@ -1222,6 +1267,7 @@ mod tests {
         let activity = WaitBlockActivity::ready_processes(vec![4, 9]);
 
         assert!(!activity.has_input_wakeup());
+        assert!(activity.has_external_activity());
         assert_eq!(
             activity.into_process_service(),
             WaitProcessService::Ready(ProcessWaitEvents::ready_processes(vec![4, 9]))
@@ -1252,6 +1298,43 @@ mod tests {
 
         assert!(!activity.has_input_wakeup());
         assert_eq!(activity.into_process_service(), WaitProcessService::Poll);
+    }
+
+    #[test]
+    fn deadline_timeout_without_activity_suppresses_timers_after_block() {
+        let timeout = WaitTimeoutChoice {
+            duration: Duration::from_millis(20),
+            finite_deadline_timeout: true,
+            shortened_by_timer: false,
+        };
+        let activity = WaitBlockActivity::poll();
+
+        assert!(!timeout.run_timers_after_block(&activity, false));
+    }
+
+    #[test]
+    fn timer_shortened_timeout_runs_timers_after_block_before_deadline() {
+        let timeout = WaitTimeoutChoice {
+            duration: Duration::from_millis(1),
+            finite_deadline_timeout: false,
+            shortened_by_timer: true,
+        };
+        let activity = WaitBlockActivity::poll();
+
+        assert!(timeout.run_timers_after_block(&activity, false));
+        assert!(!timeout.run_timers_after_block(&activity, true));
+    }
+
+    #[test]
+    fn external_activity_before_deadline_allows_timers_after_block() {
+        let timeout = WaitTimeoutChoice {
+            duration: Duration::from_millis(20),
+            finite_deadline_timeout: true,
+            shortened_by_timer: false,
+        };
+        let activity = WaitBlockActivity::ready_processes(vec![1]);
+
+        assert!(timeout.run_timers_after_block(&activity, false));
     }
 
     #[test]
