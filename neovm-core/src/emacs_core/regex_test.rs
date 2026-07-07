@@ -2965,12 +2965,23 @@ fn regex_bench_fontlock_engine() {
             "prefilter changed match count for {name}"
         );
 
-        let t_off = regex_bench_min(iters, || {
+        // Interleave the two measurements in ONE loop (and warm both first)
+        // so cache/paging state is identical for each — otherwise the second
+        // `regex_bench_min` benefits from the first's warm-up, which would
+        // fabricate a speedup for the no-prefilter patterns (whose two configs
+        // run byte-identical code).  Take the min per config to reject noise.
+        regex_bench_engine_scan(&cp_off, bytes);
+        regex_bench_engine_scan(&cp, bytes);
+        let mut t_off = std::time::Duration::MAX;
+        let mut t_on = std::time::Duration::MAX;
+        for _ in 0..iters {
+            let a = std::time::Instant::now();
             assert_eq!(regex_bench_engine_scan(&cp_off, bytes), matches);
-        });
-        let t_on = regex_bench_min(iters, || {
+            t_off = t_off.min(a.elapsed());
+            let b = std::time::Instant::now();
             assert_eq!(regex_bench_engine_scan(&cp, bytes), matches);
-        });
+            t_on = t_on.min(b.elapsed());
+        }
         total_off += t_off;
         total_on += t_on;
         report.push_str(&format!(
