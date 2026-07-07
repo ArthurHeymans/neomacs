@@ -82,7 +82,17 @@ const BOUNDARIES: &[&str] = &["\\b", "\\B", "\\<", "\\>", "\\_<", "\\_>"];
 const ANCHORS: &[&str] = &["^", "$", "\\`", "\\'", "\\="];
 /// Quantifiers legal on a single-char atom (includes unbounded + non-greedy).
 const ATOM_QUANT: &[&str] = &[
-    "", "*", "+", "?", "*?", "+?", "??", "\\{2\\}", "\\{1,\\}", "\\{0,2\\}", "\\{1,2\\}",
+    "",
+    "*",
+    "+",
+    "?",
+    "*?",
+    "+?",
+    "??",
+    "\\{2\\}",
+    "\\{1,\\}",
+    "\\{0,2\\}",
+    "\\{1,2\\}",
 ];
 /// Quantifiers legal on a GROUP — bounded only, to avoid the documented
 /// non-greedy-star-over-nullable-group stack-overflow class.
@@ -350,5 +360,8 @@ fn regex_parity_proptest_full() {
     for seed in [0x1111_2222u64, 0x3333_4444, 0x5555_6666, 0x7777_8888] {
         total += run_sweep(seed, 45, 300);
     }
-    assert!(total >= 50_000, "full sweep compared too few cases: {total}");
+    assert!(
+        total >= 50_000,
+        "full sweep compared too few cases: {total}"
+    );
 }

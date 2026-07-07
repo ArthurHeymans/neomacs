@@ -91,10 +91,18 @@ fn test_nongreedy_optional_prefers_zero() {
 
     assert_eq!(matched("a??", "aaa"), (0, 0, 0), "a?? prefers empty");
     assert_eq!(matched(".??", "xy"), (0, 0, 0), ".?? prefers empty");
-    assert_eq!(matched("a??b", "ab"), (0, 0, 2), "a??b backtracks into body");
+    assert_eq!(
+        matched("a??b", "ab"),
+        (0, 0, 2),
+        "a??b backtracks into body"
+    );
     assert_eq!(matched("a??a", "aa"), (0, 0, 1), "a??a lazy then literal");
     assert_eq!(matched("a??", ""), (0, 0, 0), "a?? on empty input");
-    assert_eq!(matched("x*a??", "xxaa"), (0, 0, 2), "greedy x* then lazy a??");
+    assert_eq!(
+        matched("x*a??", "xxaa"),
+        (0, 0, 2),
+        "greedy x* then lazy a??"
+    );
 
     // Captured group inside a non-greedy optional.
     let (pos, regs) = search_pattern("\\(a??\\)b", "ab", 0, false, &syn, 0)
@@ -139,7 +147,11 @@ fn test_word_boundary_at_string_edges() {
 
     // Interior non-boundaries still match `\B` at the right place.
     assert_eq!(pos_of("\\B", "ab"), Some(1), "\\B between two word chars");
-    assert_eq!(pos_of("\\B", ".)_aA"), Some(1), "\\B between two non-word chars");
+    assert_eq!(
+        pos_of("\\B", ".)_aA"),
+        Some(1),
+        "\\B between two non-word chars"
+    );
 
     // `\W\b`: a non-word char followed by the trailing edge (a boundary).
     assert_eq!(pos_of("\\W\\b", ","), Some(0), "\\W then \\b at EOF edge");
@@ -1552,8 +1564,9 @@ fn pike_fallback_only_on_catastrophe() {
 /// Literal alphabet for prefilter patterns: ASCII letters + Emacs-literal
 /// punctuation (`(` `)` `_` `-` `:` `!` are non-special) + multibyte, to stress
 /// byte-exact needle handling and multibyte char-boundary skipping.
-const PF_LIT_CHARS: &[char] =
-    &['a', 'b', 'c', 'd', 'e', 'f', 'g', '(', ')', '_', '-', ':', '!', 'é', '中'];
+const PF_LIT_CHARS: &[char] = &[
+    'a', 'b', 'c', 'd', 'e', 'f', 'g', '(', ')', '_', '-', ':', '!', 'é', '中',
+];
 
 /// Emit a literal run into `out`, escaping regex metacharacters, and record the
 /// raw (unescaped) bytes as a keyword so the buffer generator can plant hits.
@@ -1671,7 +1684,9 @@ fn pf_diff(
     // Forward search.
     let range = (len - start) as isize;
     let _ = take_matcher_overflow();
-    let oracle = norm(with_fastmap_disabled(|| re_search(cp, text, start, range, &syn, start)));
+    let oracle = norm(with_fastmap_disabled(|| {
+        re_search(cp, text, start, range, &syn, start)
+    }));
     if take_matcher_overflow() {
         return None;
     }
@@ -1685,7 +1700,9 @@ fn pf_diff(
 
     // Anchored match (re_match never uses the prefilter — a regression guard).
     let _ = take_matcher_overflow();
-    let oracle = norm(with_fastmap_disabled(|| re_match(cp, text, start, len, &syn, start)));
+    let oracle = norm(with_fastmap_disabled(|| {
+        re_match(cp, text, start, len, &syn, start)
+    }));
     if take_matcher_overflow() {
         return None;
     }
@@ -1846,9 +1863,14 @@ fn assert_prefilter_equiv(pat: &str, case_fold: bool, text: &[u8]) {
     let syn = DefaultSyntaxLookup;
     for start in 0..=text.len() {
         let range = (text.len() - start) as isize;
-        let oracle = norm(with_fastmap_disabled(|| re_search(&cp, text, start, range, &syn, start)));
+        let oracle = norm(with_fastmap_disabled(|| {
+            re_search(&cp, text, start, range, &syn, start)
+        }));
         let cand = norm(re_search(&cp, text, start, range, &syn, start));
-        assert_eq!(oracle, cand, "prefilter diverged for {pat:?} @ start={start}");
+        assert_eq!(
+            oracle, cand,
+            "prefilter diverged for {pat:?} @ start={start}"
+        );
     }
 }
 
@@ -1856,7 +1878,10 @@ fn assert_prefilter_equiv(pat: &str, case_fold: bool, text: &[u8]) {
 fn prefilter_built_for_leading_literal() {
     // A plain multi-byte literal → a single-needle prefilter (memmem).
     let cp = regex_compile("unread-command-events", false, false).expect("compile");
-    assert!(cp.prefilter.is_some(), "leading literal should get a prefilter");
+    assert!(
+        cp.prefilter.is_some(),
+        "leading literal should get a prefilter"
+    );
     assert_prefilter_equiv(
         "unread-command-events",
         false,
@@ -1889,7 +1914,8 @@ fn prefilter_none_for_syntax_class_head() {
     // sexp-head-kw: after `(`, the group starts with `\w`/`\s_` — no required
     // literal beyond the common `(`, so the single-byte set is rejected (the
     // fastmap's memchr already covers it).
-    let cp = regex_compile("(\\(\\(?:\\w\\|\\s_\\|\\\\.\\)+\\)\\_>", false, false).expect("compile");
+    let cp =
+        regex_compile("(\\(\\(?:\\w\\|\\s_\\|\\\\.\\)+\\)\\_>", false, false).expect("compile");
     assert!(
         cp.prefilter.is_none(),
         "single-byte `(` prefix must not build a prefilter (fastmap suffices)"
@@ -1922,7 +1948,7 @@ fn prefilter_none_for_alternation_with_nonliteral_arm() {
     // One arm has no literal head → the whole pattern has a match with no
     // offset-0 literal → no prefilter (soundness bail).
     for pat in [
-        "(\\(catch\\|\\w+\\)",  // second arm `\w+` — non-literal head
+        "(\\(catch\\|\\w+\\)",     // second arm `\w+` — non-literal head
         "(\\(catch\\|\\|throw\\)", // empty middle arm — nullable path
     ] {
         let cp = regex_compile(pat, false, false).expect("compile");
@@ -1932,16 +1958,16 @@ fn prefilter_none_for_alternation_with_nonliteral_arm() {
         );
     }
     // But the equivalent all-literal alternation still works and is correct.
-    assert_prefilter_equiv("(\\(catch\\|throw\\)", false, b"(catch (throw x)) \\w+ throw");
+    assert_prefilter_equiv(
+        "(\\(catch\\|throw\\)",
+        false,
+        b"(catch (throw x)) \\w+ throw",
+    );
 }
 
 #[test]
 fn prefilter_multibyte_needles_char_boundary() {
     // Multibyte literal keywords; candidate positions inside a multibyte char
     // must be rejected (char-boundary skip), and matches stay byte-exact.
-    assert_prefilter_equiv(
-        "\\(中文\\|éxx\\)",
-        false,
-        "a中文b éxx 中éxx中文".as_bytes(),
-    );
+    assert_prefilter_equiv("\\(中文\\|éxx\\)", false, "a中文b éxx 中éxx中文".as_bytes());
 }

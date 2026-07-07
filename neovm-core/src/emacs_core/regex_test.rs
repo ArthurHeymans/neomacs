@@ -2986,7 +2986,11 @@ fn regex_bench_fontlock_engine() {
         total_on += t_on;
         report.push_str(&format!(
             "  {name:<16} {t_off:>12.1?} {t_on:>12.1?}  {matches:>5}  {}\n",
-            if cp.prefilter.is_some() { "YES" } else { "none" },
+            if cp.prefilter.is_some() {
+                "YES"
+            } else {
+                "none"
+            },
         ));
     }
     report.push_str(&format!(

@@ -1173,9 +1173,7 @@ pub(crate) fn regex_compile_lisp_with_translation(
                         // `\(?1:\)\(?1:\)` and `\(\)\(?1:\)` remain accepted).
                         if let Some(n) = explicit_group {
                             if n <= buf.re_nsub
-                                && compile_stack
-                                    .iter()
-                                    .any(|e| e.assigned_group == Some(n))
+                                && compile_stack.iter().any(|e| e.assigned_group == Some(n))
                             {
                                 return Err(RegexCompileError {
                                     message: "Invalid regular expression".to_string(),
@@ -6572,8 +6570,13 @@ pub(crate) fn re_search(
                 // literal begins at `start + off`.
                 let mut next_lit = start.saturating_add(off).min(text_len);
                 while next_lit <= text_len {
-                    let Some(span) = pref.pf.find(text, Span { start: next_lit, end: text_len })
-                    else {
+                    let Some(span) = pref.pf.find(
+                        text,
+                        Span {
+                            start: next_lit,
+                            end: text_len,
+                        },
+                    ) else {
                         break;
                     };
                     let lit_at = span.start;
@@ -6592,10 +6595,7 @@ pub(crate) fn re_search(
                     // A match cannot start inside a multibyte character; the
                     // needle bytes are exact, so a continuation-byte candidate
                     // is never a real match — skip it.
-                    if pattern.target_multibyte
-                        && cand < text_len
-                        && (text[cand] & 0xC0) == 0x80
-                    {
+                    if pattern.target_multibyte && cand < text_len && (text[cand] & 0xC0) == 0x80 {
                         continue;
                     }
                     if let Some(result) = try_candidate!(cand, end) {
