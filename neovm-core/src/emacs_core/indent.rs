@@ -325,9 +325,9 @@ fn ranged_fixnum(value: Value, lo: i64, hi: i64) -> Option<i64> {
 /// Mirrors GNU's `check_display_width` (src/indent.c): a `display` STRING lays
 /// out at its `string-width`; a `(space ...)` spec at the width computed by
 /// `space_spec_width`. `column` is the current column at `byte`, needed for
-/// `(space :align-to ...)`. Image/slice specs return None here (their width is a
-/// font/pixel quantity GNU computes via the display engine; not column-exact in
-/// a batch/TTY context), so the covered character displays at its own width.
+/// `(space :align-to ...)`. Image/slice specs are measured by GNU through the
+/// display iterator; on TTY/batch frames they fall back to a one-column
+/// placeholder while still replacing the whole property range.
 fn display_run_at(
     ctx: &super::eval::Context,
     buffer_id: crate::buffer::BufferId,
@@ -370,8 +370,13 @@ fn display_run_at(
         // keywords. A spec with no width-bearing keyword leaves the char at its
         // own width.
         space_spec_width(display.cons_cdr(), column)?
+    } else if display_image_or_slice_spec_p(display) {
+        // GNU `check_display_width` measures image/slice display specs via the
+        // display iterator. On a TTY/batch frame, bare image and slice specs
+        // render as a single-column placeholder.
+        1
     } else {
-        // image/slice/other spec -> not handled here (see fn doc).
+        // other display specs do not contribute a computable column width here.
         return None;
     };
 
@@ -411,6 +416,14 @@ fn display_run_at(
             .get()
     };
     Some((width, run_end_byte))
+}
+
+fn display_image_or_slice_spec_p(spec: Value) -> bool {
+    if !spec.is_cons() {
+        return false;
+    }
+    let car = spec.cons_car();
+    car.is_symbol_named("image") || car.is_symbol_named("slice")
 }
 
 /// If display table `dt` remaps character `code` to a glyph vector, return the

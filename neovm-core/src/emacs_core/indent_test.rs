@@ -860,6 +860,39 @@ fn current_column_counts_display_space_relative_width() {
 }
 
 #[test]
+fn current_column_counts_display_image_as_tty_placeholder() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    // GNU's display iterator gives image specs one canonical column on TTY,
+    // while the display property still replaces the whole covered range.
+    let v = ev
+        .eval_str(
+            r#"(with-temp-buffer
+                 (insert "abcdef")
+                 (put-text-property 2 4 'display '(image :type xpm :file "test.xpm" :width 10 :height 1))
+                 (current-column))"#,
+        )
+        .expect("eval");
+    assert_eq!(super::super::print::print_value(&v), "5");
+}
+
+#[test]
+fn current_column_counts_display_slice_as_tty_placeholder() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = crate::test_utils::runtime_startup_context();
+    let v = ev
+        .eval_str(
+            r#"(with-temp-buffer
+                 (insert "abcdef")
+                 (put-text-property 2 5 'display '(slice 0 0 3 1))
+                 (list (current-column)
+                       (progn (goto-char 5) (current-column))))"#,
+        )
+        .expect("eval");
+    assert_eq!(super::super::print::print_value(&v), "(4 2)");
+}
+
+#[test]
 fn current_column_float_width_is_not_honored_but_float_align_is() {
     crate::test_utils::init_test_tracing();
     let mut ev = crate::test_utils::runtime_startup_context();
