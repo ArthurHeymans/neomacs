@@ -337,6 +337,8 @@ const EVAL_PROGRAM_RAW: &str = r#"(condition-case err
   (error
    (princ (concat "ERR " (prin1-to-string err)))))"#;
 
+const NATIVE_COMP_SUPPRESSION_PRELUDE: &str = "(setq native-comp-jit-compilation nil inhibit-automatic-native-compilation t native-comp-enable-subr-trampolines nil)";
+
 // ---------------------------------------------------------------------------
 // Oracle (GNU Emacs) subprocess evaluation
 // ---------------------------------------------------------------------------
@@ -366,7 +368,7 @@ fn run_oracle_eval_inner_with_tmpdir(
             "--batch",
             "-Q",
             "--eval",
-            "(setq native-comp-jit-compilation nil inhibit-automatic-native-compilation t native-comp-enable-subr-trampolines nil)",
+            NATIVE_COMP_SUPPRESSION_PRELUDE,
             "--eval",
             EVAL_PROGRAM_WITH_NORMALIZER,
         ]);
@@ -428,7 +430,7 @@ fn run_oracle_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<String, 
             "--batch",
             "-Q",
             "--eval",
-            "(setq native-comp-jit-compilation nil inhibit-automatic-native-compilation t native-comp-enable-subr-trampolines nil)",
+            NATIVE_COMP_SUPPRESSION_PRELUDE,
             "--eval",
             EVAL_PROGRAM_RAW,
         ]);
@@ -515,7 +517,14 @@ fn run_neomacs_binary_eval_inner_with_tmpdir(
     cmd.env("NEOVM_ORACLE_FORM_FILE", form_path.as_os_str())
         .env("NEOVM_ORACLE_LOAD_ROOT", &lisp_dir)
         .env("NEOVM_ORACLE_LOAD_FILES", load_files_str)
-        .args(["--batch", "-Q", "--eval", EVAL_PROGRAM_WITH_NORMALIZER]);
+        .args([
+            "--batch",
+            "-Q",
+            "--eval",
+            NATIVE_COMP_SUPPRESSION_PRELUDE,
+            "--eval",
+            EVAL_PROGRAM_WITH_NORMALIZER,
+        ]);
     if let Some(dir) = shared_tmpdir {
         cmd.env("NEOVM_ORACLE_TEST_TMPDIR", dir.as_os_str());
     }
@@ -570,7 +579,14 @@ fn run_neomacs_binary_eval_inner_raw(form: &str, load_files: &[&str]) -> Result<
     cmd.env("NEOVM_ORACLE_FORM_FILE", form_path.as_os_str())
         .env("NEOVM_ORACLE_LOAD_ROOT", &lisp_dir)
         .env("NEOVM_ORACLE_LOAD_FILES", load_files_str)
-        .args(["--batch", "-Q", "--eval", EVAL_PROGRAM_RAW]);
+        .args([
+            "--batch",
+            "-Q",
+            "--eval",
+            NATIVE_COMP_SUPPRESSION_PRELUDE,
+            "--eval",
+            EVAL_PROGRAM_RAW,
+        ]);
 
     if let Some(mem_limit) = neomacs_binary_mem_limit_bytes() {
         unsafe {

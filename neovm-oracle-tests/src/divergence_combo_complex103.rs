@@ -213,7 +213,7 @@ fn div_cx103_set_debug_on_entry_for_function() {
 #[test]
 fn div_cx103_compiler_macro_availability() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
+    let expect = expect_test::expect![[r#""OK (t t nil t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e

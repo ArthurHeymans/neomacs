@@ -3588,7 +3588,6 @@ impl Context {
             "treesit-auto-install-grammar",
             "treesit-enabled-modes",
             "treesit-language-remap-alist",
-            "treesit-language-source-alist",
             "treesit-load-name-override-list",
             "treesit-languages-require-line-column-tracking",
             "treesit-major-mode-remap-alist",

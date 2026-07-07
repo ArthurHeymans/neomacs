@@ -249,7 +249,7 @@ fn div_cx104_treesit_node_predicates() {
 #[test]
 fn div_cx104_treesit_install_language() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t nil t)""#]];
+    let expect = expect_test::expect![[r#""OK (t nil nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
