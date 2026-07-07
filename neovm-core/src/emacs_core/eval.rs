@@ -1816,9 +1816,6 @@ pub struct Context {
     /// by `verify_interval_modification` before an insertion and replayed by
     /// `report_interval_modification` after the inserted text exists.
     pub(crate) interval_insert_in_front_hooks: Value,
-    /// GNU dbusbind.c `xd_registered_inhibitor_locks`: an alist whose entries
-    /// are `(LOCK WHAT WHY BLOCK)`.
-    pub(crate) dbus_registered_inhibitor_locks: Value,
     /// Monotonic serial for synthetic DBus compatibility events.
     pub(crate) dbus_next_serial: i64,
     /// Match data from the last successful search/match operation.
@@ -4360,7 +4357,7 @@ impl Context {
         obarray.make_special("input-pending-p-filter-events");
         if cfg!(target_os = "linux") {
             // GNU dbusbind.c DEFVARs.  The compatibility transport currently
-            // models successful local method replies and inhibitor-lock state.
+            // models successful local method replies.
             for (name, value) in [
                 ("dbus-message-type-invalid", Value::fixnum(0)),
                 ("dbus-message-type-method-call", Value::fixnum(1)),
@@ -5003,7 +5000,6 @@ impl Context {
             last_overlay_modification_hooks: Vec::new(),
             interval_insert_behind_hooks: Value::NIL,
             interval_insert_in_front_hooks: Value::NIL,
-            dbus_registered_inhibitor_locks: Value::NIL,
             dbus_next_serial: 1,
             match_data: None,
             combine_after_change_list: Vec::new(),
@@ -5187,7 +5183,6 @@ impl Context {
             last_overlay_modification_hooks: Vec::new(),
             interval_insert_behind_hooks: Value::NIL,
             interval_insert_in_front_hooks: Value::NIL,
-            dbus_registered_inhibitor_locks: Value::NIL,
             dbus_next_serial: 1,
             match_data: None,
             combine_after_change_list: Vec::new(),
@@ -5437,9 +5432,6 @@ impl Context {
         }
         if !self.interval_insert_in_front_hooks.is_nil() {
             visit(self.interval_insert_in_front_hooks);
-        }
-        if !self.dbus_registered_inhibitor_locks.is_nil() {
-            visit(self.dbus_registered_inhibitor_locks);
         }
         if !self.current_local_map.is_nil() {
             visit(self.current_local_map);

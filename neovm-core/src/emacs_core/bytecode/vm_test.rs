@@ -6626,10 +6626,8 @@ fn vm_native_stub_clusters_use_direct_dispatch() {
                          (dbus-make-inhibitor-lock "session" "app")
                        (void-function (car err)))
                      'void-function)
-                 (condition-case err
-                     (dbus-close-inhibitor-lock nil)
-                   (wrong-type-argument (car err)))
-                 (null (dbus-registered-inhibitor-locks))
+                 (not (fboundp 'dbus-close-inhibitor-lock))
+                 (not (fboundp 'dbus-registered-inhibitor-locks))
                  (not (fboundp 'lcms2-available-p))
                  (not (fboundp 'lcms-cie-de2000))
                  (not (fboundp 'lcms-xyz->jch))
@@ -6683,7 +6681,7 @@ fn vm_native_stub_clusters_use_direct_dispatch() {
                  (condition-case nil (gnutls-symmetric-encrypt nil nil nil nil)
                    (error t)))"##
         ),
-        r#"OK (t (t t t) t t t wrong-type-argument t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t (t wrong-type-argument wrong-type-argument t t t) t t t t t)"#
+        r#"OK (t (t t t) t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t t (t wrong-type-argument wrong-type-argument t t t) t t t t t)"#
     );
 }
 

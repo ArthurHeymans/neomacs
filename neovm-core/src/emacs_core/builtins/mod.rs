@@ -6951,24 +6951,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         None,
     );
     ctx.defsubr(
-        "dbus-close-inhibitor-lock",
-        builtin_dbus_close_inhibitor_lock,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "dbus-make-inhibitor-lock",
-        builtin_dbus_make_inhibitor_lock,
-        0,
-        None,
-    );
-    ctx.defsubr(
-        "dbus-registered-inhibitor-locks",
-        builtin_dbus_registered_inhibitor_locks,
-        0,
-        None,
-    );
-    ctx.defsubr(
         "neomacs-frame-geometry",
         |_ctx, args| builtin_neomacs_frame_geometry(args),
         0,
