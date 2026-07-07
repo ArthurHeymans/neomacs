@@ -933,6 +933,7 @@ mod recursion_advanced;
 mod recursion_comprehensive_patterns;
 mod redirect_debugging_output_semantics;
 mod regex_macroexpand_via_binary_semantics;
+mod regex_parity_proptest;
 mod regexp_advanced;
 mod regexp_comprehensive_advanced;
 mod regexp_comprehensive_patterns;

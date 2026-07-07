@@ -250,3 +250,40 @@ fn div_ar_regexp_quote_special() {
         expect_test::expect![[r#""OK \"\\\\.\\\\*\\\\+\\\\?\\\\[](){}\\\\^\\\\$\\\\\\\\|\"""#]];
     crate::common::assert_oracle_parity_expect(r##"(regexp-quote ".*+?[](){}^$\\|")"##, expect);
 }
+
+#[test]
+fn div_ar_nongreedy_optional_prefers_zero() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // Non-greedy `??` prefers the empty match; it must NOT behave greedily.
+    // Found by the differential proptest (regex_parity_proptest.rs) and fixed
+    // in regex_emacs.rs compile_repetition (the `??` split now skips the body
+    // first, matching GNU regex-emacs.c:2009-2015).
+    let expect = expect_test::expect![[r#""OK (0 (0 0) 0 (0 0) 0 (0 2) (0 2 0 1))""#]];
+    crate::common::assert_oracle_parity_expect(
+        r##"
+(list (string-match "a??" "aaa") (match-data)
+      (string-match ".??" "xy")  (match-data)
+      (string-match "a??b" "ab")  (match-data)
+      (progn (string-match "\\(a??\\)b" "ab") (match-data)))
+"##,
+        expect,
+    );
+}
+
+#[test]
+fn div_ar_word_boundary_string_edges() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+    // GNU treats the beginning/end of the searched region as unconditional word
+    // boundaries (regex-emacs.c `case wordbound`, Case 1): `\b` succeeds and
+    // `\B` fails at an edge regardless of the adjacent char's syntax.  Found by
+    // the differential proptest and fixed in regex_emacs.rs assert_word_boundary.
+    let expect = expect_test::expect![[r#""OK (0 0 nil nil 1 0)""#]];
+    crate::common::assert_oracle_parity_expect(
+        r##"
+(list (string-match "\\b" "")   (string-match "\\b" ".")
+      (string-match "\\B" ".")  (string-match "\\B" "")
+      (string-match "\\B" "ab") (string-match "\\W\\b" ","))
+"##,
+        expect,
+    );
+}

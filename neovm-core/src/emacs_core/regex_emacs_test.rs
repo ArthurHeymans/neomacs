@@ -69,6 +69,117 @@ fn test_star_repetition() {
 }
 
 #[test]
+fn test_nongreedy_optional_prefers_zero() {
+    // Regression: non-greedy `??` used to fall through into the body first
+    // (greedy order), so `a??` matched one char instead of zero.  GNU
+    // `string-match` semantics — the lazy optional prefers the empty match:
+    //   (string-match "a??" "aaa")   => 0, match-data (0 0)
+    //   (string-match ".??" "xy")    => 0, match-data (0 0)
+    //   (string-match "a??b" "ab")   => 0, match-data (0 2)   [backtracks in]
+    //   (string-match "a??a" "aa")   => 0, match-data (0 1)
+    //   (string-match "x*a??" "xxaa")=> 0, match-data (0 2)
+    //   (string-match "\\(a??\\)b" "ab") => 0, groups (0 2)(0 1)
+    crate::test_utils::init_test_tracing();
+    let syn = DefaultSyntaxLookup;
+
+    let matched = |pat: &str, text: &str| -> (usize, i64, i64) {
+        let (pos, regs) = search_pattern(pat, text, 0, false, &syn, 0)
+            .expect("compile")
+            .expect("should match");
+        (pos, regs.start[0], regs.end[0])
+    };
+
+    assert_eq!(matched("a??", "aaa"), (0, 0, 0), "a?? prefers empty");
+    assert_eq!(matched(".??", "xy"), (0, 0, 0), ".?? prefers empty");
+    assert_eq!(matched("a??b", "ab"), (0, 0, 2), "a??b backtracks into body");
+    assert_eq!(matched("a??a", "aa"), (0, 0, 1), "a??a lazy then literal");
+    assert_eq!(matched("a??", ""), (0, 0, 0), "a?? on empty input");
+    assert_eq!(matched("x*a??", "xxaa"), (0, 0, 2), "greedy x* then lazy a??");
+
+    // Captured group inside a non-greedy optional.
+    let (pos, regs) = search_pattern("\\(a??\\)b", "ab", 0, false, &syn, 0)
+        .expect("compile")
+        .expect("should match");
+    assert_eq!((pos, regs.start[0], regs.end[0]), (0, 0, 2));
+    assert_eq!((regs.start[1], regs.end[1]), (0, 1), "group 1 = the 'a'");
+}
+
+#[test]
+fn test_word_boundary_at_string_edges() {
+    // Regression: GNU treats the beginning and end of the searched region as
+    // *unconditional* word boundaries (regex-emacs.c `case wordbound`, Case 1),
+    // so `\b` succeeds and `\B` fails there regardless of the adjacent char.
+    // neomacs previously computed the boundary from neighbours only, treating
+    // the missing edge char as non-word, so `\b` wrongly failed (and `\B`
+    // matched) at an edge next to a non-word char or in the empty string.
+    // GNU ground truth (`string-match`):
+    //   (string-match "\\b" "")     => 0     (string-match "\\B" "")     => nil
+    //   (string-match "\\b" ".")    => 0     (string-match "\\B" ".")    => nil
+    //   (string-match "\\b" "a")    => 0     (string-match "\\B" "a")    => nil
+    //   (string-match "\\B" "ab")   => 1     (string-match "\\B" ".)_aA")=> 1
+    crate::test_utils::init_test_tracing();
+    let syn = DefaultSyntaxLookup;
+
+    let pos_of = |pat: &str, text: &str| -> Option<usize> {
+        search_pattern(pat, text, 0, false, &syn, 0)
+            .expect("compile")
+            .map(|(pos, _)| pos)
+    };
+
+    // `\b` matches at the leading edge for every string, including empty and
+    // ones whose first char is not a word constituent.
+    assert_eq!(pos_of("\\b", ""), Some(0), "\\b on empty string");
+    assert_eq!(pos_of("\\b", "."), Some(0), "\\b before non-word char");
+    assert_eq!(pos_of("\\b", "a"), Some(0), "\\b before word char");
+
+    // `\B` never matches at an edge.
+    assert_eq!(pos_of("\\B", ""), None, "\\B on empty string");
+    assert_eq!(pos_of("\\B", "."), None, "\\B on single non-word char");
+    assert_eq!(pos_of("\\B", "a"), None, "\\B on single word char");
+
+    // Interior non-boundaries still match `\B` at the right place.
+    assert_eq!(pos_of("\\B", "ab"), Some(1), "\\B between two word chars");
+    assert_eq!(pos_of("\\B", ".)_aA"), Some(1), "\\B between two non-word chars");
+
+    // `\W\b`: a non-word char followed by the trailing edge (a boundary).
+    assert_eq!(pos_of("\\W\\b", ","), Some(0), "\\W then \\b at EOF edge");
+}
+
+#[test]
+fn test_explicit_group_number_collision_with_open_group() {
+    // Regression: GNU rejects an explicit `\(?N:...\)` whose number collides
+    // with a still-OPEN enclosing group (regex-emacs.c:2250-2259,
+    // group_in_compile_stack) as `invalid-regexp`; neomacs used to accept it.
+    // But *reusing* a number for a sequential/closed group stays legal.  Found
+    // by the differential proptest.
+    crate::test_utils::init_test_tracing();
+
+    // Collision with an enclosing open group -> compile error.
+    assert!(
+        regex_compile("\\(\\(?1:\\)\\)", false, false).is_err(),
+        "explicit group 1 nested inside the auto-numbered group 1 must error"
+    );
+    assert!(
+        regex_compile("\\(\\(\\(?2:\\)\\)\\)", false, false).is_err(),
+        "explicit group 2 nested inside enclosing group 2 must error"
+    );
+
+    // Reusing a number for a closed/sequential group is still accepted.
+    assert!(
+        regex_compile("\\(?1:\\)\\(?1:\\)", false, false).is_ok(),
+        "two sequential explicit group 1s are legal"
+    );
+    assert!(
+        regex_compile("\\(\\)\\(?1:\\)", false, false).is_ok(),
+        "auto group 1 then a sequential explicit group 1 is legal"
+    );
+    assert!(
+        regex_compile("\\(\\(?2:\\)\\)", false, false).is_ok(),
+        "explicit group 2 inside open group 1 (no collision) is legal"
+    );
+}
+
+#[test]
 fn test_charset() {
     crate::test_utils::init_test_tracing();
     let syn = DefaultSyntaxLookup;

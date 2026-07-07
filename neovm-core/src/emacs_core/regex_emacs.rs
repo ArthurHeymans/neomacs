@@ -1157,6 +1157,26 @@ pub(crate) fn regex_compile_lisp_with_translation(
                             None
                         };
 
+                        // GNU `regex-emacs.c:2250-2259`: an explicitly-numbered
+                        // group `\(?N:...\)` whose number collides with a group
+                        // that is still OPEN on the compile stack (an enclosing
+                        // `\(...\)` that already holds N) is `REG_BADPAT`.  Note
+                        // `compile_stack` here holds only the enclosing groups —
+                        // the current group has not been pushed yet.  Reusing a
+                        // number for a sequential/closed group stays legal (so
+                        // `\(?1:\)\(?1:\)` and `\(\)\(?1:\)` remain accepted).
+                        if let Some(n) = explicit_group {
+                            if n <= buf.re_nsub
+                                && compile_stack
+                                    .iter()
+                                    .any(|e| e.assigned_group == Some(n))
+                            {
+                                return Err(RegexCompileError {
+                                    message: "Invalid regular expression".to_string(),
+                                });
+                            }
+                        }
+
                         compile_stack.push(CompileStackEntry {
                             begalt_offset,
                             fixup_alt_jump,
@@ -2137,15 +2157,49 @@ fn compile_repetition(
                 // From (laststart+3) → (laststart+3+expr_len), offset = expr_len
                 store_number(&mut buf.buffer, laststart + 1, expr_len as i16);
             } else {
-                // Non-greedy ??.  This `OnFailureKeepStringJump` has genuine
-                // keep-string semantics (fallback resumes at the failure
-                // position, not the split) that the Pike VM cannot model —
-                // flag the pattern ineligible.  Unlike the smart-loop
-                // keep-string, this one has no loop back-edge.
+                // Non-greedy `??` (GNU `regex-emacs.c:2009-2015`):
+                //
+                //   L:    on_failure_jump -> expr_start   ; push body as fallback
+                //   L+3:  jump            -> END          ; ...but SKIP it first
+                //   L+6:  <expr>
+                //   END:
+                //
+                // The primary path skips the body (zero match = the non-greedy
+                // preference); the body is only tried when a later piece fails
+                // and matching backtracks to the pushed failure point.  The
+                // previous single `OnFailureKeepStringJump` fell through into
+                // the body first, i.e. it behaved *greedily* (`a??` matched one
+                // char instead of zero).
+                //
+                // Keep `has_nongreedy_optional` set so the pattern stays on the
+                // backtracking matcher (the Pike VM does not model this split).
                 buf.has_nongreedy_optional = true;
-                buf.splice_bytecode(laststart, &[RegexOp::OnFailureKeepStringJump as u8, 0, 0]);
-                let expr_len = after_last - laststart;
-                store_number(&mut buf.buffer, laststart + 1, expr_len as i16);
+                let expr_bytes = buf.buffer[laststart..after_last].to_vec();
+
+                buf.buffer.truncate(laststart);
+
+                buf.buffer.push(RegexOp::OnFailureJump as u8);
+                let ofj_arg = buf.buffer.len();
+                buf.buffer.push(0);
+                buf.buffer.push(0);
+
+                buf.buffer.push(RegexOp::Jump as u8);
+                let jump_arg = buf.buffer.len();
+                buf.buffer.push(0);
+                buf.buffer.push(0);
+
+                let expr_start = buf.buffer.len();
+                buf.buffer.extend_from_slice(&expr_bytes);
+                buf.relocate_charset_keys(laststart, after_last, expr_start);
+                let end = buf.buffer.len();
+
+                // on_failure_jump target → body start (the fallback path)
+                let ofj_offset = expr_start as i16 - (ofj_arg as i16 + 2);
+                store_number(&mut buf.buffer, ofj_arg, ofj_offset);
+
+                // jump target → past the body (the preferred skip path)
+                let jump_offset = end as i16 - (jump_arg as i16 + 2);
+                store_number(&mut buf.buffer, jump_arg, jump_offset);
             }
         }
         _ => unreachable!(),
@@ -3729,7 +3783,7 @@ fn re_char_is_symbol(
         .unwrap_or(false)
 }
 
-/// `\b` word boundary (mirrors the `at_word_boundary` closure).
+/// `\b` word boundary (mirrors GNU `regex-emacs.c` `case wordbound`).
 #[inline]
 fn assert_word_boundary(
     text: &[u8],
@@ -3737,6 +3791,18 @@ fn assert_word_boundary(
     target_multibyte: bool,
     syntax: &dyn SyntaxLookup,
 ) -> bool {
+    // GNU Case 1 (regex-emacs.c:4972-4974): a position at the beginning or end
+    // of the searched region is *unconditionally* a word boundary — `\b`
+    // succeeds and `\B` fails there, regardless of the adjacent character's
+    // word syntax.  The previous neighbour-only computation treated the missing
+    // edge character as non-word, so `\b` wrongly failed (and `\B` matched) at
+    // the edges of a string / accessible buffer region whenever the adjacent
+    // character was not a word constituent (e.g. `\b` on "." or the empty
+    // string).  `d == 0` is AT_STRINGS_BEG and `d == text.len()` is
+    // AT_STRINGS_END (the same edges `BegBuf` / `EndBuf` use).
+    if d == 0 || d == text.len() {
+        return true;
+    }
     let prev_word = re_prev_char_start(text, d, target_multibyte)
         .map(|p| re_char_is_word(text, p, target_multibyte, syntax))
         .unwrap_or(false);
