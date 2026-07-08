@@ -113,7 +113,10 @@ fn div_cx15_process_buffer_sentinel_combined() {
                          :buffer buf
                          :sentinel (lambda (proc event)
                                      (push (cons :sentinel event) sentinel-data)))))
-    (accept-process-output p 1))
+    (let ((deadline (+ (float-time) 2.0)))
+      (while (and (< (float-time) deadline)
+                  (not sentinel-data))
+        (accept-process-output p 0.05))))
   (list (with-current-buffer buf (buffer-string))
         (if sentinel-data (car sentinel-data) :none)))
 "##,
