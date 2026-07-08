@@ -2542,6 +2542,31 @@ fn test_posn_at_x_y_eval_uses_exact_redisplay_snapshot() {
 }
 
 #[test]
+fn test_posn_at_x_y_batch_uses_selected_window_without_snapshot() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = Context::new();
+    let scratch = eval.buffers.current_buffer_id().expect("scratch buffer");
+    eval.frames
+        .create_frame("xdisp-batch-posn", 80, 25, scratch);
+    let temp = eval.buffers.create_buffer(" *temp*");
+    eval.set_current_buffer_unrecorded(temp)
+        .expect("switch to temp buffer");
+    {
+        let buffer = eval.buffers.current_buffer_mut().expect("temp buffer");
+        buffer.insert("hello world\nsecond line");
+    }
+
+    let at_point = builtin_posn_at_point(&mut eval, vec![Value::fixnum(3)]).unwrap();
+    let at_xy = builtin_posn_at_x_y(&mut eval, vec![Value::fixnum(0), Value::fixnum(0)]).unwrap();
+
+    assert!(at_point.is_nil());
+    assert_eq!(
+        super::super::print::print_value(&at_xy),
+        "(#<window 1> 1 (0 . 0) 0 nil 1 (0 . 0) nil (0 . 0) (0 . 0))"
+    );
+}
+
+#[test]
 fn test_posn_at_point_eval_returns_nil_outside_visible_snapshot_span() {
     crate::test_utils::init_test_tracing();
     let mut eval = interactive_context();

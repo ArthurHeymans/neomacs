@@ -5012,6 +5012,8 @@ struct ExactVisibleMetrics {
     point: LispCharPos1,
     x: i64,
     y: i64,
+    dx: i64,
+    dy: i64,
     width: i64,
     height: i64,
     row: i64,
@@ -5023,11 +5025,65 @@ fn exact_metrics_from_point(point: &DisplayPointSnapshot) -> ExactVisibleMetrics
         point: point.buffer_pos,
         x: point.x,
         y: point.y,
+        dx: 0,
+        dy: 0,
         width: point.width.max(1),
         height: point.height.max(1),
         row: point.row,
         col: point.col,
     }
+}
+
+fn approximate_point_at_coords(
+    ctx: &ApproxWindowDisplayContext,
+    x: i64,
+    y: i64,
+) -> Option<ExactVisibleMetrics> {
+    if x < 0 || y < 0 {
+        return None;
+    }
+    let start = usize::try_from(ctx.window_start.as_i64().max(1))
+        .ok()?
+        .saturating_sub(1)
+        .min(ctx.chars.len());
+    let char_width = ctx.char_width.max(1);
+    let char_height = ctx.char_height.max(1);
+    let query_row = (y / char_height).max(0);
+    let query_col = (x / char_width).max(0);
+
+    let mut row = 0_i64;
+    let mut line_start = start;
+    let mut idx = start;
+    while row < query_row && idx < ctx.chars.len() {
+        if ctx.chars[idx] == '\n' {
+            row += 1;
+            line_start = idx + 1;
+        }
+        idx += 1;
+    }
+
+    let line_end = ctx.chars[line_start..]
+        .iter()
+        .position(|ch| *ch == '\n')
+        .map_or(ctx.chars.len(), |offset| line_start + offset);
+    let line_len = i64::try_from(line_end.saturating_sub(line_start)).ok()?;
+    let chosen_col = query_col.min(line_len);
+    let point = line_start
+        .saturating_add(usize::try_from(chosen_col).ok()?)
+        .saturating_add(1)
+        .min(ctx.chars.len().saturating_add(1));
+
+    Some(ExactVisibleMetrics {
+        point: LispCharPos1::from_one_based_usize(point),
+        x,
+        y,
+        dx: x - chosen_col.saturating_mul(char_width),
+        dy: y - row.saturating_mul(char_height),
+        width: 0,
+        height: 0,
+        row,
+        col: query_col,
+    })
 }
 
 fn resolve_exact_visible_metrics(
@@ -5067,9 +5123,28 @@ fn make_text_area_position(window_id: WindowId, metrics: ExactVisibleMetrics) ->
         Value::fixnum(metrics.point.as_i64()),
         Value::cons(Value::fixnum(metrics.col), Value::fixnum(metrics.row)),
         Value::NIL,
-        Value::cons(Value::fixnum(0), Value::fixnum(0)),
+        Value::cons(Value::fixnum(metrics.dx), Value::fixnum(metrics.dy)),
         Value::cons(Value::fixnum(metrics.width), Value::fixnum(metrics.height)),
     ])
+}
+
+fn validate_posn_pixel_coordinate(value: Value) -> Result<i64, Flow> {
+    let coordinate = match value.kind() {
+        ValueKind::Fixnum(v) => v,
+        _ => {
+            return Err(signal(
+                "wrong-type-argument",
+                vec![Value::symbol("fixnump"), value],
+            ));
+        }
+    };
+    if coordinate != -1 && coordinate < 0 {
+        return Err(signal(
+            "wrong-type-argument",
+            vec![Value::symbol("wholenump"), value],
+        ));
+    }
+    Ok(coordinate)
 }
 
 // ---------------------------------------------------------------------------
@@ -5308,26 +5383,8 @@ fn posn_at_x_y_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args_range("posn-at-x-y", &args, 2, 4)?;
-    let x_val = args.first().unwrap();
-    let x = match x_val.kind() {
-        ValueKind::Fixnum(v) => v,
-        _ => {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("fixnump"), *x_val],
-            ));
-        }
-    };
-    let y_val = args.get(1).unwrap();
-    let y = match y_val.kind() {
-        ValueKind::Fixnum(v) => v,
-        _ => {
-            return Err(signal(
-                "wrong-type-argument",
-                vec![Value::symbol("fixnump"), *y_val],
-            ));
-        }
-    };
+    let x = validate_posn_pixel_coordinate(*args.first().unwrap())?;
+    let y = validate_posn_pixel_coordinate(*args.get(1).unwrap())?;
     let whole = args.get(3).is_some_and(|v| v.is_truthy());
     let Some((fid, wid, window_relative_input)) = resolve_posn_at_xy_window(frames, args.get(2))?
     else {
@@ -5336,35 +5393,40 @@ fn posn_at_x_y_impl(
     let Some(frame) = frames.get(fid) else {
         return Ok(Value::NIL);
     };
-    let Some(snapshot) = frame.window_display_snapshot(wid) else {
-        return Ok(Value::NIL);
-    };
     let Some(window_ref) = frame.find_window(wid) else {
         return Ok(Value::NIL);
     };
 
+    let text_area_left_offset = frame
+        .window_display_snapshot(wid)
+        .map_or(0, |snapshot| snapshot.text_area_left_offset);
     let (query_x, query_y) = if window_relative_input {
-        let rel_x = if whole {
-            x - snapshot.text_area_left_offset
-        } else {
-            x
-        };
+        let rel_x = if whole { x - text_area_left_offset } else { x };
         (rel_x, y)
     } else {
         let bounds = window_ref.bounds();
         (
-            x - bounds.x.round() as i64 - snapshot.text_area_left_offset,
+            x - bounds.x.round() as i64 - text_area_left_offset,
             y - bounds.y.round() as i64,
         )
     };
 
-    let Some(point) = snapshot.point_at_coords(query_x, query_y) else {
+    if let Some(snapshot) = frame.window_display_snapshot(wid)
+        && let Some(point) = snapshot.point_at_coords(query_x, query_y)
+    {
+        return Ok(make_text_area_position(
+            wid,
+            exact_metrics_from_point(point),
+        ));
+    }
+
+    let Some(ctx) = resolve_live_window_display_context(frames, buffers, args.get(2))? else {
         return Ok(Value::NIL);
     };
-    Ok(make_text_area_position(
-        wid,
-        exact_metrics_from_point(point),
-    ))
+    let Some(metrics) = approximate_point_at_coords(&ctx, query_x, query_y) else {
+        return Ok(Value::NIL);
+    };
+    Ok(make_text_area_position(wid, metrics))
 }
 
 // ---------------------------------------------------------------------------
