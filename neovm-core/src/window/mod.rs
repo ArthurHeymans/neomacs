@@ -3219,9 +3219,11 @@ impl FrameManager {
             placement,
         )?;
 
-        // Mirror GNU: first split applies menu-bar-lines frame parameter,
-        // shifting root window down by menu_bar_height (typically 1 line).
-        frame.sync_menu_bar_height_from_parameters();
+        // GNU's split path leaves frame chrome/top-margin realization to
+        // `window--pixel-to-total` / `window-resize-apply-total`.  Resyncing the
+        // whole frame area here would recompute child character edges from the
+        // root's menu-bar top margin and incorrectly pull side-window leaves down
+        // by one line in batch.
         frame.recalculate_minibuffer_bounds();
         Some(new_id)
     }
