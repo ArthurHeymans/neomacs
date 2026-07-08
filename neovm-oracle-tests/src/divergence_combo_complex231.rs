@@ -42,21 +42,24 @@ fn div_cx231_auto_revert_mode_availability() {
 #[test]
 fn div_cx231_find_file_with_wildcards() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (t t (\"/tmp/nix-shell.XcUf3d/neo-cx231-wildlcVp7o/a.txt\" \"/tmp/nix-shell.XcUf3d/neo-cx231-wildlcVp7o/b.txt\" \"/tmp/nix-shell.XcUf3d/neo-cx231-wildlcVp7o/c.txt\"))""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t t t (\"a.txt\" \"b.txt\" \"c.txt\"))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((dir (make-temp-file "neo-cx231-wild" t)))
-  (dolist (name '("a.txt" "b.txt" "c.txt"))
-    (write-region "x" nil (expand-file-name name dir) nil 'silent))
-  (condition-case e
-      (let ((files (file-expand-wildcards (expand-file-name "*.txt" dir))))
-        (prog1 (list (consp files)
-                     (= (length files) 3)
-                     (sort files #'string<))
-          (delete-directory dir t)))
-    (error (list :errored (car e)))))
+  (unwind-protect
+      (progn
+        (dolist (name '("a.txt" "b.txt" "c.txt"))
+          (write-region "x" nil (expand-file-name name dir) nil 'silent))
+        (condition-case e
+            (let ((files (sort (file-expand-wildcards
+                                (expand-file-name "*.txt" dir))
+                               #'string<)))
+              (list (consp files)
+                    (= (length files) 3)
+                    (not (memq nil (mapcar #'file-name-absolute-p files)))
+                    (mapcar #'file-name-nondirectory files)))
+          (error (list :errored (car e)))))
+    (ignore-errors (delete-directory dir t))))
 "##,
         expect,
     );
