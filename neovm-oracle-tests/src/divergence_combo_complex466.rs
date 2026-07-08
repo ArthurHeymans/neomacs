@@ -200,11 +200,18 @@ fn div_cx466_many_windows_created() {
 #[test]
 fn div_cx466_list_all_tags() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK 19192""#]];
+    let expect = expect_test::expect![[r#""OK (nil (\"alpha\" \"beta\") t nil)""#]];
     crate::common::assert_oracle_parity_expect(
-        r##"(let ((count 0))
-  (mapatoms (lambda (_) (setq count (1+ count))))
-  count)"##,
+        r##"(let ((oa (obarray-make 7))
+      seen
+      ret)
+  (intern "alpha" oa)
+  (intern "beta" oa)
+  (setq ret (mapatoms (lambda (s) (push (symbol-name s) seen)) oa))
+  (list ret
+        (sort seen #'string<)
+        (and (intern-soft "alpha" oa) t)
+        (intern-soft "gamma" oa)))"##,
         expect,
     );
 }
