@@ -181,7 +181,7 @@ fn div_cx68_expand_file_name_edge_cases() {
 #[test]
 fn div_cx68_make_temp_file_with_suffix_and_dir() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (t \"innerH6MiC0.tmp\" \"tmp\" nil)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t \"tmp\" nil)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
@@ -191,7 +191,11 @@ fn div_cx68_make_temp_file_with_suffix_and_dir() {
             (f-base (file-name-nondirectory f))
             (f-ext (file-name-extension f)))
         (delete-directory dir t)
-        (list created f-base f-ext (file-exists-p dir))))
+        (list created
+              (string-prefix-p "inner" f-base)
+              (string-suffix-p ".tmp" f-base)
+              f-ext
+              (file-exists-p dir))))
   (error (list :errored (car e))))
 "##,
         expect,
