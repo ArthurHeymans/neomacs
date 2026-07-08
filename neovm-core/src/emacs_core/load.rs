@@ -4456,6 +4456,8 @@ fn install_bootstrap_x_window_system_vars(
     eval.set_variable("x-selection-timeout", Value::fixnum(0));
     eval.set_variable("x-session-id", Value::NIL);
     eval.set_variable("x-session-previous-id", Value::NIL);
+    eval.set_variable("x-lost-selection-functions", Value::NIL);
+    eval.set_variable("x-sent-selection-functions", Value::NIL);
     for name in [
         "x-ctrl-keysym",
         "x-alt-keysym",

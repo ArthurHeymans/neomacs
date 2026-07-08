@@ -59,6 +59,35 @@ fn c_level_defsym_hook_names_are_in_global_obarray() {
 }
 
 #[test]
+fn x_selection_hooks_match_gnu_xselect_startup_bindings() {
+    let mut ev = Context::new();
+    let result = ev
+        .eval_str(
+            r#"(list (boundp 'emacs-clipboard-manager-exit-hook)
+                     (boundp 'x-lost-selection-functions)
+                     (boundp 'x-sent-selection-functions)
+                     x-lost-selection-functions
+                     x-sent-selection-functions
+                     (special-variable-p 'x-lost-selection-functions)
+                     (special-variable-p 'x-sent-selection-functions))"#,
+        )
+        .expect("x selection hook probe should evaluate");
+
+    assert_eq!(
+        result,
+        Value::list(vec![
+            Value::NIL,
+            Value::T,
+            Value::T,
+            Value::NIL,
+            Value::NIL,
+            Value::T,
+            Value::T,
+        ])
+    );
+}
+
+#[test]
 fn mapc_mapconcat_and_mapcan_signal_circular_list_like_gnu() {
     crate::test_utils::init_test_tracing();
 

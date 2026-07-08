@@ -6276,13 +6276,18 @@ fn bootstrap_x_runtime_prebinds_gnu_x_globals_before_x_win_initialization() {
                  x-selection-timeout
                  x-session-id
                  x-session-previous-id
+                 x-lost-selection-functions
+                 x-sent-selection-functions
                  x-ctrl-keysym
                  x-alt-keysym
                  x-hyper-keysym
                  x-meta-keysym
                  x-super-keysym)"#,
     );
-    assert_eq!(rendered, "OK (t eql 160 gtk 0 nil nil nil nil nil nil nil)");
+    assert_eq!(
+        rendered,
+        "OK (t eql 160 gtk 0 nil nil nil nil nil nil nil nil nil)"
+    );
 }
 
 #[test]

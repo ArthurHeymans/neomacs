@@ -4997,6 +4997,13 @@ impl Context {
             },
         );
         obarray.make_special("x-toolkit-scroll-bars");
+        // --- src/xselect.c: syms_of_xselect ---
+        // GNU exposes these X selection notification hooks as DEFVAR_LISP
+        // globals with nil defaults.
+        for name in ["x-lost-selection-functions", "x-sent-selection-functions"] {
+            obarray.set_symbol_value(name, Value::NIL);
+            obarray.make_special(name);
+        }
 
         #[cfg(target_os = "windows")]
         super::windows::register_bootstrap_symbols(&mut obarray);
