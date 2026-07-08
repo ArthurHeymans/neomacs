@@ -3219,9 +3219,12 @@ impl crate::emacs_core::eval::Context {
                 replay_current_sequence = false;
                 tracing::debug!("read_key_sequence: replaying buffered sequence");
             } else {
-                let read_event = match self.read_char_event_with_timeout(None) {
+                let read_event = match self.read_char_event_with_timeout_for_key_sequence() {
                     Ok(Some(event)) => event,
                     Ok(None) => {
+                        if self.noninteractive() && self.input_rx.is_none() {
+                            continue;
+                        }
                         self.restore_delayed_selection_event(&mut delayed_selection_event);
                         self.restore_key_sequence_current_buffer(&mut saved_current_buffer);
                         self.command_loop
@@ -4021,6 +4024,20 @@ impl crate::emacs_core::eval::Context {
         &mut self,
         timeout: Option<std::time::Duration>,
     ) -> Result<Option<ReadCharEvent>, crate::emacs_core::error::Flow> {
+        self.read_char_event_with_timeout_policy(timeout, false)
+    }
+
+    fn read_char_event_with_timeout_for_key_sequence(
+        &mut self,
+    ) -> Result<Option<ReadCharEvent>, crate::emacs_core::error::Flow> {
+        self.read_char_event_with_timeout_policy(None, true)
+    }
+
+    fn read_char_event_with_timeout_policy(
+        &mut self,
+        timeout: Option<std::time::Duration>,
+        wait_noninteractive: bool,
+    ) -> Result<Option<ReadCharEvent>, crate::emacs_core::error::Flow> {
         let deadline = timeout.map(|timeout| std::time::Instant::now() + timeout);
 
         loop {
@@ -4044,7 +4061,7 @@ impl crate::emacs_core::eval::Context {
                 return Err(crate::emacs_core::error::signal("quit", vec![]));
             }
 
-            if self.noninteractive() && self.input_rx.is_none() {
+            if self.noninteractive() && self.input_rx.is_none() && !wait_noninteractive {
                 self.timer_stop_idle();
                 return Ok(None);
             }
@@ -4086,7 +4103,7 @@ impl crate::emacs_core::eval::Context {
                 return Err(crate::emacs_core::error::signal("quit", vec![]));
             }
 
-            if self.input_rx.is_none() {
+            if self.input_rx.is_none() && !wait_noninteractive {
                 if !self.command_loop.running {
                     return Err(crate::emacs_core::error::signal("quit", vec![]));
                 }

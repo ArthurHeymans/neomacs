@@ -3062,12 +3062,59 @@ fn read_key_consumes_character_event_and_preserves_tail() {
     );
 }
 
+fn due_gnu_timer(callback: &str) -> Value {
+    let when = std::time::SystemTime::now()
+        .checked_sub(Duration::from_millis(1))
+        .unwrap_or(std::time::UNIX_EPOCH)
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("timer deadline should not precede unix epoch");
+    let secs = when.as_secs() as i64;
+
+    Value::vector(vec![
+        Value::NIL,
+        Value::fixnum(secs >> 16),
+        Value::fixnum(secs & 0xFFFF),
+        Value::fixnum(when.subsec_micros() as i64),
+        Value::NIL,
+        Value::symbol(callback),
+        Value::NIL,
+        Value::NIL,
+        Value::fixnum(0),
+        Value::NIL,
+    ])
+}
+
 #[test]
-fn read_key_sequence_returns_empty_string() {
+fn read_key_sequence_noninteractive_no_input_waits_for_timers() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    let result = builtin_read_key_sequence(&mut ev, vec![Value::string("key: ")]).unwrap();
-    assert!(result.is_string() && result.as_utf8_str() == Some(""));
+    ev.eval_str(
+        r#"(progn
+             (fset 'timer-event-handler
+                   (lambda (timer)
+                     (setq timer-list (delq timer timer-list))
+                     (condition-case nil
+                         (apply (aref timer 5) (aref timer 6))
+                       (error nil))))
+             (fset 'read-key-sequence-timeout
+                   (lambda () (throw 'read-key-sequence-timeout-tag 'timed-out))))"#,
+    )
+    .expect("install timer-event-handler and timeout callback");
+    ev.set_variable(
+        "timer-list",
+        Value::list(vec![due_gnu_timer("read-key-sequence-timeout")]),
+    );
+
+    let result = ev.eval_str(
+        r#"(catch 'read-key-sequence-timeout-tag
+             (read-key-sequence "key: ")
+             'read-returned)"#,
+    );
+
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&result),
+        "OK timed-out"
+    );
 }
 
 #[test]
@@ -3201,16 +3248,36 @@ fn read_key_sequence_rejects_more_than_six_args() {
 }
 
 #[test]
-fn read_key_sequence_vector_returns_empty_vector() {
+fn read_key_sequence_vector_noninteractive_no_input_waits_for_timers() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
-    let result = builtin_read_key_sequence_vector(&mut ev, vec![Value::string("key: ")]).unwrap();
-    match result.kind() {
-        ValueKind::Veclike(VecLikeType::Vector) => {
-            assert!(result.as_vector_data().unwrap().is_empty())
-        }
-        other => panic!("expected vector, got {other:?}"),
-    }
+    ev.eval_str(
+        r#"(progn
+             (fset 'timer-event-handler
+                   (lambda (timer)
+                     (setq timer-list (delq timer timer-list))
+                     (condition-case nil
+                         (apply (aref timer 5) (aref timer 6))
+                       (error nil))))
+             (fset 'read-key-sequence-vector-timeout
+                   (lambda () (throw 'read-key-sequence-vector-timeout-tag 'timed-out))))"#,
+    )
+    .expect("install timer-event-handler and timeout callback");
+    ev.set_variable(
+        "timer-list",
+        Value::list(vec![due_gnu_timer("read-key-sequence-vector-timeout")]),
+    );
+
+    let result = ev.eval_str(
+        r#"(catch 'read-key-sequence-vector-timeout-tag
+             (read-key-sequence-vector "key: ")
+             'read-returned)"#,
+    );
+
+    assert_eq!(
+        crate::emacs_core::format_eval_result(&result),
+        "OK timed-out"
+    );
 }
 
 #[derive(Default)]

@@ -2454,12 +2454,7 @@ pub(crate) fn builtin_read_key_sequence_in_runtime(
         return Ok(Some(read_key_sequence_string_result(&keys)));
     }
 
-    if runtime.has_input_receiver() {
-        Ok(None)
-    } else {
-        runtime.clear_read_command_keys();
-        Ok(Some(Value::string("")))
-    }
+    Ok(None)
 }
 
 pub(crate) fn builtin_read_key_sequence_vector_in_runtime(
@@ -2476,12 +2471,7 @@ pub(crate) fn builtin_read_key_sequence_vector_in_runtime(
         return Ok(Some(read_key_sequence_vector_result(&keys)));
     }
 
-    if runtime.has_input_receiver() {
-        Ok(None)
-    } else {
-        runtime.clear_read_command_keys();
-        Ok(Some(Value::vector(vec![])))
-    }
+    Ok(None)
 }
 
 /// `(set-input-meta-mode META)`
@@ -2833,26 +2823,21 @@ pub(crate) fn finish_read_key_sequence_interactive_in_runtime(
     runtime: &mut impl KeyboardInputRuntime,
     options: crate::keyboard::ReadKeySequenceOptions,
 ) -> EvalResult {
-    if runtime.has_input_receiver() {
-        let (keys, _binding) = runtime.read_key_sequence_blocking(options)?;
-        let mut chars_only = true;
-        let mut s = String::new();
-        for k in &keys {
-            if let Some(c) = event_to_char(k) {
-                s.push(c);
-            } else {
-                chars_only = false;
-                break;
-            }
+    let (keys, _binding) = runtime.read_key_sequence_blocking(options)?;
+    let mut chars_only = true;
+    let mut s = String::new();
+    for k in &keys {
+        if let Some(c) = event_to_char(k) {
+            s.push(c);
+        } else {
+            chars_only = false;
+            break;
         }
-        if chars_only && !keys.is_empty() {
-            return Ok(Value::string(s));
-        }
-        return Ok(Value::vector(keys));
     }
-
-    runtime.clear_read_command_keys();
-    Ok(Value::string(""))
+    if chars_only && !keys.is_empty() {
+        return Ok(Value::string(s));
+    }
+    Ok(Value::vector(keys))
 }
 
 /// `(read-key-sequence-vector PROMPT)`
@@ -2876,13 +2861,8 @@ pub(crate) fn finish_read_key_sequence_vector_interactive_in_runtime(
     runtime: &mut impl KeyboardInputRuntime,
     options: crate::keyboard::ReadKeySequenceOptions,
 ) -> EvalResult {
-    if runtime.has_input_receiver() {
-        let (keys, _binding) = runtime.read_key_sequence_blocking(options)?;
-        return Ok(Value::vector(keys));
-    }
-
-    runtime.clear_read_command_keys();
-    Ok(Value::vector(vec![]))
+    let (keys, _binding) = runtime.read_key_sequence_blocking(options)?;
+    Ok(Value::vector(keys))
 }
 
 // ---------------------------------------------------------------------------
