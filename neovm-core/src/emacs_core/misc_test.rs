@@ -821,6 +821,36 @@ fn backtrace_frame_internal_surfaces_unevalled_frame() {
 }
 
 #[test]
+fn mapbacktrace_base_t_does_not_recurse() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = super::super::eval::Context::new();
+
+    let result = eval.eval_str(
+        r#"(let (bt-frames)
+             (condition-case nil
+                 (signal 'wrong-type-argument '(integerp "x"))
+               (error
+                (mapbacktrace
+                 (lambda (_evald func args _flags)
+                   (push (list (if (symbolp func) func :lambda)
+                               (length args))
+                         bt-frames))
+                 t)))
+             (list (consp bt-frames) (> (length bt-frames) 0)))"#,
+    );
+
+    assert!(
+        result.is_ok(),
+        "mapbacktrace base t probe failed: {}",
+        format_eval_result(&result)
+    );
+    assert_eq!(
+        super::super::print::print_value(&result.unwrap()),
+        "(nil nil)"
+    );
+}
+
+#[test]
 fn handler_bind_sees_signaling_eval_frames_before_unwind() {
     crate::test_utils::init_test_tracing();
     let mut eval = super::super::eval::Context::new();

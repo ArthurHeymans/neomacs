@@ -670,8 +670,8 @@ pub(crate) fn builtin_backtrace_locals(
         ));
     }
     let base = args.get(1).copied().unwrap_or(Value::NIL);
-    let frames = runtime_backtrace_frames_from_base(eval, base)?;
-    if frames.get(nframes).is_none() || frames.get(nframes - 1).is_none() {
+    let frame_indices = runtime_backtrace_frame_indices_from_base(eval, base)?;
+    if frame_indices.get(nframes).is_none() || frame_indices.get(nframes - 1).is_none() {
         return Err(signal(
             "error",
             vec![Value::string("Activation frame not found!")],
@@ -689,7 +689,7 @@ pub(crate) fn builtin_backtrace_debug(
     expect_max_args("backtrace-debug", &args, 3)?;
     let _level = expect_wholenump(&args[0])?;
     if let Some(base) = args.get(2) {
-        let _ = runtime_backtrace_frames_from_base(eval, *base)?;
+        let _ = runtime_backtrace_frame_indices_from_base(eval, *base)?;
     }
     Ok(args[1])
 }
@@ -703,8 +703,8 @@ pub(crate) fn builtin_backtrace_eval(
     expect_max_args("backtrace-eval", &args, 3)?;
     let nframes = expect_wholenump(&args[1])? as usize;
     let base = args.get(2).copied().unwrap_or(Value::NIL);
-    let frames = runtime_backtrace_frames_from_base(eval, base)?;
-    if frames.get(nframes).is_none() {
+    let frame_indices = runtime_backtrace_frame_indices_from_base(eval, base)?;
+    if frame_indices.get(nframes).is_none() {
         return Err(signal(
             "error",
             vec![Value::string("Activation frame not found!")],
@@ -726,7 +726,7 @@ fn runtime_backtrace_indirect_function(
             .map(|(_, value)| value)
             .or(Some(function))
         }
-        ValueKind::T => runtime_backtrace_indirect_function(eval, Value::symbol("t")),
+        ValueKind::T => Some(function),
         ValueKind::Nil => None,
         _ => Some(function),
     }
@@ -743,30 +743,41 @@ struct BacktraceFrameSnapshot {
     unevalled: bool,
 }
 
-/// Collect backtrace frames from the specpdl, ordered oldest-first (index 0 = deepest).
-fn collect_backtrace_frames(eval: &super::eval::Context) -> Vec<BacktraceFrameSnapshot> {
+fn backtrace_frame_snapshot_at(
+    eval: &super::eval::Context,
+    index: usize,
+) -> Option<BacktraceFrameSnapshot> {
+    match eval.specpdl.get(index) {
+        Some(super::eval::SpecBinding::Backtrace {
+            function,
+            args,
+            debug_on_exit,
+        }) => Some(BacktraceFrameSnapshot {
+            function: *function,
+            args: eval.backtrace_args_values(args).into_iter().collect(),
+            debug_on_exit: *debug_on_exit,
+            unevalled: args.is_unevalled(),
+        }),
+        _ => None,
+    }
+}
+
+/// Collect backtrace frame specpdl indices, ordered oldest-first (index 0 = deepest).
+fn collect_backtrace_frame_indices(eval: &super::eval::Context) -> Vec<usize> {
     eval.specpdl
         .iter()
-        .filter_map(|entry| match entry {
-            super::eval::SpecBinding::Backtrace {
-                function,
-                args,
-                debug_on_exit,
-            } => Some(BacktraceFrameSnapshot {
-                function: *function,
-                args: eval.backtrace_args_values(args).into_iter().collect(),
-                debug_on_exit: *debug_on_exit,
-                unevalled: args.is_unevalled(),
-            }),
+        .enumerate()
+        .filter_map(|(index, entry)| match entry {
+            super::eval::SpecBinding::Backtrace { .. } => Some(index),
             _ => None,
         })
         .collect()
 }
 
-fn runtime_backtrace_frames_from_base(
+fn runtime_backtrace_frame_indices_from_base(
     eval: &super::eval::Context,
     base: Value,
-) -> Result<Vec<BacktraceFrameSnapshot>, Flow> {
+) -> Result<Vec<usize>, Flow> {
     let mut offset = 0usize;
     let mut base_function = base;
     if base.is_cons() {
@@ -784,16 +795,19 @@ fn runtime_backtrace_frames_from_base(
         }
     }
 
-    let frames = collect_backtrace_frames(eval);
+    let frame_indices = collect_backtrace_frame_indices(eval);
 
     let start_index = if base_function.is_nil() {
-        frames.len().checked_sub(1)
+        frame_indices.len().checked_sub(1)
     } else {
         let Some(indirect_base) = runtime_backtrace_indirect_function(eval, base_function) else {
             return Ok(Vec::new());
         };
         let mut found = None;
-        for (index, frame) in frames.iter().enumerate().rev() {
+        for (index, specpdl_index) in frame_indices.iter().copied().enumerate().rev() {
+            let Some(frame) = backtrace_frame_snapshot_at(eval, specpdl_index) else {
+                continue;
+            };
             let Some(indirect_frame) = runtime_backtrace_indirect_function(eval, frame.function)
             else {
                 continue;
@@ -818,7 +832,7 @@ fn runtime_backtrace_frames_from_base(
         offset -= 1;
     }
 
-    Ok(frames.into_iter().take(index + 1).rev().collect())
+    Ok(frame_indices.into_iter().take(index + 1).rev().collect())
 }
 
 fn runtime_backtrace_frame_flags(frame: &BacktraceFrameSnapshot) -> Value {
@@ -855,6 +869,27 @@ fn apply_backtrace_callback(
     )
 }
 
+fn apply_backtrace_callback_at_index(
+    eval: &mut super::eval::Context,
+    function: Value,
+    index: usize,
+) -> EvalResult {
+    let Some(frame) = backtrace_frame_snapshot_at(eval, index) else {
+        return Ok(Value::NIL);
+    };
+
+    let root_scope = eval.save_specpdl_roots();
+    eval.push_specpdl_root(function);
+    eval.push_specpdl_root(frame.function);
+    for arg in frame.args.iter().copied() {
+        eval.push_specpdl_root(arg);
+    }
+
+    let result = apply_backtrace_callback(eval, function, &frame);
+    eval.restore_specpdl_roots(root_scope);
+    result
+}
+
 /// `(backtrace-frame--internal FUN NFRAMES BASE)` -- compatibility helper.
 ///
 /// Walks the specpdl backtrace entries and feeds frames through the same
@@ -865,11 +900,11 @@ pub(crate) fn builtin_backtrace_frame_internal(
 ) -> EvalResult {
     expect_args("backtrace-frame--internal", &args, 3)?;
     let nframes = expect_wholenump(&args[1])? as usize;
-    let frames = runtime_backtrace_frames_from_base(eval, args[2])?;
-    let Some(frame) = frames.get(nframes) else {
+    let frame_indices = runtime_backtrace_frame_indices_from_base(eval, args[2])?;
+    let Some(index) = frame_indices.get(nframes).copied() else {
         return Ok(Value::NIL);
     };
-    apply_backtrace_callback(eval, args[0], frame)
+    apply_backtrace_callback_at_index(eval, args[0], index)
 }
 
 /// `(mapbacktrace FUNCTION &optional BASE)` -- iterate runtime backtrace
@@ -881,9 +916,9 @@ pub(crate) fn builtin_mapbacktrace(
     expect_min_args("mapbacktrace", &args, 1)?;
     expect_max_args("mapbacktrace", &args, 2)?;
     let base = args.get(1).copied().unwrap_or(Value::NIL);
-    let frames = runtime_backtrace_frames_from_base(eval, base)?;
-    for frame in &frames {
-        apply_backtrace_callback(eval, args[0], frame)?;
+    let frame_indices = runtime_backtrace_frame_indices_from_base(eval, base)?;
+    for index in frame_indices {
+        apply_backtrace_callback_at_index(eval, args[0], index)?;
     }
     Ok(Value::NIL)
 }
