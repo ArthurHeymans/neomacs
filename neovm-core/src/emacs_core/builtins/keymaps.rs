@@ -12,8 +12,8 @@ use super::keymap::{
     is_list_keymap, key_event_to_emacs_event, list_keymap_accessible, list_keymap_copy,
     list_keymap_define_seq_in_obarray, list_keymap_define_seq_in_obarray_ex,
     list_keymap_inherits_from, list_keymap_parent, list_keymap_set_parent,
-    lookup_key_in_keymaps_in_obarray, make_list_keymap, make_sparse_list_keymap,
-    maybe_keymap_in_obarray, maybe_keymap_in_runtime,
+    lookup_key_in_keymaps_in_obarray, lookup_key_in_keymaps_in_obarray_runtime, make_list_keymap,
+    make_sparse_list_keymap, maybe_keymap_in_obarray, maybe_keymap_in_runtime,
 };
 use super::symbols::cache_event_symbol_value_properties_in_obarray;
 
@@ -355,12 +355,7 @@ pub(super) fn builtin_lookup_key(eval: &mut super::eval::Context, args: Vec<Valu
         return Ok(keymaps.first().copied().unwrap_or(Value::NIL));
     }
 
-    Ok(lookup_key_with_menu_compat(
-        eval.obarray(),
-        &keymaps,
-        &events,
-        t_ok,
-    ))
+    lookup_key_with_menu_compat_runtime(eval, &keymaps, &events, t_ok)
 }
 
 pub(crate) fn builtin_lookup_key_impl(obarray: &Obarray, args: &[Value]) -> EvalResult {
@@ -424,6 +419,49 @@ fn lookup_key_with_menu_compat(
     }
 
     found
+}
+
+fn lookup_key_with_menu_compat_runtime(
+    eval: &mut super::eval::Context,
+    keymaps: &[Value],
+    events: &[Value],
+    t_ok: bool,
+) -> EvalResult {
+    let found = lookup_key_in_keymaps_in_obarray_runtime(eval, keymaps, events, t_ok)?;
+    if is_defined_lookup_result(&found) || !is_menu_bar_key(events) {
+        return Ok(found);
+    }
+
+    let lower_events: Vec<Value> = events
+        .iter()
+        .map(|event| {
+            event
+                .as_symbol_name()
+                .map(|name| Value::symbol(name.to_lowercase()))
+                .unwrap_or(*event)
+        })
+        .collect();
+    let lower_found = lookup_key_in_keymaps_in_obarray_runtime(eval, keymaps, &lower_events, t_ok)?;
+    if is_defined_lookup_result(&lower_found) {
+        return Ok(lower_found);
+    }
+
+    let dash_events: Vec<Value> = lower_events
+        .iter()
+        .map(|event| {
+            event
+                .as_symbol_name()
+                .filter(|name| name.contains(' '))
+                .map(|name| Value::symbol(name.replace(' ', "-")))
+                .unwrap_or(*event)
+        })
+        .collect();
+    let dash_found = lookup_key_in_keymaps_in_obarray_runtime(eval, keymaps, &dash_events, t_ok)?;
+    if is_defined_lookup_result(&dash_found) {
+        return Ok(dash_found);
+    }
+
+    Ok(found)
 }
 
 fn is_defined_lookup_result(value: &Value) -> bool {

@@ -4926,6 +4926,32 @@ fn bootstrap_defvar_keymap_and_fset_share_populated_keymap_object() {
 }
 
 #[test]
+fn lookup_key_applies_menu_item_filters_like_gnu() {
+    crate::test_utils::init_test_tracing();
+    let result = bootstrap_eval_all(
+        r#"(let ((m (make-sparse-keymap))
+                 (tool (make-sparse-keymap))
+                 (mouse (make-sparse-keymap)))
+             (define-key tool [open] 'ignore)
+             (define-key mouse [minor] 'ignore)
+             (define-key m [tool-bar]
+               `(menu-item "tool bar" ignore
+                           :filter ,(lambda (_) tool)))
+             (define-key m [C-down-mouse-3]
+               `(menu-item "Menu Bar" ignore
+                           :filter ,(lambda (_) mouse)))
+             (list (keymapp (lookup-key m [tool-bar]))
+                   (lookup-key (lookup-key m [tool-bar]) [open])
+                   (keymapp (lookup-key m [C-down-mouse-3]))
+                   (lookup-key (lookup-key m [C-down-mouse-3]) [minor])))"#,
+    )
+    .into_iter()
+    .next()
+    .expect("filtered menu-item lookup result");
+    assert_eq!(result, "OK (t ignore t ignore)");
+}
+
+#[test]
 fn bootstrap_runtime_help_map_and_help_command_are_populated_like_gnu() {
     crate::test_utils::init_test_tracing();
     let result = bootstrap_eval_all(
