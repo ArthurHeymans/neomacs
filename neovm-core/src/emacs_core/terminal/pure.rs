@@ -387,10 +387,7 @@ pub(crate) fn collect_terminal_gc_roots(roots: &mut Vec<Value>) {
 // ---------------------------------------------------------------------------
 
 fn terminal_handle_for_id(id: u64) -> Value {
-    Value::vector(vec![
-        Value::symbol("--neovm-terminal--"),
-        Value::fixnum(id as i64),
-    ])
+    Value::make_terminal(id)
 }
 
 pub(crate) fn terminal_handle_value() -> Value {

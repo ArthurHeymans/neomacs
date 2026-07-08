@@ -898,6 +898,7 @@ impl TaggedValue {
                 VecLikeType::Frame => "frame",
                 VecLikeType::Timer => "timer",
                 VecLikeType::Process => "process",
+                VecLikeType::Terminal => "terminal",
                 // GNU Emacs reports both fixnums and bignums as
                 // "integer" via `Ftype_of` / `Fcl_type_of`.
                 VecLikeType::Bignum => "integer",

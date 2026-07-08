@@ -3623,6 +3623,7 @@ impl TaggedHeap {
                         VecLikeType::Frame => size_of::<FrameObj>(),
                         VecLikeType::Timer => size_of::<TimerObj>(),
                         VecLikeType::Process => size_of::<ProcessObj>(),
+                        VecLikeType::Terminal => size_of::<TerminalObj>(),
                         VecLikeType::Xwidget => size_of::<XwidgetObj>(),
                         VecLikeType::XwidgetView => size_of::<XwidgetViewObj>(),
                         VecLikeType::Subr => size_of::<SubrObj>(),
@@ -4066,6 +4067,19 @@ impl TaggedHeap {
         self.link_veclike(ptr as *mut VecLikeHeader);
         self.allocated_count += 1;
         self.note_allocation_bytes(size_of::<ProcessObj>());
+        unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
+    }
+
+    /// Allocate a display terminal object.
+    pub fn alloc_terminal(&mut self, id: u64) -> TaggedValue {
+        let obj = Box::new(TerminalObj {
+            header: VecLikeHeader::new(VecLikeType::Terminal),
+            id,
+        });
+        let ptr = Box::into_raw(obj);
+        self.link_veclike(ptr as *mut VecLikeHeader);
+        self.allocated_count += 1;
+        self.note_allocation_bytes(size_of::<TerminalObj>());
         unsafe { TaggedValue::from_veclike_ptr(ptr as *const VecLikeHeader) }
     }
 
@@ -5578,13 +5592,15 @@ impl TaggedHeap {
                     let o = &*(ptr as *const XwidgetViewObj);
                     out.extend([o.model, o.window]);
                 }
-                // Buffer/Window/Frame/Timer/Process/Marker/Subr/Bignum/Sqlite/
-                // UserPtr have no Value children to trace (mirrors trace_veclike).
+                // Buffer/Window/Frame/Timer/Process/Terminal/Marker/Subr/
+                // Bignum/Sqlite/UserPtr have no Value children to trace
+                // (mirrors trace_veclike).
                 VecLikeType::Buffer
                 | VecLikeType::Window
                 | VecLikeType::Frame
                 | VecLikeType::Timer
                 | VecLikeType::Process
+                | VecLikeType::Terminal
                 | VecLikeType::Marker
                 | VecLikeType::Subr
                 | VecLikeType::Bignum
@@ -7398,6 +7414,7 @@ impl TaggedHeap {
             | VecLikeType::Frame
             | VecLikeType::Timer
             | VecLikeType::Process
+            | VecLikeType::Terminal
             | VecLikeType::Marker
             | VecLikeType::Subr
             | VecLikeType::Bignum
@@ -7647,6 +7664,9 @@ impl TaggedHeap {
                     VecLikeType::Frame => unsafe { drop(Box::from_raw(ptr as *mut FrameObj)) },
                     VecLikeType::Timer => unsafe { drop(Box::from_raw(ptr as *mut TimerObj)) },
                     VecLikeType::Process => unsafe { drop(Box::from_raw(ptr as *mut ProcessObj)) },
+                    VecLikeType::Terminal => unsafe {
+                        drop(Box::from_raw(ptr as *mut TerminalObj))
+                    },
                     VecLikeType::Xwidget => unsafe { drop(Box::from_raw(ptr as *mut XwidgetObj)) },
                     VecLikeType::XwidgetView => unsafe {
                         drop(Box::from_raw(ptr as *mut XwidgetViewObj))
@@ -8182,7 +8202,7 @@ pub(crate) mod alloc_probe {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
-    const N_KINDS: usize = 28;
+    const N_KINDS: usize = 29;
     const N_BUCKETS: usize = 11;
 
     /// Dense kind index: String, Float, then every `VecLikeType` variant.
@@ -8202,6 +8222,7 @@ pub(crate) mod alloc_probe {
         "Buffer",
         "HashTable",
         "Obarray",
+        "Terminal",
         "WindowConfig",
         "Subr",
         "Xwidget",
@@ -8248,19 +8269,20 @@ pub(crate) mod alloc_probe {
                     VecLikeType::Buffer => 10,
                     VecLikeType::HashTable => 11,
                     VecLikeType::Obarray => 12,
-                    VecLikeType::WindowConfiguration => 13,
-                    VecLikeType::Subr => 14,
-                    VecLikeType::Xwidget => 15,
-                    VecLikeType::XwidgetView => 16,
-                    VecLikeType::ModuleFunction => 17,
-                    VecLikeType::Sqlite => 18,
-                    VecLikeType::Lambda => 19,
-                    VecLikeType::CharTable => 20,
-                    VecLikeType::SubCharTable => 21,
-                    VecLikeType::Record => 22,
-                    VecLikeType::Macro => 23,
-                    VecLikeType::ByteCode => 24,
-                    VecLikeType::Timer => 25,
+                    VecLikeType::Terminal => 13,
+                    VecLikeType::WindowConfiguration => 14,
+                    VecLikeType::Subr => 15,
+                    VecLikeType::Xwidget => 16,
+                    VecLikeType::XwidgetView => 17,
+                    VecLikeType::ModuleFunction => 18,
+                    VecLikeType::Sqlite => 19,
+                    VecLikeType::Lambda => 20,
+                    VecLikeType::CharTable => 21,
+                    VecLikeType::SubCharTable => 22,
+                    VecLikeType::Record => 23,
+                    VecLikeType::Macro => 24,
+                    VecLikeType::ByteCode => 25,
+                    VecLikeType::Timer => 26,
                 }
             }
         }
@@ -8284,7 +8306,7 @@ pub(crate) mod alloc_probe {
 
     /// ByteCode-kind dense index in `KIND_NAMES`/`COUNTS` (2 + `ByteCode`'s
     /// position in the `VecLikeType` arm of `kind_index`).
-    const BYTECODE_KIND: usize = 26;
+    const BYTECODE_KIND: usize = 27;
 
     /// Backtrace hook (call-chain evidence for probes): while armed, capture
     /// a Rust backtrace for each ByteCode-kind allocation, up to the armed

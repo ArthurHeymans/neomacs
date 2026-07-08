@@ -1601,6 +1601,11 @@ impl TaggedValue {
         })
     }
 
+    /// Allocate a GNU-shaped terminal object.
+    pub fn make_terminal(id: u64) -> Self {
+        with_tagged_heap(|h| h.alloc_terminal(id))
+    }
+
     /// Allocate a GNU-shaped xwidget model object.
     pub fn make_xwidget(
         type_: Value,

@@ -265,6 +265,11 @@ impl DumpEncoder {
                 // they can never appear in a portable dump image.
                 panic!("pdump: process objects are not portable")
             }
+            ValueKind::Veclike(VecLikeType::Terminal) => {
+                // Terminals are live runtime display objects; dump images must
+                // rebuild the initial terminal for the host process.
+                panic!("pdump: terminal objects are not portable")
+            }
             ValueKind::Veclike(VecLikeType::Xwidget)
             | ValueKind::Veclike(VecLikeType::XwidgetView) => {
                 panic!("pdump: xwidget objects are not portable")

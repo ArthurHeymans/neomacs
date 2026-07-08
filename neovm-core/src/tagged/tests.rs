@@ -103,6 +103,7 @@ fn gnu_pvec_type_layout_for_shared_vectorlikes() {
         (VecLikeType::Buffer, 13),
         (VecLikeType::HashTable, 14),
         (VecLikeType::Obarray, 15),
+        (VecLikeType::Terminal, 16),
         (VecLikeType::WindowConfiguration, 17),
         (VecLikeType::Subr, 18),
         (VecLikeType::Xwidget, 20),

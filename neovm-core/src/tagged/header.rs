@@ -231,6 +231,8 @@ pub enum VecLikeType {
     HashTable = 14,
     /// Obarray object (GNU `PVEC_OBARRAY`).
     Obarray = 15,
+    /// Display terminal object (GNU `PVEC_TERMINAL`).
+    Terminal = 16,
     /// Saved window configuration (GNU `PVEC_WINDOW_CONFIGURATION`). Stored with
     /// the same `{header, data}` layout as a record, but a distinct type tag so
     /// it is opaque to the vector/array/sequence predicates (as in GNU).
@@ -273,6 +275,7 @@ impl VecLikeType {
             Self::Buffer => GnuPvecType::Buffer,
             Self::HashTable => GnuPvecType::HashTable,
             Self::Obarray => GnuPvecType::Obarray,
+            Self::Terminal => GnuPvecType::Terminal,
             Self::WindowConfiguration => GnuPvecType::WindowConfiguration,
             Self::Subr => GnuPvecType::Subr,
             Self::Xwidget => GnuPvecType::Xwidget,
@@ -755,6 +758,17 @@ pub struct SubCharTableObj {
     pub depth: i32,
     pub min_char: i32,
     pub contents: LispValueVec,
+}
+
+/// Heap-allocated display terminal object.
+///
+/// GNU exposes terminals as `PVEC_TERMINAL` pseudovectors. Neomacs stores the
+/// mutable terminal state in `TerminalManager`; the Lisp object carries only the
+/// stable terminal id and the GNU-compatible vec-like tag.
+#[repr(C)]
+pub struct TerminalObj {
+    pub header: VecLikeHeader,
+    pub id: u64,
 }
 
 /// Heap-allocated hash table.

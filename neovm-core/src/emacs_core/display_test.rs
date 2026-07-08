@@ -8,9 +8,9 @@ use crate::emacs_core::intern::resolve_sym;
 use crate::emacs_core::terminal::pure::{
     builtin_controlling_tty_p, builtin_frame_terminal, builtin_resume_tty,
     builtin_selected_terminal, builtin_set_terminal_parameter, builtin_suspend_tty,
-    builtin_terminal_live_p, builtin_terminal_name, builtin_terminal_parameter,
-    builtin_terminal_parameters, builtin_tty_top_frame, builtin_tty_type,
-    reset_terminal_thread_locals, terminal_handle_value,
+    builtin_terminal_list, builtin_terminal_live_p, builtin_terminal_name,
+    builtin_terminal_parameter, builtin_terminal_parameters, builtin_tty_top_frame,
+    builtin_tty_type, reset_terminal_thread_locals, terminal_handle_value,
 };
 use crate::emacs_core::value::ValueKind;
 use std::fs;
@@ -444,6 +444,7 @@ fn frame_terminal_returns_live_terminal_handle() {
     let handle = builtin_frame_terminal(&mut eval, vec![Value::NIL]).unwrap();
     let live = builtin_terminal_live_p(&mut eval, vec![handle]).unwrap();
     assert_eq!(live, Value::T);
+    assert_eq!(handle.type_name(), "terminal");
 }
 
 #[test]
@@ -453,6 +454,22 @@ fn selected_terminal_returns_live_terminal_handle() {
     let handle = builtin_selected_terminal(vec![]).unwrap();
     let live = builtin_terminal_live_p(&mut eval, vec![handle]).unwrap();
     assert_eq!(live, Value::T);
+}
+
+#[test]
+fn frame_terminal_and_terminal_list_are_terminal_objects() {
+    crate::test_utils::init_test_tracing();
+    crate::emacs_core::terminal::pure::reset_terminal_thread_locals();
+    let mut eval = crate::emacs_core::Context::new();
+
+    let terminal = builtin_frame_terminal(&mut eval, vec![Value::NIL]).unwrap();
+    let terminals = builtin_terminal_list(vec![]).unwrap();
+    let listed = crate::emacs_core::value::list_to_vec(&terminals).unwrap();
+
+    assert_eq!(terminal.type_name(), "terminal");
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].type_name(), "terminal");
+    assert!(crate::emacs_core::value::eq_value(&terminal, &listed[0]));
 }
 
 #[test]

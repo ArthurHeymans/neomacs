@@ -1089,6 +1089,12 @@ fn write_value_stateful_inner(value: &Value, out: &mut String, state: &mut Print
                     .unwrap_or_else(|| "#<process>".to_string()),
             );
         }
+        ValueKind::Veclike(VecLikeType::Terminal) => {
+            out.push_str(
+                &print_special_handle(value, state.buffers)
+                    .unwrap_or_else(|| "#<terminal>".to_string()),
+            );
+        }
         ValueKind::Veclike(VecLikeType::Xwidget) => {
             let xw = value.as_xwidget().unwrap();
             write!(out, "#<xwidget {}>", xw.xwidget_id).unwrap();
@@ -2117,6 +2123,13 @@ fn append_print_value_bytes(value: &Value, out: &mut Vec<u8>, options: PrintOpti
             out.extend_from_slice(
                 super::process::print_process_handle(value)
                     .unwrap_or_else(|| "#<process>".to_string())
+                    .as_bytes(),
+            );
+        }
+        ValueKind::Veclike(VecLikeType::Terminal) => {
+            out.extend_from_slice(
+                print_special_handle(value, None)
+                    .unwrap_or_else(|| "#<terminal>".to_string())
                     .as_bytes(),
             );
         }
