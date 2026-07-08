@@ -8450,6 +8450,22 @@ fn string_match_unibyte_high_byte_charset_range_matches_gnu() {
     let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xC3]));
     let result = builtin_string_match(&mut eval, vec![all_bytes, raw]).expect("negated byte range");
     assert_eq!(result, Value::NIL);
+
+    let high_byte_range = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
+        b'[', 0x80, b'-', 0xFF, b']',
+    ]));
+    let multibyte_e_acute = Value::string("é");
+    let result = builtin_string_match(&mut eval, vec![high_byte_range, multibyte_e_acute])
+        .expect("unibyte high-byte range against multibyte string");
+    assert_eq!(result, Value::NIL);
+
+    let all_bytes = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
+        b'[', b'^', 0x00, b'-', 0x7F, 0x80, b'-', 0xFF, b']',
+    ]));
+    let multibyte_e_acute = Value::string("é");
+    let result = builtin_string_match(&mut eval, vec![all_bytes, multibyte_e_acute])
+        .expect("negated byte range against multibyte string");
+    assert_eq!(result, Value::fixnum(0));
 }
 
 #[test]

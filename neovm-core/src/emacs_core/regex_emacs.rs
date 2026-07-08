@@ -2254,16 +2254,6 @@ fn decode_pattern_char(bytes: &[u8], pos: usize, multibyte: bool) -> Option<(u32
     }
 }
 
-fn decode_charset_atom(bytes: &[u8], pos: usize, multibyte: bool) -> Option<(u32, usize)> {
-    decode_pattern_char(bytes, pos, multibyte).map(|(code, len)| {
-        if !multibyte && code >= 0x80 {
-            (emacs_char::unibyte_to_char(code as u8), len)
-        } else {
-            (code, len)
-        }
-    })
-}
-
 fn emacs_char_to_rust_char(code: u32) -> char {
     if emacs_char::char_byte8_p(code) {
         char::from(emacs_char::char_to_byte8(code))
@@ -2442,6 +2432,7 @@ fn compile_charset(
                     bitmap_start,
                     c,
                     &mut mb_ranges,
+                    pattern_multibyte,
                     buf.translate.as_ref(),
                 );
             }
@@ -2475,7 +2466,7 @@ fn compile_charset(
 
         // Decode a full Emacs character from the pattern.
         let (c, clen) =
-            decode_charset_atom(pattern, *p, pattern_multibyte).unwrap_or((b as u32, 1));
+            decode_pattern_char(pattern, *p, pattern_multibyte).unwrap_or((b as u32, 1));
         *p += clen;
 
         if b == b']' && !first {
@@ -2497,7 +2488,7 @@ fn compile_charset(
         if b == b'-' && *p < plen && pattern[*p] != b']' {
             if let Some(range_start) = pending_char.take() {
                 // Range: range_start - next_char
-                let (range_end, rlen) = decode_charset_atom(pattern, *p, pattern_multibyte)
+                let (range_end, rlen) = decode_pattern_char(pattern, *p, pattern_multibyte)
                     .unwrap_or((pattern[*p] as u32, 1));
                 *p += rlen;
                 let translate = buf.translate.as_ref();
@@ -2531,6 +2522,7 @@ fn compile_charset(
                     bitmap_start,
                     c,
                     &mut mb_ranges,
+                    pattern_multibyte,
                     buf.translate.as_ref(),
                 );
             }
@@ -2557,6 +2549,7 @@ fn compile_charset(
                 bitmap_start,
                 prev,
                 &mut mb_ranges,
+                pattern_multibyte,
                 buf.translate.as_ref(),
             );
         }
@@ -2575,6 +2568,7 @@ fn compile_charset(
             bitmap_start,
             c,
             &mut mb_ranges,
+            pattern_multibyte,
             buf.translate.as_ref(),
         );
     }
@@ -2607,12 +2601,23 @@ fn add_charset_char(
     bitmap_start: usize,
     c: u32,
     mb_ranges: &mut Vec<(char, char)>,
+    pattern_multibyte: bool,
     translate: Option<&CaseTranslation>,
 ) {
     if c < 0x80 {
         set_bitmap_bit(buffer, bitmap_start, c as u8, translate);
     } else if emacs_char::char_byte8_p(c) {
         set_bitmap_raw_bit(buffer, bitmap_start, emacs_char::char_to_byte8(c));
+    } else if !pattern_multibyte {
+        add_charset_range(
+            buffer,
+            bitmap_start,
+            mb_ranges,
+            c,
+            c,
+            pattern_multibyte,
+            translate,
+        );
     } else {
         let ch = emacs_char_to_rust_char(c);
         add_multibyte_range(buffer, bitmap_start, mb_ranges, ch, ch, translate);
@@ -2662,12 +2667,11 @@ fn add_charset_range(
         let end_ch = emacs_char_to_rust_char(end);
         add_multibyte_range(buffer, bitmap_start, mb_ranges, start_ch, end_ch, translate);
     } else {
-        let Some(start_byte) = regex_char_to_unibyte(start) else {
+        if start > 0xFF || end > 0xFF {
             return;
-        };
-        let Some(end_byte) = regex_char_to_unibyte(end) else {
-            return;
-        };
+        }
+        let start_byte = start as u8;
+        let end_byte = end as u8;
         for byte in start_byte..=end_byte {
             let c = regex_unibyte_to_char(byte);
             if emacs_char::char_byte8_p(c) {
@@ -6159,7 +6163,6 @@ fn compile_fastmap(pattern: &mut CompiledPattern, syntax: &dyn SyntaxLookup) {
                     if pc >= bytecode.len() {
                         break;
                     }
-                    let charset_op_pos = pc - 1;
                     let bitmap_len = bytecode[pc] as usize & 0x7F;
                     pc += 1;
                     for c in 0..256usize {
@@ -6171,6 +6174,16 @@ fn compile_fastmap(pattern: &mut CompiledPattern, syntax: &dyn SyntaxLookup) {
                         if !in_set {
                             pattern.fastmap[c] = true;
                         }
+                    }
+                    // GNU `analyze_first_fastmap` treats any `charset_not`
+                    // as capable of matching multibyte characters beyond the
+                    // bitmap, even when the bitmap covers every raw byte.
+                    // The search loop will only try real character
+                    // boundaries, so this conservative non-ASCII coverage is
+                    // enough to avoid skipping candidates like `é` for
+                    // `[^\x00-\xff]`.
+                    for c in 128..256usize {
+                        pattern.fastmap[c] = true;
                     }
                     break;
                 }
