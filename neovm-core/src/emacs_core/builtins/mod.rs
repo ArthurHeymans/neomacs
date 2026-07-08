@@ -5749,18 +5749,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         Some(0),
     );
     ctx.defsubr(
-        "native-comp-unit-file",
-        |_ctx, args| builtin_native_comp_unit_file(args),
-        1,
-        Some(1),
-    );
-    ctx.defsubr(
-        "native-comp-unit-set-file",
-        |_ctx, args| builtin_native_comp_unit_set_file(args),
-        2,
-        Some(2),
-    );
-    ctx.defsubr(
         "native-elisp-load",
         |_ctx, args| builtin_native_elisp_load(args),
         1,
@@ -6067,12 +6055,6 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
         |_ctx, args| builtin_string_distance(args),
         2,
         Some(3),
-    );
-    ctx.defsubr(
-        "subr-native-comp-unit",
-        |_ctx, args| builtin_subr_native_comp_unit(args),
-        1,
-        Some(1),
     );
     ctx.defsubr(
         "subr-native-lambda-list",

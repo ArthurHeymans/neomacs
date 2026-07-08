@@ -5834,31 +5834,15 @@ fn pure_dispatch_frame_menu_mouse_placeholders_match_compat_contracts() {
 }
 
 #[test]
-fn pure_dispatch_native_comp_placeholders_match_compat_contracts() {
+fn pure_dispatch_native_comp_surface_matches_no_native_comp_build() {
     crate::test_utils::init_test_tracing();
     let available = dispatch_builtin_pure("native-comp-available-p", vec![])
         .expect("builtin native-comp-available-p should resolve")
         .expect("builtin native-comp-available-p should evaluate");
     assert!(available.is_nil());
 
-    let unit_file = dispatch_builtin_pure(
-        "native-comp-unit-file",
-        vec![Value::vector(vec![Value::keyword("native-comp-unit")])],
-    )
-    .expect("builtin native-comp-unit-file should resolve")
-    .expect("builtin native-comp-unit-file should evaluate");
-    assert!(unit_file.is_nil());
-
-    let unit_set_file = dispatch_builtin_pure(
-        "native-comp-unit-set-file",
-        vec![
-            Value::vector(vec![Value::keyword("native-comp-unit")]),
-            Value::string("foo.eln"),
-        ],
-    )
-    .expect("builtin native-comp-unit-set-file should resolve")
-    .expect("builtin native-comp-unit-set-file should evaluate");
-    assert!(unit_set_file.is_nil());
+    assert!(dispatch_builtin_pure("native-comp-unit-file", vec![Value::NIL]).is_none());
+    assert!(dispatch_builtin_pure("native-comp-unit-set-file", vec![Value::NIL]).is_none());
 
     let native_elisp_load =
         dispatch_builtin_pure("native-elisp-load", vec![Value::string("foo.eln")])
@@ -6310,10 +6294,7 @@ fn pure_dispatch_sort_subr_placeholder_cluster_matches_compat_contracts() {
     .expect("builtin string-distance should evaluate");
     assert_eq!(string_distance, Value::fixnum(1));
 
-    let subr_unit = dispatch_builtin_pure("subr-native-comp-unit", vec![Value::NIL])
-        .expect("builtin subr-native-comp-unit should resolve")
-        .expect("builtin subr-native-comp-unit should evaluate");
-    assert!(subr_unit.is_nil());
+    assert!(dispatch_builtin_pure("subr-native-comp-unit", vec![Value::NIL]).is_none());
 
     let subr_lambda_list = dispatch_builtin_pure("subr-native-lambda-list", vec![Value::NIL])
         .expect("builtin subr-native-lambda-list should resolve")

@@ -989,8 +989,6 @@ fn subr_arity_command_read_primitives_match_oracle() {
     assert_subr_arity("mouse-position", 0, Some(0));
     assert_subr_arity("newline-cache-check", 0, Some(1));
     assert_subr_arity("native-comp-available-p", 0, Some(0));
-    assert_subr_arity("native-comp-unit-file", 1, Some(1));
-    assert_subr_arity("native-comp-unit-set-file", 2, Some(2));
     assert_subr_arity("native-elisp-load", 1, Some(2));
     assert_subr_arity("new-fontset", 2, Some(2));
     assert_subr_arity("object-intervals", 1, Some(1));
@@ -1045,7 +1043,6 @@ fn subr_arity_command_read_primitives_match_oracle() {
     assert_subr_arity("split-char", 1, Some(1));
     assert_subr_arity("string-distance", 2, Some(3));
     assert_subr_arity("subst-char-in-region", 4, Some(5));
-    assert_subr_arity("subr-native-comp-unit", 1, Some(1));
     assert_subr_arity("subr-native-lambda-list", 1, Some(1));
     assert_subr_arity("subr-type", 1, Some(1));
     assert_subr_arity("this-single-command-keys", 0, Some(0));

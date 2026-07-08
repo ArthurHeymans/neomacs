@@ -2714,46 +2714,6 @@ pub(crate) fn builtin_native_comp_available_p(args: Vec<Value>) -> EvalResult {
     Ok(Value::NIL)
 }
 
-pub(crate) fn builtin_native_comp_unit_file(args: Vec<Value>) -> EvalResult {
-    expect_args("native-comp-unit-file", &args, 1)?;
-    let is_native_comp_unit = match args[0].kind() {
-        ValueKind::Veclike(VecLikeType::Vector) => {
-            let items = args[0].as_vector_data().unwrap().clone();
-            items
-                .first()
-                .is_some_and(|v| v.as_symbol_name() == Some(":native-comp-unit"))
-        }
-        _ => false,
-    };
-    if !is_native_comp_unit {
-        return Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("native-comp-unit"), args[0]],
-        ));
-    }
-    Ok(Value::NIL)
-}
-
-pub(crate) fn builtin_native_comp_unit_set_file(args: Vec<Value>) -> EvalResult {
-    expect_args("native-comp-unit-set-file", &args, 2)?;
-    let is_native_comp_unit = match args[0].kind() {
-        ValueKind::Veclike(VecLikeType::Vector) => {
-            let items = args[0].as_vector_data().unwrap().clone();
-            items
-                .first()
-                .is_some_and(|v| v.as_symbol_name() == Some(":native-comp-unit"))
-        }
-        _ => false,
-    };
-    if !is_native_comp_unit {
-        return Err(signal(
-            "wrong-type-argument",
-            vec![Value::symbol("native-comp-unit"), args[0]],
-        ));
-    }
-    Ok(Value::NIL)
-}
-
 pub(crate) fn builtin_native_elisp_load(args: Vec<Value>) -> EvalResult {
     expect_range_args("native-elisp-load", &args, 1, 2)?;
     // Validate the argument is a string, then echo it back unchanged.
@@ -3499,11 +3459,6 @@ fn levenshtein_distance_bytes(a: &[u8], b: &[u8]) -> usize {
         std::mem::swap(&mut prev, &mut curr);
     }
     prev[n]
-}
-
-pub(crate) fn builtin_subr_native_comp_unit(args: Vec<Value>) -> EvalResult {
-    expect_args("subr-native-comp-unit", &args, 1)?;
-    Ok(Value::NIL)
 }
 
 pub(crate) fn builtin_subr_native_lambda_list(args: Vec<Value>) -> EvalResult {
