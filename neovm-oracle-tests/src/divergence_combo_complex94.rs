@@ -91,8 +91,7 @@ fn div_cx94_directory_files_recursively_nested() {
 #[test]
 fn div_cx94_locate_dominating_file_finds_in_parent() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect =
-        expect_test::expect![[r#""OK (\"/tmp/nix-shell.XcUf3d/neo-cx94-domFxnSim/\" \"\" nil)""#]];
+    let expect = expect_test::expect![[r#""OK (t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((root (make-temp-file "neo-cx94-dom" t))
@@ -102,10 +101,11 @@ fn div_cx94_locate_dominating_file_finds_in_parent() {
   (write-region "x" nil marker nil 'silent)
   (make-directory subsub t)
   (let ((located (locate-dominating-file subsub "MARKER")))
-    (delete-directory root t)
-    (list located
-          (and located (file-name-nondirectory located))
-          (and located (file-exists-p (expand-file-name "MARKER" located))))))
+    (prog1 (list (and located (file-equal-p located root))
+                 (and located (file-name-absolute-p located))
+                 (and located (string-suffix-p "/" located))
+                 (and located (file-exists-p (expand-file-name "MARKER" located))))
+      (delete-directory root t))))
 "##,
         expect,
     );
