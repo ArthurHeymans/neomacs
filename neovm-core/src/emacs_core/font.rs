@@ -544,7 +544,9 @@ fn sync_live_frame_font_state(
         frame.font_pixel_size = realized.font_size_px.max(1.0);
         frame.char_width = realized.char_width.max(1.0);
         frame.char_height = realized.line_height.max(1.0);
-        if frame.effective_window_system().is_some() {
+        let is_top_level_gui_frame =
+            frame.effective_window_system().is_some() && frame.parent_frame.as_frame_id().is_none();
+        if is_top_level_gui_frame {
             frame.defer_next_gui_parameter_resize();
             geometry_hints = Some(frame.gui_geometry_hints());
         }

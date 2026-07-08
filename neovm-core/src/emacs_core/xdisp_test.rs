@@ -2737,6 +2737,158 @@ fn test_posn_at_point_eval_returns_nil_for_positions_missing_entire_visible_row(
 }
 
 #[test]
+fn test_vertical_motion_eval_uses_live_redisplay_rows() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("xdisp-vertical-motion-rows", 160, 96, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let buf = eval.buffers.get_mut(buf_id).expect("buffer");
+        buf.insert(&"a\n".repeat(100));
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
+    }
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+            window_id: selected_window,
+            rows: vec![
+                crate::window::DisplayRowSnapshot {
+                    row: 0,
+                    y: 0,
+                    height: 16,
+                    start_x: 0,
+                    start_col: 0,
+                    end_x: 8,
+                    end_col: 1,
+                    start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                    end_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                },
+                crate::window::DisplayRowSnapshot {
+                    row: 1,
+                    y: 16,
+                    height: 16,
+                    start_x: 0,
+                    start_col: 0,
+                    end_x: 8,
+                    end_col: 1,
+                    start_buffer_pos: Some(crate::buffer::LispCharPos1::new(40)),
+                    end_buffer_pos: Some(crate::buffer::LispCharPos1::new(40)),
+                },
+                crate::window::DisplayRowSnapshot {
+                    row: 2,
+                    y: 32,
+                    height: 16,
+                    start_x: 0,
+                    start_col: 0,
+                    end_x: 8,
+                    end_col: 1,
+                    start_buffer_pos: Some(crate::buffer::LispCharPos1::new(80)),
+                    end_buffer_pos: Some(crate::buffer::LispCharPos1::new(80)),
+                },
+            ],
+            ..crate::window::WindowDisplaySnapshot::default()
+        }]);
+    }
+
+    let result = eval
+        .eval_str("(progn (goto-char 1) (list (vertical-motion 2) (point)))")
+        .unwrap();
+    assert_eq!(super::super::print::print_value(&result), "(2 80)");
+}
+
+#[test]
+fn test_vertical_motion_eval_uses_live_redisplay_goal_column() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = interactive_context();
+    let buf_id = eval.buffers.current_buffer().expect("current buffer").id;
+    let frame_id =
+        eval.frame_manager_mut()
+            .create_frame("xdisp-vertical-motion-column", 160, 96, buf_id);
+    let selected_window = eval
+        .frame_manager()
+        .get(frame_id)
+        .expect("frame")
+        .selected_window;
+    {
+        let buf = eval.buffers.get_mut(buf_id).expect("buffer");
+        buf.insert(&"a\n".repeat(100));
+        buf.goto_emacs_byte_pos(crate::buffer::EmacsBytePos::new(0));
+    }
+    {
+        let frame = eval.frame_manager_mut().get_mut(frame_id).expect("frame");
+        frame.replace_display_snapshots(vec![crate::window::WindowDisplaySnapshot {
+            window_id: selected_window,
+            points: vec![
+                crate::window::DisplayPointSnapshot {
+                    buffer_pos: crate::buffer::LispCharPos1::new(40),
+                    x: 0,
+                    y: 16,
+                    width: 8,
+                    height: 16,
+                    row: 1,
+                    col: 0,
+                },
+                crate::window::DisplayPointSnapshot {
+                    buffer_pos: crate::buffer::LispCharPos1::new(43),
+                    x: 24,
+                    y: 16,
+                    width: 8,
+                    height: 16,
+                    row: 1,
+                    col: 3,
+                },
+                crate::window::DisplayPointSnapshot {
+                    buffer_pos: crate::buffer::LispCharPos1::new(45),
+                    x: 40,
+                    y: 16,
+                    width: 8,
+                    height: 16,
+                    row: 1,
+                    col: 5,
+                },
+            ],
+            rows: vec![
+                crate::window::DisplayRowSnapshot {
+                    row: 0,
+                    y: 0,
+                    height: 16,
+                    start_x: 0,
+                    start_col: 0,
+                    end_x: 8,
+                    end_col: 1,
+                    start_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                    end_buffer_pos: Some(crate::buffer::LispCharPos1::new(1)),
+                },
+                crate::window::DisplayRowSnapshot {
+                    row: 1,
+                    y: 16,
+                    height: 16,
+                    start_x: 0,
+                    start_col: 0,
+                    end_x: 48,
+                    end_col: 6,
+                    start_buffer_pos: Some(crate::buffer::LispCharPos1::new(40)),
+                    end_buffer_pos: Some(crate::buffer::LispCharPos1::new(45)),
+                },
+            ],
+            ..crate::window::WindowDisplaySnapshot::default()
+        }]);
+    }
+
+    let result = eval
+        .eval_str("(progn (goto-char 1) (list (vertical-motion (cons 3 1)) (point)))")
+        .unwrap();
+    assert_eq!(super::super::print::print_value(&result), "(1 43)");
+}
+
+#[test]
 fn test_move_point_visually() {
     crate::test_utils::init_test_tracing();
     for direction in [1_i64, 0, -1, 2] {

@@ -7416,12 +7416,26 @@ pub(crate) fn x_create_frame_impl(
         display_host.is_some(),
         args.first()
     );
+    let explicit_font = Value::symbol("font")
+        .as_symbol_id()
+        .is_some_and(|font_key| parsed.all.contains_key(&font_key));
     let parent_id = parsed
         .parent_frame
         .filter(|parent_id| frames.get(*parent_id).is_some());
     let parent_frame_value = parent_id
         .map(|parent_id| Value::make_frame(parent_id.0))
         .unwrap_or(Value::NIL);
+    let inherited_font_state = if explicit_font {
+        None
+    } else {
+        parent_id
+            .and_then(|parent_id| frames.get(parent_id))
+            .and_then(|parent| {
+                let public_font = parent.known_parameter(FrameParam::Font)?;
+                let font_parameter = parent.parameter("font-parameter")?;
+                Some((public_font, font_parameter))
+            })
+    };
     let metrics = parent_id
         .and_then(|parent_id| frames.get(parent_id))
         .map(|parent| GuiFrameMetrics {
@@ -7534,6 +7548,10 @@ pub(crate) fn x_create_frame_impl(
         frame.set_parameter(Value::symbol("display-type"), Value::symbol("color"));
         frame.set_parameter(Value::symbol("background-mode"), Value::symbol("dark"));
         frame.install_gnu_gui_default_parameters();
+        if let Some((public_font, font_parameter)) = inherited_font_state {
+            frame.set_known_parameter(FrameParam::Font, public_font);
+            frame.set_parameter(Value::symbol("font-parameter"), font_parameter);
+        }
         for (key, value) in parsed.all {
             frame.set_parameter_key(FrameParamKey::from_symbol_id(key), value);
         }

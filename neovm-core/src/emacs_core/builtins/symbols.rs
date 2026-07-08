@@ -1,5 +1,7 @@
 use super::*;
-use crate::buffer::{CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, LispCharPos1};
+use crate::buffer::{
+    BufferId, CharLen, CharPos0, CharRange, EmacsByteLen, EmacsBytePos, LispCharPos1,
+};
 use crate::emacs_core::eval::{
     push_scratch_gc_root, restore_scratch_gc_roots, save_scratch_gc_roots,
 };
@@ -10,6 +12,7 @@ use crate::emacs_core::intern::{
 use crate::emacs_core::minibuffer;
 use crate::emacs_core::symbol::Obarray;
 use crate::emacs_core::{indent, xdisp};
+use crate::window::{DisplayRowSnapshot, WindowDisplaySnapshot, WindowId};
 use malachite::integer::Integer;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -2117,14 +2120,116 @@ fn next_screen_line_start_from(
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+struct LiveSnapshotVerticalMotion {
+    target: LispCharPos1,
+    moved: i64,
+}
+
+fn live_vertical_motion_snapshot<'a>(
+    eval: &'a super::eval::Context,
+    window: Option<Value>,
+    current_buffer: BufferId,
+) -> Option<&'a WindowDisplaySnapshot> {
+    let window = window.filter(|value| !value.is_nil());
+    let (frame, window_id) = if let Some(window) = window {
+        let window_id = WindowId(window.as_window_id()?);
+        let frame_id = eval.frames.find_window_frame_id(window_id)?;
+        (eval.frames.get(frame_id)?, window_id)
+    } else {
+        let frame = eval.frames.selected_frame()?;
+        (frame, frame.selected_window)
+    };
+    let live_window = frame.find_window(window_id)?;
+    if live_window.buffer_id()? != current_buffer {
+        return None;
+    }
+    frame.window_display_snapshot(window_id)
+}
+
+fn snapshot_text_rows(snapshot: &WindowDisplaySnapshot) -> Vec<&DisplayRowSnapshot> {
+    let mut rows: Vec<_> = snapshot
+        .rows
+        .iter()
+        .filter(|row| row.start_buffer_pos.is_some() && row.end_buffer_pos.is_some())
+        .collect();
+    rows.sort_by_key(|row| row.row);
+    rows
+}
+
+fn snapshot_row_index_for_pos(rows: &[&DisplayRowSnapshot], pos: LispCharPos1) -> Option<usize> {
+    rows.iter().position(|row| {
+        let Some(start) = row.start_buffer_pos else {
+            return false;
+        };
+        let Some(end) = row.end_buffer_pos else {
+            return false;
+        };
+        start <= pos && pos <= end
+    })
+}
+
+fn snapshot_target_pos_on_row(
+    snapshot: &WindowDisplaySnapshot,
+    row: &DisplayRowSnapshot,
+    cols: Option<i64>,
+) -> Option<LispCharPos1> {
+    let Some(target_col) = cols.map(|col| col.max(0)) else {
+        return row.start_buffer_pos;
+    };
+    snapshot
+        .points
+        .iter()
+        .filter(|point| point.row == row.row)
+        .min_by_key(|point| {
+            let distance = (point.col - target_col).abs();
+            let side = if point.col >= target_col { 0 } else { 1 };
+            (
+                distance,
+                side,
+                point.col,
+                point.x,
+                point.buffer_pos.as_i64(),
+            )
+        })
+        .map(|point| point.buffer_pos)
+        .or(row.start_buffer_pos)
+}
+
+fn vertical_motion_from_live_snapshot(
+    eval: &super::eval::Context,
+    window: Option<Value>,
+    current_buffer: BufferId,
+    point: LispCharPos1,
+    cols: Option<i64>,
+    lines: i64,
+) -> Option<LiveSnapshotVerticalMotion> {
+    if eval.noninteractive() {
+        return None;
+    }
+    let snapshot = live_vertical_motion_snapshot(eval, window, current_buffer)?;
+    let rows = snapshot_text_rows(snapshot);
+    let current_idx = snapshot_row_index_for_pos(&rows, point)?;
+    let target_idx = current_idx as i64 + lines;
+    if !(0..rows.len() as i64).contains(&target_idx) {
+        return None;
+    }
+    let target_idx = target_idx as usize;
+    let target = snapshot_target_pos_on_row(snapshot, rows[target_idx], cols)?;
+    Some(LiveSnapshotVerticalMotion {
+        target,
+        moved: target_idx as i64 - current_idx as i64,
+    })
+}
+
 /// `(vertical-motion LINES &optional WINDOW CUR-COL)` -> integer
 ///
 /// Move point to the start of the screen line LINES lines down (or up if
 /// negative).  Returns the number of lines actually moved.
 ///
 /// In GNU Emacs this uses the full display engine to handle word-wrap,
-/// display properties, etc.  Here we approximate with newline counting,
-/// which is correct for non-wrapped lines.
+/// display properties, etc.  In live frames, use the last redisplay snapshot
+/// for visible rows; otherwise approximate with buffer scanning.
 pub(crate) fn builtin_vertical_motion(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
@@ -2178,7 +2283,26 @@ pub(crate) fn builtin_vertical_motion(
     };
     let accessible = buf.accessible_emacs_byte_region();
     let pt = accessible.clamp(buf.point_emacs_byte_pos());
+    let pt_lisp = buf.emacs_byte_pos_to_lisp_char_pos(pt);
     let begv = accessible.start();
+
+    if let Some(snapshot_motion) = vertical_motion_from_live_snapshot(
+        eval,
+        args.get(1).copied(),
+        current_id,
+        pt_lisp,
+        cols,
+        lines,
+    ) {
+        let target = eval
+            .buffers
+            .get(current_id)
+            .map(|buf| buf.lisp_pos_to_emacs_byte_pos(snapshot_motion.target))
+            .unwrap_or(pt);
+        let _ = eval.buffers.goto_buffer_emacs_byte_pos(current_id, target);
+        return Ok(Value::fixnum(snapshot_motion.moved));
+    }
+
     let screen_width = vertical_motion_screen_width(eval, args.get(1).copied());
     let truncate_lines = super::window_cmds::window_truncates_lines_for_motion(
         eval,

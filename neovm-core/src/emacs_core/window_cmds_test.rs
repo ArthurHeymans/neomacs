@@ -4077,6 +4077,125 @@ fn x_create_frame_with_parent_frame_creates_gui_child_overlay_without_host_windo
 }
 
 #[test]
+fn x_create_frame_with_parent_frame_inherits_parent_font_state() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*scratch*");
+    let parent_id = ev.frames.create_frame("parent", 960, 640, scratch);
+    let parent_font_name = Value::string("-*-Hack-regular-normal-*-*-102-*-*-*-m-0-iso10646-1");
+    let parent_font_object = Value::vector(vec![
+        Value::keyword("font-object"),
+        Value::keyword("family"),
+        Value::string("Hack"),
+        Value::keyword("weight"),
+        Value::symbol("regular"),
+        Value::keyword("slant"),
+        Value::symbol("normal"),
+        Value::keyword("width"),
+        Value::symbol("normal"),
+        Value::keyword("size"),
+        Value::fixnum(102),
+        Value::keyword("height"),
+        Value::fixnum(102),
+        Value::keyword("name"),
+        parent_font_name,
+    ]);
+    {
+        let parent = ev.frames.get_mut(parent_id).expect("parent frame");
+        parent.set_window_system(Some(Value::symbol("neo")));
+        parent.set_known_parameter(FrameParam::Font, parent_font_name);
+        parent.set_parameter(Value::symbol("font-parameter"), parent_font_object);
+        parent.char_width = 7.2;
+        parent.char_height = 17.0;
+        parent.font_pixel_size = 13.0;
+    }
+    ev.frames.select_frame(parent_id);
+    ev.set_display_host(Box::new(RecordingDisplayHost::new()));
+
+    let params = Value::list(vec![
+        Value::cons(
+            Value::symbol("parent-frame"),
+            Value::make_frame(parent_id.0),
+        ),
+        Value::cons(Value::symbol("minibuffer"), Value::NIL),
+    ]);
+    let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
+    let child_id = crate::window::FrameId(
+        created
+            .as_frame_id()
+            .unwrap_or_else(|| panic!("expected frame object, got {:?}", created)),
+    );
+    let child = ev.frames.get(child_id).expect("child frame");
+
+    assert_eq!(
+        child.known_parameter(FrameParam::Font),
+        Some(parent_font_name)
+    );
+    assert_eq!(child.parameter("font-parameter"), Some(parent_font_object));
+}
+
+#[test]
+fn live_default_font_change_on_child_frame_skips_top_level_geometry_hints() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*scratch*");
+    ev.buffers.set_current(scratch);
+    let parent_id = ev.frames.create_frame("parent", 960, 640, scratch);
+    {
+        let parent = ev.frames.get_mut(parent_id).expect("parent frame");
+        parent.set_window_system(Some(Value::symbol("neo")));
+    }
+    ev.frames.select_frame(parent_id);
+    let host = RecordingDisplayHost::with_resolved_frame_font(ResolvedFrameFont {
+        family: LispString::from_utf8("Noto Sans Mono"),
+        foundry: None,
+        weight: FontWeight::NORMAL,
+        slant: FontSlant::Normal,
+        width: FontWidth::Normal,
+        postscript_name: Some(LispString::from_utf8("NotoSansMono-Regular")),
+        height_tenths: 160,
+        font_size_px: 22.0,
+        char_width: 13.0,
+        line_height: 31.0,
+    });
+    let geometry_hints = host.geometry_hints.clone();
+    ev.set_display_host(Box::new(host));
+
+    let params = Value::list(vec![
+        Value::cons(
+            Value::symbol("parent-frame"),
+            Value::make_frame(parent_id.0),
+        ),
+        Value::cons(Value::symbol("minibuffer"), Value::NIL),
+    ]);
+    let child = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
+    let child_id = crate::window::FrameId(
+        child
+            .as_frame_id()
+            .unwrap_or_else(|| panic!("expected frame object, got {:?}", child)),
+    );
+
+    crate::emacs_core::font::builtin_internal_set_lisp_face_attribute(
+        &mut ev,
+        vec![
+            Value::symbol("default"),
+            Value::keyword("font"),
+            Value::string("Noto Sans Mono-16"),
+            Value::make_frame(child_id.0),
+        ],
+    )
+    .expect("set child default face font");
+
+    let child_frame = ev.frames.get(child_id).expect("child frame");
+    assert_eq!(child_frame.char_width, 13.0);
+    assert_eq!(child_frame.char_height, 31.0);
+    assert!(
+        geometry_hints.borrow().is_empty(),
+        "child frames are composited by the parent and must not emit top-level geometry hints"
+    );
+}
+
+#[test]
 fn x_create_frame_accepts_text_pixel_size_on_gui_child_frame() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
