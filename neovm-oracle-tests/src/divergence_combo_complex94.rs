@@ -8,19 +8,21 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx94_file_truename_simple_no_symlinks() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"/tmp/nix-shell.XcUf3d/neo-cx94-tnssPBC0/simple.txt\" t t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (\"simple.txt\" t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((dir (make-temp-file "neo-cx94-tn" t))
        (f (expand-file-name "simple.txt" dir)))
-  (with-temp-buffer
-    (insert "content")
-    (write-region (point-min) (point-max) f nil 'silent))
-  (let ((true (file-truename f)))
-    (delete-directory dir t)
-    (list true (string= true f) (file-name-absolute-p true))))
+  (unwind-protect
+      (progn
+        (with-temp-buffer
+          (insert "content")
+          (write-region (point-min) (point-max) f nil 'silent))
+        (let ((true (file-truename f)))
+          (list (file-name-nondirectory true)
+                (string= true f)
+                (file-name-absolute-p true))))
+    (when (file-exists-p dir) (delete-directory dir t))))
 "##,
         expect,
     );
@@ -29,24 +31,27 @@ fn div_cx94_file_truename_simple_no_symlinks() {
 #[test]
 fn div_cx94_file_symlink_resolution_round_trip() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"/tmp/nix-shell.XcUf3d/neo-cx94-symzdkWQi/real.txt\" \"/tmp/nix-shell.XcUf3d/neo-cx94-symzdkWQi/real.txt\" t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (\"real.txt\" \"real.txt\" t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let* ((dir (make-temp-file "neo-cx94-sym" t))
            (real (expand-file-name "real.txt" dir))
            (link (expand-file-name "link.txt" dir)))
-      (with-temp-buffer
-        (insert "real")
-        (write-region (point-min) (point-max) real nil 'silent))
-      (make-symbolic-link real link)
-      (let ((true-of-link (file-truename link))
-            (true-of-real (file-truename real)))
-        (delete-directory dir t)
-        (list true-of-link true-of-real
-              (string= true-of-link true-of-real))))
+      (unwind-protect
+          (progn
+            (with-temp-buffer
+              (insert "real")
+              (write-region (point-min) (point-max) real nil 'silent))
+            (let ((default-directory (file-name-as-directory dir)))
+              (make-symbolic-link "real.txt" "link.txt"))
+            (let ((true-of-link (file-truename link))
+                  (true-of-real (file-truename real)))
+              (list (file-name-nondirectory true-of-link)
+                    (file-name-nondirectory true-of-real)
+                    (file-name-absolute-p true-of-link)
+                    (string= true-of-link true-of-real))))
+        (when (file-exists-p dir) (delete-directory dir t))))
   (error (list :errored (car e))))
 "##,
         expect,
@@ -171,24 +176,25 @@ fn div_cx94_directory_files_match_predicate() {
 #[test]
 fn div_cx94_file_attributes_with_symlink() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (nil \"/tmp/nix-shell.XcUf3d/neo-cx94-attrWNQDSO/real.dat\" \"/tmp/nix-shell.XcUf3d/neo-cx94-attrWNQDSO/real.dat\")""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (nil \"real.dat\" \"real.dat\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let* ((dir (make-temp-file "neo-cx94-attr" t))
            (real (expand-file-name "real.dat" dir))
            (link (expand-file-name "link.dat" dir)))
-      (write-region "real-content" nil real nil 'silent)
-      (make-symbolic-link real link)
-      (let ((attr-real (file-attributes real))
-            (attr-link (file-attributes link))
-            (attr-link-no-follow (file-attributes link t)))
-        (delete-directory dir t)
-        (list (file-attribute-type attr-real)
-              (file-attribute-type attr-link)
-              (file-attribute-type attr-link-no-follow))))
+      (unwind-protect
+          (progn
+            (write-region "real-content" nil real nil 'silent)
+            (let ((default-directory (file-name-as-directory dir)))
+              (make-symbolic-link "real.dat" "link.dat"))
+            (let ((attr-real (file-attributes real))
+                  (attr-link (file-attributes link))
+                  (attr-link-no-follow (file-attributes link t)))
+              (list (file-attribute-type attr-real)
+                    (file-attribute-type attr-link)
+                    (file-attribute-type attr-link-no-follow))))
+        (when (file-exists-p dir) (delete-directory dir t))))
   (error (list :errored (car e))))
 "##,
         expect,

@@ -136,24 +136,25 @@ fn div_cx304_set_file_modes_query() {
 #[test]
 fn div_cx304_file_symlink_p_query() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (\"/tmp/nix-shell.XcUf3d/neo-cx304-symgeKmh4/real.txt\" nil t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (\"real.txt\" nil t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (condition-case e
     (let* ((dir (make-temp-file "neo-cx304-sym" t))
            (real (expand-file-name "real.txt" dir))
            (link (expand-file-name "link.txt" dir)))
-      (write-region "content" nil real nil 'silent)
-      (make-symbolic-link real link)
-      (let ((link-target (file-symlink-p link))
-            (real-target (file-symlink-p real))
-            (true-link (file-truename link))
-            (true-real (file-truename real)))
-        (delete-directory dir t)
-        (list link-target real-target
-              (string= true-link true-real))))
+      (unwind-protect
+          (progn
+            (write-region "content" nil real nil 'silent)
+            (let ((default-directory (file-name-as-directory dir)))
+              (make-symbolic-link "real.txt" "link.txt"))
+            (let ((link-target (file-symlink-p link))
+                  (real-target (file-symlink-p real))
+                  (true-link (file-truename link))
+                  (true-real (file-truename real)))
+              (list link-target real-target
+                    (string= true-link true-real))))
+        (when (file-exists-p dir) (delete-directory dir t))))
   (error (list :errored (car e))))
 "##,
         expect,
