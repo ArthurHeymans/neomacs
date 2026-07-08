@@ -6128,6 +6128,48 @@ fn window_end_prefers_last_redisplay_snapshot_when_available() {
 }
 
 #[test]
+fn window_end_update_in_batch_returns_stored_end_without_estimate() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    ev.set_variable("noninteractive", Value::T);
+    let buf = ev.buffers.create_buffer("*scratch*");
+    ev.buffers.set_current(buf);
+    ev.buffers
+        .get_mut(buf)
+        .expect("scratch buffer")
+        .insert(&vec!["line of content"; 50].join("\n"));
+    let fid = ev.frames.create_frame("F1", 80, 25, buf);
+    let wid = ev.frames.get(fid).expect("frame").selected_window;
+    let point_max = ev
+        .buffers
+        .get(buf)
+        .expect("scratch buffer")
+        .point_max_char_pos()
+        .get();
+
+    {
+        let frame = ev.frames.get_mut(fid).expect("frame");
+        if let Some(crate::window::Window::Leaf {
+            window_start,
+            window_end_pos,
+            window_end_valid,
+            ..
+        }) = frame.find_window_mut(wid)
+        {
+            *window_start = LispCharPos1::from_one_based_usize(50);
+            *window_end_pos = 0;
+            *window_end_valid = false;
+        } else {
+            panic!("selected window should be a leaf");
+        }
+    }
+
+    let result =
+        super::builtin_window_end(&mut ev, vec![Value::NIL, Value::T]).expect("window-end");
+    assert_eq!(result, Value::fixnum(point_max as i64 + 1));
+}
+
+#[test]
 fn window_chrome_height_queries_prefer_last_redisplay_snapshot_when_available() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

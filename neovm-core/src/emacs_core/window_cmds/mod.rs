@@ -2139,10 +2139,12 @@ fn estimated_window_end_from_body_lines(
 
 /// `(window-end &optional WINDOW UPDATE)` -> integer position.
 pub(crate) fn builtin_window_end(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
+    let noninteractive = eval.noninteractive();
     let (frames, buffers) = (&mut eval.frames, &mut eval.buffers);
     expect_max_args("window-end", &args, 2)?;
     let (fid, wid) =
         resolve_window_id_with_pred_in_state(frames, buffers, args.first(), "window-live-p")?;
+    let frame_initial = frames.get(fid).is_some_and(|frame| frame.initial);
     let w = get_leaf(frames, fid, wid)?;
     match w {
         Window::Leaf {
@@ -2167,9 +2169,7 @@ pub(crate) fn builtin_window_end(eval: &mut super::eval::Context, args: Vec<Valu
             {
                 return Ok(Value::fixnum(snapshot_end.as_i64()));
             }
-            if !update_requested
-                && (*window_end_valid || stored_end > window_start.to_one_based_usize())
-            {
+            if !update_requested || noninteractive || frame_initial || *window_end_valid {
                 return Ok(Value::fixnum(stored_end as i64));
             }
 
