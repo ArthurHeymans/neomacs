@@ -2060,11 +2060,11 @@ pub struct Context {
     /// similarly compact while this side stack owns the exact-GC roots.
     backtrace_args_stack: Vec<LispArgVec>,
     /// Exact-GC mirror of GNU eval.c's transient C stack Lisp_Object slots.
-    /// Examples include `Fprogn` seeing just-returned eval_sub argument arrays
-    /// through conservative stack scanning, and `Flet` retaining its `temps`
-    /// array until `SAFE_FREE_UNBIND_TO`.
+    /// Examples include a sequence frame seeing the previous evaluated call's
+    /// argument array while it evaluates the next form, and `Flet` retaining
+    /// its `temps` array until `SAFE_FREE_UNBIND_TO`.
     eval_temp_roots: Vec<Value>,
-    sequence_temp_root_depth: usize,
+    sequence_temp_root_bases: Vec<usize>,
     /// Contiguous bytecode stack buffer, matching GNU Emacs's bc_thread_state.
     /// All bytecode frames share this single buffer. GC scans it directly.
     pub(crate) bc_buf: Vec<Value>,
@@ -5105,7 +5105,7 @@ impl Context {
             vm_root_frames: Vec::new(),
             backtrace_args_stack: Vec::new(),
             eval_temp_roots: Vec::new(),
-            sequence_temp_root_depth: 0,
+            sequence_temp_root_bases: Vec::new(),
             bc_buf: Vec::with_capacity(4096),
             bc_frames: Vec::new(),
             condition_stack: Vec::new(),
@@ -5290,7 +5290,7 @@ impl Context {
             vm_root_frames: Vec::new(),
             backtrace_args_stack: Vec::new(),
             eval_temp_roots: Vec::new(),
-            sequence_temp_root_depth: 0,
+            sequence_temp_root_bases: Vec::new(),
             bc_buf: Vec::with_capacity(4096),
             bc_frames: Vec::new(),
             condition_stack: Vec::new(),
@@ -12117,22 +12117,25 @@ impl Context {
     }
 
     fn save_sequence_temp_roots(&mut self) -> SequenceTempRootScopeState {
-        self.sequence_temp_root_depth += 1;
-        SequenceTempRootScopeState {
-            saved_len: self.eval_temp_roots.len(),
-        }
+        let saved_len = self.eval_temp_roots.len();
+        self.sequence_temp_root_bases.push(saved_len);
+        SequenceTempRootScopeState { saved_len }
     }
 
     fn restore_sequence_temp_roots(&mut self, scope: SequenceTempRootScopeState) {
-        debug_assert!(self.sequence_temp_root_depth > 0);
+        let saved_len = self
+            .sequence_temp_root_bases
+            .pop()
+            .expect("sequence temp root restore without matching save");
+        debug_assert_eq!(saved_len, scope.saved_len);
         self.eval_temp_roots.truncate(scope.saved_len);
-        self.sequence_temp_root_depth = self.sequence_temp_root_depth.saturating_sub(1);
     }
 
     fn record_sequence_temp_roots_from_backtrace(&mut self, count: usize) {
-        if self.sequence_temp_root_depth == 0 {
+        let Some(&saved_len) = self.sequence_temp_root_bases.last() else {
             return;
-        }
+        };
+        self.eval_temp_roots.truncate(saved_len);
         let Some(SpecBinding::Backtrace { args, .. }) = self.specpdl.get(count) else {
             return;
         };

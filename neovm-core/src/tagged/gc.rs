@@ -2640,6 +2640,11 @@ pub struct TaggedHeap {
 
     /// Gray worklist for mark phase.
     gray_queue: Vec<TaggedValue>,
+    /// Per-cycle mark bits for symbols. GNU symbols are GC-managed objects, so
+    /// weak hash tables decide symbol-key survival from the symbol mark bit.
+    /// Neomacs stores symbols as immediate `SymId`s, so the collector mirrors
+    /// that mark bit here for weak-table semantics.
+    marked_symbols: FxHashSet<SymId>,
     /// Weak hash tables discovered during this cycle's mark. Their entries are
     /// NOT traced inline (so a weak key/value does not keep its entry alive);
     /// `mark_and_sweep_weak_tables` instead processes them at the stop-the-world
@@ -3009,6 +3014,7 @@ impl TaggedHeap {
             bytes_since_gc: 0,
             live_bytes: 0,
             gray_queue: Vec::new(),
+            marked_symbols: FxHashSet::default(),
             weak_hash_tables: Vec::new(),
             permanent_weak_hash_tables: Vec::new(),
             finalizer_registry: Vec::new(),
@@ -4574,6 +4580,7 @@ impl TaggedHeap {
 
         // -- Seed gray queue from roots --
         self.gray_queue.clear();
+        self.marked_symbols.clear();
         self.weak_hash_tables.clear();
         self.mark_cons_block_cache = None;
         // New mark cycle: the per-cycle SATB pre-image dedup set must start empty
@@ -4963,12 +4970,8 @@ impl TaggedHeap {
                 let cell = unsafe { start.add(i) };
                 let car = unsafe { (*cell).load_car() };
                 let cdr = unsafe { (*cell).load_cdr() };
-                if car.is_heap_object() {
-                    self.push_gray(car, "first-cycle-mapped-cons-car");
-                }
-                if cdr.is_heap_object() {
-                    self.push_gray(cdr, "first-cycle-mapped-cons-cdr");
-                }
+                self.mark_or_push_child(car, "first-cycle-mapped-cons-car");
+                self.mark_or_push_child(cdr, "first-cycle-mapped-cons-cdr");
             }
         }
         let strings: Vec<*mut StringObj> =
@@ -4980,9 +4983,7 @@ impl TaggedHeap {
                 intervals.for_each_root(|root| roots.push(root));
             }
             for root in roots {
-                if root.is_heap_object() {
-                    self.push_gray(root, "first-cycle-mapped-string-interval");
-                }
+                self.mark_or_push_child(root, "first-cycle-mapped-string-interval");
             }
         }
     }
@@ -5025,12 +5026,8 @@ impl TaggedHeap {
             let ptr = owner.xcons_ptr();
             let car = unsafe { (*ptr).load_car() };
             let cdr = unsafe { (*ptr).load_cdr() };
-            if car.is_heap_object() {
-                self.push_gray(car, origin);
-            }
-            if cdr.is_heap_object() {
-                self.push_gray(cdr, origin);
-            }
+            self.mark_or_push_child(car, origin);
+            self.mark_or_push_child(cdr, origin);
         } else if owner.is_veclike() {
             if let Some(ptr) = owner.as_veclike_ptr() {
                 // A dumped/tenured WEAK hash table is permanent-black, so the main
@@ -5048,9 +5045,7 @@ impl TaggedHeap {
                 // themselves and do NOT mark their contents.
                 if let Some(weak_children) = self.register_weak_hash_table_for_sweep(ptr) {
                     for child in weak_children {
-                        if child.is_heap_object() {
-                            self.push_gray(child, origin);
-                        }
+                        self.mark_or_push_child(child, origin);
                     }
                 } else {
                     // STRONG enumeration for every other veclike (and non-weak
@@ -5059,9 +5054,7 @@ impl TaggedHeap {
                     // permanent owner to be marked, or it is swept while still
                     // referenced (UAF).
                     for child in self.collect_veclike_children(ptr as *mut VecLikeHeader) {
-                        if child.is_heap_object() {
-                            self.push_gray(child, origin);
-                        }
+                        self.mark_or_push_child(child, origin);
                     }
                 }
             }
@@ -5070,9 +5063,7 @@ impl TaggedHeap {
                 let intervals = unsafe { (*(ptr as *const StringObj)).data.intervals() };
                 if !intervals.is_empty() {
                     intervals.for_each_root(|root| {
-                        if root.is_heap_object() {
-                            self.push_gray(root, origin);
-                        }
+                        self.mark_or_push_child(root, origin);
                     });
                 }
             }
@@ -5083,6 +5074,10 @@ impl TaggedHeap {
     /// Is `value` currently marked? Covers heap and mapped objects of every
     /// category. Used only by the dump-partition verifier.
     fn is_value_marked(&self, value: TaggedValue) -> bool {
+        if let crate::tagged::value::ValueKind::Symbol(id) = value.kind() {
+            return crate::emacs_core::intern::is_canonical_id(id)
+                || self.marked_symbols.contains(&id);
+        }
         if value.is_cons() {
             let ptr = value.xcons_ptr();
             if ConsBlock::ptr_is_cell_aligned(ptr) {
@@ -5605,6 +5600,10 @@ impl TaggedHeap {
     }
 
     pub(crate) fn seed_root_with_origin(&mut self, root: TaggedValue, origin: &str) {
+        if let crate::tagged::value::ValueKind::Symbol(id) = root.kind() {
+            self.mark_symbol(id);
+            return;
+        }
         if !root.is_heap_object() {
             return;
         }
@@ -5664,9 +5663,7 @@ impl TaggedHeap {
         // `reseed_runtime_and_remembered_roots`).
         self.last_runtime_seed_roots = roots.len();
         for (value, origin) in roots {
-            if value.is_heap_object() {
-                self.push_gray(value, origin);
-            }
+            self.mark_or_push_child(value, origin);
         }
         self.last_runtime_seed_us = seed_t0.elapsed().as_micros() as u64;
     }
@@ -5732,9 +5729,7 @@ impl TaggedHeap {
             return;
         }
         for function in doomed.iter().copied() {
-            if function.is_heap_object() {
-                self.push_gray(function, "doomed-finalizer-function");
-            }
+            self.mark_or_push_child(function, "doomed-finalizer-function");
         }
         self.mark_all();
         self.doomed_finalizer_functions.extend(doomed);
@@ -5824,11 +5819,11 @@ impl TaggedHeap {
                     let value_survives = self.is_value_marked(value);
                     if Self::keep_weak_entry(weakness, key_survives, value_survives) {
                         if !key_survives {
-                            self.push_gray(key, "weak-hash-key");
+                            self.mark_or_push_child(key, "weak-hash-key");
                             marked = true;
                         }
                         if !value_survives {
-                            self.push_gray(value, "weak-hash-value");
+                            self.mark_or_push_child(value, "weak-hash-value");
                             marked = true;
                         }
                     }
@@ -6989,6 +6984,21 @@ impl TaggedHeap {
         self.gray_queue.push(val);
     }
 
+    fn mark_symbol(&mut self, id: SymId) {
+        if crate::emacs_core::intern::is_canonical_id(id) {
+            return;
+        }
+        self.marked_symbols.insert(id);
+    }
+
+    fn mark_or_push_child(&mut self, val: TaggedValue, origin: &str) {
+        match val.kind() {
+            crate::tagged::value::ValueKind::Symbol(id) => self.mark_symbol(id),
+            _ if val.is_heap_object() => self.push_gray(val, origin),
+            _ => {}
+        }
+    }
+
     #[cfg(debug_assertions)]
     fn debug_assert_heap_tag_matches_header(&self, val: TaggedValue, origin: &str) {
         if val.is_cons() {
@@ -7037,17 +7047,15 @@ impl TaggedHeap {
 
     /// Mark a single tagged value and push its children onto the gray queue.
     fn mark_value(&mut self, val: TaggedValue) {
-        if val.is_cons() {
+        if let crate::tagged::value::ValueKind::Symbol(id) = val.kind() {
+            self.mark_symbol(id);
+        } else if val.is_cons() {
             let ptr = val.xcons_ptr();
             if self.mark_cons(ptr) {
                 let car = unsafe { (*ptr).load_car() };
                 let cdr = unsafe { (*ptr).load_cdr() };
-                if car.is_heap_object() {
-                    self.push_gray(car, "cons-car");
-                }
-                if cdr.is_heap_object() {
-                    self.push_gray(cdr, "cons-cdr");
-                }
+                self.mark_or_push_child(car, "cons-car");
+                self.mark_or_push_child(cdr, "cons-cdr");
             }
         } else if val.is_string() {
             let ptr = val.as_string_ptr().unwrap() as *mut StringObj;
@@ -7057,9 +7065,7 @@ impl TaggedHeap {
                         let intervals = (*ptr).data.intervals();
                         if !intervals.is_empty() {
                             intervals.for_each_root(|root| {
-                                if root.is_heap_object() {
-                                    self.push_gray(root, "mapped-string-interval");
-                                }
+                                self.mark_or_push_child(root, "mapped-string-interval");
                             });
                         }
                     }
@@ -7085,9 +7091,7 @@ impl TaggedHeap {
                 let intervals = (*ptr).data.intervals();
                 if !intervals.is_empty() {
                     intervals.for_each_root(|root| {
-                        if root.is_heap_object() {
-                            self.push_gray(root, "string-interval");
-                        }
+                        self.mark_or_push_child(root, "string-interval");
                     });
                 }
             };
@@ -7214,9 +7218,7 @@ impl TaggedHeap {
             VecLikeType::Vector => {
                 let obj = ptr as *const VectorObj;
                 for val in unsafe { (*obj).data.iter_atomic() } {
-                    if val.is_heap_object() {
-                        self.push_gray(val, "vector-slot");
-                    }
+                    self.mark_or_push_child(val, "vector-slot");
                 }
             }
             VecLikeType::CharTable => {
@@ -7227,36 +7229,26 @@ impl TaggedHeap {
                     (load_value_atomic(&obj.purpose), "char-table-purpose"),
                     (load_value_atomic(&obj.ascii), "char-table-ascii"),
                 ] {
-                    if value.is_heap_object() {
-                        self.push_gray(value, origin);
-                    }
+                    self.mark_or_push_child(value, origin);
                 }
                 for slot in &obj.contents {
                     let val = load_value_atomic(slot);
-                    if val.is_heap_object() {
-                        self.push_gray(val, "char-table-content");
-                    }
+                    self.mark_or_push_child(val, "char-table-content");
                 }
                 for val in obj.extras.iter_atomic() {
-                    if val.is_heap_object() {
-                        self.push_gray(val, "char-table-extra");
-                    }
+                    self.mark_or_push_child(val, "char-table-extra");
                 }
             }
             VecLikeType::SubCharTable => {
                 let obj = unsafe { &*(ptr as *const SubCharTableObj) };
                 for val in obj.contents.iter_atomic() {
-                    if val.is_heap_object() {
-                        self.push_gray(val, "sub-char-table-content");
-                    }
+                    self.mark_or_push_child(val, "sub-char-table-content");
                 }
             }
             VecLikeType::Record | VecLikeType::WindowConfiguration => {
                 let obj = ptr as *const RecordObj;
                 for val in unsafe { (*obj).data.iter_atomic() } {
-                    if val.is_heap_object() {
-                        self.push_gray(val, "record-slot");
-                    }
+                    self.mark_or_push_child(val, "record-slot");
                 }
             }
             VecLikeType::HashTable => {
@@ -7282,16 +7274,12 @@ impl TaggedHeap {
                     // Trace all values in the hash table
                     for slot in ht.data.values() {
                         let val = load_value_atomic(slot);
-                        if val.is_heap_object() {
-                            self.push_gray(val, "hash-table-value");
-                        }
+                        self.mark_or_push_child(val, "hash-table-value");
                     }
                     // Trace key snapshots (original key objects)
                     for slot in ht.key_snapshots.values() {
                         let val = load_value_atomic(slot);
-                        if val.is_heap_object() {
-                            self.push_gray(val, "hash-table-key-snapshot");
-                        }
+                        self.mark_or_push_child(val, "hash-table-key-snapshot");
                     }
                 }
                 // Custom test/hash closures (from `define-hash-table-test`) live
@@ -7300,23 +7288,17 @@ impl TaggedHeap {
                 // gethash/puthash calls a freed function (use-after-free). The
                 // fields are immutable after table creation, so a plain read is
                 // race-free during a concurrent mark.
-                if let Some(f) = ht.user_cmp_function
-                    && f.is_heap_object()
-                {
-                    self.push_gray(f, "hash-table-user-cmp");
+                if let Some(f) = ht.user_cmp_function {
+                    self.mark_or_push_child(f, "hash-table-user-cmp");
                 }
-                if let Some(f) = ht.user_hash_function
-                    && f.is_heap_object()
-                {
-                    self.push_gray(f, "hash-table-user-hash");
+                if let Some(f) = ht.user_hash_function {
+                    self.mark_or_push_child(f, "hash-table-user-hash");
                 }
             }
             VecLikeType::Obarray => {
                 let obj = unsafe { &*(ptr as *const ObarrayObj) };
                 for val in obj.buckets.iter_atomic() {
-                    if val.is_heap_object() {
-                        self.push_gray(val, "obarray-bucket");
-                    }
+                    self.mark_or_push_child(val, "obarray-bucket");
                 }
             }
             VecLikeType::Lambda | VecLikeType::Macro => {
@@ -7324,45 +7306,31 @@ impl TaggedHeap {
                 // Trace ALL slots uniformly — no type-specific logic needed.
                 let obj = ptr as *const LambdaObj;
                 for val in unsafe { (*obj).data.iter_atomic() } {
-                    if val.is_heap_object() {
-                        self.push_gray(val, "closure-slot");
-                    }
+                    self.mark_or_push_child(val, "closure-slot");
                 }
             }
             VecLikeType::ByteCode => {
                 let obj = ptr as *const ByteCodeObj;
                 let data = unsafe { &(*obj).data };
-                if data.arglist.is_heap_object() {
-                    self.push_gray(data.arglist, "bytecode-arglist");
-                }
+                self.mark_or_push_child(data.arglist, "bytecode-arglist");
                 // Trace constants vector
                 for val in &data.constants {
-                    if val.is_heap_object() {
-                        self.push_gray(*val, "bytecode-constant");
-                    }
+                    self.mark_or_push_child(*val, "bytecode-constant");
                 }
                 // Trace captured lexical environment
                 if let Some(env) = data.env {
-                    if env.is_heap_object() {
-                        self.push_gray(env, "bytecode-env");
-                    }
+                    self.mark_or_push_child(env, "bytecode-env");
                 }
                 // Trace doc_form (can be a Value)
                 if let Some(doc_form) = data.doc_form {
-                    if doc_form.is_heap_object() {
-                        self.push_gray(doc_form, "bytecode-doc-form");
-                    }
+                    self.mark_or_push_child(doc_form, "bytecode-doc-form");
                 }
                 // Trace interactive spec
                 if let Some(interactive) = data.interactive {
-                    if interactive.is_heap_object() {
-                        self.push_gray(interactive, "bytecode-interactive");
-                    }
+                    self.mark_or_push_child(interactive, "bytecode-interactive");
                 }
                 for val in &data.extra_slots {
-                    if val.is_heap_object() {
-                        self.push_gray(*val, "bytecode-extra-slot");
-                    }
+                    self.mark_or_push_child(*val, "bytecode-extra-slot");
                 }
             }
             VecLikeType::Overlay => {
@@ -7370,21 +7338,15 @@ impl TaggedHeap {
                 let data = unsafe { &(*obj).data };
                 // Trace the property list
                 let plist = load_value_atomic(&data.plist);
-                if plist.is_heap_object() {
-                    self.push_gray(plist, "overlay-plist");
-                }
+                self.mark_or_push_child(plist, "overlay-plist");
             }
             VecLikeType::SymbolWithPos => {
                 // Trace both the symbol and the position fields.
                 let obj = ptr as *const SymbolWithPosObj;
                 let sym = unsafe { (*obj).sym };
                 let pos = unsafe { (*obj).pos };
-                if sym.is_heap_object() {
-                    self.push_gray(sym, "symbol-with-pos-symbol");
-                }
-                if pos.is_heap_object() {
-                    self.push_gray(pos, "symbol-with-pos-position");
-                }
+                self.mark_or_push_child(sym, "symbol-with-pos-symbol");
+                self.mark_or_push_child(pos, "symbol-with-pos-position");
             }
             VecLikeType::Finalizer => {
                 // A REACHABLE finalizer keeps its function alive (GNU
@@ -7392,20 +7354,14 @@ impl TaggedHeap {
                 // handled at mark termination by
                 // `mark_and_queue_doomed_finalizers`.
                 let function = unsafe { (*(ptr as *const FinalizerObj)).function };
-                if function.is_heap_object() {
-                    self.push_gray(function, "finalizer-function");
-                }
+                self.mark_or_push_child(function, "finalizer-function");
             }
             VecLikeType::ModuleFunction => {
                 let obj = ptr as *const ModuleFunctionObj;
                 let doc = unsafe { (*obj).documentation };
                 let interactive = unsafe { (*obj).interactive_form };
-                if doc.is_heap_object() {
-                    self.push_gray(doc, "module-function-documentation");
-                }
-                if interactive.is_heap_object() {
-                    self.push_gray(interactive, "module-function-interactive");
-                }
+                self.mark_or_push_child(doc, "module-function-documentation");
+                self.mark_or_push_child(interactive, "module-function-interactive");
             }
             VecLikeType::Xwidget => {
                 let obj = ptr as *const XwidgetObj;
@@ -7422,9 +7378,7 @@ impl TaggedHeap {
                     ]
                 };
                 for (value, label) in fields {
-                    if value.is_heap_object() {
-                        self.push_gray(value, label);
-                    }
+                    self.mark_or_push_child(value, label);
                 }
             }
             VecLikeType::XwidgetView => {
@@ -7436,9 +7390,7 @@ impl TaggedHeap {
                     ]
                 };
                 for (value, label) in fields {
-                    if value.is_heap_object() {
-                        self.push_gray(value, label);
-                    }
+                    self.mark_or_push_child(value, label);
                 }
             }
             VecLikeType::Buffer
