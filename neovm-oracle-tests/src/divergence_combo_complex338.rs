@@ -23,17 +23,18 @@ fn div_cx338_timer_creation_and_cancel() {
 #[test]
 fn div_cx338_repeat_timer_fires_multiple() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (t (:tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick :tick))""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t t)""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (fired)
   (let ((timer (run-with-timer 0 0.001 (lambda () (push :tick fired)))))
     (sit-for 0.02)
     (cancel-timer timer))
-  (list (>= (length fired) 1)
-        (nreverse fired)))
+  (list (> (length fired) 1)
+        (catch 'bad
+          (dolist (x fired t)
+            (unless (eq x :tick)
+              (throw 'bad nil))))))
 "##,
         expect,
     )

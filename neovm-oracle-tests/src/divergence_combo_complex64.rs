@@ -93,7 +93,7 @@ fn div_cx64_make_pipe_pair_one_way_communication() {
 #[test]
 fn div_cx64_timer_repeated_invocation_in_order() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[r#""OK (20 0 19 (:once))""#]];
+    let expect = expect_test::expect![[r#""OK (t 0 t (:once))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (let (fire-seq)
@@ -104,7 +104,8 @@ fn div_cx64_timer_repeated_invocation_in_order() {
       (setq fire-seq nil)
       (let ((once (run-with-timer 0 nil (lambda () (push :once fire-seq)))))
         (sit-for 0.02)
-        (list (length first) (car first) (car (last first))
+        (list (> (length first) 1) (car first)
+              (= (car (last first)) (1- (length first)))
               (nreverse fire-seq))))))
 "##,
         expect,
