@@ -9,21 +9,28 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 fn div_cx254_dir_locals_read() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (nil /tmp/nix-shell.XcUf3d/neo-cx254-dirlocalsrEwVmD/.dir-locals.el)""#
+        r#""OK (t ((neo-cx254-var . \"test-value\")) ((neo-cx254-elisp . t)))""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
-(let* ((dir (make-temp-file "neo-cx254-dirlocals" t))
-       (locals-file (expand-file-name ".dir-locals.el" dir)))
-  (with-temp-buffer
-    (insert "((nil . ((neo-cx254-var . \"test-value\")))
-              (emacs-lisp-mode . ((neo-cx254-elisp . t))))")
-    (write-region (point-min) (point-max) locals-file nil 'silent))
-  (condition-case e
-      (let ((result (dir-locals-read-from-file locals-file)))
-        (delete-directory dir t)
-        (list (consp result) result))
-    (error (progn (delete-directory dir t) (list :errored (car e))))))
+(let ((dir-locals-class-alist nil)
+      (dir-locals-directory-cache nil))
+  (let* ((dir (make-temp-file "neo-cx254-dirlocals" t))
+         (locals-file (expand-file-name ".dir-locals.el" dir)))
+    (unwind-protect
+        (progn
+          (with-temp-buffer
+            (insert "((nil . ((neo-cx254-var . \"test-value\")))
+                      (emacs-lisp-mode . ((neo-cx254-elisp . t))))")
+            (write-region (point-min) (point-max) locals-file nil 'silent))
+          (condition-case e
+              (let* ((class (dir-locals-read-from-file dir))
+                     (variables (dir-locals-get-class-variables class)))
+                (list (symbolp class)
+                      (cdr (assq nil variables))
+                      (cdr (assq 'emacs-lisp-mode variables))))
+            (error (list :errored (car e)))))
+      (when (file-exists-p dir) (delete-directory dir t)))))
 "##,
         expect,
     )
