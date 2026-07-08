@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use crate::keyboard::SpecialInputServiceOutcome;
 
 use super::error::Flow;
+use super::eval::GnuTimerTimestamp;
 use super::process::{
     ProcessId, ProcessOutputServiceOutcome, ProcessOutputServiceRequest, ProcessOutputWaitRequest,
     ProcessOutputWaitTiming, ProcessWaitBackendInterest, ProcessWaitEvents,
@@ -19,20 +20,106 @@ use super::process::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum WaitDeadline {
     Poll,
-    Until(Instant),
+    Until {
+        instant: Instant,
+        coarse_end: Option<Duration>,
+        timer_deadline: GnuTimerTimestamp,
+    },
     Forever,
 }
 
+fn monotonic_coarse_now() -> Option<Duration> {
+    #[cfg(any(target_os = "android", target_os = "linux"))]
+    {
+        let mut ts = std::mem::MaybeUninit::<libc::timespec>::uninit();
+        let rc = unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC_COARSE, ts.as_mut_ptr()) };
+        if rc == 0 {
+            let ts = unsafe { ts.assume_init() };
+            if ts.tv_sec >= 0 && ts.tv_nsec >= 0 {
+                return Some(Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32));
+            }
+        }
+    }
+
+    None
+}
+
 impl WaitDeadline {
+    fn until(instant: Instant) -> Self {
+        let now = Instant::now();
+        let remaining = instant.saturating_duration_since(now);
+        Self::until_with_timer_deadline(
+            instant,
+            None,
+            GnuTimerTimestamp::now().add_duration(remaining),
+        )
+    }
+
+    fn for_duration(duration: Duration) -> Self {
+        Self::for_duration_with_timer_deadline(
+            duration,
+            GnuTimerTimestamp::now().add_duration(duration),
+        )
+    }
+
+    fn for_duration_with_timer_deadline(
+        duration: Duration,
+        timer_deadline: GnuTimerTimestamp,
+    ) -> Self {
+        Self::until_with_timer_deadline(
+            Instant::now() + duration,
+            monotonic_coarse_now().map(|now| now + duration),
+            timer_deadline,
+        )
+    }
+
+    fn until_with_timer_deadline(
+        instant: Instant,
+        coarse_end: Option<Duration>,
+        timer_deadline: GnuTimerTimestamp,
+    ) -> Self {
+        Self::Until {
+            instant,
+            coarse_end,
+            timer_deadline,
+        }
+    }
+
     fn expired(self, now: Instant) -> bool {
-        matches!(self, Self::Until(deadline) if now >= deadline)
+        match self {
+            Self::Until {
+                instant,
+                coarse_end: Some(coarse_end),
+                ..
+            } => {
+                monotonic_coarse_now().map_or(now >= instant, |coarse_now| coarse_now >= coarse_end)
+            }
+            Self::Until { instant, .. } => now >= instant,
+            Self::Poll | Self::Forever => false,
+        }
     }
 
     fn remaining(self, now: Instant) -> Option<Duration> {
         match self {
             Self::Poll => Some(Duration::ZERO),
-            Self::Until(deadline) => Some(deadline.saturating_duration_since(now)),
+            Self::Until {
+                instant,
+                coarse_end: Some(coarse_end),
+                ..
+            } => Some(
+                monotonic_coarse_now()
+                    .map(|coarse_now| coarse_end.saturating_sub(coarse_now))
+                    .unwrap_or_else(|| instant.saturating_duration_since(now)),
+            ),
+            Self::Until { instant, .. } => Some(instant.saturating_duration_since(now)),
             Self::Forever => None,
+        }
+    }
+
+    fn timer_deadline(self) -> Option<GnuTimerTimestamp> {
+        match self {
+            Self::Until { timer_deadline, .. } => Some(timer_deadline),
+            Self::Poll | Self::Forever => None,
         }
     }
 }
@@ -40,7 +127,7 @@ impl WaitDeadline {
 fn process_output_wait_deadline(timing: ProcessOutputWaitTiming) -> WaitDeadline {
     match timing {
         ProcessOutputWaitTiming::Poll => WaitDeadline::Poll,
-        ProcessOutputWaitTiming::For(duration) => WaitDeadline::Until(Instant::now() + duration),
+        ProcessOutputWaitTiming::For(duration) => WaitDeadline::for_duration(duration),
         ProcessOutputWaitTiming::Forever => WaitDeadline::Forever,
     }
 }
@@ -243,7 +330,7 @@ impl WaitRequest {
     }
 
     fn read_command_input_until(deadline: Instant) -> Self {
-        Self::read_command_input(WaitDeadline::Until(deadline))
+        Self::read_command_input(WaitDeadline::until(deadline))
     }
 
     fn read_command_input_forever() -> Self {
@@ -293,7 +380,21 @@ impl WaitRequest {
 
     fn sleep_until(deadline: Instant) -> Self {
         Self {
-            deadline: WaitDeadline::Until(deadline),
+            deadline: WaitDeadline::until(deadline),
+            keyboard: KeyboardWaitPolicy::ServiceSpecialOnly,
+            processes: ProcessWaitPolicy::ServiceAny,
+            timers: TimerWaitPolicy::Run,
+            redisplay: false,
+            special_input: SpecialInputWaitPolicy::ServiceOnly,
+        }
+    }
+
+    fn sleep_for_duration_until_timer_deadline(
+        duration: Duration,
+        timer_deadline: GnuTimerTimestamp,
+    ) -> Self {
+        Self {
+            deadline: WaitDeadline::for_duration_with_timer_deadline(duration, timer_deadline),
             keyboard: KeyboardWaitPolicy::ServiceSpecialOnly,
             processes: ProcessWaitPolicy::ServiceAny,
             timers: TimerWaitPolicy::Run,
@@ -304,7 +405,7 @@ impl WaitRequest {
 
     fn resize_ack(deadline: Instant) -> Self {
         Self {
-            deadline: WaitDeadline::Until(deadline),
+            deadline: WaitDeadline::until(deadline),
             keyboard: KeyboardWaitPolicy::WaitForSpecialInput,
             processes: ProcessWaitPolicy::None,
             timers: TimerWaitPolicy::Suppress,
@@ -322,7 +423,11 @@ impl WaitRequest {
     }
 
     fn deadline_is_finite(self) -> bool {
-        matches!(self.deadline, WaitDeadline::Until(_))
+        matches!(self.deadline, WaitDeadline::Until { .. })
+    }
+
+    fn timer_deadline(self) -> Option<GnuTimerTimestamp> {
+        self.deadline.timer_deadline()
     }
 
     fn deadline_is_forever(self) -> bool {
@@ -957,6 +1062,17 @@ impl super::eval::Context {
         Ok(())
     }
 
+    pub(crate) fn wait_for_duration_until_timer_deadline(
+        &mut self,
+        duration: Duration,
+        timer_deadline: GnuTimerTimestamp,
+    ) -> Result<(), Flow> {
+        let _ = self.wait_reading_process_output(
+            WaitRequest::sleep_for_duration_until_timer_deadline(duration, timer_deadline),
+        )?;
+        Ok(())
+    }
+
     pub(crate) fn wait_for_resize_ack_until(&mut self, deadline: Instant) -> Result<bool, Flow> {
         let completion = self.wait_reading_process_output(WaitRequest::resize_ack(deadline))?;
         Ok(completion == WaitCompletion::SpecialInputActivity)
@@ -1034,8 +1150,11 @@ impl super::eval::Context {
         }
     }
 
-    fn next_gnu_timer_timeout(&self) -> Option<Duration> {
-        let ordinary = self.next_ordinary_gnu_timer_timeout();
+    fn next_gnu_timer_timeout(
+        &self,
+        timer_deadline: Option<GnuTimerTimestamp>,
+    ) -> Option<Duration> {
+        let ordinary = self.next_ordinary_gnu_timer_timeout_before(timer_deadline);
         let idle = self.next_idle_gnu_timer_timeout();
 
         match (ordinary, idle) {
@@ -1051,7 +1170,7 @@ impl super::eval::Context {
         let mut shortened_by_timer = false;
 
         if request.runs_timers() {
-            if let Some(next) = self.next_gnu_timer_timeout()
+            if let Some(next) = self.next_gnu_timer_timeout(request.timer_deadline())
                 && next < timeout
             {
                 timeout = next;
@@ -1187,6 +1306,53 @@ mod tests {
         outcome.record_timer_activity(true);
 
         assert!(outcome.has_timer_activity());
+    }
+
+    fn gnu_timer_vector_at(deadline: GnuTimerTimestamp) -> crate::emacs_core::value::Value {
+        use crate::emacs_core::value::Value;
+
+        Value::vector(vec![
+            Value::NIL,
+            Value::fixnum(deadline.high_seconds),
+            Value::fixnum(deadline.low_seconds),
+            Value::fixnum(deadline.usecs),
+            Value::NIL,
+            Value::symbol("ignore"),
+            Value::NIL,
+            Value::NIL,
+            Value::fixnum(deadline.psecs),
+            Value::NIL,
+        ])
+    }
+
+    #[test]
+    fn ordinary_timer_deadline_filter_excludes_boundary_timer() {
+        use crate::emacs_core::eval::Context;
+        use crate::emacs_core::value::Value;
+
+        let now = GnuTimerTimestamp::now();
+        let before_deadline = now.add_duration(Duration::from_millis(10));
+        let deadline = now.add_duration(Duration::from_millis(20));
+        let mut context = Context::new();
+
+        context.set_variable(
+            "timer-list",
+            Value::list(vec![gnu_timer_vector_at(deadline)]),
+        );
+        assert_eq!(
+            context.next_ordinary_gnu_timer_timeout_before(Some(deadline)),
+            None
+        );
+
+        context.set_variable(
+            "timer-list",
+            Value::list(vec![gnu_timer_vector_at(before_deadline)]),
+        );
+        assert!(
+            context
+                .next_ordinary_gnu_timer_timeout_before(Some(deadline))
+                .is_some()
+        );
     }
 
     #[test]

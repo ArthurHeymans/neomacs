@@ -17,9 +17,10 @@
 //! `sleep-for` stays native because GNU's is C (`Fsleep_for`, dispnew.c): it
 //! parses SECONDS/MILLISECONDS and enters `wait_reading_process_output`.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use super::error::{EvalResult, Flow, signal};
+use super::eval::GnuTimerTimestamp;
 use super::value::{Value, ValueKind, VecLikeType};
 use malachite::base::num::conversion::traits::RoundingFrom;
 use malachite::base::rounding_modes::RoundingMode;
@@ -59,6 +60,20 @@ fn expect_fixnum_like(value: &Value) -> Result<i64, Flow> {
     }
 }
 
+fn gnu_sleep_duration_from_secs(seconds: f64) -> Duration {
+    let whole = seconds.trunc();
+    let frac = seconds - whole;
+    let mut secs = whole as u64;
+    let mut nanos = (frac * 1_000_000_000.0).ceil() as u32;
+
+    if nanos >= 1_000_000_000 {
+        secs += u64::from(nanos / 1_000_000_000);
+        nanos %= 1_000_000_000;
+    }
+
+    Duration::new(secs, nanos)
+}
+
 /// `(sleep-for SECONDS &optional MILLISECONDS)` — GNU `Fsleep_for`
 /// (dispnew.c): pause, reading process output, without redisplay or servicing
 /// command input.
@@ -85,8 +100,17 @@ pub(crate) fn builtin_sleep_for(eval: &mut super::eval::Context, args: Vec<Value
 
     let total_secs = secs + millis / 1000.0;
     if total_secs > 0.0 {
-        let total = Duration::from_secs_f64(total_secs);
-        let _ = eval.wait_until(Instant::now() + total)?;
+        let total = gnu_sleep_duration_from_secs(total_secs);
+        let end_time = GnuTimerTimestamp::now().add_duration(total);
+
+        loop {
+            let now = GnuTimerTimestamp::now();
+            if now >= end_time {
+                break;
+            }
+            let remaining = end_time.duration_until(now);
+            let _ = eval.wait_for_duration_until_timer_deadline(remaining, end_time)?;
+        }
     }
 
     Ok(Value::NIL)

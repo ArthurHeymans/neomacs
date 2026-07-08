@@ -5257,6 +5257,13 @@ impl crate::emacs_core::eval::Context {
     }
 
     pub(crate) fn next_ordinary_gnu_timer_timeout(&self) -> Option<std::time::Duration> {
+        self.next_ordinary_gnu_timer_timeout_before(None)
+    }
+
+    pub(crate) fn next_ordinary_gnu_timer_timeout_before(
+        &self,
+        deadline: Option<crate::emacs_core::eval::GnuTimerTimestamp>,
+    ) -> Option<std::time::Duration> {
         let timers = self
             .obarray
             .symbol_value("timer-list")
@@ -5267,6 +5274,7 @@ impl crate::emacs_core::eval::Context {
         timers
             .into_iter()
             .filter_map(pending_gnu_timer_in_keyboard_runtime)
+            .filter(|timer| deadline.is_none_or(|deadline| timer.when < deadline))
             .map(|timer| timer.when.duration_until(now))
             .min()
     }

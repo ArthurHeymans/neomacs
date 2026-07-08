@@ -607,6 +607,24 @@ impl GnuTimerTimestamp {
             psecs: 0,
         }
     }
+
+    pub(crate) fn add_duration(self, duration: std::time::Duration) -> Self {
+        let mut secs = self.unix_seconds() + duration.as_secs() as i64;
+        let mut usecs = self.usecs + duration.subsec_micros() as i64;
+        let psecs = self.psecs;
+
+        if usecs >= 1_000_000 {
+            secs += usecs / 1_000_000;
+            usecs %= 1_000_000;
+        }
+
+        Self {
+            high_seconds: secs >> 16,
+            low_seconds: secs & 0xFFFF,
+            usecs,
+            psecs,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
