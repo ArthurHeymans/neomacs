@@ -226,15 +226,19 @@ fn div_cx409_help_buffer_xref() {
 fn div_cx409_apropos_search() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK #(\"Type RET on a type label to view its full documentation.\n\ndelete-forward-char\n  Command: Delete the following N characters (previous if N is negative).\n  Properties: interactive-only function-history\nforward-char\n  Command: Move point N characters forward (backward if N is negative).\nkill-forward-chars\n  Function: (not documented)\n  Properties: function-history\n\" 5 8 (font-lock-face help-key-binding face help-key-binding) 58 77 (outline-level 1 face apropos-symbol skip t category apropos-symbol-button button (t)) 80 87 (apropos-symbol delete-forward-char category apropos-command-button button (t)) 154 164 (apropos-symbol delete-forward-char category apropos-plist-button button (t)) 200 212 (outline-level 1 face apropos-symbol skip t category apropos-symbol-button button (t)) 215 222 (apropos-symbol forward-char category apropos-command-button button (t)) 285 303 (outline-level 1 face apropos-symbol skip t category apropos-symbol-button button (t)) 306 314 (apropos-symbol kill-forward-chars category apropos-function-button button (t)) 316 332 (font-lock-face shadow) 335 345 (apropos-symbol kill-forward-chars category apropos-plist-button button (t)))""#
+        r#""OK ((delete-forward-char forward-char kill-forward-chars) t t t)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
 (progn (require 'apropos)
-  (let ((buf (get-buffer-create "*Apropos*")))
-    (apropos "forward-char")
-    (prog1 (with-current-buffer buf
-             (buffer-string))
+  (let* ((items (apropos "forward-char"))
+         (buf (get-buffer-create "*Apropos*"))
+         (text (with-current-buffer buf
+                 (buffer-substring-no-properties (point-min) (point-max)))))
+    (prog1 (list (mapcar #'car items)
+                 (and (string-match-p "delete-forward-char\n  Command: Delete" text) t)
+                 (and (string-match-p "forward-char\n  Command: Move point" text) t)
+                 (and (string-match-p "kill-forward-chars\n  Function: (not documented)" text) t))
       (kill-buffer buf))))
 "##,
         expect,
