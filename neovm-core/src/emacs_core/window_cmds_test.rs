@@ -4135,6 +4135,63 @@ fn x_create_frame_with_parent_frame_inherits_parent_font_state() {
 }
 
 #[test]
+fn x_create_frame_with_explicit_font_resolves_internal_font_parameter() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = Context::new();
+    let scratch = ev.buffers.create_buffer("*scratch*");
+    let parent_id = ev.frames.create_frame("parent", 960, 640, scratch);
+    {
+        let parent = ev.frames.get_mut(parent_id).expect("parent frame");
+        parent.set_window_system(Some(Value::symbol("neo")));
+        parent.set_known_parameter(FrameParam::Font, Value::string("JetBrains Mono-9"));
+        parent.char_width = 7.2;
+        parent.char_height = 17.0;
+        parent.font_pixel_size = 13.0;
+    }
+    ev.frames.select_frame(parent_id);
+    ev.set_display_host(Box::new(RecordingDisplayHost::with_resolved_frame_font(
+        ResolvedFrameFont {
+            family: LispString::from_utf8("JetBrains Mono"),
+            foundry: None,
+            weight: FontWeight::NORMAL,
+            slant: FontSlant::Normal,
+            width: FontWidth::Normal,
+            postscript_name: Some(LispString::from_utf8("JetBrainsMono-Regular")),
+            height_tenths: 90,
+            font_size_px: 13.0,
+            char_width: 7.2,
+            line_height: 17.0,
+        },
+    )));
+
+    let params = Value::list(vec![
+        Value::cons(
+            Value::symbol("parent-frame"),
+            Value::make_frame(parent_id.0),
+        ),
+        Value::cons(Value::symbol("font"), Value::string("JetBrains Mono-9")),
+        Value::cons(Value::symbol("minibuffer"), Value::NIL),
+    ]);
+    let created = super::builtin_x_create_frame(&mut ev, vec![params]).expect("x-create-frame");
+    let child_id = crate::window::FrameId(
+        created
+            .as_frame_id()
+            .unwrap_or_else(|| panic!("expected frame object, got {:?}", created)),
+    );
+    let child = ev.frames.get(child_id).expect("child frame");
+
+    assert!(
+        child
+            .parameter("font-parameter")
+            .is_some_and(|value| value.is_vector()),
+        "explicit x-create-frame font must be resolved into internal font-parameter"
+    );
+    assert_eq!(child.char_width, 7.2);
+    assert_eq!(child.char_height, 17.0);
+    assert_eq!(child.font_pixel_size, 13.0);
+}
+
+#[test]
 fn live_default_font_change_on_child_frame_skips_top_level_geometry_hints() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();

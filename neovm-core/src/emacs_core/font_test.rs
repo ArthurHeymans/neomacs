@@ -3035,6 +3035,75 @@ fn runtime_face_sync_realizes_default_colors_from_frame_parameters() {
 }
 
 #[test]
+fn default_face_font_attr_update_refreshes_live_frame_font_state() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let frame_id = ensure_selected_gui_frame(&mut eval);
+    {
+        let frame = eval
+            .frame_manager_mut()
+            .get_mut(frame_id)
+            .expect("selected frame");
+        frame.install_gnu_gui_default_parameters();
+        frame.set_known_parameter(FrameParam::Font, Value::string("JetBrains Mono-10"));
+        frame.char_width = 7.8;
+        frame.char_height = 18.0;
+        frame.font_pixel_size = 14.0;
+    }
+    eval.set_display_host(Box::new(LiveFrameFontDisplayHost {
+        realized: Some(ResolvedFrameFont {
+            family: LispString::from_utf8("JetBrains Mono"),
+            foundry: None,
+            weight: FontWeight::NORMAL,
+            slant: FontSlant::Normal,
+            width: FontWidth::Normal,
+            postscript_name: Some(LispString::from_utf8("JetBrainsMono-Regular")),
+            height_tenths: 90,
+            font_size_px: 13.0,
+            char_width: 7.2,
+            line_height: 17.0,
+        }),
+    }));
+
+    builtin_internal_set_lisp_face_attribute(
+        &mut eval,
+        vec![
+            Value::symbol("default"),
+            Value::keyword("family"),
+            Value::string("JetBrains Mono"),
+            Value::make_frame(frame_id.0),
+        ],
+    )
+    .expect("set default family");
+    builtin_internal_set_lisp_face_attribute(
+        &mut eval,
+        vec![
+            Value::symbol("default"),
+            Value::keyword("height"),
+            Value::fixnum(90),
+            Value::make_frame(frame_id.0),
+        ],
+    )
+    .expect("set default height");
+
+    let frame = eval.frame_manager().get(frame_id).expect("selected frame");
+    assert!(
+        frame
+            .parameter("font-parameter")
+            .is_some_and(|value| value.is_vector()),
+        "default face font attr changes should refresh internal font-parameter"
+    );
+    assert_eq!(frame.char_width, 7.2);
+    assert_eq!(frame.char_height, 17.0);
+    assert_eq!(frame.font_pixel_size, 13.0);
+    assert_ne!(
+        frame.known_parameter(FrameParam::Font),
+        Some(Value::string("JetBrains Mono-10")),
+        "frame font parameter must not remain at the stale pre-face-change font"
+    );
+}
+
+#[test]
 fn internal_get_lisp_face_attribute_eval_prefers_explicit_lisp_face_values() {
     crate::test_utils::init_test_tracing();
     let mut eval = crate::emacs_core::eval::Context::new();

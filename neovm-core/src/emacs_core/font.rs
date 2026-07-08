@@ -476,6 +476,20 @@ fn resolve_live_frame_font_request(
     frame_id: FrameId,
     requested: &Value,
 ) -> LiveFrameFontResolution {
+    resolve_live_frame_font_request_in_state(
+        &eval.frames,
+        &mut eval.display_host,
+        frame_id,
+        requested,
+    )
+}
+
+fn resolve_live_frame_font_request_in_state(
+    frames: &FrameManager,
+    display_host: &mut Option<Box<dyn super::eval::DisplayHost>>,
+    frame_id: FrameId,
+    requested: &Value,
+) -> LiveFrameFontResolution {
     if is_font_object(requested) {
         return LiveFrameFontResolution {
             font_value: *requested,
@@ -483,7 +497,7 @@ fn resolve_live_frame_font_request(
         };
     }
 
-    if let Some(frame) = eval.frames.get(frame_id)
+    if let Some(frame) = frames.get(frame_id)
         && font_value_matches_frame_font_parameter(frame, requested)
         && let Some(font_value) = frame.parameter("font-parameter")
         && is_font(&font_value)
@@ -501,8 +515,7 @@ fn resolve_live_frame_font_request(
         };
     };
 
-    let realized = eval
-        .display_host
+    let realized = display_host
         .as_mut()
         .and_then(|host| {
             host.resolve_frame_font(frame_id, requested_face.clone())
@@ -526,7 +539,23 @@ fn sync_live_frame_font_state(
     requested: &Value,
     resolution: &LiveFrameFontResolution,
 ) {
-    let Some(frame) = eval.frames.get_mut(frame_id) else {
+    sync_live_frame_font_state_in_state(
+        &mut eval.frames,
+        &mut eval.display_host,
+        frame_id,
+        requested,
+        resolution,
+    );
+}
+
+fn sync_live_frame_font_state_in_state(
+    frames: &mut FrameManager,
+    display_host: &mut Option<Box<dyn super::eval::DisplayHost>>,
+    frame_id: FrameId,
+    requested: &Value,
+    resolution: &LiveFrameFontResolution,
+) {
+    let Some(frame) = frames.get_mut(frame_id) else {
         return;
     };
 
@@ -553,7 +582,7 @@ fn sync_live_frame_font_state(
     }
 
     if let Some(geometry_hints) = geometry_hints
-        && let Some(host) = eval.display_host.as_mut()
+        && let Some(host) = display_host.as_mut()
         && let Err(err) = host.set_gui_frame_geometry_hints(frame_id, geometry_hints)
     {
         tracing::warn!(
@@ -562,6 +591,63 @@ fn sync_live_frame_font_state(
             err
         );
     }
+}
+
+pub(crate) fn sync_live_frame_font_parameter_in_state(
+    frames: &mut FrameManager,
+    display_host: &mut Option<Box<dyn super::eval::DisplayHost>>,
+    frame_id: FrameId,
+    requested: Value,
+) {
+    let resolution =
+        resolve_live_frame_font_request_in_state(frames, display_host, frame_id, &requested);
+    sync_live_frame_font_state_in_state(frames, display_host, frame_id, &requested, &resolution);
+}
+
+fn default_face_font_attr_affects_frame_font(attr: LFaceAttr) -> bool {
+    matches!(
+        attr,
+        LFaceAttr::Font
+            | LFaceAttr::Family
+            | LFaceAttr::Foundry
+            | LFaceAttr::Height
+            | LFaceAttr::Weight
+            | LFaceAttr::Slant
+            | LFaceAttr::Width
+    )
+}
+
+fn sync_live_default_face_font_state(eval: &mut super::eval::Context, frame_id: FrameId) {
+    if eval
+        .frames
+        .get(frame_id)
+        .is_none_or(|frame| frame.effective_window_system().is_none())
+    {
+        return;
+    }
+
+    let Some(vector) = lookup_frame_lisp_face_vector(eval, frame_id, "default") else {
+        return;
+    };
+    let requested_face = runtime_face_from_lisp_face_vector("default", vector);
+    let realized = eval
+        .display_host
+        .as_mut()
+        .and_then(|host| {
+            host.resolve_frame_font(frame_id, requested_face.clone())
+                .ok()
+        })
+        .flatten();
+    let font_value = realized
+        .as_ref()
+        .map(|resolved| build_frame_font_object_from_resolution(&requested_face, resolved))
+        .unwrap_or_else(|| build_font_object(&requested_face));
+    let resolution = LiveFrameFontResolution {
+        font_value,
+        realized,
+    };
+
+    sync_live_frame_font_state(eval, frame_id, &font_value, &resolution);
 }
 
 fn expect_optional_frame_designator_in_state(
@@ -5412,6 +5498,11 @@ pub(crate) fn builtin_internal_set_lisp_face_attribute(
                 {
                     sync_live_frame_font_state(eval, frame_id, &value, resolution);
                 }
+            } else if face_name == "default"
+                && default_face_font_attr_affects_frame_font(canonical_attr)
+                && let Some(frame_id) = live_frame_id
+            {
+                sync_live_default_face_font_state(eval, frame_id);
             }
 
             if let Some(frame_id) = live_frame_id {

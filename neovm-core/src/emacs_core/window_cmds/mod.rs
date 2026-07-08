@@ -7416,9 +7416,10 @@ pub(crate) fn x_create_frame_impl(
         display_host.is_some(),
         args.first()
     );
-    let explicit_font = Value::symbol("font")
+    let explicit_font_value = Value::symbol("font")
         .as_symbol_id()
-        .is_some_and(|font_key| parsed.all.contains_key(&font_key));
+        .and_then(|font_key| parsed.all.get(&font_key).copied());
+    let explicit_font = explicit_font_value.is_some();
     let parent_id = parsed
         .parent_frame
         .filter(|parent_id| frames.get(*parent_id).is_some());
@@ -7589,6 +7590,12 @@ pub(crate) fn x_create_frame_impl(
         frame.sync_menu_bar_height_from_parameters();
         frame.sync_tool_bar_height_from_parameters();
         frame.sync_window_area_bounds();
+    }
+    if let Some(font_value) = explicit_font_value {
+        super::font::sync_live_frame_font_parameter_in_state(frames, display_host, fid, font_value);
+        if let Some(frame) = frames.get_mut(fid) {
+            frame.sync_window_area_bounds();
+        }
     }
     if !is_child_frame && let Some(host) = display_host.as_mut() {
         let geometry_hints = frames
