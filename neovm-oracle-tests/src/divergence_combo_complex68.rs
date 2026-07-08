@@ -131,23 +131,27 @@ fn div_cx68_file_attributes_full_destructuring() {
 #[test]
 fn div_cx68_file_coding_roundtrip_latin1_unibyte_charset_prop() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    crate::common::assert_oracle_parity(
+    let expect = expect_test::expect![[r#""OK (3 3 nil)""#]];
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let* ((path (make-temp-file "neo-cx68-latin1"))
        (data (decode-coding-string (unibyte-string #xe9 #xe0 #xfc) 'latin-1-unix)))
-  (with-temp-buffer
-    (insert data)
-    (write-region (point-min) (point-max) path nil 'silent nil 'latin-1-unix))
-  (let* ((content
-          (with-temp-buffer
-            (set-buffer-multibyte nil)
-            (insert-file-contents path)
-            (let ((s (buffer-string)))
-              (list (length s) (string-bytes s)
-                    (text-properties-at 0))))))
-    (delete-file path)
-    content))
+  (unwind-protect
+      (progn
+        (with-temp-buffer
+          (insert data)
+          (let ((coding-system-for-write 'latin-1-unix))
+            (write-region (point-min) (point-max) path nil 'silent)))
+        (with-temp-buffer
+          (set-buffer-multibyte nil)
+          (let ((coding-system-for-read 'no-conversion))
+            (insert-file-contents path))
+          (let ((s (buffer-string)))
+            (list (length s) (string-bytes s)
+                  (text-properties-at 0 s)))))
+    (ignore-errors (delete-file path))))
 "##,
+        expect,
     );
 }
 
