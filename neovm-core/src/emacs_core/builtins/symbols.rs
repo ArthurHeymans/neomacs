@@ -2080,10 +2080,7 @@ fn next_screen_line_start_from(
             }));
         }
         if truncate_lines && column.saturating_add(advance.width) > screen_width {
-            return Ok(Some(ScreenLineStep {
-                next: point_max,
-                counts_line: false,
-            }));
+            return Ok(Some(truncated_logical_line_step(eval, buffer_id, scan)?));
         }
         if advance.unbreakable_wide
             && scan > start
@@ -2098,10 +2095,7 @@ fn next_screen_line_start_from(
         column = column.saturating_add(advance.width);
         if column >= screen_width {
             if truncate_lines {
-                return Ok(Some(ScreenLineStep {
-                    next: point_max,
-                    counts_line: false,
-                }));
+                return Ok(Some(truncated_logical_line_step(eval, buffer_id, scan)?));
             }
             return Ok(Some(ScreenLineStep {
                 next: scan,
@@ -2118,6 +2112,38 @@ fn next_screen_line_start_from(
     } else {
         Ok(None)
     }
+}
+
+fn truncated_logical_line_step(
+    eval: &super::eval::Context,
+    buffer_id: crate::buffer::BufferId,
+    from: EmacsBytePos,
+) -> Result<ScreenLineStep, Flow> {
+    let Some(buf) = eval.buffers.get(buffer_id) else {
+        return Ok(ScreenLineStep {
+            next: from,
+            counts_line: false,
+        });
+    };
+    let point_max = buf.accessible_emacs_byte_region().end();
+    let mut scan = from;
+    while scan < point_max {
+        if buf.emacs_byte_at_pos(scan) == Some(b'\n') {
+            return Ok(ScreenLineStep {
+                next: scan.add_len(EmacsByteLen::new(1)),
+                counts_line: true,
+            });
+        }
+        let char_len = buf
+            .char_after_emacs_byte_len(scan)
+            .map(|len| len.max(EmacsByteLen::new(1)))
+            .unwrap_or(EmacsByteLen::new(1));
+        scan = scan.add_len(char_len);
+    }
+    Ok(ScreenLineStep {
+        next: point_max,
+        counts_line: false,
+    })
 }
 
 #[derive(Clone, Copy, Debug)]

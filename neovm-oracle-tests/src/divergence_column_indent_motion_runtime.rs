@@ -114,6 +114,45 @@ fn forward_line_return() {
 }
 
 #[test]
+fn vertical_motion_narrow_window_moves_one_logical_line_with_treemacs_like_props() {
+    return_if_neovm_enable_oracle_proptest_not_set!();
+
+    let expect = expect_test::expect![[r#""OK (20 20 14 2 1 43 3)""#]];
+    crate::common::assert_oracle_parity_expect(
+        r##"(with-temp-buffer
+  (let ((buf (current-buffer)))
+    (delete-other-windows)
+    (let ((w (split-window (selected-window) 20 'left)))
+      (select-window (next-window w))
+      (setq w (selected-window))
+      (switch-to-buffer buf)
+      (setq truncate-lines nil)
+      (insert (propertize "	neomacs ↑1" 'display '(raise 0.0)) "\n")
+      (insert (propertize "" 'display '(raise 0.1))
+              "	"
+              (propertize "" 'display '(raise 0.0))
+              "	"
+              (propertize ".agent-shell/transcripts"
+                          :collapsed '(1 "a" "b"))
+              "\n")
+      (insert (propertize "" 'display '(raise 0.1))
+              "	"
+              (propertize "" 'display '(raise 0.0))
+              "	.cargo\n")
+      (goto-char (point-min))
+      (forward-line 1)
+      (list (window-width w)
+            (window-body-width w)
+            (point)
+            (line-number-at-pos)
+            (vertical-motion 1 w)
+            (point)
+            (line-number-at-pos)))))"##,
+        expect,
+    );
+}
+
+#[test]
 fn indent_line_to() {
     return_if_neovm_enable_oracle_proptest_not_set!();
 
