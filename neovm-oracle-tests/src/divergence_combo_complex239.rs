@@ -8,17 +8,25 @@ use super::common::return_if_neovm_enable_oracle_proptest_not_set;
 #[test]
 fn div_cx239_garbage_collect_return_value() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (t t (conses 16 250691 124536) (symbols 48 27103 1) (strings 32 86361 11785))""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK (t t (conses symbols strings) (16 48 32) (t t t))""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
-(let ((gc-result (garbage-collect)))
+(let* ((gc-result (garbage-collect))
+       (entries (mapcar (lambda (name) (assq name gc-result))
+                        '(conses symbols strings))))
   (list (consp gc-result)
         (> (length gc-result) 0)
-        (assq 'conses gc-result)
-        (assq 'symbols gc-result)
-        (assq 'strings gc-result)))
+        (mapcar #'car entries)
+        (mapcar #'cadr entries)
+        (mapcar (lambda (entry)
+                  (and (consp entry)
+                       (= (length entry) 4)
+                       (integerp (nth 2 entry))
+                       (>= (nth 2 entry) 0)
+                       (integerp (nth 3 entry))
+                       (>= (nth 3 entry) 0)))
+                entries)))
 "##,
         expect,
     );
