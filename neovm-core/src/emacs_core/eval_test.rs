@@ -8179,6 +8179,20 @@ fn provide_preserves_uninterned_feature_identity() {
 }
 
 #[test]
+fn provide_cons_preserves_features_tail_identity() {
+    crate::test_utils::init_test_tracing();
+    let result = eval_one(
+        r#"(let ((s (make-symbol "neo-x"))
+                 (before features))
+             (provide s)
+             (list (eq (car features) s)
+                   (eq (cdr features) before)
+                   (featurep s)))"#,
+    );
+    assert_eq!(result, "OK (t t t)");
+}
+
+#[test]
 fn provide_stores_subfeatures_list() {
     crate::test_utils::init_test_tracing();
     // GNU provide stores the SUBFEATURES list via (put FEATURE 'subfeatures LIST).

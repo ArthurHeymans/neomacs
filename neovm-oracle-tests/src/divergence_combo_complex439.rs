@@ -156,14 +156,15 @@ fn div_cx439_message_format_error() {
 #[test]
 fn div_cx439_features_load_provide() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK (t (neo-cx439-feat warnings icons cl-loaddefs cl-lib rmc iso-transl tooltip cconv eldoc paren electric uniquify ediff-hook vc-hooks lisp-float-type elisp-mode mwheel term/x-win x-win term/common-win x-dnd touch-screen tool-bar dnd fontset image regexp-opt fringe tabulated-list replace newcomment text-mode lisp-mode prog-mode register page tab-bar menu-bar rfn-eshadow isearch easymenu timer select scroll-bar mouse jit-lock font-lock syntax font-core term/tty-colors frame minibuffer nadvice seq simple cl-generic indonesian philippine cham georgian utf-8-lang misc-lang vietnamese tibetan thai tai-viet lao korean japanese eucjp-ms cp51932 hebrew greek romanian slovak czech european ethiopic indian cyrillic chinese composite emoji-zwj charscript charprop case-table epa-hook jka-cmpr-hook help abbrev obarray oclosure cl-preloaded button loaddefs theme-loaddefs faces cus-face macroexp files window text-properties overlay sha1 md5 base64 format env code-pages mule custom widget keymap hashtable-print-readable backquote threads dbusbind inotify lcms2 dynamic-setting system-font-setting font-render-setting cairo gtk x-toolkit xinput2 x multi-tty move-toolbar make-network-process tty-child-frames emacs) t)""#
-    ]];
+    let expect = expect_test::expect![[r#""OK (t t t t t)""#]];
     crate::common::assert_oracle_parity_expect(
-        r##"(let ((sym (make-symbol "neo-cx439-feat")))
+        r##"(let ((sym (make-symbol "neo-cx439-feat"))
+      (before features))
   (provide sym)
   (list (featurep sym)
-        (memq sym features)
+        (eq (car features) sym)
+        (eq (cdr features) before)
+        (and (memq sym features) t)
         (listp features)))"##,
         expect,
     );

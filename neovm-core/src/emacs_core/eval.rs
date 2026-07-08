@@ -1125,9 +1125,13 @@ pub(crate) fn add_feature_id_in_state(obarray: &mut Obarray, features: &mut Vec<
     if features.iter().any(|feature| *feature == id) {
         return;
     }
+    let current = obarray
+        .symbol_value("features")
+        .cloned()
+        .unwrap_or(Value::NIL);
     // Emacs pushes newly-provided features at the front.
     features.insert(0, id);
-    sync_features_variable_in_state(obarray, features);
+    obarray.set_symbol_value("features", Value::cons(Value::from_sym_id(id), current));
 }
 
 pub(crate) fn remove_feature_in_state(
