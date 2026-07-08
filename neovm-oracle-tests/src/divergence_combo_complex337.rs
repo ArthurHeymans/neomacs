@@ -31,7 +31,7 @@ fn div_cx337_process_filter_chunked_capture() {
 fn div_cx337_process_sentinel_exit_and_signal_events() {
     return_if_neovm_enable_oracle_proptest_not_set!();
     let expect = expect_test::expect![[
-        r#""OK (((:exit . \"exited abnormally with code 7\n\") (:sig . \"terminated\n\")) 7 exit 15 signal)""#
+        r#""OK ((:exit . \"exited abnormally with code 7\n\") (:sig . \"terminated\n\") 7 exit 15 signal)""#
     ]];
     crate::common::assert_oracle_parity_expect(
         r##"
@@ -42,18 +42,18 @@ fn div_cx337_process_sentinel_exit_and_signal_events() {
         (p2 (make-process :name "neo-cx337-sig"
                           :command '("sh" "-c" "kill -TERM $$")
                           :sentinel (lambda (proc ev) (push (cons :sig ev) events)))))
-    ;; The sentinel IS the subject here, so we keep both sentinels.  We only
-    ;; remove the timing race: drain p1 to death and wait for its sentinel to
-    ;; fire, THEN drain p2 to death and wait for its sentinel.  That pins a
-    ;; canonical (:exit ... :sig ...) event order independent of OS scheduling,
-    ;; instead of reading after a fixed 2s+0.05s window where the two async
-    ;; sentinels could fire in either order.
+    ;; The sentinel IS the subject here, so we keep both sentinels.  GNU
+    ;; status_notify services all changed processes, even when
+    ;; accept-process-output targets a single process, so the two async
+    ;; sentinels can fire in either order.  Wait for the tagged events and
+    ;; assert their payloads independent of that delivery order.
     (while (process-live-p p1) (accept-process-output p1 1))
-    (while (= (length events) 0) (accept-process-output p1 1))
+    (while (not (assq :exit events)) (accept-process-output p1 1))
     (while (process-live-p p2) (accept-process-output p2 1))
-    (while (< (length events) 2) (accept-process-output p2 1))
+    (while (not (assq :sig events)) (accept-process-output p2 1))
     (while (accept-process-output nil 0))
-    (list (nreverse events)
+    (list (assq :exit events)
+          (assq :sig events)
           (process-exit-status p1)
           (process-status p1)
           (process-exit-status p2)
