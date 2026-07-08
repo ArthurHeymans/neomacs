@@ -809,11 +809,7 @@ pub(crate) fn operating_system_release_value() -> Value {
 }
 
 pub(crate) fn system_configuration_value() -> Value {
-    Value::string(
-        option_env!("TARGET")
-            .map(str::to_owned)
-            .unwrap_or_else(fallback_system_configuration),
-    )
+    Value::string(gnu_system_configuration())
 }
 
 pub(crate) fn system_configuration_options_value() -> Value {
@@ -828,6 +824,15 @@ pub(crate) fn system_configuration_features_value() -> Value {
     features.sort_unstable();
     features.dedup();
     Value::string(features.join(" "))
+}
+
+fn gnu_system_configuration() -> String {
+    if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        return "x86_64-pc-linux-gnu".to_string();
+    }
+    option_env!("TARGET")
+        .map(str::to_owned)
+        .unwrap_or_else(fallback_system_configuration)
 }
 
 fn fallback_system_configuration() -> String {

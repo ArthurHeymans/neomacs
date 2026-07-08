@@ -528,7 +528,13 @@ fn user_info() {
             .is_string()
     );
     assert!(builtin_system_name(vec![]).unwrap().is_string());
-    assert!(system_configuration_value().is_string());
+    let system_configuration = system_configuration_value();
+    assert!(system_configuration.is_string());
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    assert_eq!(
+        system_configuration.as_utf8_str(),
+        Some("x86_64-pc-linux-gnu")
+    );
     assert!(system_configuration_options_value().is_string());
     assert!(system_configuration_features_value().is_string());
     assert!(

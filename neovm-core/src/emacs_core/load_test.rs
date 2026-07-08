@@ -8405,6 +8405,8 @@ fn ensure_startup_compat_variables_backfills_xfaces_bootstrap_state() {
         "face-font-rescale-alist",
         "face-near-same-color-threshold",
         "face-font-lax-matched-attributes",
+        "data-directory",
+        "doc-directory",
         "system-configuration",
         "system-configuration-options",
         "system-configuration-features",
@@ -8440,6 +8442,22 @@ fn ensure_startup_compat_variables_backfills_xfaces_bootstrap_state() {
             .symbol_value("system-configuration")
             .is_some_and(|v| v.is_string()),
         "system-configuration should be backfilled to a string"
+    );
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    assert_eq!(
+        eval.obarray()
+            .symbol_value("system-configuration")
+            .and_then(|value| value.as_utf8_str()),
+        Some("x86_64-pc-linux-gnu")
+    );
+    assert_eq!(
+        eval.obarray()
+            .symbol_value("doc-directory")
+            .and_then(|value| value.as_utf8_str()),
+        eval.obarray()
+            .symbol_value("data-directory")
+            .and_then(|value| value.as_utf8_str()),
+        "GNU initializes doc-directory from PATH_DOC, matching data-directory in this tree"
     );
     assert!(
         eval.obarray()

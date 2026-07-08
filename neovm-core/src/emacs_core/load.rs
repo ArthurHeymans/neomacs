@@ -4183,6 +4183,10 @@ fn finalize_cached_bootstrap_eval(
         Value::unibyte_string(lisp_directory_name_from_host_path(&etc_dir)),
     );
     eval.set_variable(
+        "doc-directory",
+        Value::unibyte_string(lisp_directory_name_from_host_path(&etc_dir)),
+    );
+    eval.set_variable(
         "source-directory",
         Value::unibyte_string(lisp_directory_name_from_host_path(project_root)),
     );
@@ -4558,6 +4562,10 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         let etc_dir = project_root.join("etc");
         eval.set_variable(
             "data-directory",
+            Value::unibyte_string(lisp_directory_name_from_host_path(&etc_dir)),
+        );
+        eval.set_variable(
+            "doc-directory",
             Value::unibyte_string(lisp_directory_name_from_host_path(&etc_dir)),
         );
         // source-directory: top-level source tree
