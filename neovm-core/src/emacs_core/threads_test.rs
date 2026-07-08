@@ -421,7 +421,7 @@ fn threads_feature_and_main_thread_binding_match_gnu() {
 }
 
 #[test]
-fn test_builtin_all_threads_excludes_finished_worker() {
+fn test_builtin_all_threads_includes_finished_unjoined_worker() {
     crate::test_utils::init_test_tracing();
     let mut eval = Context::new();
     let worker = builtin_make_thread(
@@ -438,7 +438,12 @@ fn test_builtin_all_threads_excludes_finished_worker() {
     .unwrap();
     let result = builtin_all_threads(&mut eval, vec![]).unwrap();
     let list = super::super::value::list_to_vec(&result).unwrap();
-    assert!(!list.iter().any(|value| eq_value(value, &worker)));
+    assert!(list.iter().any(|value| eq_value(value, &worker)));
+
+    builtin_thread_join(&mut eval, vec![worker]).unwrap();
+    let after_join = builtin_all_threads(&mut eval, vec![]).unwrap();
+    let after_join = super::super::value::list_to_vec(&after_join).unwrap();
+    assert!(!after_join.iter().any(|value| eq_value(value, &worker)));
 }
 
 #[test]

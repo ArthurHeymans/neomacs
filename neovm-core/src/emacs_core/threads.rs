@@ -312,17 +312,6 @@ impl ThreadManager {
             .collect()
     }
 
-    /// Return thread ids that are still active from `all-threads`' point of view.
-    pub fn active_thread_ids(&self) -> Vec<u64> {
-        self.threads
-            .iter()
-            .filter_map(|(id, thread)| {
-                matches!(thread.status, ThreadStatus::Created | ThreadStatus::Running)
-                    .then_some(*id)
-            })
-            .collect()
-    }
-
     /// Return thread result (for join).
     pub fn thread_result(&self, id: u64) -> Value {
         self.threads
@@ -963,7 +952,7 @@ pub(crate) fn builtin_all_threads(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("all-threads", &args, 0)?;
-    let mut ids = ctx.threads.active_thread_ids();
+    let mut ids = ctx.threads.all_thread_ids();
     ids.sort_unstable();
     let objects: Vec<Value> = ids
         .into_iter()
