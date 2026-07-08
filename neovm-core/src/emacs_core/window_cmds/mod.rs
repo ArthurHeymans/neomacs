@@ -6817,6 +6817,68 @@ pub(crate) fn builtin_set_frame_position(
     Ok(Value::T)
 }
 
+/// `(set-frame-size-and-position-pixelwise FRAME WIDTH HEIGHT LEFT TOP &optional GRAVITY)` -> nil.
+pub(crate) fn builtin_set_frame_size_and_position_pixelwise(
+    eval: &mut super::eval::Context,
+    args: Vec<Value>,
+) -> EvalResult {
+    expect_min_args("set-frame-size-and-position-pixelwise", &args, 5)?;
+    expect_max_args("set-frame-size-and-position-pixelwise", &args, 6)?;
+    let fid = resolve_frame_id_in_state(
+        &mut eval.frames,
+        &mut eval.buffers,
+        Some(&args[0]),
+        "frame-live-p",
+    )?;
+    let left = expect_int(&args[3])?;
+    let top = expect_int(&args[4])?;
+    if let Some(gravity) = args.get(5)
+        && gravity.is_truthy()
+    {
+        let gravity = expect_int(gravity)?;
+        if !(0..=10).contains(&gravity) {
+            return Err(signal(
+                "args-out-of-range",
+                vec![
+                    *args.get(5).expect("gravity"),
+                    Value::fixnum(0),
+                    Value::fixnum(10),
+                ],
+            ));
+        }
+    }
+
+    let uses_window_system_pixels = eval
+        .frames
+        .get(fid)
+        .is_some_and(frame_uses_window_system_pixels);
+    let is_child_frame = eval
+        .frames
+        .get(fid)
+        .is_some_and(|frame| frame.parent_frame.as_frame_id().is_some());
+
+    if uses_window_system_pixels || is_child_frame {
+        let frame = eval
+            .frames
+            .get_mut(fid)
+            .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
+        frame.left_pos = left;
+        frame.top_pos = top;
+        frame.set_parameter(Value::symbol("left"), Value::fixnum(left));
+        frame.set_parameter(Value::symbol("top"), Value::fixnum(top));
+    } else {
+        let frame = eval
+            .frames
+            .get_mut(fid)
+            .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
+        frame.set_parameter(Value::symbol("left"), Value::fixnum(left));
+        frame.set_parameter(Value::symbol("top"), Value::fixnum(top));
+    }
+
+    builtin_set_frame_size(eval, vec![args[0], args[1], args[2], Value::T])?;
+    Ok(Value::NIL)
+}
+
 /// `(make-frame &optional PARAMETERS)` -> frame id.
 ///
 /// GNU Emacs routes GUI frame creation through `x-create-frame` and keeps

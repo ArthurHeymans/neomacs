@@ -4971,7 +4971,7 @@ pub(crate) fn init_builtins(ctx: &mut super::eval::Context) {
     );
     ctx.defsubr(
         "set-frame-size-and-position-pixelwise",
-        |_ctx, args| builtin_set_frame_size_and_position_pixelwise(args),
+        super::window_cmds::builtin_set_frame_size_and_position_pixelwise,
         0,
         None,
     );

@@ -641,6 +641,7 @@ mod forward_comment_patterns;
 mod forward_line;
 mod forward_line_advanced;
 mod frame_configuration_semantics;
+mod frame_pixelwise_geometry_semantics;
 mod frame_window_strict_edge_semantics;
 mod frame_windows_min_size_semantics;
 mod fset_marker_alias_edge_semantics;

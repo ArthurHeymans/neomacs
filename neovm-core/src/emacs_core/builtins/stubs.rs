@@ -1633,14 +1633,6 @@ pub(crate) fn builtin_frame_root_frame(
     Ok(Value::make_frame(root.0))
 }
 
-/// `(set-frame-size-and-position-pixelwise FRAME WIDTH HEIGHT LEFT TOP &optional GRAVITY)`
-/// — combined resize+move stub, returns nil.
-pub(crate) fn builtin_set_frame_size_and_position_pixelwise(args: Vec<Value>) -> EvalResult {
-    expect_range_args("set-frame-size-and-position-pixelwise", &args, 5, 6)?;
-    expect_frame_live_or_nil(&args[0])?;
-    Ok(Value::NIL)
-}
-
 /// `(mouse-position-in-root-frame)` — stub, returns nil.
 pub(crate) fn builtin_mouse_position_in_root_frame(args: Vec<Value>) -> EvalResult {
     expect_args("mouse-position-in-root-frame", &args, 0)?;
