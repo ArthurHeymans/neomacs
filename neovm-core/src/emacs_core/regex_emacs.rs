@@ -1088,13 +1088,7 @@ pub(crate) fn regex_compile_lisp_with_translation(
                 laststart = Some(bpos!());
                 pending_exact = None;
                 let pattern_multibyte = buf.multibyte;
-                compile_charset(
-                    pattern_bytes,
-                    &mut p,
-                    &mut buf,
-                    case_fold,
-                    pattern_multibyte,
-                )?;
+                compile_charset(pattern_bytes, &mut p, &mut buf, pattern_multibyte)?;
             }
 
             // ----------------------------------------------------------
@@ -2376,7 +2370,6 @@ fn compile_charset(
     pattern: &[u8],
     p: &mut usize,
     buf: &mut CompiledPattern,
-    case_fold: bool,
     pattern_multibyte: bool,
 ) -> Result<(), RegexCompileError> {
     let plen = pattern.len();
@@ -2438,7 +2431,6 @@ fn compile_charset(
                     &mut buf.buffer,
                     bitmap_start,
                     c,
-                    case_fold,
                     &mut mb_ranges,
                     buf.translate.as_ref(),
                 );
@@ -2526,7 +2518,14 @@ fn compile_charset(
                             '\u{80}'
                         };
                         if end_u32 >= 128 {
-                            add_multibyte_range(&mut mb_ranges, mb_start, range_end, case_fold);
+                            add_multibyte_range(
+                                &mut buf.buffer,
+                                bitmap_start,
+                                &mut mb_ranges,
+                                mb_start,
+                                range_end,
+                                translate,
+                            );
                         }
                     }
                 }
@@ -2550,7 +2549,6 @@ fn compile_charset(
                     &mut buf.buffer,
                     bitmap_start,
                     c,
-                    case_fold,
                     &mut mb_ranges,
                     buf.translate.as_ref(),
                 );
@@ -2579,7 +2577,6 @@ fn compile_charset(
                 &mut buf.buffer,
                 bitmap_start,
                 prev,
-                case_fold,
                 &mut mb_ranges,
                 buf.translate.as_ref(),
             );
@@ -2598,7 +2595,6 @@ fn compile_charset(
             &mut buf.buffer,
             bitmap_start,
             c,
-            case_fold,
             &mut mb_ranges,
             buf.translate.as_ref(),
         );
@@ -2631,40 +2627,66 @@ fn add_charset_char(
     buffer: &mut Vec<u8>,
     bitmap_start: usize,
     c: char,
-    case_fold: bool,
     mb_ranges: &mut Vec<(char, char)>,
     translate: Option<&CaseTranslation>,
 ) {
     if c.is_ascii() {
         set_bitmap_bit(buffer, bitmap_start, c as u8, translate);
     } else {
-        add_multibyte_range(mb_ranges, c, c, case_fold);
+        add_multibyte_range(buffer, bitmap_start, mb_ranges, c, c, translate);
     }
 }
 
-/// Add a multibyte character range, optionally expanding for case-folding.
-fn add_multibyte_range(ranges: &mut Vec<(char, char)>, start: char, end: char, case_fold: bool) {
-    ranges.push((start, end));
-    if case_fold {
-        // For case-folding, also add the upper/lower-case variants.
-        // For single-char ranges, just add the case-folded char.
-        // For multi-char ranges, this is a conservative approximation:
-        // we add the lowercased and uppercased versions of the endpoints.
-        if start == end {
-            for variant in start.to_lowercase() {
-                if variant != start {
-                    ranges.push((variant, variant));
-                }
+fn push_or_merge_multibyte_range(ranges: &mut Vec<(char, char)>, ch: char) {
+    for (lo, hi) in ranges.iter_mut().rev() {
+        let ch_u = ch as u32;
+        let lo_u = *lo as u32;
+        let hi_u = *hi as u32;
+        if ch_u >= lo_u.saturating_sub(1) && ch_u <= hi_u.saturating_add(1) {
+            if ch_u < lo_u {
+                *lo = ch;
+            } else if ch_u > hi_u {
+                *hi = ch;
             }
-            for variant in start.to_uppercase() {
-                if variant != start {
-                    ranges.push((variant, variant));
-                }
-            }
+            return;
         }
-        // For multi-char ranges (start != end), the range itself should
-        // cover the needed codepoints in most cases. We don't expand
-        // further to avoid combinatorial explosion.
+    }
+    ranges.push((ch, ch));
+}
+
+/// Add a multibyte character range and its case-canonical image.
+///
+/// Mirrors GNU `SETUP_MULTIBYTE_RANGE`: the original `[FROM, TO]` is stored
+/// first, then every character in that range is translated through the active
+/// case table.  Translated multibyte characters outside the original range are
+/// merged into the range table; translated unibyte characters are reflected in
+/// the bitmap.
+fn add_multibyte_range(
+    buffer: &mut Vec<u8>,
+    bitmap_start: usize,
+    ranges: &mut Vec<(char, char)>,
+    start: char,
+    end: char,
+    translate: Option<&CaseTranslation>,
+) {
+    ranges.push((start, end));
+    let Some(translate) = translate else {
+        return;
+    };
+
+    let start_u = start as u32;
+    let end_u = end as u32;
+    for code in start_u..=end_u {
+        let translated = translate.translate(code);
+        if let Some(byte) = regex_char_to_unibyte(translated) {
+            set_bitmap_raw_bit(buffer, bitmap_start, byte);
+        }
+        if translated >= start_u && translated <= end_u {
+            continue;
+        }
+        if let Some(ch) = char::from_u32(translated) {
+            push_or_merge_multibyte_range(ranges, ch);
+        }
     }
 }
 
@@ -2696,8 +2718,12 @@ fn set_bitmap_bit(
         Some(table) => table.translate_byte(c),
         None => c,
     };
-    let byte_idx = bitmap_start + (target as usize / 8);
-    let bit_idx = target as usize % 8;
+    set_bitmap_raw_bit(buffer, bitmap_start, target);
+}
+
+fn set_bitmap_raw_bit(buffer: &mut [u8], bitmap_start: usize, c: u8) {
+    let byte_idx = bitmap_start + (c as usize / 8);
+    let bit_idx = c as usize % 8;
     if byte_idx < buffer.len() {
         buffer[byte_idx] |= 1 << bit_idx;
     }

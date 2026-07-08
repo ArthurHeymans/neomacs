@@ -1416,6 +1416,51 @@ fn string_match_with_multibyte_literal_repetition() {
 }
 
 #[test]
+fn string_match_multibyte_charset_range_matches_interior_character() {
+    crate::test_utils::init_test_tracing();
+    let pattern = lisp_pat("[À-Å]");
+    let compiled = regex_emacs::regex_compile_lisp_with_translation(&pattern, false, None).unwrap();
+    assert_eq!(compiled.multibyte_charsets.get(&0), Some(&vec![('À', 'Å')]));
+    let folded = regex_emacs::regex_compile_lisp_with_translation(
+        &pattern,
+        false,
+        Some(regex_emacs::CaseTranslation::standard()),
+    )
+    .unwrap();
+    assert!(
+        folded
+            .multibyte_charsets
+            .get(&0)
+            .is_some_and(|ranges| ranges.contains(&('à', 'å'))),
+        "case-folded range should include GNU's translated image"
+    );
+    assert!(
+        compiled.fastmap[0xC3],
+        "UTF-8 lead byte should be searchable"
+    );
+    let haystack = LispString::from_utf8("Ä");
+    assert!(
+        regex_emacs::re_match(
+            &compiled,
+            haystack.as_bytes(),
+            0,
+            haystack.byte_len(),
+            &DefaultSyntaxLookup,
+            STRING_MATCH_AT_DOT_UNREACHABLE,
+        )
+        .is_some(),
+        "anchored charset match should accept the interior codepoint"
+    );
+
+    let mut md = None;
+    let result = string_match_full("[À-Å]", "Ä", 0, &mut md);
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), Some(0));
+    let md = md.unwrap();
+    assert_eq!(match_group(md.groups[0]), Some(MatchGroup::new(0, 1)));
+}
+
+#[test]
 fn string_match_trivial_escaped_literal_uses_character_positions() {
     crate::test_utils::init_test_tracing();
     let mut md = None;
