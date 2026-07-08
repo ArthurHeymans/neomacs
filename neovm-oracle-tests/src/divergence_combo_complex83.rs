@@ -203,13 +203,20 @@ fn div_cx83_time_difference_in_units() {
 #[test]
 fn div_cx83_time_with_fractional_seconds() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    let expect = expect_test::expect![[
-        r#""OK ((27202 18529 947575 526000) (0 . 1000000) \"00.000\" \"00.000000\")""#
-    ]];
+    let expect =
+        expect_test::expect![[r#""OK ((t t t t t) (0 . 1000000) \"00.000\" \"00.000000\")""#]];
     crate::common::assert_oracle_parity_expect(
         r##"
-(let* ((t0 (encode-time '(30 0 0) 0 12 15 6 2024 nil)))
-  (list (current-time)
+(let* ((t0 (encode-time '(30 0 0) 0 12 15 6 2024 nil))
+       (now (current-time)))
+  (list (list (consp now)
+              (= (length now) 4)
+              (catch 'all-integers
+                (dolist (part now t)
+                  (unless (integerp part)
+                    (throw 'all-integers nil))))
+              (<= 0 (nth 2 now) 999999)
+              (<= 0 (nth 3 now) 999999999999))
         (encode-time '(0 0 0) 0 0 1 1 2024 nil)
         (format-time-string "%S.%3N" t0)
         (format-time-string "%S.%6N" t0)))
