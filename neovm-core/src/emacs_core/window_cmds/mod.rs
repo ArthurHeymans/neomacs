@@ -7948,7 +7948,8 @@ fn frame_parameter_value(frame: &crate::window::Frame, param_key: FrameParamKey)
     }
 
     match param_key.name() {
-        "explicit-name" => frame.explicit_name_value(),
+        "explicit-name" if frame.effective_window_system().is_some() => frame.explicit_name_value(),
+        "explicit-name" => Value::NIL,
         // GNU `Fframe_parameters` reports width/height from live frame geometry
         // for top-level non-window frames, even after their parameter alist has
         // stored requested size values.
@@ -8020,10 +8021,12 @@ pub(crate) fn builtin_frame_parameters(
         frame.icon_name_value(),
     ));
     pairs.push(Value::cons(FrameParam::Title.symbol(), frame.title_value()));
-    pairs.push(Value::cons(
-        Value::symbol("explicit-name"),
-        frame.explicit_name_value(),
-    ));
+    if frame.effective_window_system().is_some() {
+        pairs.push(Value::cons(
+            Value::symbol("explicit-name"),
+            frame.explicit_name_value(),
+        ));
+    }
     let width = if frame_is_top_level_non_window(frame) {
         Value::fixnum(frame.columns() as i64)
     } else {
@@ -8094,7 +8097,7 @@ pub(crate) fn builtin_frame_parameters(
         }
         if k.as_symbol_name()
             .as_deref()
-            .is_some_and(|name| name == "width" || name == "height")
+            .is_some_and(|name| name == "width" || name == "height" || name == "visibility")
         {
             continue;
         }
@@ -8349,10 +8352,17 @@ pub(crate) fn builtin_modify_frame_parameters(
                             }
                         }
                         FrameParamKey::Known(FrameParam::Visibility) => {
-                            // Route through set_frame_visibility so the
-                            // display runtime is notified — mirrors
-                            // GNU's gui_set_visibility → Fmake_frame_invisible.
-                            set_frame_visibility(eval, fid, pair_cdr.is_truthy())?;
+                            if eval.frames.get(fid).is_some_and(|frame| {
+                                frame.effective_window_system().is_some()
+                                    || frame.parent_frame.as_frame_id().is_some()
+                            }) {
+                                // Route through set_frame_visibility so the
+                                // display runtime is notified — mirrors
+                                // GNU's gui_set_visibility → Fmake_frame_invisible.
+                                set_frame_visibility(eval, fid, pair_cdr.is_truthy())?;
+                            } else if let Some(frame) = eval.frames.get_mut(fid) {
+                                frame.set_known_parameter(FrameParam::Visibility, pair_cdr);
+                            }
                         }
                         FrameParamKey::Known(FrameParam::Undecorated) => {
                             if let Some(frame) = eval.frames.get_mut(fid) {

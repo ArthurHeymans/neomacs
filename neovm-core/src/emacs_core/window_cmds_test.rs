@@ -5057,11 +5057,13 @@ fn modify_frame_parameters_name() {
     let results = eval_with_frame(
         "(modify-frame-parameters (selected-frame) '((name . \"NewName\")))
          (frame-parameter (selected-frame) 'name)
-         (frame-parameter (selected-frame) 'explicit-name)",
+         (frame-parameter (selected-frame) 'explicit-name)
+         (assq 'explicit-name (frame-parameters))",
     );
     assert_eq!(results[0], "OK nil");
     assert_eq!(results[1], r#"OK "NewName""#);
-    assert_eq!(results[2], "OK t");
+    assert_eq!(results[2], "OK nil");
+    assert_eq!(results[3], "OK nil");
 }
 
 #[test]
@@ -5077,6 +5079,21 @@ fn modify_frame_parameters_name_nil_restores_generated_name() {
     assert_eq!(results[1], "OK nil");
     assert_eq!(results[2], r#"OK "F1""#);
     assert_eq!(results[3], "OK nil");
+}
+
+#[test]
+fn modify_frame_parameters_top_level_tty_visibility_reports_live_state() {
+    crate::test_utils::init_test_tracing();
+    let results = eval_with_frame(
+        "(modify-frame-parameters (selected-frame) '((visibility . nil)))
+         (frame-visible-p (selected-frame))
+         (frame-parameter nil 'visibility)
+         (assq 'visibility (frame-parameters))",
+    );
+    assert_eq!(results[0], "OK nil");
+    assert_eq!(results[1], "OK t");
+    assert_eq!(results[2], "OK t");
+    assert_eq!(results[3], "OK (visibility . t)");
 }
 
 #[test]
