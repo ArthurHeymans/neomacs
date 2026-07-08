@@ -5820,6 +5820,58 @@ fn set_frame_size_and_position_pixelwise_resizes_gui_child_frame() {
 }
 
 #[test]
+fn set_frame_size_and_position_pixelwise_updates_top_level_tty_native_totals() {
+    crate::test_utils::init_test_tracing();
+    let mut ev = runtime_startup_context();
+    let frame = Value::make_frame(ev.frames.selected_frame().expect("selected frame").id.0);
+
+    super::builtin_set_frame_size_and_position_pixelwise(
+        &mut ev,
+        vec![
+            frame,
+            Value::fixnum(123),
+            Value::fixnum(45),
+            Value::fixnum(17),
+            Value::fixnum(19),
+        ],
+    )
+    .expect("set-frame-size-and-position-pixelwise");
+
+    assert_eq!(
+        super::builtin_frame_native_width(&mut ev, vec![frame]).unwrap(),
+        Value::fixnum(123)
+    );
+    assert_eq!(
+        super::builtin_frame_native_height(&mut ev, vec![frame]).unwrap(),
+        Value::fixnum(46)
+    );
+    assert_eq!(
+        super::builtin_frame_total_cols(&mut ev, vec![frame]).unwrap(),
+        Value::fixnum(123)
+    );
+    assert_eq!(
+        super::builtin_frame_total_lines(&mut ev, vec![frame]).unwrap(),
+        Value::fixnum(46)
+    );
+    assert_eq!(
+        super::builtin_frame_text_width(&mut ev, vec![frame]).unwrap(),
+        Value::fixnum(123)
+    );
+    assert_eq!(
+        super::builtin_frame_text_height(&mut ev, vec![frame]).unwrap(),
+        Value::fixnum(45)
+    );
+
+    let frame_state = ev.frames.selected_frame().expect("selected frame");
+    assert_eq!(frame_state.parameter("width"), Some(Value::fixnum(80)));
+    assert_eq!(frame_state.parameter("height"), Some(Value::fixnum(25)));
+    assert_eq!(frame_state.parameter("left"), Some(Value::fixnum(17)));
+    assert_eq!(frame_state.parameter("top"), Some(Value::fixnum(19)));
+    assert_eq!(frame_state.left_pos, 0);
+    assert_eq!(frame_state.top_pos, 0);
+}
+
+#[test]
 fn resize_input_preserves_buffer_local_fixed_width_side_window() {
     crate::test_utils::init_test_tracing();
     let mut ev = runtime_startup_context();

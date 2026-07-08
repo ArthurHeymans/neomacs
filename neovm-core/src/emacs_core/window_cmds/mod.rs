@@ -5026,6 +5026,8 @@ pub(crate) fn builtin_pop_to_buffer(
 const MIN_FRAME_COLS: i64 = 10;
 const MIN_FRAME_TEXT_LINES: i64 = 5;
 const FRAME_TEXT_LINES_PARAM: &str = "neovm--frame-text-lines";
+const FRAME_TOTAL_COLS_PARAM: &str = "neovm--frame-total-cols";
+const FRAME_TOTAL_LINES_PARAM: &str = "neovm--frame-total-lines";
 const LIVE_GUI_RESIZE_ACK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(1);
 
 #[derive(Clone, Copy, Debug)]
@@ -5090,8 +5092,9 @@ fn sync_live_gui_resize_for_geometry_queries(
 
 fn frame_total_cols(frame: &crate::window::Frame) -> i64 {
     frame
-        .parameter("width")
+        .parameter(FRAME_TOTAL_COLS_PARAM)
         .and_then(|v| v.as_int())
+        .or_else(|| frame.parameter("width").and_then(|v| v.as_int()))
         .unwrap_or(frame.columns() as i64)
 }
 
@@ -5261,8 +5264,9 @@ fn frame_resize_request_from_params(
 
 fn frame_total_lines(frame: &crate::window::Frame) -> i64 {
     frame
-        .parameter("height")
+        .parameter(FRAME_TOTAL_LINES_PARAM)
         .and_then(|v| v.as_int())
+        .or_else(|| frame.parameter("height").and_then(|v| v.as_int()))
         .unwrap_or(frame.lines() as i64)
 }
 
@@ -5305,6 +5309,31 @@ fn set_frame_text_size(frame: &mut crate::window::Frame, cols: i64, text_lines: 
         frame.height = (total_lines as u32).saturating_mul(char_height).max(1);
         frame.sync_window_area_bounds();
     }
+}
+
+fn set_top_level_non_window_pixelwise_totals(
+    frame: &mut crate::window::Frame,
+    text_width: u32,
+    text_height: u32,
+) {
+    let text_width = i64::from(text_width).max(1);
+    let text_height = i64::from(text_height).max(1);
+    let total_lines = text_height
+        .saturating_add(i64::from(frame.minibuffer_leaf.is_some()))
+        .min(u32::MAX as i64);
+
+    frame.set_parameter(
+        Value::symbol(FRAME_TOTAL_COLS_PARAM),
+        Value::fixnum(text_width),
+    );
+    frame.set_parameter(
+        Value::symbol(FRAME_TOTAL_LINES_PARAM),
+        Value::fixnum(total_lines),
+    );
+    frame.set_parameter(
+        Value::symbol(FRAME_TEXT_LINES_PARAM),
+        Value::fixnum(text_height),
+    );
 }
 
 fn live_gui_resize_pixels_from_logical_size(
@@ -6894,6 +6923,19 @@ pub(crate) fn builtin_set_frame_size_and_position_pixelwise(
     }
 
     builtin_set_frame_size(eval, vec![args[0], args[1], args[2], Value::T])?;
+    if eval
+        .frames
+        .get(fid)
+        .is_some_and(frame_is_top_level_non_window)
+    {
+        let width = check_frame_pixels(&args[1], true, 1.0)?;
+        let height = check_frame_pixels(&args[2], true, 1.0)?;
+        let frame = eval
+            .frames
+            .get_mut(fid)
+            .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
+        set_top_level_non_window_pixelwise_totals(frame, width, height);
+    }
     Ok(Value::NIL)
 }
 
