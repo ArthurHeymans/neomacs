@@ -295,7 +295,7 @@ const EARLY_HELP_BODY: &str = concat!(
     "Report bugs to https://github.com/eval-exec/neomacs-windows/issues.\n",
 );
 
-const BOOTSTRAP_CORE_FEATURES: &[&str] = &["neomacs"];
+const BOOTSTRAP_CORE_FEATURES: &[&str] = &[];
 
 fn classify_early_cli_action(args: impl IntoIterator<Item = String>) -> Option<EarlyCliAction> {
     let mut args = args.into_iter();
@@ -2110,6 +2110,10 @@ fn load_neomacs_gui_term_layer(evaluator: &mut Context) {
     {
         return;
     }
+
+    evaluator
+        .eval_str("(provide 'neomacs)")
+        .expect("GUI terminal layer should advertise the Neomacs backend");
 
     let load_path = get_load_path(evaluator.obarray());
     for library in ["term/common-win", "term/neo-win"] {

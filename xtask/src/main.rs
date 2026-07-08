@@ -3035,11 +3035,30 @@ fn run_preloaded_lisp_byte_compile(
     envs: &[(OsString, OsString)],
 ) -> Result<()> {
     print_synthetic_step("byte-compile loadup preloaded Lisp (GNU src/lisp.mk)");
-    let sources =
+    let all_sources =
         parse_preloaded_lisp_sources(&paths.lisp_root.join("loadup.el"), &paths.lisp_root)?;
-    let sources = sources
+    let characters_source = paths.lisp_root.join("international/characters.el");
+    let unicode_deps = preloaded_characters_dependency_sources(&paths.lisp_root);
+    if all_sources.contains(&characters_source) {
+        let deps_to_compile = unicode_deps
+            .iter()
+            .filter(|source| options.dry_run || bytecode_needs_rebuild(source))
+            .collect::<Vec<_>>();
+        for source in deps_to_compile {
+            run_preloaded_lisp_byte_compile_source(options, paths, envs, source)?;
+        }
+    }
+
+    let sources = all_sources
         .into_iter()
-        .filter(|source| options.dry_run || bytecode_needs_rebuild(source))
+        .filter(|source| {
+            options.dry_run
+                || if *source == characters_source {
+                    bytecode_needs_rebuild_with_dependencies(source, &unicode_deps)
+                } else {
+                    bytecode_needs_rebuild(source)
+                }
+        })
         .collect::<Vec<_>>();
 
     if sources.is_empty() {
@@ -3697,6 +3716,39 @@ fn bytecode_needs_rebuild(source: &Path) -> bool {
         (Some(s), Some(e)) => s > e,
         _ => true,
     }
+}
+
+fn bytecode_needs_rebuild_with_dependencies(source: &Path, dependencies: &[PathBuf]) -> bool {
+    if bytecode_needs_rebuild(source) {
+        return true;
+    }
+    let elc = source.with_extension("elc");
+    let Ok(elc_meta) = fs::metadata(&elc) else {
+        return true;
+    };
+    let elc_mtime = elc_meta.modified().ok();
+    dependencies.iter().any(|dependency| {
+        bytecode_needs_rebuild(dependency)
+            || fs::metadata(dependency.with_extension("elc"))
+                .and_then(|metadata| metadata.modified())
+                .ok()
+                .zip(elc_mtime)
+                .is_some_and(|(dep_mtime, target_mtime)| dep_mtime > target_mtime)
+    })
+}
+
+fn preloaded_characters_dependency_sources(lisp_root: &Path) -> Vec<PathBuf> {
+    // GNU src/Makefile.in:
+    //   international/characters.elc: international/charscript.elc
+    //                                international/emoji-zwj.elc
+    // `characters.elc' loads these generated helpers while dump-mode is non-nil,
+    // so they must be byte-compiled before the final pdump.
+    ["international/charscript.el", "international/emoji-zwj.el"]
+        .into_iter()
+        .map(|relative| lisp_root.join(relative))
+        .filter(|source| source.is_file())
+        .filter(|source| !source_has_no_byte_compile_marker(source).unwrap_or(false))
+        .collect()
 }
 
 fn compile_first_args_for_source(native_comp: bool, source: &Path) -> Vec<OsString> {

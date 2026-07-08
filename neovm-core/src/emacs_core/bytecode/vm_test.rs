@@ -6638,7 +6638,7 @@ fn vm_native_stub_clusters_use_direct_dispatch() {
                  (not (null (memq 'gnutls (gnutls-available-p))))
                  (not (null (memq 'gnutls3 (gnutls-available-p))))
                  (neomacs-tls-available-p)
-                 (featurep 'tls)
+                 (not (featurep 'tls))
                  (fboundp 'open-tls-stream)
                  (not (null (assq 'AES-256-CBC (gnutls-ciphers))))
                  (not (null (assq 'SHA256 (gnutls-digests))))

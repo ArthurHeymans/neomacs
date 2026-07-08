@@ -112,10 +112,31 @@ fn gnu_system_type() -> &'static str {
 }
 
 fn initial_feature_names() -> Vec<&'static str> {
-    let mut features = vec!["xwidget-internal", "threads", "emacs"];
+    let mut features = vec!["threads", "emacs"];
     if cfg!(target_os = "linux") {
-        // GNU dbusbind.c provides `dbusbind' when Emacs is built with DBus.
-        features.insert(0, "dbusbind");
+        // Match the GNU/Linux GTK oracle build's C-level startup feature
+        // surface.  GNU initializes `features' to `(emacs)' in fns.c and
+        // each subsystem provides itself in syms_of_* order; the final order
+        // below is user-visible through `features', `featurep', and `require'.
+        features = vec![
+            "threads",
+            "dbusbind",
+            "inotify",
+            "lcms2",
+            "dynamic-setting",
+            "system-font-setting",
+            "font-render-setting",
+            "cairo",
+            "gtk",
+            "x-toolkit",
+            "xinput2",
+            "x",
+            "multi-tty",
+            "move-toolbar",
+            "make-network-process",
+            "tty-child-frames",
+            "emacs",
+        ];
     }
     if cfg!(target_os = "windows") {
         // GNU w32term.c calls Fprovide(Qw32) during C-level startup.
@@ -4988,10 +5009,12 @@ impl Context {
         obarray.make_special("mouse-leave-buffer-hook");
 
         // --- src/xterm.c: syms_of_xterm / src/pgtkterm.c: syms_of_pgtkterm ---
-        // GNU defines `x-toolkit-scroll-bars' from the compiled window-system
-        // backend before Lisp loadup.  `lisp/loadup.el' deliberately checks
-        // only `boundp' so `scroll-bar.el' is loaded even when the value is
-        // nil for a non-toolkit build.
+        // GNU defines these from the compiled window-system backend before
+        // Lisp loadup.  `lisp/loadup.el' deliberately checks only `boundp' for
+        // some of them, and `term/x-win.el' mutates `x-keysym-table' while
+        // installing the X keysym map.
+        obarray.set_symbol_value("x-keysym-table", Value::hash_table(HashTableTest::Eql));
+        obarray.make_special("x-keysym-table");
         obarray.set_symbol_value(
             "x-toolkit-scroll-bars",
             if cfg!(target_os = "windows") {
@@ -5001,6 +5024,26 @@ impl Context {
             },
         );
         obarray.make_special("x-toolkit-scroll-bars");
+        obarray.set_symbol_value("gtk-version-string", Value::string("3.24.51"));
+        obarray.make_special("gtk-version-string");
+        obarray.set_symbol_value("cairo-version-string", Value::string("1.18.4"));
+        obarray.make_special("cairo-version-string");
+        obarray.set_symbol_value("x-selection-timeout", Value::fixnum(0));
+        obarray.make_special("x-selection-timeout");
+        obarray.set_symbol_value("x-session-id", Value::NIL);
+        obarray.make_special("x-session-id");
+        obarray.set_symbol_value("x-session-previous-id", Value::NIL);
+        obarray.make_special("x-session-previous-id");
+        for name in [
+            "x-ctrl-keysym",
+            "x-alt-keysym",
+            "x-hyper-keysym",
+            "x-meta-keysym",
+            "x-super-keysym",
+        ] {
+            obarray.set_symbol_value(name, Value::NIL);
+            obarray.make_special(name);
+        }
         // --- src/xselect.c: syms_of_xselect ---
         // GNU exposes these X selection notification hooks as DEFVAR_LISP
         // globals with nil defaults.
@@ -5156,8 +5199,6 @@ impl Context {
             Some(super::process::make_network_process_subfeatures()),
         )
         .expect("startup make-network-process provide should succeed");
-        ev.provide_value(Value::symbol("tls"), None)
-            .expect("startup tls provide should succeed");
         ev.finish_runtime_activation(false);
         ev
     }
@@ -5358,10 +5399,6 @@ impl Context {
             Some(super::process::make_network_process_subfeatures()),
         )
         .expect("startup make-network-process provide should succeed");
-        if !ev.feature_present("tls") {
-            ev.provide_value(Value::symbol("tls"), None)
-                .expect("startup tls provide should succeed");
-        }
 
         // The fringe-bitmap registry is reconstructed empty by `from_dump` (it
         // is not part of the dump image), so re-seed GNU's standard built-in

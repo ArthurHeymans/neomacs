@@ -186,6 +186,39 @@ fn parse_preloaded_lisp_sources_matches_gnu_lisp_mk_shape() {
 }
 
 #[test]
+fn preloaded_characters_dependencies_match_gnu_makefile_rule() {
+    let tempdir = tempdir();
+    let lisp_root = tempdir.join("lisp");
+    fs::create_dir_all(lisp_root.join("international")).unwrap();
+    fs::write(lisp_root.join("international/charscript.el"), "").unwrap();
+    fs::write(lisp_root.join("international/emoji-zwj.el"), "").unwrap();
+
+    assert_eq!(
+        preloaded_characters_dependency_sources(&lisp_root),
+        vec![
+            lisp_root.join("international/charscript.el"),
+            lisp_root.join("international/emoji-zwj.el"),
+        ]
+    );
+}
+
+#[test]
+fn bytecode_rebuild_with_dependencies_follows_newer_dependency_elc() {
+    let tempdir = tempdir();
+    let source = tempdir.join("characters.el");
+    let dependency = tempdir.join("emoji-zwj.el");
+    fs::write(&source, "").unwrap();
+    fs::write(&dependency, "").unwrap();
+    fs::write(source.with_extension("elc"), "target\n").unwrap();
+    write_elc_newer_than(&dependency, &source.with_extension("elc"));
+
+    assert!(bytecode_needs_rebuild_with_dependencies(
+        &source,
+        &[dependency]
+    ));
+}
+
+#[test]
 fn parse_compile_first_skips_native_entries_by_default() {
     let tempdir = tempdir();
     let lisp_root = tempdir.join("lisp");

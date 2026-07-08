@@ -7936,7 +7936,7 @@ fn find_file_with_suffix_flags() {
 }
 
 #[test]
-fn bootstrap_find_file_prefers_ldefs_boot_over_runtime_loaddefs() {
+fn bootstrap_find_file_uses_runtime_loaddefs_when_present() {
     crate::test_utils::init_test_tracing();
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -7956,13 +7956,10 @@ fn bootstrap_find_file_prefers_ldefs_boot_over_runtime_loaddefs() {
         Some(loaddefs.clone())
     );
 
-    {
-        let _guard = BootstrapLdefsBootPreferenceGuard::enable();
-        assert_eq!(
-            find_file_in_load_path_with_flags("loaddefs", &load_path, false, false, false),
-            Some(ldefs_boot.clone())
-        );
-    }
+    assert_eq!(
+        find_file_in_load_path_with_flags("ldefs-boot.el", &load_path, false, false, false),
+        Some(ldefs_boot)
+    );
 
     assert_eq!(
         find_file_in_load_path_with_flags("loaddefs", &load_path, false, false, false),

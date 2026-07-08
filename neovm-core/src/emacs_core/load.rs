@@ -8,7 +8,6 @@ use super::value::{HashKey, Value, ValueKind, VecLikeType, list_to_vec};
 use super::value_reader::ReadSymbolShorthands;
 use crate::heap_types::LispString;
 use sha2::{Digest, Sha256};
-use std::cell::Cell;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
@@ -18,10 +17,6 @@ use std::os::fd::AsRawFd;
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
 use std::path::{Path, PathBuf};
 use strum::{EnumString, IntoStaticStr};
-
-thread_local! {
-    static BOOTSTRAP_PREFER_LDEFS_BOOT: Cell<bool> = const { Cell::new(false) };
-}
 
 fn load_string_text(value: &Value) -> Option<String> {
     // Used for error display, loaddefs file-name filtering and symbol-name
@@ -108,27 +103,6 @@ fn load_hist_file_name(
         Some(dir) => load_path_lisp_string(&dir.join(file_name)),
         None => super::fileio::path_to_lisp_file_name(Path::new(file_name)),
     }
-}
-
-struct BootstrapLdefsBootPreferenceGuard {
-    previous: bool,
-}
-
-impl BootstrapLdefsBootPreferenceGuard {
-    fn enable() -> Self {
-        let previous = BOOTSTRAP_PREFER_LDEFS_BOOT.with(|cell| cell.replace(true));
-        Self { previous }
-    }
-}
-
-impl Drop for BootstrapLdefsBootPreferenceGuard {
-    fn drop(&mut self) {
-        BOOTSTRAP_PREFER_LDEFS_BOOT.with(|cell| cell.set(self.previous));
-    }
-}
-
-fn bootstrap_prefers_ldefs_boot() -> bool {
-    BOOTSTRAP_PREFER_LDEFS_BOOT.with(Cell::get)
 }
 
 /// EOL-aware coding-system name for an Emacs-extended UTF-8 source file.
@@ -818,25 +792,6 @@ fn find_lisp_file_in_load_path_with_flags(
     if path.is_absolute() {
         return find_for_base(&path, name, no_suffix, must_suffix, prefer_newer)
             .map(|found| load_path_lisp_string(&found));
-    }
-
-    // GNU keeps `ldefs-boot.el` as the curated bootstrap autoload surface and
-    // only requires it to carry autoloads needed during source bootstrap.
-    // When building the source bootstrap evaluator, prefer that curated file
-    // over a potentially fresher runtime `loaddefs.el`, whose extra defcustom
-    // surface can pull later Lisp (for example `electric` -> `nadvice`) before
-    // early bootstrap files like `oclosure` have been loaded.
-    if bootstrap_prefers_ldefs_boot()
-        && !no_suffix
-        && !must_suffix
-        && matches!(name.as_bytes(), b"loaddefs" | b"loaddefs.el")
-    {
-        for dir in load_path {
-            let bootstrap = load_path_buf(dir).join("ldefs-boot.el");
-            if bootstrap.is_file() {
-                return Some(load_path_lisp_string(&bootstrap));
-            }
-        }
     }
 
     // Emacs searches load-path directory-by-directory; suffix preference
@@ -2303,7 +2258,9 @@ fn normalized_bootstrap_features(extra_features: &[&str]) -> Vec<String> {
 // stops serializing dynamic load context bindings as top-level values. V20
 // marks keyboard-translate-table special like GNU's DEFVAR_KBOARD.
 // V21 keeps Neomacs' GUI terminal library out of the dumped batch surface.
-const BOOTSTRAP_IMAGE_SCHEMA_VERSION: u32 = 21;
+// V22 stops redirecting bootstrap `loaddefs` loads to `ldefs-boot` when the
+// real generated loaddefs file exists, matching GNU loadup.el's fallback path.
+const BOOTSTRAP_IMAGE_SCHEMA_VERSION: u32 = 22;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LoadupDumpMode {
@@ -4674,7 +4631,6 @@ pub fn create_bootstrap_evaluator_with_startup_surface(
         // manages eager expansion, etc.
         let loadup_path = lisp_dir.join("loadup.el");
         tracing::info!("Loading loadup.el from {}", loadup_path.display());
-        let _bootstrap_ldefs_boot_preference = BootstrapLdefsBootPreferenceGuard::enable();
         match load_file(&mut eval, &loadup_path) {
             Ok(_) => tracing::info!("loadup.el completed successfully"),
             Err(e) => {
