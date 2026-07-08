@@ -5210,24 +5210,39 @@ fn window_right_divider_width_only_applies_to_non_rightmost_windows() {
 }
 
 #[test]
-fn modify_frame_parameters_width_height_preserve_pixel_dimensions() {
+fn modify_frame_parameters_top_level_tty_reports_live_width_height() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let buf = ev.buffers.create_buffer("*scratch*");
     let fid = ev.frames.create_frame("F1", 800, 600, buf);
-    let out = ev
-        .eval_str_each("(modify-frame-parameters (selected-frame) '((width . 80) (height . 25)))");
+    let (initial_width, initial_height) = {
+        let frame = ev.frames.get(fid).expect("frame should exist");
+        (
+            Value::fixnum(frame.columns() as i64),
+            Value::fixnum(frame.lines() as i64),
+        )
+    };
+    let out = ev.eval_str_each(
+        "(progn
+           (modify-frame-parameters
+            (selected-frame) '((width . 90) (height . 30) (left . 7) (top . 8)))
+           (list (frame-parameter nil 'width)
+                 (frame-parameter nil 'height)
+                 (frame-parameter nil 'left)
+                 (frame-parameter nil 'top)))",
+    );
     assert!(
         out[0].is_ok(),
         "modify-frame-parameters failed: {:?}",
         out[0]
     );
 
-    let frame = ev.frames.get(fid).expect("frame should exist");
-    assert_eq!(frame.width, 800);
-    assert_eq!(frame.height, 600);
-    assert_eq!(frame.parameter("width"), Some(Value::fixnum(80)));
-    assert_eq!(frame.parameter("height"), Some(Value::fixnum(25)));
+    let value = out[0].as_ref().expect("eval result");
+    let items = crate::emacs_core::value::list_to_vec(value).expect("result list");
+    assert_eq!(items[0], initial_width);
+    assert_eq!(items[1], initial_height);
+    assert_eq!(items[2], Value::fixnum(7));
+    assert_eq!(items[3], Value::fixnum(8));
 }
 
 #[test]
@@ -5565,7 +5580,7 @@ fn modify_frame_parameters_tool_bar_lines_reflows_root_window_tree() {
 }
 
 #[test]
-fn set_frame_size_builtins_preserve_pixel_dimensions() {
+fn set_frame_size_builtins_leave_top_level_tty_size_unchanged() {
     crate::test_utils::init_test_tracing();
     let mut ev = Context::new();
     let buf = ev.buffers.create_buffer("*scratch*");
@@ -5585,12 +5600,9 @@ fn set_frame_size_builtins_preserve_pixel_dimensions() {
     let frame = ev.frames.get(fid).expect("frame should exist");
     assert_eq!(frame.width, 800);
     assert_eq!(frame.height, 600);
-    assert_eq!(frame.parameter("width"), Some(Value::fixnum(100)));
-    assert_eq!(frame.parameter("height"), Some(Value::fixnum(36)));
-    assert_eq!(
-        frame.parameter("neovm--frame-text-lines"),
-        Some(Value::fixnum(35))
-    );
+    assert_eq!(frame.parameter("width"), None);
+    assert_eq!(frame.parameter("height"), None);
+    assert_eq!(frame.parameter("neovm--frame-text-lines"), None);
 }
 
 #[test]

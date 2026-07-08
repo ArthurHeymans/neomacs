@@ -5103,6 +5103,10 @@ fn frame_uses_window_system_pixels(frame: &crate::window::Frame) -> bool {
     frame.effective_window_system().is_some()
 }
 
+fn frame_is_top_level_non_window(frame: &crate::window::Frame) -> bool {
+    frame.effective_window_system().is_none() && frame.parent_frame.as_frame_id().is_none()
+}
+
 fn frame_non_text_height_pixels(frame: &crate::window::Frame) -> u32 {
     // GNU frame text size includes the minibuffer window.  Only true frame
     // chrome lives outside the text area for sizing math here.
@@ -6598,7 +6602,11 @@ pub(crate) fn builtin_set_frame_height(
                 pretend,
             )?;
         }
-    } else {
+    } else if ctx
+        .frames
+        .get(fid)
+        .is_some_and(|frame| frame.parent_frame.as_frame_id().is_some())
+    {
         let cols = {
             let frame = &mut ctx
                 .frames
@@ -6684,7 +6692,11 @@ pub(crate) fn builtin_set_frame_width(
                 pretend,
             )?;
         }
-    } else {
+    } else if ctx
+        .frames
+        .get(fid)
+        .is_some_and(|frame| frame.parent_frame.as_frame_id().is_some())
+    {
         let text_lines = {
             let frame = &mut ctx
                 .frames
@@ -6776,7 +6788,11 @@ pub(crate) fn builtin_set_frame_size(
                 false,
             )?;
         }
-    } else {
+    } else if ctx
+        .frames
+        .get(fid)
+        .is_some_and(|frame| frame.parent_frame.as_frame_id().is_some())
+    {
         let cols = ((text_width_px as f32) / char_width.max(1.0))
             .floor()
             .max(1.0) as i64;
@@ -6810,10 +6826,12 @@ pub(crate) fn builtin_set_frame_position(
     let frame = frames
         .get_mut(fid)
         .ok_or_else(|| signal("error", vec![Value::string("Frame not found")]))?;
-    frame.left_pos = x;
-    frame.top_pos = y;
-    frame.set_parameter(Value::symbol("left"), Value::fixnum(x));
-    frame.set_parameter(Value::symbol("top"), Value::fixnum(y));
+    if frame.effective_window_system().is_some() || frame.parent_frame.as_frame_id().is_some() {
+        frame.left_pos = x;
+        frame.top_pos = y;
+        frame.set_parameter(Value::symbol("left"), Value::fixnum(x));
+        frame.set_parameter(Value::symbol("top"), Value::fixnum(y));
+    }
     Ok(Value::T)
 }
 
@@ -7931,9 +7949,11 @@ fn frame_parameter_value(frame: &crate::window::Frame, param_key: FrameParamKey)
 
     match param_key.name() {
         "explicit-name" => frame.explicit_name_value(),
-        // In Emacs, frame parameter width/height are text columns/lines.
-        // For the bootstrap batch frame, explicit parameter overrides preserve
-        // the 80x25 report shape.
+        // GNU `Fframe_parameters` reports width/height from live frame geometry
+        // for top-level non-window frames, even after their parameter alist has
+        // stored requested size values.
+        "width" if frame_is_top_level_non_window(frame) => Value::fixnum(frame.columns() as i64),
+        "height" if frame_is_top_level_non_window(frame) => Value::fixnum(frame.lines() as i64),
         "width" => frame
             .parameter("width")
             .unwrap_or(Value::fixnum(frame.columns() as i64)),
@@ -8004,12 +8024,20 @@ pub(crate) fn builtin_frame_parameters(
         Value::symbol("explicit-name"),
         frame.explicit_name_value(),
     ));
-    let width = frame
-        .parameter("width")
-        .unwrap_or(Value::fixnum(frame.columns() as i64));
-    let height = frame
-        .parameter("height")
-        .unwrap_or(Value::fixnum(frame.lines() as i64));
+    let width = if frame_is_top_level_non_window(frame) {
+        Value::fixnum(frame.columns() as i64)
+    } else {
+        frame
+            .parameter("width")
+            .unwrap_or(Value::fixnum(frame.columns() as i64))
+    };
+    let height = if frame_is_top_level_non_window(frame) {
+        Value::fixnum(frame.lines() as i64)
+    } else {
+        frame
+            .parameter("height")
+            .unwrap_or(Value::fixnum(frame.lines() as i64))
+    };
     pairs.push(Value::cons(Value::symbol("width"), width));
     pairs.push(Value::cons(Value::symbol("height"), height));
     pairs.push(Value::cons(
@@ -8061,6 +8089,12 @@ pub(crate) fn builtin_frame_parameters(
             && k.as_symbol_id()
                 .and_then(FrameParam::from_symbol_id)
                 .is_some_and(|param| param == FrameParam::Font)
+        {
+            continue;
+        }
+        if k.as_symbol_name()
+            .as_deref()
+            .is_some_and(|name| name == "width" || name == "height")
         {
             continue;
         }
