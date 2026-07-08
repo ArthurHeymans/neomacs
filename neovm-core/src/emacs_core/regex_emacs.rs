@@ -2254,6 +2254,16 @@ fn decode_pattern_char(bytes: &[u8], pos: usize, multibyte: bool) -> Option<(u32
     }
 }
 
+fn decode_charset_atom(bytes: &[u8], pos: usize, multibyte: bool) -> Option<(u32, usize)> {
+    decode_pattern_char(bytes, pos, multibyte).map(|(code, len)| {
+        if !multibyte && code >= 0x80 {
+            (emacs_char::unibyte_to_char(code as u8), len)
+        } else {
+            (code, len)
+        }
+    })
+}
+
 fn emacs_char_to_rust_char(code: u32) -> char {
     if emacs_char::char_byte8_p(code) {
         char::from(emacs_char::char_to_byte8(code))
@@ -2417,7 +2427,7 @@ fn compile_charset(
 
     // Special case: ] at start is literal
     let mut first = true;
-    let mut pending_char: Option<char> = None;
+    let mut pending_char: Option<u32> = None;
     let mut closed = false;
 
     while *p < plen {
@@ -2465,7 +2475,7 @@ fn compile_charset(
 
         // Decode a full Emacs character from the pattern.
         let (c, clen) =
-            decode_pattern_char(pattern, *p, pattern_multibyte).unwrap_or((b as u32, 1));
+            decode_charset_atom(pattern, *p, pattern_multibyte).unwrap_or((b as u32, 1));
         *p += clen;
 
         if b == b']' && !first {
@@ -2487,52 +2497,23 @@ fn compile_charset(
         if b == b'-' && *p < plen && pattern[*p] != b']' {
             if let Some(range_start) = pending_char.take() {
                 // Range: range_start - next_char
-                let (range_end, rlen) = decode_pattern_char(pattern, *p, pattern_multibyte)
+                let (range_end, rlen) = decode_charset_atom(pattern, *p, pattern_multibyte)
                     .unwrap_or((pattern[*p] as u32, 1));
-                let range_end = emacs_char_to_rust_char(range_end);
                 *p += rlen;
                 let translate = buf.translate.as_ref();
-                if range_start <= range_end {
-                    if range_start.is_ascii() && range_end.is_ascii() {
-                        // Both ASCII — use the bitmap
-                        for ch in (range_start as u8)..=(range_end as u8) {
-                            set_bitmap_bit(&mut buf.buffer, bitmap_start, ch, translate);
-                        }
-                    } else {
-                        // At least one endpoint is non-ASCII.
-                        // Put the ASCII portion in the bitmap and the rest in
-                        // multibyte ranges.
-                        let start_u32 = range_start as u32;
-                        let end_u32 = range_end as u32;
-                        // ASCII portion: codepoints <= 127
-                        if start_u32 <= 127 {
-                            let ascii_end = end_u32.min(127) as u8;
-                            for ch in (start_u32 as u8)..=ascii_end {
-                                set_bitmap_bit(&mut buf.buffer, bitmap_start, ch, translate);
-                            }
-                        }
-                        // Multibyte portion: codepoints >= 128
-                        let mb_start = if start_u32 >= 128 {
-                            range_start
-                        } else {
-                            '\u{80}'
-                        };
-                        if end_u32 >= 128 {
-                            add_multibyte_range(
-                                &mut buf.buffer,
-                                bitmap_start,
-                                &mut mb_ranges,
-                                mb_start,
-                                range_end,
-                                translate,
-                            );
-                        }
-                    }
-                }
+                add_charset_range(
+                    &mut buf.buffer,
+                    bitmap_start,
+                    &mut mb_ranges,
+                    range_start,
+                    range_end,
+                    pattern_multibyte,
+                    translate,
+                );
                 continue;
             }
             // '-' at start or after a range → literal '-'
-            pending_char = Some('-');
+            pending_char = Some('-' as u32);
             continue;
         }
 
@@ -2553,7 +2534,7 @@ fn compile_charset(
                     buf.translate.as_ref(),
                 );
             }
-            pending_char = Some('\\');
+            pending_char = Some('\\' as u32);
             continue;
         }
 
@@ -2570,8 +2551,6 @@ fn compile_charset(
         // `[:` was not followed by a valid class name, causing
         // spurious "Unmatched [" errors.
 
-        // Regular character
-        let c = emacs_char_to_rust_char(c);
         if let Some(prev) = pending_char.take() {
             add_charset_char(
                 &mut buf.buffer,
@@ -2626,14 +2605,85 @@ fn compile_charset(
 fn add_charset_char(
     buffer: &mut Vec<u8>,
     bitmap_start: usize,
-    c: char,
+    c: u32,
     mb_ranges: &mut Vec<(char, char)>,
     translate: Option<&CaseTranslation>,
 ) {
-    if c.is_ascii() {
+    if c < 0x80 {
         set_bitmap_bit(buffer, bitmap_start, c as u8, translate);
+    } else if emacs_char::char_byte8_p(c) {
+        set_bitmap_raw_bit(buffer, bitmap_start, emacs_char::char_to_byte8(c));
     } else {
-        add_multibyte_range(buffer, bitmap_start, mb_ranges, c, c, translate);
+        let ch = emacs_char_to_rust_char(c);
+        add_multibyte_range(buffer, bitmap_start, mb_ranges, ch, ch, translate);
+    }
+}
+
+fn add_charset_range(
+    buffer: &mut Vec<u8>,
+    bitmap_start: usize,
+    mb_ranges: &mut Vec<(char, char)>,
+    mut start: u32,
+    end: u32,
+    pattern_multibyte: bool,
+    translate: Option<&CaseTranslation>,
+) {
+    if emacs_char::char_byte8_p(end) && start >= 0x80 && !emacs_char::char_byte8_p(start) {
+        return;
+    }
+
+    if start > end {
+        return;
+    }
+
+    if start < 0x80 {
+        let ascii_end = end.min(0x7f);
+        for ch in start..=ascii_end {
+            set_bitmap_bit(buffer, bitmap_start, ch as u8, translate);
+        }
+        start = ascii_end + 1;
+        if emacs_char::char_byte8_p(end) {
+            start = emacs_char::unibyte_to_char(0x80);
+        }
+    }
+
+    if start > end {
+        return;
+    }
+
+    if emacs_char::char_byte8_p(start) {
+        let start_byte = emacs_char::char_to_byte8(start);
+        let end_byte = emacs_char::char_to_byte8(end);
+        for byte in start_byte..=end_byte {
+            set_bitmap_raw_bit(buffer, bitmap_start, byte);
+        }
+    } else if pattern_multibyte {
+        let start_ch = emacs_char_to_rust_char(start);
+        let end_ch = emacs_char_to_rust_char(end);
+        add_multibyte_range(buffer, bitmap_start, mb_ranges, start_ch, end_ch, translate);
+    } else {
+        let Some(start_byte) = regex_char_to_unibyte(start) else {
+            return;
+        };
+        let Some(end_byte) = regex_char_to_unibyte(end) else {
+            return;
+        };
+        for byte in start_byte..=end_byte {
+            let c = regex_unibyte_to_char(byte);
+            if emacs_char::char_byte8_p(c) {
+                set_bitmap_raw_bit(buffer, bitmap_start, byte);
+            } else {
+                let translated = translate.map_or(c, |table| table.translate(c));
+                if let Some(translated_byte) = regex_char_to_unibyte(translated) {
+                    set_bitmap_raw_bit(buffer, bitmap_start, translated_byte);
+                } else {
+                    set_bitmap_raw_bit(buffer, bitmap_start, byte);
+                }
+                if let Some(ch) = char::from_u32(translated) {
+                    push_or_merge_multibyte_range(mb_ranges, ch);
+                }
+            }
+        }
     }
 }
 

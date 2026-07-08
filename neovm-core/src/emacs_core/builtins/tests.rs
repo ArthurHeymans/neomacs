@@ -8433,6 +8433,26 @@ fn string_match_handles_raw_unibyte_pattern_without_panicking() {
 }
 
 #[test]
+fn string_match_unibyte_high_byte_charset_range_matches_gnu() {
+    crate::test_utils::init_test_tracing();
+    let mut eval = crate::emacs_core::eval::Context::new();
+    let high_byte_range = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
+        b'[', 0x80, b'-', 0xFF, b']',
+    ]));
+    let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xC3]));
+    let result = builtin_string_match(&mut eval, vec![high_byte_range, raw])
+        .expect("raw high-byte range should compile");
+    assert_eq!(result, Value::fixnum(0));
+
+    let all_bytes = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
+        b'[', b'^', 0x00, b'-', 0x7F, 0x80, b'-', 0xFF, b']',
+    ]));
+    let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![0xC3]));
+    let result = builtin_string_match(&mut eval, vec![all_bytes, raw]).expect("negated byte range");
+    assert_eq!(result, Value::NIL);
+}
+
+#[test]
 fn substring_preserves_raw_unibyte_string_content() {
     crate::test_utils::init_test_tracing();
     let raw = Value::heap_string(crate::heap_types::LispString::from_unibyte(vec![
