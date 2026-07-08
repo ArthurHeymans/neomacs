@@ -210,19 +210,26 @@ fn div_cx9_encode_string_replacement_char_count() {
 #[test]
 fn div_cx9_write_region_mustbenew() {
     return_if_neovm_enable_oracle_proptest_not_set!();
-    crate::common::assert_oracle_parity(
+    let expect = expect_test::expect![[r#""OK (:correctly-blocked :created t \"new\")""#]];
+    crate::common::assert_oracle_parity_expect(
         r##"
 (let ((f (make-temp-file "neo-cx9-mbn-"))
       (f2 (make-temp-file "neo-cx9-mbn2-")))
   (ignore-errors (delete-file f2))
-  (condition-case e
-      (progn (write-region "data" nil f nil nil nil t) :ok)
-    (file-already-exists :exists))
-  (prog1 (condition-case e
-             (progn (write-region "data" nil f nil nil nil 'excl) :unexpected)
-           (file-already-exists :correctly-blocked))
-    (ignore-errors (delete-file f)) (ignore-errors (delete-file f2))))
+  (prog1 (list (condition-case e
+                   (progn (write-region "data" nil f nil nil nil 'excl) :unexpected)
+                 (file-already-exists :correctly-blocked))
+               (condition-case e
+                   (progn (write-region "new" nil f2 nil nil nil 'excl) :created)
+                 (file-already-exists :unexpected))
+               (file-exists-p f2)
+               (with-temp-buffer
+                 (insert-file-contents f2)
+                 (buffer-string)))
+    (ignore-errors (delete-file f))
+    (ignore-errors (delete-file f2))))
 "##,
+        expect,
     );
 }
 
