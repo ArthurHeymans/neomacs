@@ -1555,7 +1555,9 @@ impl WgpuRenderer {
                 };
                 if changed {
                     let old_text = self
-                        .fx.title_fade.prev_breadcrumb_text
+                        .fx
+                        .title_fade
+                        .prev_breadcrumb_text
                         .get(&wid)
                         .cloned()
                         .unwrap_or_default();
@@ -1572,10 +1574,15 @@ impl WgpuRenderer {
                         ),
                     });
                 }
-                self.fx.title_fade.prev_breadcrumb_text.insert(wid, new_text.clone());
+                self.fx
+                    .title_fade
+                    .prev_breadcrumb_text
+                    .insert(wid, new_text.clone());
             }
             // Clean up expired fades
-            self.fx.title_fade.active
+            self.fx
+                .title_fade
+                .active
                 .retain(|f| f.started.elapsed() < f.duration);
             if !self.fx.title_fade.active.is_empty() {
                 self.fx.needs_continuous_redraw = true;
@@ -1597,7 +1604,9 @@ impl WgpuRenderer {
 
             // Check if this window has an active title fade
             let active_fade = self
-                .fx.title_fade.active
+                .fx
+                .title_fade
+                .active
                 .iter()
                 .find(|f| f.window_id == info.window_id.get());
 
@@ -2580,7 +2589,8 @@ impl WgpuRenderer {
                 batch_ranges.push((bg, start..end));
             }
             let icon_upload = self
-                .arenas.image
+                .arenas
+                .image
                 .upload(&self.device, &self.queue, &all_verts);
             if let Some(ref upload) = icon_upload {
                 let mut encoder =
@@ -2843,7 +2853,8 @@ impl WgpuRenderer {
                 batch_ranges.push((bg, start..end));
             }
             let icon_upload = self
-                .arenas.image
+                .arenas
+                .image
                 .upload(&self.device, &self.queue, &all_verts);
             if let Some(ref upload) = icon_upload {
                 let mut encoder =

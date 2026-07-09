@@ -8,16 +8,13 @@ use cosmic_text::SubpixelBin;
 use wgpu::util::DeviceExt;
 
 use neomacs_display_protocol::face::{BoxType, FaceAttributes, UnderlineStyle};
-use neomacs_display_protocol::frame_glyphs::{
-    CursorStyle, FrameGlyph, MaterializedFaceData,
-};
+use neomacs_display_protocol::frame_glyphs::{CursorStyle, FrameGlyph, MaterializedFaceData};
 use neomacs_display_protocol::types::Color;
 
 use super::super::glyph_atlas::{
-    AnyAtlasEntry, ComposedGlyphKey, GlyphKey, SubpixelRequest, WgpuGlyphAtlas,
-    glyph_font_identity,
+    AnyAtlasEntry, ComposedGlyphKey, GlyphKey, SubpixelRequest, WgpuGlyphAtlas, glyph_font_identity,
 };
-use super::super::vertex::{GlyphVertex, SubpixelGlyphVertex, RectVertex, RoundedRectVertex};
+use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex};
 use super::frame_pass::{BoxSpanSet, FrameParams, FramePassCtx};
 use super::glyphs::{
     CHAR_OVERLAP_MIN_AXIS, RenderedCharBounds, build_subpixel_vertices, color_is_grayscale,
@@ -207,10 +204,7 @@ impl WgpuRenderer {
                         y_bin,
                     };
                     seen_single_keys.insert(key.clone());
-                    if trace_face_debug_enabled()
-                        && !want_overlay
-                        && !color_is_grayscale(*fg)
-                    {
+                    if trace_face_debug_enabled() && !want_overlay && !color_is_grayscale(*fg) {
                         tracing::info!(
                             "face-debug call={} milestone=before_get_or_create char={:?} face={} pos=({:.1},{:.1}) fg=({:.3},{:.3},{:.3},{:.3})",
                             face_debug_call_id,
@@ -248,37 +242,36 @@ impl WgpuRenderer {
                     let tex_v_min_base = uv.min()[1];
                     let tex_v_max_base = uv.max()[1];
 
-                    let (glyph_y, glyph_h, tex_v_min, tex_v_max) =
-                        if let Some(clip) = clip_rect {
-                            let full_h = glyph_h;
-                            let v_range = tex_v_max_base - tex_v_min_base;
-                            let mut y0 = glyph_y;
-                            let mut h0 = glyph_h;
-                            let mut v0 = tex_v_min_base;
-                            let mut v1 = tex_v_max_base;
-                            let top = clip.y;
-                            let bottom = clip.y + clip.height;
-                            if y0 < top {
-                                let cut = top - y0;
-                                if cut >= h0 {
-                                    continue;
-                                }
-                                y0 = top;
-                                h0 -= cut;
-                                v0 += (cut / full_h) * v_range;
+                    let (glyph_y, glyph_h, tex_v_min, tex_v_max) = if let Some(clip) = clip_rect {
+                        let full_h = glyph_h;
+                        let v_range = tex_v_max_base - tex_v_min_base;
+                        let mut y0 = glyph_y;
+                        let mut h0 = glyph_h;
+                        let mut v0 = tex_v_min_base;
+                        let mut v1 = tex_v_max_base;
+                        let top = clip.y;
+                        let bottom = clip.y + clip.height;
+                        if y0 < top {
+                            let cut = top - y0;
+                            if cut >= h0 {
+                                continue;
                             }
-                            if y0 + h0 > bottom {
-                                let cut = (y0 + h0) - bottom;
-                                if cut >= h0 {
-                                    continue;
-                                }
-                                h0 -= cut;
-                                v1 -= (cut / full_h) * v_range;
+                            y0 = top;
+                            h0 -= cut;
+                            v0 += (cut / full_h) * v_range;
+                        }
+                        if y0 + h0 > bottom {
+                            let cut = (y0 + h0) - bottom;
+                            if cut >= h0 {
+                                continue;
                             }
-                            (y0, h0, v0, v1)
-                        } else {
-                            (glyph_y, glyph_h, tex_v_min_base, tex_v_max_base)
-                        };
+                            h0 -= cut;
+                            v1 -= (cut / full_h) * v_range;
+                        }
+                        (y0, h0, v0, v1)
+                    } else {
+                        (glyph_y, glyph_h, tex_v_min_base, tex_v_max_base)
+                    };
 
                     if glyph_w > CHAR_OVERLAP_MIN_AXIS && glyph_h > CHAR_OVERLAP_MIN_AXIS {
                         let cell_right = *x + *width;
@@ -620,12 +613,10 @@ impl WgpuRenderer {
                         raw,
                     );
                 }
-                if let Some((idx, vertex)) =
-                    all_vertices.iter().enumerate().find(|(_, v)| {
-                        let [r, g, b, _] = v.color;
-                        (r - g).abs() > 0.001 || (g - b).abs() > 0.001
-                    })
-                {
+                if let Some((idx, vertex)) = all_vertices.iter().enumerate().find(|(_, v)| {
+                    let [r, g, b, _] = v.color;
+                    (r - g).abs() > 0.001 || (g - b).abs() > 0.001
+                }) {
                     let raw = bytemuck::bytes_of(vertex);
                     tracing::info!(
                         "face-debug call={} mask-vertex-colored idx={} pos=({:.1},{:.1}) uv=({:.3},{:.3}) color=({:.3},{:.3},{:.3},{:.3}) raw={:02x?}",
@@ -649,9 +640,10 @@ impl WgpuRenderer {
                 }
             }
 
-            let mask_upload =
-                self.arenas.glyph
-                    .upload(&self.device, &self.queue, &all_vertices);
+            let mask_upload = self
+                .arenas
+                .glyph
+                .upload(&self.device, &self.queue, &all_vertices);
             stats.glyph_vertex_buffer_creations += 1;
 
             if let Some(ref upload) = mask_upload {
@@ -693,7 +685,8 @@ impl WgpuRenderer {
                 .collect();
 
             let subpixel_upload =
-                self.arenas.subpixel
+                self.arenas
+                    .subpixel
                     .upload(&self.device, &self.queue, &all_vertices);
             stats.glyph_vertex_buffer_creations += 1;
 
@@ -707,9 +700,7 @@ impl WgpuRenderer {
                 let page_id = entry.page_id_value();
                 let batch_start = i;
                 i += 1;
-                while i < subpixel_data.len()
-                    && subpixel_data[i].0.page_id_value() == page_id
-                {
+                while i < subpixel_data.len() && subpixel_data[i].0.page_id_value() == page_id {
                     i += 1;
                 }
                 let bg = match glyph_atlas.atlas_bind_group(*entry) {
@@ -738,9 +729,10 @@ impl WgpuRenderer {
                 .flat_map(|(_, verts)| verts.iter().copied())
                 .collect();
 
-            let color_upload =
-                self.arenas.glyph
-                    .upload(&self.device, &self.queue, &all_vertices);
+            let color_upload = self
+                .arenas
+                .glyph
+                .upload(&self.device, &self.queue, &all_vertices);
             stats.glyph_vertex_buffer_creations += 1;
 
             if let Some(ref upload) = color_upload {
@@ -830,9 +822,7 @@ impl WgpuRenderer {
                     let (ul_pos, ul_thick) = frame_glyphs
                         .faces
                         .get(face_id)
-                        .map(|f| {
-                            (f.underline_position as f32, f.underline_thickness as f32)
-                        })
+                        .map(|f| (f.underline_position as f32, f.underline_thickness as f32))
                         .unwrap_or((1.0, 1.0));
 
                     // --- Underline ---
@@ -841,8 +831,7 @@ impl WgpuRenderer {
                         let ul_y = baseline_y + ul_pos;
                         let line_thickness = ul_thick.max(1.0);
 
-                        match UnderlineStyle::from_gnu_code(*underline).unwrap_or_default()
-                        {
+                        match UnderlineStyle::from_gnu_code(*underline).unwrap_or_default() {
                             UnderlineStyle::Line => {
                                 // Single solid line
                                 self.add_rect(
@@ -862,8 +851,7 @@ impl WgpuRenderer {
                                 let mut cx = *x;
                                 while cx < *x + *width {
                                     let sw = seg_w.min(*x + *width - cx);
-                                    let phase =
-                                        (cx - *x) * std::f32::consts::TAU / wavelength;
+                                    let phase = (cx - *x) * std::f32::consts::TAU / wavelength;
                                     let offset = phase.sin() * amplitude;
                                     self.add_rect(
                                         &mut decoration_vertices,
@@ -995,8 +983,7 @@ impl WgpuRenderer {
                     };
                     let has_underline = face.attributes.contains(FaceAttributes::UNDERLINE);
                     let has_overline = face.attributes.contains(FaceAttributes::OVERLINE);
-                    let has_strike =
-                        face.attributes.contains(FaceAttributes::STRIKE_THROUGH);
+                    let has_strike = face.attributes.contains(FaceAttributes::STRIKE_THROUGH);
                     if !has_underline && !has_overline && !has_strike {
                         continue;
                     }
@@ -1037,8 +1024,7 @@ impl WgpuRenderer {
                                 let mut cx = *x;
                                 while cx < *x + *width {
                                     let sw = seg_w.min(*x + *width - cx);
-                                    let phase =
-                                        (cx - *x) * std::f32::consts::TAU / wavelength;
+                                    let phase = (cx - *x) * std::f32::consts::TAU / wavelength;
                                     let offset = phase.sin() * amplitude;
                                     self.add_rect(
                                         &mut decoration_vertices,

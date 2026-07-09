@@ -3,9 +3,9 @@
 use super::super::glyph_atlas::{ComposedGlyphKey, GlyphKey, WgpuGlyphAtlas};
 use super::super::vertex::{RectVertex, SubpixelGlyphVertex, Uniforms};
 use super::GlyphRenderStats;
-use super::frame_pass::{BoxSpan, FramePassCtx, FrameParams};
 use super::ModeLineFadeEntry;
 use super::WgpuRenderer;
+use super::frame_pass::{BoxSpan, FrameParams, FramePassCtx};
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
@@ -23,7 +23,6 @@ use wgpu::util::DeviceExt;
 pub(super) const CHAR_OVERLAP_MIN_AXIS: f32 = 0.5;
 const CHAR_OVERLAP_MIN_AREA: f32 = 1.0;
 const CHAR_OVERLAP_LOG_LIMIT: usize = 32;
-
 
 #[derive(Debug, Clone)]
 pub(super) struct RenderedCharBounds {
@@ -1243,12 +1242,7 @@ impl WgpuRenderer {
                 renderer_height: self.height as f32,
             };
 
-            self.draw_pre_content_background_effects(
-                &mut ctx.pass,
-                &ectx,
-                faces,
-                &box_spans.spans,
-            );
+            self.draw_pre_content_background_effects(&mut ctx.pass, &ectx, faces, &box_spans.spans);
 
             self.draw_pre_content_effects(&mut ctx.pass, &ectx);
 
@@ -1298,7 +1292,6 @@ impl WgpuRenderer {
         self.queue.submit(std::iter::once(encoder.finish()));
     }
 
-
     fn refresh_frame_animation_state(&mut self, frame_glyphs: &FrameGlyphBuffer) {
         // Reset continuous redraw flag (will be set by dim fade or other animations).
         self.fx.needs_continuous_redraw = false;
@@ -1315,13 +1308,17 @@ impl WgpuRenderer {
     }
 
     fn refresh_line_animation_state(&mut self) {
-        self.fx.line_anim.active
+        self.fx
+            .line_anim
+            .active
             .retain(|a| a.started.elapsed() < a.duration);
         self.mark_continuous_redraw_if(!self.fx.line_anim.active.is_empty());
     }
 
     fn refresh_mode_line_transition_state(&mut self, frame_glyphs: &FrameGlyphBuffer) {
-        self.fx.mode_line_fade.active
+        self.fx
+            .mode_line_fade
+            .active
             .retain(|e| e.started.elapsed() < e.duration);
         self.mark_continuous_redraw_if(!self.fx.mode_line_fade.active.is_empty());
 
@@ -1363,12 +1360,16 @@ impl WgpuRenderer {
             }
             let hash = hasher.finish();
             let prev = self
-                .fx.mode_line_fade.prev_hashes
+                .fx
+                .mode_line_fade
+                .prev_hashes
                 .insert(info.window_id.get(), hash);
             if let Some(prev_hash) = prev
                 && prev_hash != hash
             {
-                self.fx.mode_line_fade.active
+                self.fx
+                    .mode_line_fade
+                    .active
                     .retain(|e| e.window_id != info.window_id.get());
                 self.fx.mode_line_fade.active.push(ModeLineFadeEntry {
                     window_id: info.window_id.get(),
@@ -1387,14 +1388,18 @@ impl WgpuRenderer {
     }
 
     fn refresh_text_fade_state(&mut self) {
-        self.fx.text_fade.active
+        self.fx
+            .text_fade
+            .active
             .retain(|e| e.started.elapsed() < e.duration);
         self.mark_continuous_redraw_if(!self.fx.text_fade.active.is_empty());
     }
 
     fn refresh_scroll_spacing_state(&mut self) {
         let now_spacing = std::time::Instant::now();
-        self.fx.scroll_spacing.active
+        self.fx
+            .scroll_spacing
+            .active
             .retain(|e| now_spacing.duration_since(e.started) < e.duration);
         self.mark_continuous_redraw_if(!self.fx.scroll_spacing.active.is_empty());
     }
@@ -1424,7 +1429,9 @@ impl WgpuRenderer {
     }
 
     fn refresh_scroll_momentum_state(&mut self) {
-        self.fx.scroll_momentum.active
+        self.fx
+            .scroll_momentum
+            .active
             .retain(|e| e.started.elapsed() < e.duration);
         self.mark_continuous_redraw_if(!self.fx.scroll_momentum.active.is_empty());
     }
@@ -1502,7 +1509,11 @@ impl WgpuRenderer {
         })
     }
 
-    pub(super) fn clip_vertical(y: f32, height: f32, clip_rect: Option<&Rect>) -> Option<(f32, f32)> {
+    pub(super) fn clip_vertical(
+        y: f32,
+        height: f32,
+        clip_rect: Option<&Rect>,
+    ) -> Option<(f32, f32)> {
         if height <= 0.0 {
             return None;
         }

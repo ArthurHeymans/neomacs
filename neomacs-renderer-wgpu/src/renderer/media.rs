@@ -16,7 +16,8 @@ impl WgpuRenderer {
         fg_color: u32,
         bg_color: u32,
     ) -> u32 {
-        self.caches.image
+        self.caches
+            .image
             .load_file(path, max_width, max_height, fg_color, bg_color)
     }
 
@@ -30,7 +31,8 @@ impl WgpuRenderer {
         fg_color: u32,
         bg_color: u32,
     ) {
-        self.caches.image
+        self.caches
+            .image
             .load_file_with_id(id, path, max_width, max_height, fg_color, bg_color)
     }
 
@@ -43,7 +45,8 @@ impl WgpuRenderer {
         fg_color: u32,
         bg_color: u32,
     ) -> u32 {
-        self.caches.image
+        self.caches
+            .image
             .load_data(data, max_width, max_height, fg_color, bg_color)
     }
 
@@ -57,19 +60,22 @@ impl WgpuRenderer {
         fg_color: u32,
         bg_color: u32,
     ) {
-        self.caches.image
+        self.caches
+            .image
             .load_data_with_id(id, data, max_width, max_height, fg_color, bg_color)
     }
 
     /// Load image from raw ARGB32 pixel data
     pub fn load_image_argb32(&mut self, data: &[u8], width: u32, height: u32, stride: u32) -> u32 {
-        self.caches.image
+        self.caches
+            .image
             .load_raw_argb32(data, width, height, stride, 0, 0)
     }
 
     /// Load image from raw RGB24 pixel data
     pub fn load_image_rgb24(&mut self, data: &[u8], width: u32, height: u32, stride: u32) -> u32 {
-        self.caches.image
+        self.caches
+            .image
             .load_raw_rgb24(data, width, height, stride, 0, 0)
     }
 
@@ -82,7 +88,8 @@ impl WgpuRenderer {
         height: u32,
         stride: u32,
     ) {
-        self.caches.image
+        self.caches
+            .image
             .load_raw_argb32_with_id(id, data, width, height, stride)
     }
 
@@ -95,7 +102,8 @@ impl WgpuRenderer {
         height: u32,
         stride: u32,
     ) {
-        self.caches.image
+        self.caches
+            .image
             .load_raw_rgb24_with_id(id, data, width, height, stride)
     }
 
@@ -111,7 +119,8 @@ impl WgpuRenderer {
 
     /// Get image dimensions (works for pending and loaded images)
     pub fn get_image_size(&self, id: u32) -> Option<(u32, u32)> {
-        self.caches.image
+        self.caches
+            .image
             .get_dimensions(id)
             .map(|d| (d.width, d.height))
     }
@@ -147,14 +156,16 @@ impl WgpuRenderer {
         loop_count: i32,
         autoplay: bool,
     ) {
-        self.caches.video
+        self.caches
+            .video
             .load_file_with_id(id, path, loop_count, autoplay);
     }
 
     /// Load video from URI with a pre-allocated ID.
     #[cfg(feature = "video")]
     pub fn load_video_uri_with_id(&mut self, id: u32, uri: &str, loop_count: i32, autoplay: bool) {
-        self.caches.video
+        self.caches
+            .video
             .load_uri_with_id(id, uri, loop_count, autoplay);
     }
 
@@ -208,7 +219,8 @@ impl WgpuRenderer {
         // are compatible with the shared image/video rendering pipeline
         let layout = self.caches.image.bind_group_layout();
         let sampler = self.caches.image.sampler();
-        self.caches.video
+        self.caches
+            .video
             .process_pending(&self.device, &self.queue, layout, sampler);
     }
 
@@ -342,7 +354,8 @@ impl WgpuRenderer {
         view_id: u32,
         buffer: super::super::external_buffer::DmaBufBuffer,
     ) -> bool {
-        self.caches.webkit
+        self.caches
+            .webkit
             .update_view(view_id, buffer, &self.device, &self.queue)
     }
 

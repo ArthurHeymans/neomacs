@@ -1116,7 +1116,8 @@ impl WgpuRenderer {
                     .collect();
 
                 let mask_upload =
-                    self.arenas.glyph
+                    self.arenas
+                        .glyph
                         .upload(&self.device, &self.queue, &all_vertices);
                 stats.glyph_vertex_buffer_creations += 1;
 
@@ -1159,7 +1160,8 @@ impl WgpuRenderer {
                     .collect();
 
                 let subpixel_upload =
-                    self.arenas.subpixel
+                    self.arenas
+                        .subpixel
                         .upload(&self.device, &self.queue, &all_vertices);
                 stats.glyph_vertex_buffer_creations += 1;
 
@@ -1202,7 +1204,8 @@ impl WgpuRenderer {
                     .collect();
 
                 let color_upload =
-                    self.arenas.glyph
+                    self.arenas
+                        .glyph
                         .upload(&self.device, &self.queue, &all_vertices);
                 stats.glyph_vertex_buffer_creations += 1;
 

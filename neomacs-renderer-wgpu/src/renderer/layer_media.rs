@@ -31,39 +31,38 @@ impl WgpuRenderer {
                 ..
             } = glyph
             {
-                let (draw_y, clipped_height, tex_v_min, tex_v_max) =
-                    if let Some(clip) = clip_rect {
-                        let mut y0 = *y;
-                        let mut h0 = *height;
-                        let mut v0 = 0.0_f32;
-                        let mut v1 = 1.0_f32;
-                        let top = clip.y;
-                        let bottom = clip.y + clip.height;
-                        if y0 < top {
-                            let cut = top - y0;
-                            if cut >= h0 {
-                                continue;
-                            }
-                            y0 = top;
-                            h0 -= cut;
-                            if *height > 0.0 {
-                                v0 += cut / *height;
-                            }
+                let (draw_y, clipped_height, tex_v_min, tex_v_max) = if let Some(clip) = clip_rect {
+                    let mut y0 = *y;
+                    let mut h0 = *height;
+                    let mut v0 = 0.0_f32;
+                    let mut v1 = 1.0_f32;
+                    let top = clip.y;
+                    let bottom = clip.y + clip.height;
+                    if y0 < top {
+                        let cut = top - y0;
+                        if cut >= h0 {
+                            continue;
                         }
-                        if y0 + h0 > bottom {
-                            let cut = (y0 + h0) - bottom;
-                            if cut >= h0 {
-                                continue;
-                            }
-                            h0 -= cut;
-                            if *height > 0.0 {
-                                v1 -= cut / *height;
-                            }
+                        y0 = top;
+                        h0 -= cut;
+                        if *height > 0.0 {
+                            v0 += cut / *height;
                         }
-                        (y0, h0, v0, v1)
-                    } else {
-                        (*y, *height, 0.0, 1.0)
-                    };
+                    }
+                    if y0 + h0 > bottom {
+                        let cut = (y0 + h0) - bottom;
+                        if cut >= h0 {
+                            continue;
+                        }
+                        h0 -= cut;
+                        if *height > 0.0 {
+                            v1 -= cut / *height;
+                        }
+                    }
+                    (y0, h0, v0, v1)
+                } else {
+                    (*y, *height, 0.0, 1.0)
+                };
 
                 // Skip if fully clipped
                 if clipped_height <= 0.0 {
@@ -178,39 +177,38 @@ impl WgpuRenderer {
                 ..
             } = glyph
             {
-                let (draw_y, clipped_height, tex_v_min, tex_v_max) =
-                    if let Some(clip) = clip_rect {
-                        let mut y0 = *y;
-                        let mut h0 = *height;
-                        let mut v0 = 0.0_f32;
-                        let mut v1 = 1.0_f32;
-                        let top = clip.y;
-                        let bottom = clip.y + clip.height;
-                        if y0 < top {
-                            let cut = top - y0;
-                            if cut >= h0 {
-                                continue;
-                            }
-                            y0 = top;
-                            h0 -= cut;
-                            if *height > 0.0 {
-                                v0 += cut / *height;
-                            }
+                let (draw_y, clipped_height, tex_v_min, tex_v_max) = if let Some(clip) = clip_rect {
+                    let mut y0 = *y;
+                    let mut h0 = *height;
+                    let mut v0 = 0.0_f32;
+                    let mut v1 = 1.0_f32;
+                    let top = clip.y;
+                    let bottom = clip.y + clip.height;
+                    if y0 < top {
+                        let cut = top - y0;
+                        if cut >= h0 {
+                            continue;
                         }
-                        if y0 + h0 > bottom {
-                            let cut = (y0 + h0) - bottom;
-                            if cut >= h0 {
-                                continue;
-                            }
-                            h0 -= cut;
-                            if *height > 0.0 {
-                                v1 -= cut / *height;
-                            }
+                        y0 = top;
+                        h0 -= cut;
+                        if *height > 0.0 {
+                            v0 += cut / *height;
                         }
-                        (y0, h0, v0, v1)
-                    } else {
-                        (*y, *height, 0.0, 1.0)
-                    };
+                    }
+                    if y0 + h0 > bottom {
+                        let cut = (y0 + h0) - bottom;
+                        if cut >= h0 {
+                            continue;
+                        }
+                        h0 -= cut;
+                        if *height > 0.0 {
+                            v1 -= cut / *height;
+                        }
+                    }
+                    (y0, h0, v0, v1)
+                } else {
+                    (*y, *height, 0.0, 1.0)
+                };
 
                 // Skip if fully clipped
                 if clipped_height <= 0.0 {

@@ -200,9 +200,7 @@ impl WgpuRenderer {
             } = glyph
             {
                 if !row_role.is_chrome()
-                    && !Self::overlaps_rounded_box_span(
-                        *x, *y, false, box_spans, faces, box_margin,
-                    )
+                    && !Self::overlaps_rounded_box_span(*x, *y, false, box_spans, faces, box_margin)
                 {
                     let ya = if has_line_anims {
                         *y + self.line_y_offset(*x, *y)
@@ -683,13 +681,13 @@ impl WgpuRenderer {
         let faces = ctx.params.faces;
         let box_spans = &spans.spans;
         if !overlay_rect_vertices.is_empty() {
-            let rect_buffer =
-                self.device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Overlay Rect Buffer"),
-                        contents: bytemuck::cast_slice(overlay_rect_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+            let rect_buffer = self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Overlay Rect Buffer"),
+                    contents: bytemuck::cast_slice(overlay_rect_vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
 
             render_pass.set_pipeline(&self.pipelines.rect);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);

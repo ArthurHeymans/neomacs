@@ -141,7 +141,9 @@ impl WgpuRenderer {
         now: std::time::Instant,
     ) {
         // Replace existing entry for this window
-        self.fx.scroll_velocity.fades
+        self.fx
+            .scroll_velocity
+            .fades
             .retain(|e| e.window_id != window_id);
         self.fx.scroll_velocity.fades.push(ScrollVelocityFadeEntry {
             window_id,
@@ -314,7 +316,9 @@ impl WgpuRenderer {
         direction: i32,
         now: std::time::Instant,
     ) {
-        self.fx.scroll_momentum.active
+        self.fx
+            .scroll_momentum
+            .active
             .retain(|e| e.window_id != window_id);
         self.fx.scroll_momentum.active.push(ScrollMomentumEntry {
             window_id,
@@ -366,7 +370,9 @@ impl WgpuRenderer {
         at_top: bool,
         now: std::time::Instant,
     ) {
-        self.fx.edge_glow.entries
+        self.fx
+            .edge_glow
+            .entries
             .retain(|e| e.window_id != window_id || e.at_top != at_top);
         self.fx.edge_glow.entries.push(EdgeGlowEntry {
             window_id,
@@ -415,7 +421,10 @@ impl WgpuRenderer {
     /// Trigger a text fade-in animation for a window
     pub fn trigger_text_fade_in(&mut self, window_id: i64, bounds: Rect, now: std::time::Instant) {
         // Replace existing animation for this window
-        self.fx.text_fade.active.retain(|e| e.window_id != window_id);
+        self.fx
+            .text_fade
+            .active
+            .retain(|e| e.window_id != window_id);
         self.fx.text_fade.active.push(TextFadeEntry {
             window_id,
             bounds,
@@ -458,14 +467,18 @@ impl WgpuRenderer {
         now: std::time::Instant,
     ) {
         // Replace existing animation for this window
-        self.fx.scroll_spacing.active
+        self.fx
+            .scroll_spacing
+            .active
             .retain(|e| e.window_id != window_id);
         self.fx.scroll_spacing.active.push(ScrollSpacingEntry {
             window_id,
             bounds,
             direction,
             started: now,
-            duration: std::time::Duration::from_millis(self.durations.scroll_line_spacing_ms as u64),
+            duration: std::time::Duration::from_millis(
+                self.durations.scroll_line_spacing_ms as u64,
+            ),
         });
         self.fx.needs_continuous_redraw = true;
     }
@@ -488,7 +501,9 @@ impl WgpuRenderer {
     /// Start a window switch fade for a specific window
     pub fn start_window_fade(&mut self, window_id: i64, bounds: Rect) {
         // Remove any existing fade for this window
-        self.fx.window_fade.active
+        self.fx
+            .window_fade
+            .active
             .retain(|f| f.window_id != window_id);
         self.fx.window_fade.active.push(WindowFadeEntry {
             window_id,
@@ -612,12 +627,13 @@ impl RendererFrameEffectsRef<'_> {
 
     fn record_cursor_trail(&mut self, x: f32, y: f32, w: f32, h: f32, length: usize) {
         let trail = &mut self.renderer.fx.cursor_trail;
-        let dist =
-            ((x - trail.last_pos.0).powi(2) + (y - trail.last_pos.1).powi(2)).sqrt();
+        let dist = ((x - trail.last_pos.0).powi(2) + (y - trail.last_pos.1).powi(2)).sqrt();
         if dist < 2.0 {
             return;
         }
-        trail.positions.push((x, y, w, h, std::time::Instant::now()));
+        trail
+            .positions
+            .push((x, y, w, h, std::time::Instant::now()));
         trail.last_pos = (x, y);
         while trail.positions.len() > length {
             trail.positions.remove(0);

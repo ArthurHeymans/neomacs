@@ -13,7 +13,10 @@ use super::frame_pass::{ChromeLayerVertices, FrameParams, FramePassCtx};
 impl WgpuRenderer {
     /// Collect cursor rects (inverse-video bg, behind-text trail, front
     /// cursors), window borders, and scroll bar tracks/thumbs.
-    pub(super) fn collect_chrome_layers(&mut self, params: &FrameParams<'_>) -> ChromeLayerVertices {
+    pub(super) fn collect_chrome_layers(
+        &mut self,
+        params: &FrameParams<'_>,
+    ) -> ChromeLayerVertices {
         let frame_glyphs = params.frame_glyphs;
         let cursor_visible = params.cursor_visible;
         let animated_cursor = params.animated_cursor;
@@ -184,18 +187,22 @@ impl WgpuRenderer {
     }
 
     /// Draw front cursors and window borders (after text).
-    pub(super) fn draw_cursor_layer(&self, ctx: &mut FramePassCtx<'_, '_>, chrome: &ChromeLayerVertices) {
+    pub(super) fn draw_cursor_layer(
+        &self,
+        ctx: &mut FramePassCtx<'_, '_>,
+        chrome: &ChromeLayerVertices,
+    ) {
         let render_pass = &mut ctx.pass;
         let cursor_vertices = &chrome.cursors;
         // Draw cursors and borders (after text)
         if !cursor_vertices.is_empty() {
-            let cursor_buffer =
-                self.device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Cursor Vertex Buffer"),
-                        contents: bytemuck::cast_slice(cursor_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+            let cursor_buffer = self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Cursor Vertex Buffer"),
+                    contents: bytemuck::cast_slice(cursor_vertices),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
 
             render_pass.set_pipeline(&self.pipelines.rect);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
@@ -205,7 +212,11 @@ impl WgpuRenderer {
     }
 
     /// Draw scroll bar thumbs as filled rounded rects.
-    pub(super) fn draw_scroll_bar_thumbs(&self, ctx: &mut FramePassCtx<'_, '_>, chrome: &ChromeLayerVertices) {
+    pub(super) fn draw_scroll_bar_thumbs(
+        &self,
+        ctx: &mut FramePassCtx<'_, '_>,
+        chrome: &ChromeLayerVertices,
+    ) {
         let render_pass = &mut ctx.pass;
         let scroll_bar_thumb_vertices = &chrome.scroll_bar_thumbs;
         // === Draw scroll bar thumbs as filled rounded rects ===
@@ -213,24 +224,15 @@ impl WgpuRenderer {
             let mut rounded_verts: Vec<RoundedRectVertex> = Vec::new();
             for (tx, ty, tw, th, radius, color) in scroll_bar_thumb_vertices {
                 // border_width = 0 triggers filled mode in the shader
-                self.add_rounded_rect(
-                    &mut rounded_verts,
-                    *tx,
-                    *ty,
-                    *tw,
-                    *th,
-                    0.0,
-                    *radius,
-                    color,
-                );
+                self.add_rounded_rect(&mut rounded_verts, *tx, *ty, *tw, *th, 0.0, *radius, color);
             }
-            let thumb_buffer =
-                self.device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Scroll Bar Thumb Buffer"),
-                        contents: bytemuck::cast_slice(&rounded_verts),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+            let thumb_buffer = self
+                .device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Scroll Bar Thumb Buffer"),
+                    contents: bytemuck::cast_slice(&rounded_verts),
+                    usage: wgpu::BufferUsages::VERTEX,
+                });
             render_pass.set_pipeline(&self.pipelines.rounded_rect);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
             render_pass.set_vertex_buffer(0, thumb_buffer.slice(..));

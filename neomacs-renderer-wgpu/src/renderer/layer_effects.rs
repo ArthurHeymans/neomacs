@@ -233,7 +233,10 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Cursor Magnetism",
-            super::cursor_effects::emit_cursor_magnetism(&ctx, &mut self.fx.cursor_magnetism.entries)
+            super::cursor_effects::emit_cursor_magnetism(
+                &ctx,
+                &mut self.fx.cursor_magnetism.entries
+            )
         );
 
         // === Step 1i2: Window corner fold effect ===
@@ -449,10 +452,7 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Sonar Ping Buffer",
-            super::cursor_effects::emit_cursor_sonar_ping(
-                &ctx,
-                &mut self.fx.sonar_ping.entries
-            )
+            super::cursor_effects::emit_cursor_sonar_ping(&ctx, &mut self.fx.sonar_ping.entries)
         );
 
         // === Lightning bolt effect ===
@@ -1373,7 +1373,10 @@ impl WgpuRenderer {
             self,
             render_pass,
             "Scroll Velocity Fade Buffer",
-            super::window_effects::emit_scroll_velocity_fade(ctx, &mut self.fx.scroll_velocity.fades,)
+            super::window_effects::emit_scroll_velocity_fade(
+                ctx,
+                &mut self.fx.scroll_velocity.fades,
+            )
         );
 
         // === Click halo effect ===
