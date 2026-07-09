@@ -19040,6 +19040,93 @@ fn bench_jit_vs_vm_loop() {
     eprintln!("speedup (VM/JIT): {:.2}x", ratio);
 }
 
+/// Threshold-economics companion to [`bench_jit_vs_vm_loop`]: how does the
+/// tier-up threshold change END-TO-END wall time for functions of different
+/// total call volume? Runs the same shape of fixnum sum loop (N=100 per call)
+/// through the REAL heat counter — no forced tiers: the first
+/// `hot_threshold()` calls interpret, then the seam compiles once and later
+/// calls run native.
+///
+/// One process per threshold (the OnceLock caches the env at first read):
+///
+///   NEOVM_JIT_THRESHOLD=1000 cargo nextest run -p neovm-core \
+///     -E 'test(jit_bench_threshold_economics)' --run-ignored all
+///
+/// Interpreting the numbers: a debug build inflates Cranelift compile time
+/// relative to release, and compilation is the ONLY cost a lower threshold
+/// adds (every other term favors tiering up earlier). A threshold that wins
+/// under debug therefore wins in release a fortiori.
+#[cfg(feature = "jit")]
+#[test]
+#[ignore = "manual perf measurement; A/B via NEOVM_JIT_THRESHOLD, one process per value"]
+fn jit_bench_threshold_economics() {
+    crate::test_utils::init_test_tracing();
+    use crate::emacs_core::bytecode::ByteCodeFunction;
+    use crate::emacs_core::bytecode::opcode::Op;
+    use crate::emacs_core::value::LambdaParams;
+    use std::time::Instant;
+
+    const N: i64 = 100;
+    let ops = vec![
+        Op::Constant(0),   // 0
+        Op::Constant(0),   // 1
+        Op::StackRef(0),   // 2  loop top
+        Op::Constant(1),   // 3
+        Op::Lss,           // 4
+        Op::GotoIfNil(14), // 5
+        Op::StackRef(1),   // 6
+        Op::StackRef(1),   // 7
+        Op::Add,           // 8
+        Op::StackSet(2),   // 9
+        Op::StackRef(0),   // 10
+        Op::Add1,          // 11
+        Op::StackSet(1),   // 12
+        Op::Goto(2),       // 13
+        Op::StackRef(1),   // 14  loop end
+        Op::Return,        // 15
+    ];
+    let constants = vec![Value::make_int(0), Value::make_int(N)];
+    let expected = Value::make_int(N * (N - 1) / 2);
+
+    // Fresh function per scenario: an untouched heat counter, so tier-up
+    // happens exactly where the threshold puts it.
+    let build = || -> Value {
+        let mut f = ByteCodeFunction::new(LambdaParams {
+            required: Vec::new(),
+            optional: Vec::new(),
+            rest: None,
+        });
+        f.ops = ops.clone();
+        f.constants = constants.clone();
+        f.max_stack = 64;
+        Value::make_bytecode(f)
+    };
+
+    let mut ev = Context::new();
+    let threshold = crate::emacs_core::jit::hot_threshold();
+
+    // Call volumes bracketing the decision: "hot" amortizes any compile cost,
+    // "medium" is the population a 10k threshold strands in the interpreter,
+    // "barely-warm" is the compile-cost risk case for a low threshold.
+    for (label, calls) in [
+        ("hot", 20_000u32),
+        ("medium", 3_000u32),
+        ("barely-warm", 1_200u32),
+    ] {
+        let f = build();
+        let t = Instant::now();
+        for _ in 0..calls {
+            let r = ev.funcall_general_untraced(f, vec![]).unwrap();
+            assert_eq!(r, expected, "sum loop must stay correct on every tier");
+        }
+        let elapsed = t.elapsed();
+        eprintln!(
+            "[threshold-econ] threshold={threshold} workload={label} calls={calls} total={elapsed:?} ({:.0} ns/call)",
+            elapsed.as_nanos() as f64 / calls as f64
+        );
+    }
+}
+
 #[test]
 fn string_equal_unibyte_high_byte_vs_multibyte_char() {
     crate::test_utils::init_test_tracing();

@@ -266,9 +266,19 @@ pub fn jit_runtime_enabled() -> bool {
 }
 
 impl Runtime {
-    /// Invocations before a function is "hot" enough to tier up. Placeholder —
-    /// tuned against the benchmark harness in Phase 8.
-    pub const HOT_THRESHOLD: u32 = 10_000;
+    /// Invocations before a function is "hot" enough to tier up.
+    ///
+    /// Tuned via `jit_bench_threshold_economics` (eval_test.rs), an
+    /// interleaved debug-build A/B of 1_000 vs the previous placeholder
+    /// 10_000 across 1.2k/3k/20k-call workloads: 1_000 halves end-to-end
+    /// wall time for the 3k-20k call population (the functions a 10_000
+    /// threshold strands in the interpreter forever) and only regresses
+    /// ~1.2k-call functions by the one-time compile cost — which a debug
+    /// build heavily inflates, so the release regression is smaller still.
+    /// Compilation is the only cost lowering adds; going far lower (100)
+    /// starts compiling barely-warm functions for no amortized win.
+    /// `NEOVM_JIT_THRESHOLD` still overrides per process.
+    pub const HOT_THRESHOLD: u32 = 1_000;
 
     #[inline]
     pub const fn new() -> Self {

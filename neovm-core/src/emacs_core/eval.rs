@@ -9525,16 +9525,19 @@ impl Context {
         // GNU uses SAFE_ALLOCA_LISP for evaluated arguments here. Keep the
         // common arities inline instead of allocating a heap Vec per call.
         // GNU validates the argument-list structure UP FRONT, before
-        // evaluating any argument: the MANY/8+ subr path runs
+        // evaluating any argument: the subr path runs a single
         // `list_length (args_left)` (eval.c:2624) and `apply_lambda` runs
         // `list_length (args)` (eval.c:3302). Both end in `CHECK_LIST_END`,
         // so an improper arg list (e.g. `((lambda (a &rest b) b) x . y)`)
         // signals `(wrong-type-argument listp BAD-CDR)` *before* `x` is ever
         // evaluated. Neo previously evaluated args lazily and only checked
         // the tail afterwards, leaking a void-variable error for `x` first.
-        // (Direct fixed-arity subrs already validated via `direct_subr_entry`
-        // above; this guards the closure/bytecode/MANY paths.)
-        if list_length(&original_args).is_none() {
+        // Subrs already walked the spine once for the arity check above
+        // (`direct_subr_entry` is only Some when that walk returned a
+        // length), so re-walking here would make the spine cost 3x per
+        // interpreted subr call where GNU pays 1x + the eval walk. Only
+        // the closure/bytecode/lambda paths still need the up-front walk.
+        if direct_subr_entry.is_none() && list_length(&original_args).is_none() {
             return Err(self.listp_error(original_args));
         }
         let mut args = LispArgVec::new();
