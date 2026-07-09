@@ -174,10 +174,10 @@ impl WgpuRenderer {
                         occlusion_query_set: None,
                         multiview_mask: None,
                     });
-                    if let Some(upload) = self
-                        .arenas
-                        .rect
-                        .upload(&self.device, &self.queue, &bg_verts)
+                    if let Some(upload) =
+                        self.arenas
+                            .rect
+                            .upload(&self.device, &self.queue, &bg_verts)
                     {
                         pass.set_pipeline(&self.pipelines.rect);
                         pass.set_bind_group(0, &self.uniform_bind_group, &[]);

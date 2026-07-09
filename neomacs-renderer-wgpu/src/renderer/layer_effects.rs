@@ -8,7 +8,6 @@
 
 use std::collections::HashMap;
 
-
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::types::Color;
 
@@ -20,7 +19,11 @@ use super::frame_pass::BoxSpan;
 macro_rules! draw_effect {
     ($self:ident, $rp:ident, $label:expr, $verts:expr) => {{
         let verts = $verts;
-        if let Some(upload) = $self.arenas.rect.upload(&$self.device, &$self.queue, &verts) {
+        if let Some(upload) = $self
+            .arenas
+            .rect
+            .upload(&$self.device, &$self.queue, &verts)
+        {
             $rp.set_pipeline(&$self.pipelines.rect);
             $rp.set_bind_group(0, &$self.uniform_bind_group, &[]);
             $rp.set_vertex_buffer(0, upload.buffer_slice());
@@ -32,7 +35,11 @@ macro_rules! draw_effect {
         let verts = $verts;
         if !verts.is_empty() {
             $self.fx.needs_continuous_redraw = true;
-            if let Some(upload) = $self.arenas.rect.upload(&$self.device, &$self.queue, &verts) {
+            if let Some(upload) = $self
+                .arenas
+                .rect
+                .upload(&$self.device, &$self.queue, &verts)
+            {
                 $rp.set_pipeline(&$self.pipelines.rect);
                 $rp.set_bind_group(0, &$self.uniform_bind_group, &[]);
                 $rp.set_vertex_buffer(0, upload.buffer_slice());
@@ -49,7 +56,11 @@ macro_rules! draw_stateful {
         if needs_redraw {
             $self.fx.needs_continuous_redraw = true;
         }
-        if let Some(upload) = $self.arenas.rect.upload(&$self.device, &$self.queue, &verts) {
+        if let Some(upload) = $self
+            .arenas
+            .rect
+            .upload(&$self.device, &$self.queue, &verts)
+        {
             $rp.set_pipeline(&$self.pipelines.rect);
             $rp.set_bind_group(0, &$self.uniform_bind_group, &[]);
             $rp.set_vertex_buffer(0, upload.buffer_slice());

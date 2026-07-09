@@ -598,7 +598,9 @@ impl WgpuRenderer {
         &mut self,
         vertices: &[GlyphVertex],
     ) -> Option<super::dynamic_buffer::VertexUpload> {
-        self.arenas.image.upload(&self.device, &self.queue, vertices)
+        self.arenas
+            .image
+            .upload(&self.device, &self.queue, vertices)
     }
 
     /// Helper: submit a two-quad scroll render pass (old + new textures).

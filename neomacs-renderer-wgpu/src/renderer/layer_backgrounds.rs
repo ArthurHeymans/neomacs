@@ -1,7 +1,6 @@
 //! Background collection and overlay-background draw phases of
 //! `render_frame_glyphs` (z-order steps 1 and 5).
 
-
 use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::frame_glyphs::{FrameGlyph, MaterializedFaceData};
 use neomacs_display_protocol::types::Color;

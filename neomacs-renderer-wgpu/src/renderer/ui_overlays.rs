@@ -23,7 +23,6 @@ impl WgpuRenderer {
         surface_width: u32,
         surface_height: u32,
     ) {
-
         let logical_w = surface_width as f32 / self.scale_factor;
         let logical_h = surface_height as f32 / self.scale_factor;
         let uniforms = Uniforms {
@@ -351,7 +350,6 @@ impl WgpuRenderer {
         glyphs: &mut Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])>,
         glyph_atlas: &WgpuGlyphAtlas,
     ) {
-
         if glyphs.is_empty() {
             return;
         }
@@ -411,7 +409,11 @@ impl WgpuRenderer {
             page_ids.push(entry.page_id_value());
         }
 
-        let Some(buffer) = self.arenas.glyph.upload(&self.device, &self.queue, &vertices) else {
+        let Some(buffer) = self
+            .arenas
+            .glyph
+            .upload(&self.device, &self.queue, &vertices)
+        else {
             return;
         };
 
@@ -480,7 +482,6 @@ impl WgpuRenderer {
         frame_glyphs: &FrameGlyphBuffer,
         glyph_atlas: &mut WgpuGlyphAtlas,
     ) {
-
         if !self.effects.window_watermark.enabled {
             return;
         }
@@ -631,7 +632,11 @@ impl WgpuRenderer {
             page_ids.push(entry.page_id_value());
         }
 
-        let Some(buffer) = self.arenas.glyph.upload(&self.device, &self.queue, &vertices) else {
+        let Some(buffer) = self
+            .arenas
+            .glyph
+            .upload(&self.device, &self.queue, &vertices)
+        else {
             return;
         };
 
@@ -702,7 +707,6 @@ impl WgpuRenderer {
         surface_width: u32,
         surface_height: u32,
     ) {
-
         let logical_w = surface_width as f32 / self.scale_factor;
         let logical_h = surface_height as f32 / self.scale_factor;
         let uniforms = Uniforms {
@@ -758,8 +762,11 @@ impl WgpuRenderer {
         self.add_rect(&mut rect_vertices, tx, ty, bw, th, &border_color); // left
         self.add_rect(&mut rect_vertices, tx + tw - bw, ty, bw, th, &border_color); // right
 
-        if let Some(rect_buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_vertices) {
-
+        if let Some(rect_buffer) =
+            self.arenas
+                .rect
+                .upload(&self.device, &self.queue, &rect_vertices)
+        {
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -841,7 +848,6 @@ impl WgpuRenderer {
         surface_width: u32,
         surface_height: u32,
     ) {
-
         let logical_w = surface_width as f32 / self.scale_factor;
         let logical_h = surface_height as f32 / self.scale_factor;
         let uniforms = Uniforms {
@@ -967,8 +973,11 @@ impl WgpuRenderer {
         self.add_rect(&mut rect_vertices, min_x, 4.0, 1.0, tb_h - 8.0, &sep_color);
 
         // Render rect pass
-        if let Some(rect_buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_vertices) {
-
+        if let Some(rect_buffer) =
+            self.arenas
+                .rect
+                .upload(&self.device, &self.queue, &rect_vertices)
+        {
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -1124,7 +1133,6 @@ impl WgpuRenderer {
         surface_width: u32,
         surface_height: u32,
     ) {
-
         let logical_w = surface_width as f32 / self.scale_factor;
         let logical_h = surface_height as f32 / self.scale_factor;
         let uniforms = Uniforms {
@@ -1209,7 +1217,11 @@ impl WgpuRenderer {
             self.add_rect(&mut rect_vertices, x, bar_y, indicator_width, bar_h, &color);
         }
 
-        let Some(rect_buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_vertices) else {
+        let Some(rect_buffer) = self
+            .arenas
+            .rect
+            .upload(&self.device, &self.queue, &rect_vertices)
+        else {
             return;
         };
 
@@ -1255,7 +1267,6 @@ impl WgpuRenderer {
         surface_width: u32,
         surface_height: u32,
     ) {
-
         if preedit_text.is_empty() {
             return;
         }
@@ -1297,8 +1308,11 @@ impl WgpuRenderer {
             &underline_color,
         );
 
-        if let Some(rect_buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_vertices) {
-
+        if let Some(rect_buffer) =
+            self.arenas
+                .rect
+                .upload(&self.device, &self.queue, &rect_vertices)
+        {
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -1369,7 +1383,6 @@ impl WgpuRenderer {
         surface_width: u32,
         surface_height: u32,
     ) {
-
         let logical_w = surface_width as f32 / self.scale_factor;
         let logical_h = surface_height as f32 / self.scale_factor;
         let uniforms = Uniforms {
@@ -1394,7 +1407,11 @@ impl WgpuRenderer {
             &Color::new(1.0, 1.0, 1.0, 1.0), // white, alpha=1
         );
 
-        let Some(buffer) = self.arenas.rounded.upload(&self.device, &self.queue, &vertices) else {
+        let Some(buffer) = self
+            .arenas
+            .rounded
+            .upload(&self.device, &self.queue, &vertices)
+        else {
             return;
         };
 
@@ -1468,7 +1485,6 @@ impl WgpuRenderer {
         frame_glyphs: &FrameGlyphBuffer,
         glyph_atlas: &mut WgpuGlyphAtlas,
     ) {
-
         if !self.effects.breadcrumb.enabled {
             return;
         }
@@ -1723,7 +1739,11 @@ impl WgpuRenderer {
         }
 
         // Draw background rects
-        if let Some(rect_buffer) = self.arenas.rect.upload(&self.device, &self.queue, &all_rect_vertices) {
+        if let Some(rect_buffer) =
+            self.arenas
+                .rect
+                .upload(&self.device, &self.queue, &all_rect_vertices)
+        {
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -1768,7 +1788,6 @@ impl WgpuRenderer {
         glyph_atlas: &mut WgpuGlyphAtlas,
         wpm: f32,
     ) {
-
         // Find the selected window (non-minibuffer)
         let selected = frame_glyphs
             .window_infos
@@ -1833,7 +1852,11 @@ impl WgpuRenderer {
         }
 
         // Draw background
-        if let Some(rect_buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_vertices) {
+        if let Some(rect_buffer) =
+            self.arenas
+                .rect
+                .upload(&self.device, &self.queue, &rect_vertices)
+        {
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -1878,7 +1901,6 @@ impl WgpuRenderer {
         surface_width: u32,
         surface_height: u32,
     ) {
-
         if lines.is_empty() {
             return;
         }
@@ -1914,7 +1936,11 @@ impl WgpuRenderer {
         let mut rect_vertices: Vec<RectVertex> = Vec::new();
         self.add_rect(&mut rect_vertices, badge_x, badge_y, badge_w, badge_h, &bg);
 
-        let Some(rect_buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_vertices) else {
+        let Some(rect_buffer) = self
+            .arenas
+            .rect
+            .upload(&self.device, &self.queue, &rect_vertices)
+        else {
             return;
         };
         let mut encoder = self
@@ -1987,7 +2013,6 @@ impl WgpuRenderer {
         surface_height: u32,
         alpha: f32,
     ) {
-
         let logical_w = surface_width as f32 / self.scale_factor;
         let logical_h = surface_height as f32 / self.scale_factor;
         let uniforms = Uniforms {
@@ -2011,7 +2036,11 @@ impl WgpuRenderer {
             &flash_color,
         );
 
-        let Some(rect_buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_vertices) else {
+        let Some(rect_buffer) = self
+            .arenas
+            .rect
+            .upload(&self.device, &self.queue, &rect_vertices)
+        else {
             return;
         };
 
@@ -2132,7 +2161,11 @@ impl WgpuRenderer {
             &border_color,
         );
 
-        if let Some(buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_verts) {
+        if let Some(buffer) = self
+            .arenas
+            .rect
+            .upload(&self.device, &self.queue, &rect_verts)
+        {
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -2347,7 +2380,11 @@ impl WgpuRenderer {
             &border_color,
         );
 
-        if let Some(buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_verts) {
+        if let Some(buffer) = self
+            .arenas
+            .rect
+            .upload(&self.device, &self.queue, &rect_verts)
+        {
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -2641,7 +2678,11 @@ impl WgpuRenderer {
             &border_color,
         );
 
-        if let Some(buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_verts) {
+        if let Some(buffer) = self
+            .arenas
+            .rect
+            .upload(&self.device, &self.queue, &rect_verts)
+        {
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {

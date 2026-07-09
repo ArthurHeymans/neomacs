@@ -1,7 +1,6 @@
 //! Inline media draw phases of `render_frame_glyphs` (z-order step 7):
 //! images, videos, and WebKit xwidget views.
 
-
 use neomacs_display_protocol::frame_glyphs::FrameGlyph;
 
 use super::super::vertex::GlyphVertex;
@@ -376,8 +375,7 @@ impl WgpuRenderer {
                     }
 
                     // An inline xwidget's id IS its webkit view id.
-                    let view_id =
-                        neomacs_display_protocol::types::WebKitId::new(xwidget_id.get());
+                    let view_id = neomacs_display_protocol::types::WebKitId::new(xwidget_id.get());
                     // Check if webkit texture is ready
                     if self.caches.webkit.get(view_id).is_some() {
                         tracing::debug!(

@@ -1060,10 +1060,10 @@ impl WgpuRenderer {
 
             // --- Draw fringe bitmaps (own column, above backgrounds, below
             // text — fringes never overlap the text area). ---
-            if let Some(upload) = self
-                .arenas
-                .rect
-                .upload(&self.device, &self.queue, &fringe_vertices)
+            if let Some(upload) =
+                self.arenas
+                    .rect
+                    .upload(&self.device, &self.queue, &fringe_vertices)
             {
                 pass.set_pipeline(rect_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
@@ -1430,10 +1430,10 @@ impl WgpuRenderer {
             }
 
             // --- Draw cursors and borders (on top of everything) ---
-            if let Some(upload) = self
-                .arenas
-                .rect
-                .upload(&self.device, &self.queue, &cursor_vertices)
+            if let Some(upload) =
+                self.arenas
+                    .rect
+                    .upload(&self.device, &self.queue, &cursor_vertices)
             {
                 pass.set_pipeline(rect_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);

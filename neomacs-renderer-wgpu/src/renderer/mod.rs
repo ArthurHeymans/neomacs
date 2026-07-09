@@ -39,9 +39,9 @@ mod ui_overlays;
 mod window_effects;
 
 pub use fx_state::RendererFrameEffects;
-pub use row_reuse::{FrameRowDamage, RowDamageInfo, RowReuseStats, WindowRowDamage};
 pub(crate) use fx_state::*;
 pub(crate) use resources::*;
+pub use row_reuse::{FrameRowDamage, RowDamageInfo, RowReuseStats, WindowRowDamage};
 pub use stats::*;
 
 /// GPU-accelerated renderer using wgpu.
@@ -1812,7 +1812,10 @@ impl WgpuRenderer {
             },
         ];
 
-        let upload = self.arenas.image.upload(&self.device, &self.queue, &vertices);
+        let upload = self
+            .arenas
+            .image
+            .upload(&self.device, &self.queue, &vertices);
 
         let mut encoder = self
             .device

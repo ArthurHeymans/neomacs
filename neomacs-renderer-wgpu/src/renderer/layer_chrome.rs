@@ -1,7 +1,6 @@
 //! Cursor, window border, and scroll bar phases of `render_frame_glyphs`
 //! (z-order steps 2-3 collection and step 8 draws).
 
-
 use neomacs_display_protocol::frame_glyphs::FrameGlyph;
 use neomacs_display_protocol::types::Color;
 
@@ -217,10 +216,10 @@ impl WgpuRenderer {
                 // border_width = 0 triggers filled mode in the shader
                 self.add_rounded_rect(&mut rounded_verts, *tx, *ty, *tw, *th, 0.0, *radius, color);
             }
-            if let Some(upload) = self
-                .arenas
-                .rounded
-                .upload(&self.device, &self.queue, &rounded_verts)
+            if let Some(upload) =
+                self.arenas
+                    .rounded
+                    .upload(&self.device, &self.queue, &rounded_verts)
             {
                 render_pass.set_pipeline(&self.pipelines.rounded_rect);
                 render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);

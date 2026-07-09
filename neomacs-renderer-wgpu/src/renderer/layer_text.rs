@@ -15,12 +15,12 @@ use super::super::glyph_atlas::{
 };
 use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex};
 use super::frame_pass::{BoxSpanSet, FrameParams, FramePassCtx};
-use super::row_reuse;
 use super::glyphs::{
     CHAR_OVERLAP_MIN_AXIS, RenderedCharBounds, build_subpixel_vertices, color_is_grayscale,
     log_cursor_glyph_alignment, log_rendered_char_overlaps, subpixel_background_color,
     subpixel_foreground_color, trace_face_debug_enabled,
 };
+use super::row_reuse;
 use super::{GlyphRenderStats, WgpuRenderer};
 
 /// Per-pass glyph vertex batches keyed by atlas entry, split by pipeline.

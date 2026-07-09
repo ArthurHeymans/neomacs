@@ -555,14 +555,24 @@ fn spliced_rows_rebase_so_next_frame_reuses_them_again() {
     let dvpos = 14.0f32;
     let glyphs_b = two_window_glyphs(dvpos);
     let damage_b = all_rows(|_, _| RowDamage::ReusedShifted { dvpos });
-    let ran_b = run_pass(&glyphs_b, &base_ctx(Some(&damage_b), &origins), &cache, false);
+    let ran_b = run_pass(
+        &glyphs_b,
+        &base_ctx(Some(&damage_b), &origins),
+        &cache,
+        false,
+    );
     assert_eq!(ran_b.stats.rows_reused_shifted, 4);
     cache.stage(ran_b.captures);
     cache.commit_frame();
 
     // Frame C: unchanged relative to B → verbatim reuse of the rebased rows.
     let damage_c = all_rows(|_, _| RowDamage::Reused);
-    let ran_c = run_pass(&glyphs_b, &base_ctx(Some(&damage_c), &origins), &cache, false);
+    let ran_c = run_pass(
+        &glyphs_b,
+        &base_ctx(Some(&damage_c), &origins),
+        &cache,
+        false,
+    );
     assert_eq!(ran_c.stats.rows_reused_verbatim, 4);
 
     let full = run_pass(
@@ -868,7 +878,12 @@ fn gradient_face_rows_never_splice_shifted_but_splice_verbatim() {
     let dvpos = 3.0f32;
     let glyphs_b = two_window_glyphs(dvpos);
     let damage = all_rows(|_, _| RowDamage::ReusedShifted { dvpos });
-    let shifted = run_pass_with(&glyphs_b, &base_ctx(Some(&damage), &origins), &cache, &config);
+    let shifted = run_pass_with(
+        &glyphs_b,
+        &base_ctx(Some(&damage), &origins),
+        &cache,
+        &config,
+    );
     assert_eq!(shifted.stats.rows_reused_shifted, 0);
     assert_eq!(shifted.stats.rows_tessellated, 4);
     assert_eq!(shifted.stats.reuse_bails, 4);
@@ -882,7 +897,12 @@ fn gradient_face_rows_never_splice_shifted_but_splice_verbatim() {
 
     // Verbatim reuse (dy == 0, same sample positions) stays allowed.
     let damage = all_rows(|_, _| RowDamage::Reused);
-    let verbatim = run_pass_with(&glyphs_a, &base_ctx(Some(&damage), &origins), &cache, &config);
+    let verbatim = run_pass_with(
+        &glyphs_a,
+        &base_ctx(Some(&damage), &origins),
+        &cache,
+        &config,
+    );
     assert_eq!(verbatim.stats.rows_reused_verbatim, 4);
     assert_eq!(verbatim.stats.reuse_bails, 0);
     let full_a = run_pass_with(
@@ -911,7 +931,12 @@ fn band_edge_rows_never_splice_shifted() {
     let dvpos = 2.0f32;
     let glyphs_b = two_window_glyphs(dvpos);
     let damage = all_rows(|_, _| RowDamage::ReusedShifted { dvpos });
-    let ran = run_pass_with(&glyphs_b, &base_ctx(Some(&damage), &origins), &cache, &config);
+    let ran = run_pass_with(
+        &glyphs_b,
+        &base_ctx(Some(&damage), &origins),
+        &cache,
+        &config,
+    );
     assert_eq!(ran.stats.rows_reused_shifted, 0);
     assert_eq!(ran.stats.rows_tessellated, 4);
     assert_eq!(ran.stats.reuse_bails, 4);

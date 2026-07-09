@@ -207,7 +207,9 @@ impl RenderApp {
                         .primary_window_mut()
                         .map(|ws| &mut ws.render)
                     {
-                        primary_frame.floating_webkits.retain(|w| w.webkit_id.get() != id);
+                        primary_frame
+                            .floating_webkits
+                            .retain(|w| w.webkit_id.get() != id);
                     }
                     self.frame_windows
                         .destroy_floating_webkit_from_top_level_windows(id);
@@ -349,7 +351,9 @@ impl RenderApp {
                         .primary_window_mut()
                         .map(|ws| &mut ws.render)
                     {
-                        primary_frame.floating_webkits.retain(|w| w.webkit_id.get() != id);
+                        primary_frame
+                            .floating_webkits
+                            .retain(|w| w.webkit_id.get() != id);
                     }
                     self.frame_windows
                         .remove_floating_webkit_from_top_level_windows(id);
@@ -382,7 +386,9 @@ impl RenderApp {
                         .primary_window_mut()
                         .map(|ws| &mut ws.render)
                     {
-                        primary_frame.floating_webkits.retain(|w| w.webkit_id.get() != id);
+                        primary_frame
+                            .floating_webkits
+                            .retain(|w| w.webkit_id.get() != id);
                     }
                     self.frame_windows
                         .remove_floating_webkit_from_top_level_windows(id);
