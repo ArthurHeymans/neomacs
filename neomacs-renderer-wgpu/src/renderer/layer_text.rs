@@ -1,4 +1,4 @@
-//! Text phases of `render_frame_glyphs` (z-order steps 2-4): glyph batch
+//! Text phases of `render_frame_glyphs` (z-order steps 4-6): glyph batch
 //! building, batched text draws, text decorations, and box borders, run once
 //! for buffer text and once for overlay (mode-line/echo) text.
 

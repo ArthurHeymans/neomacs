@@ -293,7 +293,6 @@ impl CursorAnimator {
         self.blink_on = true;
         self.last_blink_toggle = Instant::now();
 
-        let _now = Instant::now();
         let dx = self.target_x - self.last_target_x;
         let dy = self.target_y - self.last_target_y;
         let distance = (dx * dx + dy * dy).sqrt();

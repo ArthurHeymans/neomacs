@@ -298,6 +298,11 @@ pub(super) struct CachedRow {
 }
 
 /// Retained per-(frame, window, row) tessellation output from earlier frames.
+///
+/// Entries are partitioned by frame_id; if a frame_id were ever reused across
+/// a compositor teardown/recreate, a surviving entry could meet a fresh atlas
+/// whose eviction_generation restarted at 0 — revalidate_and_pin's
+/// page-generation check is the backstop.
 #[derive(Default)]
 pub(crate) struct RowReuseCache {
     rows: HashMap<RowKey, CachedRow>,
