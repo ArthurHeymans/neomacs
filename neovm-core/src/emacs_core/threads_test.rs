@@ -154,8 +154,7 @@ fn mutex_lock_unlock_cycle() {
     let id = mgr.create_mutex(None);
     assert!(mgr.mutex_lock(id));
     assert!(mgr.mutex_unlock(id));
-    // Unlocking when not locked is fine
-    assert!(mgr.mutex_unlock(id));
+    assert!(!mgr.mutex_unlock(id));
 }
 
 #[test]
@@ -174,6 +173,24 @@ fn mutex_recursive_lock() {
     // Now fully unlocked
     let m = mgr.mutexes.get(&id).unwrap();
     assert!(m.owner.is_none());
+}
+
+#[test]
+fn mutex_contended_lock_preserves_existing_owner() {
+    crate::test_utils::init_test_tracing();
+    let mut mgr = ThreadManager::new();
+    let id = mgr.create_mutex(None);
+    assert!(mgr.mutex_lock(id));
+
+    let worker = mgr.create_thread(Value::NIL, None);
+    let saved = mgr.enter_thread(worker);
+    assert!(!mgr.mutex_lock(id));
+    mgr.restore_thread(saved);
+
+    let m = mgr.mutexes.get(&id).unwrap();
+    assert_eq!(m.owner, Some(0));
+    assert_eq!(m.lock_count, 1);
+    assert!(mgr.mutex_unlock(id));
 }
 
 // -- Condition variable unit tests --------------------------------------

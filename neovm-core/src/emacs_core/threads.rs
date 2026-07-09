@@ -75,9 +75,13 @@ pub struct ThreadState {
 // Mutex state
 // ---------------------------------------------------------------------------
 
-/// A cooperative mutex.  Since the VM is single-threaded, lock/unlock are
-/// effectively no-ops, but we still track ownership for diagnostics and to
-/// match the Emacs API.
+/// A cooperative mutex.
+///
+/// GNU's Lisp mutex ownership is maintained above the platform thread backend:
+/// a contended `mutex-lock` waits without changing the owner, then acquires
+/// only after the owning thread unlocks.  The simulated VM does not yet have a
+/// resumable wait frame for every blocking primitive, but the ownership state
+/// must still follow GNU's invariant.
 #[derive(Clone, Debug)]
 pub struct MutexState {
     pub id: u64,
@@ -404,8 +408,11 @@ impl ThreadManager {
         id
     }
 
-    /// Lock a mutex (on behalf of the current thread).
-    /// In single-threaded mode this always succeeds.
+    /// Lock a mutex on behalf of the current thread.
+    ///
+    /// Returns true if the current thread owns the mutex after this call.
+    /// Returns false when another thread owns it; callers that can suspend
+    /// should wait and retry after unlock, mirroring GNU `thread.c`.
     pub fn mutex_lock(&mut self, mutex_id: u64) -> bool {
         let current = self.current_thread;
         if let Some(m) = self.mutexes.get_mut(&mutex_id) {
@@ -420,14 +427,7 @@ impl ThreadManager {
                     m.lock_count += 1;
                     true
                 }
-                Some(_) => {
-                    // In a real multi-threaded implementation this would block.
-                    // In our single-threaded sim it should not happen, but we
-                    // handle it gracefully by allowing the lock anyway.
-                    m.owner = Some(current);
-                    m.lock_count = 1;
-                    true
-                }
+                Some(_) => false,
             }
         } else {
             false
@@ -446,8 +446,7 @@ impl ThreadManager {
                 }
                 true
             } else {
-                // Not locked by current thread — still succeed for compatibility
-                true
+                false
             }
         } else {
             false
