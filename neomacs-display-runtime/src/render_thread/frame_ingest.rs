@@ -140,7 +140,6 @@ impl RenderApp {
                         width,
                         height,
                         style: cursor.style,
-                        color: cursor.color,
                         frame_id: entry.frame_id,
                     });
                     break;
@@ -303,7 +302,7 @@ impl RenderApp {
                 // can tell whether tab-line/header-line glyphs are emitted at
                 // all (and where) vs. silently dropped.
                 {
-                    use crate::core::frame_glyphs::{FrameGlyph, GlyphRowRole};
+                    use crate::core::frame_glyphs::FrameGlyph;
                     let mut per_role: std::collections::HashMap<String, (usize, f32, String)> =
                         std::collections::HashMap::new();
                     for g in &frame.glyphs {

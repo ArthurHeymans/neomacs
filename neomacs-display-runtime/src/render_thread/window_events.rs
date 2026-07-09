@@ -199,7 +199,7 @@ impl RenderApp {
             }
 
             WindowEvent::Focused(focused) => {
-                let is_primary = self.frame_windows.is_primary_winit(window_id);
+                let _is_primary = self.frame_windows.is_primary_winit(window_id);
                 let emacs_fid = self.emacs_frame_for_window_event(window_id);
                 self.comms.send_input(InputEvent::WindowFocus {
                     focused,

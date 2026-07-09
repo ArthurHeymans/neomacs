@@ -41,6 +41,7 @@ impl RenderThread {
         }
     }
 
+    #[allow(dead_code)] // spawn helpers exercised by the thread_handle tests
     fn spawn_with_state_timeout<T, S, R>(
         startup: S,
         runner: R,
@@ -67,6 +68,7 @@ impl RenderThread {
         Self::finish_spawn(handle, startup_rx, startup_timeout)
     }
 
+    #[allow(dead_code)] // exercised by the thread_handle tests
     fn spawn_with_state<T, S, R>(startup: S, runner: R) -> Result<Self, String>
     where
         T: Send + 'static,

@@ -22,7 +22,9 @@ use super::state::{
 };
 use super::transitions::{TransitionState, clear_frame_transition_textures};
 use super::x11_hints::apply_window_geometry_hints;
-use crate::core::frame_glyphs::{FrameGlyph, FrameGlyphBuffer};
+use crate::core::frame_glyphs::FrameGlyphBuffer;
+#[cfg(feature = "neo-term")]
+use crate::core::frame_glyphs::FrameGlyph;
 use neomacs_display_protocol::TransitionPolicy;
 use neomacs_display_protocol::effect_config::IdleDimConfig;
 use neomacs_display_protocol::glyph_matrix::{
@@ -43,12 +45,6 @@ pub(crate) struct GuiFrameNativeWindowState {
     pub width: u32,
     pub height: u32,
     pub scale_factor: f64,
-    /// Whether this window's native pointer cursor is hidden during typing.
-    pub mouse_hidden_for_typing: bool,
-    /// Whether native IME composition is active in this frame window.
-    pub ime_enabled: bool,
-    /// Last native IME cursor rectangle sent to this frame window.
-    pub(super) last_ime_cursor_area: Option<ImeCursorArea>,
     /// Borderless native-window chrome state for this frame window.
     pub(super) chrome: WindowChrome,
 }
@@ -139,79 +135,10 @@ pub(crate) struct FrameCompositor {
     pub transitions: TransitionState,
 }
 
-impl OverlayState {
-    pub fn popup_is_open(&self) -> bool {
-        self.popup_menu.is_some()
-    }
-
-    pub fn hide_popup(&mut self) -> bool {
-        if self.popup_menu.is_some() {
-            self.popup_menu = None;
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn hide_tooltip(&mut self) -> bool {
-        if self.tooltip.is_some() {
-            self.tooltip = None;
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn has_active_overlay(&self) -> bool {
-        self.popup_menu.is_some() || self.tooltip.is_some()
-    }
-}
-
 impl ChromeState {
-    pub fn is_interacting(&self) -> bool {
-        self.interaction.menu_bar_active.is_some()
-            || self.interaction.compact_bar_menu_active.is_some()
-            || self.interaction.compact_bar_tool_pressed.is_some()
-            || self.interaction.toolbar_pressed.is_some()
-            || self.interaction.tab_bar_pressed.is_some()
-    }
-
-    pub fn clear_interaction(&mut self) {
-        self.interaction.menu_bar_active = None;
-        self.interaction.compact_bar_menu_active = None;
-        self.interaction.compact_bar_tool_pressed = None;
-        self.interaction.toolbar_pressed = None;
-        self.interaction.toolbar_press_captured = false;
-        self.interaction.tab_bar_pressed = None;
-        self.interaction.tab_bar_press_captured = false;
-    }
-
     pub fn dismiss_menus(&mut self) {
         self.interaction.menu_bar_active = None;
         self.interaction.compact_bar_menu_active = None;
-    }
-
-    /// Release all pressed state and return what was active.
-    /// Returns the pressed item if any, clearing interaction state.
-    pub fn release_pressed(&mut self) -> Option<ChromePress> {
-        if let Some(idx) = self.interaction.menu_bar_active.take() {
-            return Some(ChromePress::MenuBar(idx));
-        }
-        if let Some(idx) = self.interaction.compact_bar_menu_active.take() {
-            return Some(ChromePress::CompactMenu(idx));
-        }
-        if let Some(idx) = self.interaction.compact_bar_tool_pressed.take() {
-            return Some(ChromePress::CompactTool(idx));
-        }
-        if let Some(idx) = self.interaction.toolbar_pressed.take() {
-            self.interaction.toolbar_press_captured = false;
-            return Some(ChromePress::ToolBar(idx));
-        }
-        if let Some(idx) = self.interaction.tab_bar_pressed.take() {
-            self.interaction.tab_bar_press_captured = false;
-            return Some(ChromePress::TabBar(idx));
-        }
-        None
     }
 
     /// Apply a mouse press on a chrome hit during a popup interaction.
@@ -221,8 +148,6 @@ impl ChromeState {
         self.interaction.compact_bar_menu_active = None;
         match press {
             ChromePress::MenuBar(idx) => self.interaction.menu_bar_active = Some(*idx),
-            ChromePress::CompactMenu(idx) => self.interaction.compact_bar_menu_active = Some(*idx),
-            ChromePress::CompactTool(idx) => self.interaction.compact_bar_tool_pressed = Some(*idx),
             ChromePress::ToolBar(idx) => self.interaction.toolbar_pressed = Some(*idx),
             ChromePress::TabBar(idx) => {
                 self.interaction.tab_bar_press_captured = true;
@@ -231,36 +156,12 @@ impl ChromeState {
         }
     }
 
-    /// Update hover state for all chrome bars. Returns true if dirty.
-    pub fn update_hover(
-        &mut self,
-        menu_bar_hover: Option<u32>,
-        tab_bar_hover: Option<u32>,
-        toolbar_hover: Option<u32>,
-    ) -> bool {
-        let mut dirty = false;
-        if self.interaction.menu_bar_hovered != menu_bar_hover {
-            self.interaction.menu_bar_hovered = menu_bar_hover;
-            dirty = true;
-        }
-        if self.interaction.tab_bar_hovered != tab_bar_hover {
-            self.interaction.tab_bar_hovered = tab_bar_hover;
-            dirty = true;
-        }
-        if self.interaction.toolbar_hovered != toolbar_hover {
-            self.interaction.toolbar_hovered = toolbar_hover;
-            dirty = true;
-        }
-        dirty
-    }
 }
 
 /// Result of a chrome interaction press.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ChromePress {
     MenuBar(u32),
-    CompactMenu(u32),
-    CompactTool(u32),
     ToolBar(u32),
     TabBar(u32),
 }
@@ -426,18 +327,6 @@ impl GuiFrameRenderState {
         self.compositor.dirty = true;
     }
 
-    pub(super) fn extend_current_frame_glyphs(&mut self, glyphs: Vec<FrameGlyph>) -> bool {
-        if glyphs.is_empty() {
-            return false;
-        }
-        let Some(frame) = self.compositor.current_frame.as_mut() else {
-            return false;
-        };
-        frame.glyphs.extend(glyphs);
-        self.compositor.dirty = true;
-        true
-    }
-
     /// Append glyphs together with the faces they reference.
     ///
     /// Producers that emit `FrameGlyph::Char` with synthesized face ids (the
@@ -478,11 +367,6 @@ impl GuiFrameRenderState {
     pub(super) fn clear_ime_preedit(&mut self) {
         self.overlays.ime_preedit_active = false;
         self.overlays.ime_preedit_text.clear();
-        self.compositor.dirty = true;
-    }
-
-    pub(super) fn set_fps_enabled(&mut self, enabled: bool) {
-        self.overlays.fps.enabled = enabled;
         self.compositor.dirty = true;
     }
 
@@ -769,7 +653,6 @@ impl GuiFrameRenderState {
                 width: cursor.width,
                 height: cursor.height,
                 style: cursor.style,
-                color: cursor.color,
                 frame_id: self.emacs_frame_id,
             });
             if target_moved {
@@ -873,13 +756,6 @@ impl FrameLifecycle {
         }
     }
 
-    pub fn native_mut(&mut self) -> Option<&mut GuiFrameNativeWindowState> {
-        match self {
-            Self::Active { native, .. } => Some(native),
-            _ => None,
-        }
-    }
-
     pub fn is_active(&self) -> bool {
         matches!(self, Self::Active { .. })
     }
@@ -900,10 +776,6 @@ impl FrameLifecycle {
             Self::Active { native, .. } => native.scale_factor,
             Self::Pending { scale_factor, .. } => *scale_factor,
         }
-    }
-
-    pub fn native_scale_factor(&self) -> f64 {
-        self.native().map_or(1.0, |n| n.scale_factor)
     }
 
     pub fn chrome(&self) -> &WindowChrome {
@@ -974,19 +846,6 @@ impl FrameLifecycle {
                 last_ime_cursor_area,
                 ..
             } => *last_ime_cursor_area,
-        }
-    }
-
-    pub fn set_last_ime_cursor_area(&mut self, area: Option<ImeCursorArea>) {
-        match self {
-            Self::Active {
-                last_ime_cursor_area: l,
-                ..
-            } => *l = area,
-            Self::Pending {
-                last_ime_cursor_area: l,
-                ..
-            } => *l = area,
         }
     }
 
@@ -1287,14 +1146,6 @@ impl GuiFrameWindowState {
         self.lifecycle.set_ime_enabled(enabled);
     }
 
-    pub fn mouse_hidden_for_typing(&self) -> bool {
-        self.lifecycle.mouse_hidden_for_typing()
-    }
-
-    pub fn set_mouse_hidden_for_typing_pending(&mut self, hidden: bool) {
-        self.lifecycle.set_mouse_hidden_for_typing(hidden);
-    }
-
     pub fn request_redraw(&self) {
         self.lifecycle.request_redraw();
     }
@@ -1303,42 +1154,6 @@ impl GuiFrameWindowState {
         self.lifecycle.window()
     }
 
-    pub(super) fn last_ime_cursor_area(&self) -> Option<ImeCursorArea> {
-        self.lifecycle.last_ime_cursor_area()
-    }
-
-    pub(super) fn set_last_ime_cursor_area(&mut self, area: Option<ImeCursorArea>) {
-        self.lifecycle.set_last_ime_cursor_area(area);
-    }
-
-    pub fn geometry_hints(&self) -> Option<GuiFrameGeometryHints> {
-        self.lifecycle.geometry_hints()
-    }
-
-    pub fn set_geometry_hints(&mut self, hints: GuiFrameGeometryHints) {
-        match &mut self.lifecycle {
-            FrameLifecycle::Active { native, .. } => {
-                apply_window_geometry_hints(&native.window, hints);
-            }
-            FrameLifecycle::Pending { geometry_hints, .. } => {
-                *geometry_hints = Some(hints);
-            }
-        }
-    }
-
-    pub fn set_pending_size(&mut self, width: u32, height: u32) {
-        match &mut self.lifecycle {
-            FrameLifecycle::Pending {
-                width: pw,
-                height: ph,
-                ..
-            } => {
-                *pw = width;
-                *ph = height;
-            }
-            _ => {}
-        }
-    }
 }
 
 /// Key for frame-window lookup in the manager's `windows` HashMap.
@@ -1429,7 +1244,6 @@ impl GuiFrameWindowManager {
                 width,
                 height,
                 style: cursor.style,
-                color: cursor.color,
                 frame_id: emacs_frame_id,
             }
         })
@@ -1448,11 +1262,7 @@ impl GuiFrameWindowManager {
         self.sync_primary_mapping();
     }
 
-    pub fn adopt_primary_winit_id(&mut self, winit_id: WindowId) {
-        self.primary_winit_id = Some(winit_id);
-        self.sync_primary_mapping();
-    }
-
+    #[allow(dead_code)] // used by the frame-window manager tests
     pub fn primary_frame_id(&self) -> Option<u64> {
         self.primary_emacs_frame_id
     }
@@ -1465,11 +1275,6 @@ impl GuiFrameWindowManager {
         emacs_frame_id == 0 || self.primary_emacs_frame_id == Some(emacs_frame_id)
     }
 
-    pub fn has_secondary_window(&self, emacs_frame_id: u64) -> bool {
-        self.windows
-            .contains_key(&FrameKey::Adopted(emacs_frame_id))
-    }
-
     fn primary_frame_key(&self) -> FrameKey {
         FrameKey::from_primary(self.primary_emacs_frame_id)
     }
@@ -1480,15 +1285,6 @@ impl GuiFrameWindowManager {
 
     pub(super) fn primary_window_mut(&mut self) -> Option<&mut GuiFrameWindowState> {
         self.windows.get_mut(&self.primary_frame_key())
-    }
-
-    pub(super) fn set_primary_window(&mut self, window_state: GuiFrameWindowState) {
-        if let Some(native) = window_state.lifecycle.native() {
-            self.primary_winit_id = Some(native.window.id());
-        }
-        let key = self.primary_frame_key();
-        self.windows.insert(key, window_state);
-        self.sync_primary_mapping();
     }
 
     pub(super) fn set_primary_pending(&mut self, window_state: GuiFrameWindowState) {
@@ -1669,9 +1465,6 @@ impl GuiFrameWindowManager {
                                     width: phys.width,
                                     height: phys.height,
                                     scale_factor,
-                                    mouse_hidden_for_typing: false,
-                                    ime_enabled: false,
-                                    last_ime_cursor_area: None,
                                     chrome: chrome.clone(),
                                 },
                                 mouse_hidden_for_typing: false,

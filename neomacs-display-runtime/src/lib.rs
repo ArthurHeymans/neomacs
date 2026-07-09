@@ -8,9 +8,6 @@
 //! Editor Runtime (Rust) ──► Scene Graph ──► wgpu ──► GPU
 //! ```
 
-#![allow(unused)] // TODO: Remove once implementation is complete
-#![allow(unsafe_op_in_unsafe_fn)] // TODO: migrate FFI-heavy code to explicit unsafe blocks
-
 pub mod backend;
 pub mod core;
 pub mod thread_comm;
@@ -68,10 +65,6 @@ pub fn gpu_power_preference() -> wgpu::PowerPreference {
         }
         Err(_) => wgpu::PowerPreference::HighPerformance,
     }
-}
-
-pub(crate) fn wgpu_instance_descriptor_from_env() -> wgpu::InstanceDescriptor {
-    wgpu::InstanceDescriptor::new_without_display_handle_from_env()
 }
 
 pub(crate) fn wgpu_instance_descriptor_with_display(

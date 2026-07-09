@@ -1149,11 +1149,11 @@ fn render_command_show_tooltip() {
             y,
             text,
             fg_r,
-            fg_g,
-            fg_b,
+            fg_g: _,
+            fg_b: _,
             bg_r,
-            bg_g,
-            bg_b,
+            bg_g: _,
+            bg_b: _,
         }) => {
             assert_eq!(frame.raw_id(), 0x2000);
             assert_eq!(x, 300.0);

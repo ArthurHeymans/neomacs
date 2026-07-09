@@ -13,19 +13,24 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crate::thread_comm::{InputEvent, LifecycleCommand, RenderCommand, RenderComms};
-use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 #[cfg(unix)]
 const GNU_KBD_BUFFER_SIZE: usize = 4096;
 
 // Modifier masks — must match neomacs-display-runtime/src/backend/wgpu/events.rs
+// SHIFT/CTRL/SUPER are consumed only by the non-unix crossterm key mapper below.
+#[allow(dead_code)]
 const NEOMACS_SHIFT_MASK: u32 = 1 << 0;
+#[allow(dead_code)]
 const NEOMACS_CTRL_MASK: u32 = 1 << 1;
 const NEOMACS_META_MASK: u32 = 1 << 2;
+#[allow(dead_code)]
 const NEOMACS_SUPER_MASK: u32 = 1 << 3;
 
 const XK_RETURN: u32 = 0xff0d;
 const XK_TAB: u32 = 0xff09;
+#[allow(dead_code)] // used only by the non-unix crossterm key mapper below
 const XK_ESCAPE: u32 = 0xff1b;
 const XK_LEFT: u32 = 0xff51;
 const XK_UP: u32 = 0xff52;
@@ -33,7 +38,11 @@ const XK_RIGHT: u32 = 0xff53;
 const XK_DOWN: u32 = 0xff54;
 const XK_F1: u32 = 0xffbe;
 
+// The crossterm `KeyEvent` -> `InputEvent` mapper (map_modifiers, without_control,
+// tty_control_char_keysym, map_key_event) is wired into `read_tty_events` only on
+// non-unix targets; on unix it is exercised solely by the tests, hence the allows.
 /// Convert crossterm modifiers to our internal modifier mask.
+#[allow(dead_code)]
 fn map_modifiers(mods: KeyModifiers) -> u32 {
     let mut out = 0;
     if mods.contains(KeyModifiers::SHIFT) {
@@ -51,10 +60,12 @@ fn map_modifiers(mods: KeyModifiers) -> u32 {
     out
 }
 
+#[allow(dead_code)]
 fn without_control(modifiers: u32) -> u32 {
     modifiers & !NEOMACS_CTRL_MASK
 }
 
+#[allow(dead_code)]
 fn tty_control_char_keysym(c: char) -> Option<u32> {
     match c {
         '@' | '2' => Some(0x00),
@@ -73,6 +84,7 @@ fn tty_control_char_keysym(c: char) -> Option<u32> {
 /// Returns `None` for modifier-only keys (Shift, Ctrl, Alt, Super,
 /// CapsLock, NumLock, etc.) — those are tracked by crossterm's modifier
 /// state on subsequent key events, matching how winit delivers them.
+#[allow(dead_code)]
 fn map_key_event(event: KeyEvent) -> Option<InputEvent> {
     // Ignore key releases — Emacs only cares about press/repeat.
     if event.kind == KeyEventKind::Release {

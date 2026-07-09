@@ -3,20 +3,13 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::Instant;
 
 use winit::dpi::{LogicalSize, PhysicalSize, Size};
-use winit::window::Window;
 
 use crate::core::face::Face;
-use crate::core::frame_glyphs::FrameGlyphBuffer;
-use crate::core::frame_glyphs::FrameTabBarState;
 pub use crate::thread_comm::MonitorInfo;
 use crate::thread_comm::RenderComms;
-use neomacs_display_protocol::glyph_matrix::{
-    GuiCompactBarState, GuiMenuBarState, GuiToolBarState,
-};
 use neomacs_display_protocol::{EffectsConfig, ToolBarImageSource, TransitionPolicy};
-use neomacs_renderer_wgpu::{PopupMenuState, TooltipState, WgpuRenderer};
+use neomacs_renderer_wgpu::WgpuRenderer;
 
-use super::child_frames::ChildFrameManager;
 use super::cursor::CursorState;
 use super::frame_windows::{
     FrameLifecycle, GuiFrameRenderState, GuiFrameWindowManager, GuiFrameWindowState,

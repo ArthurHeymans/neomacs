@@ -12,7 +12,6 @@ fn make_target(x: f32, y: f32, w: f32, h: f32, style: CursorStyle) -> CursorTarg
         width: w,
         height: h,
         style,
-        color: Color::WHITE,
         frame_id: 0,
     }
 }

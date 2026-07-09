@@ -20,6 +20,9 @@ impl RenderApp {
         }
     }
 
+    // WebKit command fields (button/state/modifiers/keycode/script/frame id) are
+    // consumed only inside the `wpe-webkit` cfg blocks below.
+    #[cfg_attr(not(feature = "wpe-webkit"), allow(unused_variables))]
     pub(super) fn handle_asset(&mut self, cmd: AssetCommand) {
         match cmd {
             AssetCommand::ImageLoadFile {

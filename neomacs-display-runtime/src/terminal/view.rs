@@ -14,7 +14,6 @@ use portable_pty::{CommandBuilder, MasterPty, PtySize, native_pty_system};
 
 use alacritty_terminal::event::{Event as TermEvent, EventListener};
 use alacritty_terminal::grid::Dimensions;
-use alacritty_terminal::index::Column;
 use alacritty_terminal::term::{Config as TermConfig, Term};
 use alacritty_terminal::vte::ansi;
 
@@ -166,7 +165,7 @@ impl TerminalView {
             pixel_width: 8u16.saturating_mul(cols),
             pixel_height: 16u16.saturating_mul(rows),
         };
-        let mut pty_pair = pty_system
+        let pty_pair = pty_system
             .openpty(pty_size)
             .map_err(|e| format!("Failed to create PTY: {}", e))?;
 

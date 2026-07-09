@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 
 use super::child_frames::ChildFrameManager;
 use super::cursor::CursorTarget;
@@ -604,32 +603,6 @@ impl RenderApp {
         renderer.set_scale_factor(old_scale_factor);
         renderer.resize(old_width, old_height);
         Some((output, frame))
-    }
-
-    fn render_frame_window_overlays(
-        renderer: &mut WgpuRenderer,
-        native: &GuiFrameNativeWindowState,
-        render: &mut GuiFrameRenderState,
-        surface_view: &wgpu::TextureView,
-        frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
-        cursor_visible: bool,
-        animated_cursor: Option<crate::core::types::AnimatedCursor>,
-        child_frame_style: &ChildFrameStyle,
-        scroll_indicators_enabled: bool,
-    ) {
-        let empty_toolbar = ToolbarResources::default();
-        Self::render_frame_window_overlays_with_toolbar_resources(
-            renderer,
-            native,
-            render,
-            surface_view,
-            frame,
-            cursor_visible,
-            animated_cursor,
-            child_frame_style,
-            scroll_indicators_enabled,
-            &empty_toolbar,
-        );
     }
 
     #[allow(clippy::too_many_arguments)]

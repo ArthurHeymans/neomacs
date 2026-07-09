@@ -8,6 +8,11 @@
 //! - wpe-webkit: WebKit engine (GObject API)
 //! - dma-buf: Zero-copy GPU buffer sharing
 
+// The WPE submodules are FFI-heavy: `sys` is bindgen-generated and `backend`/`view`
+// wrap raw WPE/GObject C calls whose `unsafe fn` bodies call into C without an inner
+// `unsafe {}` block. Scoped here (feature-gated module) instead of crate-wide.
+#![allow(unsafe_op_in_unsafe_fn)]
+
 #[cfg(feature = "wpe-webkit")]
 pub(crate) mod sys;
 

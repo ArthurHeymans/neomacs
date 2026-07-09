@@ -270,6 +270,7 @@ impl TtyGrid {
         }
     }
 
+    #[allow(dead_code)] // exercised by the TtyGrid unit tests
     fn get(&self, col: usize, row: usize) -> Option<&TtyCell> {
         if col < self.width && row < self.height {
             Some(&self.cells[row * self.width + col])
@@ -687,24 +688,6 @@ fn terminal_cursor_state(
 // ---------------------------------------------------------------------------
 // TtyBackend
 // ---------------------------------------------------------------------------
-
-/// Output target abstraction for testing. In production this writes to
-/// stdout; in tests it writes to a Vec<u8>.
-trait TtyOutput: Write + Send {
-    fn flush_output(&mut self) -> io::Result<()>;
-}
-
-impl TtyOutput for io::Stdout {
-    fn flush_output(&mut self) -> io::Result<()> {
-        self.flush()
-    }
-}
-
-impl TtyOutput for Vec<u8> {
-    fn flush_output(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
 
 /// TTY backend state
 pub struct TtyBackend {

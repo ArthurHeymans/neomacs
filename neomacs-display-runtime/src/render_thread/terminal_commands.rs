@@ -1,5 +1,6 @@
 //! Terminal render commands.
 
+#[cfg(feature = "neo-term")]
 use super::RenderApp;
 
 #[cfg(feature = "neo-term")]

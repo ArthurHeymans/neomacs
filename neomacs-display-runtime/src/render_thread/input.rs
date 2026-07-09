@@ -16,16 +16,6 @@ pub(super) struct MenuBarHit {
     pub(super) anchor: PopupAnchorRect,
 }
 
-pub(super) fn menu_bar_hit_test_items(
-    items: &[MenuBarItem],
-    height: f32,
-    char_width: f32,
-    x: f32,
-    y: f32,
-) -> Option<u32> {
-    menu_bar_hit_test_item(items, height, char_width, x, y).map(|hit| hit.index)
-}
-
 pub(super) fn menu_bar_hit_test_item(
     items: &[MenuBarItem],
     height: f32,

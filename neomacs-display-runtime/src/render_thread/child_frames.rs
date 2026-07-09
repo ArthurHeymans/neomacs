@@ -15,6 +15,7 @@ pub(crate) struct ChildFrameEntry {
     pub abs_x: f32,
     pub abs_y: f32,
     /// Frame counter when this entry was last updated
+    #[allow(dead_code)] // read by the test-exercised prune_stale
     pub last_updated: u64,
 }
 
@@ -82,6 +83,7 @@ impl ChildFrameManager {
     }
 
     /// Remove child frames not updated in the last `max_age` poll cycles.
+    #[allow(dead_code)] // child-frame staleness API, exercised by the child_frames tests
     pub fn prune_stale(&mut self, max_age: u64) {
         let threshold = self.frame_counter.saturating_sub(max_age);
         let before = self.frames.len();
@@ -118,6 +120,7 @@ impl ChildFrameManager {
     }
 
     /// Whether there are any child frames.
+    #[allow(dead_code)] // exercised by the child_frames tests
     pub fn is_empty(&self) -> bool {
         self.frames.is_empty()
     }

@@ -1,6 +1,5 @@
 //! Window transition state (crossfade and scroll animations).
 
-use super::frame_windows::{GuiFrameNativeWindowState, GuiFrameRenderState};
 use crate::core::frame_glyphs::{
     FrameGlyphBuffer, WindowEffectHint, WindowTransitionHint, WindowTransitionKind,
 };
@@ -16,7 +15,11 @@ pub(super) struct CrossfadeTransition {
     pub(super) bounds: Rect,
     pub(super) effect: ScrollEffect,
     pub(super) easing: ScrollEasing,
+    // Snapshot handles retained for the transition's lifetime; sampling during the
+    // crossfade goes through `old_bind_group`, so these are never read directly.
+    #[allow(dead_code)]
     pub(super) old_texture: wgpu::Texture,
+    #[allow(dead_code)]
     pub(super) old_view: wgpu::TextureView,
     pub(super) old_bind_group: wgpu::BindGroup,
 }
@@ -32,7 +35,11 @@ pub(super) struct ScrollTransition {
     pub(super) scroll_distance: f32,
     pub(super) effect: ScrollEffect,
     pub(super) easing: ScrollEasing,
+    // Snapshot handles retained for the transition's lifetime; sampling during the
+    // scroll slide goes through `old_bind_group`, so these are never read directly.
+    #[allow(dead_code)]
     pub(super) old_texture: wgpu::Texture,
+    #[allow(dead_code)]
     pub(super) old_view: wgpu::TextureView,
     pub(super) old_bind_group: wgpu::BindGroup,
 }

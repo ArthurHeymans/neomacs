@@ -181,9 +181,6 @@ impl RenderApp {
                 width: pending_width,
                 height: pending_height,
                 scale_factor: pending_scale_factor,
-                mouse_hidden_for_typing: false,
-                ime_enabled: false,
-                last_ime_cursor_area: None,
                 chrome: {
                     let primary = self.frame_windows.primary_window().unwrap();
                     primary.lifecycle.chrome().clone()
@@ -247,40 +244,6 @@ impl RenderApp {
 
         #[cfg(feature = "video")]
         tracing::info!("Video cache initialized");
-    }
-
-    pub(super) fn handle_resize(&mut self, width: u32, height: u32) {
-        if width == 0 || height == 0 {
-            return;
-        }
-
-        if let Some(device) = self.gpu.as_ref().map(|gpu| gpu.device.clone()) {
-            if let Some(primary_state) = self.frame_windows.primary_window_mut() {
-                primary_state.handle_resize(&device, width, height);
-            }
-        }
-
-        if let Some(renderer) = &mut self.renderer {
-            renderer.resize(width, height);
-        }
-
-        if self.effects.resize_padding.enabled {
-            if let (Some(renderer), Some(primary_state)) = (
-                self.renderer.as_ref(),
-                self.frame_windows.primary_window_mut(),
-            ) {
-                renderer.trigger_transient_resize_padding(
-                    &mut primary_state.render.compositor.renderer_effects,
-                    std::time::Instant::now(),
-                );
-            }
-        }
-
-        if let Some(ws) = self.frame_windows.primary_window_mut() {
-            ws.render.compositor.dirty = true
-        };
-
-        tracing::debug!("Surface resized to {}x{}", width, height);
     }
 }
 

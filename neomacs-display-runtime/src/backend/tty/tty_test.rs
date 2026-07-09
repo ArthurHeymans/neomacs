@@ -1,6 +1,6 @@
 use super::*;
 use crate::core::frame_glyphs::DisplaySlotId;
-use crate::core::types::{DisplayWindowId, Rect};
+use crate::core::types::DisplayWindowId;
 
 // -------------------------------------------------------------------
 // ANSI escape sequence generation

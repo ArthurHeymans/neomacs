@@ -32,42 +32,13 @@ mod x11_hints;
 pub use bootstrap::{build_render_event_loop, run_render_loop, run_render_loop_current_thread};
 #[cfg(feature = "wpe-webkit")]
 use state::WebKitImportPolicy;
-use state::{FpsCounter, ImeCursorArea, RenderApp, WindowChrome};
+use state::{FpsCounter, ImeCursorArea, RenderApp};
 pub use state::{MonitorInfo, SharedImageDimensions, SharedMonitorInfo};
 pub use thread_handle::RenderThread;
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
+use winit::event_loop::EventLoopProxy;
 
-use winit::application::ApplicationHandler;
-use winit::event::{ElementState, KeyEvent, MouseButton, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
-use winit::keyboard::{Key, NamedKey};
-use winit::window::{Window, WindowId};
-
-#[cfg(target_os = "linux")]
-use winit::platform::wayland::EventLoopBuilderExtWayland;
-#[cfg(target_os = "linux")]
-use winit::platform::x11::EventLoopBuilderExtX11;
-
-use crate::backend::wgpu::{
-    NEOMACS_CTRL_MASK, NEOMACS_META_MASK, NEOMACS_SHIFT_MASK, NEOMACS_SUPER_MASK,
-};
-use crate::core::face::Face;
-use crate::core::frame_glyphs::{FrameGlyph, FrameGlyphBuffer, GlyphRowRole};
-use crate::core::types::{
-    AnimatedCursor, Color, CursorAnimStyle, Rect, ease_in_out_cubic, ease_linear, ease_out_cubic,
-    ease_out_expo, ease_out_quad,
-};
-use crate::thread_comm::{
-    InputEvent, MenuBarItem, PopupMenuItem, RenderCommand, RenderComms, TabBarItem, ToolBarItem,
-};
-use cursor::{CornerSpring, CursorState, CursorTarget};
-use neomacs_display_protocol::EffectsConfig;
-use neomacs_renderer_wgpu::WgpuRenderer;
-pub(crate) use neomacs_renderer_wgpu::{MenuPanel, PopupMenuState, TooltipState};
-use transitions::{CrossfadeTransition, ScrollTransition, TransitionState};
+pub(crate) use neomacs_renderer_wgpu::{PopupMenuState, TooltipState};
 
 #[cfg(all(feature = "wpe-webkit", wpe_platform_available))]
 use crate::backend::wpe::sys::platform as plat;

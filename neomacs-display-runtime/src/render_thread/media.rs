@@ -1,11 +1,15 @@
 use super::RenderApp;
+#[cfg(feature = "neo-term")]
 use super::frame_windows::GuiFrameRenderState;
 #[cfg(feature = "neo-term")]
 use crate::core::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
+#[cfg(feature = "neo-term")]
 use crate::core::frame_glyphs::{DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole};
 #[cfg(feature = "neo-term")]
 use crate::core::types::Color;
+#[cfg(feature = "neo-term")]
 use crate::core::types::DisplayWindowId;
+#[cfg(any(feature = "neo-term", all(feature = "wpe-webkit", wpe_platform_available)))]
 use crate::thread_comm::InputEvent;
 #[cfg(feature = "neo-term")]
 use std::collections::HashMap;

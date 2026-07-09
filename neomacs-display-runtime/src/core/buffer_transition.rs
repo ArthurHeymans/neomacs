@@ -161,7 +161,7 @@ impl BufferTransition {
     }
 
     /// Update progress with explicit delta time
-    pub fn update_with_dt(&mut self, dt: f32) -> bool {
+    pub fn update_with_dt(&mut self, _dt: f32) -> bool {
         if self.completed {
             return false;
         }

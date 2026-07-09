@@ -104,7 +104,6 @@ fn secondary_frame_cursor_state_clears_when_no_target_remains() {
         width: 8.0,
         height: 16.0,
         style: CursorStyle::Bar(2.0),
-        color: Color::WHITE,
         frame_id: 0x42,
     });
 
@@ -129,7 +128,6 @@ fn frame_render_state_syncs_visual_cursor_config_from_defaults() {
             width: 3.0,
             height: 4.0,
             style: CursorStyle::Bar(1.0),
-            color: Color::WHITE,
             frame_id: 0x42,
         });
         cursor
@@ -182,7 +180,6 @@ fn frame_render_state_applies_visual_cursor_animation_rects() {
         width: 13.0,
         height: 14.0,
         style: CursorStyle::Hollow,
-        color: Color::WHITE,
         frame_id: 0x42,
     });
     render.compositor.visual_cursors.insert(-7, visual);
@@ -302,7 +299,6 @@ fn frame_render_state_remove_child_cursor_clears_preedit() {
         width: 3.0,
         height: 4.0,
         style: CursorStyle::Bar(1.0),
-        color: Color::WHITE,
         frame_id: 0x99,
     });
     render.overlays.ime_preedit_active = true;

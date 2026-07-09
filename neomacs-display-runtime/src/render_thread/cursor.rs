@@ -2,7 +2,7 @@
 
 use crate::core::frame_glyphs::CursorStyle;
 use crate::core::types::{
-    AnimatedCursor, Color, CursorAnimStyle, DisplayFrameId, DisplayWindowId, ease_in_out_cubic,
+    AnimatedCursor, CursorAnimStyle, DisplayFrameId, DisplayWindowId, ease_in_out_cubic,
     ease_linear, ease_out_cubic, ease_out_expo, ease_out_quad,
 };
 
@@ -15,7 +15,6 @@ pub(super) struct CursorTarget {
     pub(super) width: f32,
     pub(super) height: f32,
     pub(super) style: CursorStyle,
-    pub(super) color: Color,
     /// Which frame owns this cursor (0 = root frame, non-zero = child frame_id)
     pub(super) frame_id: u64,
 }
