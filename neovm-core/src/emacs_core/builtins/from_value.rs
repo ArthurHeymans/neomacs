@@ -42,14 +42,6 @@ pub(crate) trait FromValue: Sized {
     fn from_value(eval: &mut eval::Context, value: Value) -> Result<Self, Flow>;
 }
 
-/// Build the canonical `(wrong-type-argument PREDICATE value)` signal.
-pub(crate) fn wrong_type(predicate: &str, value: Value) -> Flow {
-    signal(
-        LispCondition::WrongTypeArgument,
-        vec![Value::symbol(predicate), value],
-    )
-}
-
 /// Identity: accepts any value. Lets a typed signature keep raw `Value`
 /// parameters for arguments with no single predicate.
 impl FromValue for Value {
@@ -98,11 +90,11 @@ impl FromValue for bool {
 }
 
 /// `symbolp` — the symbol's identity (nil and keywords are symbols).
+/// Honors `symbols-with-pos-enabled`: a symbol-with-pos unwraps to its
+/// bare symbol exactly as GNU's `maybe_remove_pos_from_symbol` path does.
 impl FromValue for SymId {
-    fn from_value(_eval: &mut eval::Context, value: Value) -> Result<Self, Flow> {
-        value
-            .as_symbol_id()
-            .ok_or_else(|| wrong_type("symbolp", value))
+    fn from_value(eval: &mut eval::Context, value: Value) -> Result<Self, Flow> {
+        expect_symbol_id_checked(&value, eval.symbols_with_pos_enabled)
     }
 }
 

@@ -3150,21 +3150,10 @@ pub(crate) fn builtin_goto_char(eval: &mut super::eval::Context, args: Vec<Value
     builtin_goto_char_1(eval, args[0])
 }
 
-fn expect_goto_char_position(buffers: &BufferManager, value: &Value) -> Result<i64, Flow> {
-    match value.kind() {
-        ValueKind::Fixnum(n) => Ok(n),
-        _ if super::marker::is_marker(value) => {
-            super::marker::marker_position_as_int_with_buffers(buffers, value)
-        }
-        _ => Err(signal(
-            LispCondition::WrongTypeArgument,
-            vec![Value::symbol("integer-or-marker-p"), *value],
-        )),
-    }
-}
-
 pub(crate) fn builtin_goto_char_1(eval: &mut super::eval::Context, arg: Value) -> EvalResult {
-    let pos = expect_goto_char_position(&eval.buffers, &arg)?;
+    // GNU returns POSITION itself (a marker stays a marker), so the raw
+    // arg survives extraction; the typed position carries the coordinate.
+    let pos = LispCharPos1::from_value(eval, arg)?;
     let current_id = eval
         .buffers
         .current_buffer_id()
@@ -3176,7 +3165,7 @@ pub(crate) fn builtin_goto_char_1(eval: &mut super::eval::Context, arg: Value) -
             .ok_or_else(|| signal("error", vec![Value::string("No current buffer")]))?;
         (
             buf.point_emacs_byte_pos(),
-            buf.lisp_pos_to_accessible_emacs_byte_pos(LispCharPos1::new(pos)),
+            buf.lisp_pos_to_accessible_emacs_byte_pos(pos),
         )
     };
     // Adjust for intangible text property

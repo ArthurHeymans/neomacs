@@ -55,7 +55,10 @@ pub(crate) fn symbol_id_checked(value: &Value, symbols_with_pos_enabled: bool) -
     }
 }
 
-fn expect_symbol_id_checked(value: &Value, symbols_with_pos_enabled: bool) -> Result<SymId, Flow> {
+pub(crate) fn expect_symbol_id_checked(
+    value: &Value,
+    symbols_with_pos_enabled: bool,
+) -> Result<SymId, Flow> {
     symbol_id_checked(value, symbols_with_pos_enabled).ok_or_else(|| {
         signal(
             LispCondition::WrongTypeArgument,
@@ -246,21 +249,20 @@ pub(crate) fn builtin_boundp(eval: &mut super::eval::Context, args: Vec<Value>) 
     builtin_boundp_1(eval, args[0])
 }
 
-pub(crate) fn builtin_boundp_1(eval: &mut super::eval::Context, arg: Value) -> EvalResult {
-    let obarray = eval.obarray();
-    let resolved = resolve_variable_alias_id_in_obarray(
-        obarray,
-        expect_symbol_id_checked(&arg, eval.symbols_with_pos_enabled)?,
-    )?;
-    // specbind writes directly to obarray, so no dynamic stack lookup needed.
-    if let Some(buf) = eval.buffers.current_buffer() {
-        if let Some(binding) = buf.get_buffer_local_binding_by_sym_id(resolved) {
-            return Ok(Value::bool_val(binding.as_value().is_some()));
+typed_subr! {
+    pub(crate) fn builtin_boundp_1(eval, symbol: SymId) -> EvalResult {
+        let obarray = eval.obarray();
+        let resolved = resolve_variable_alias_id_in_obarray(obarray, symbol)?;
+        // specbind writes directly to obarray, so no dynamic stack lookup needed.
+        if let Some(buf) = eval.buffers.current_buffer() {
+            if let Some(binding) = buf.get_buffer_local_binding_by_sym_id(resolved) {
+                return Ok(Value::bool_val(binding.as_value().is_some()));
+            }
         }
+        Ok(Value::bool_val(
+            obarray.boundp_id(resolved) || obarray.is_constant_id(resolved),
+        ))
     }
-    Ok(Value::bool_val(
-        obarray.boundp_id(resolved) || obarray.is_constant_id(resolved),
-    ))
 }
 
 pub(crate) fn builtin_obarrayp(args: Vec<Value>) -> EvalResult {
@@ -277,17 +279,15 @@ pub(crate) fn builtin_special_variable_p(
     builtin_special_variable_p_1(eval, args[0])
 }
 
-pub(crate) fn builtin_special_variable_p_1(
-    eval: &mut super::eval::Context,
-    arg: Value,
-) -> EvalResult {
-    let symbol = expect_symbol_id_checked(&arg, eval.symbols_with_pos_enabled)?;
-    // Match GNU eval.c Fspecial_variable_p: this is a direct declared-special
-    // bit test on the symbol itself, not an alias walk and not a constant
-    // check.  Canonical keywords become special when materialized in the
-    // initial obarray, mirroring lread.c intern_sym.
-    eval.obarray_mut().ensure_interned_global_id(symbol);
-    Ok(Value::bool_val(eval.obarray().is_special_id(symbol)))
+typed_subr! {
+    pub(crate) fn builtin_special_variable_p_1(eval, symbol: SymId) -> EvalResult {
+        // Match GNU eval.c Fspecial_variable_p: this is a direct declared-special
+        // bit test on the symbol itself, not an alias walk and not a constant
+        // check.  Canonical keywords become special when materialized in the
+        // initial obarray, mirroring lread.c intern_sym.
+        eval.obarray_mut().ensure_interned_global_id(symbol);
+        Ok(Value::bool_val(eval.obarray().is_special_id(symbol)))
+    }
 }
 
 pub(crate) fn builtin_default_boundp(
@@ -550,12 +550,13 @@ pub(crate) fn builtin_fboundp(eval: &mut super::eval::Context, args: Vec<Value>)
     builtin_fboundp_1(eval, args[0])
 }
 
-pub(crate) fn builtin_fboundp_1(eval: &mut super::eval::Context, arg: Value) -> EvalResult {
-    let symbol = expect_symbol_id_checked(&arg, eval.symbols_with_pos_enabled)?;
-    Ok(Value::bool_val(
-        symbol_function_cell_in_obarray(eval.obarray(), symbol)
-            .is_some_and(|function| !function.is_nil()),
-    ))
+typed_subr! {
+    pub(crate) fn builtin_fboundp_1(eval, symbol: SymId) -> EvalResult {
+        Ok(Value::bool_val(
+            symbol_function_cell_in_obarray(eval.obarray(), symbol)
+                .is_some_and(|function| !function.is_nil()),
+        ))
+    }
 }
 
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
@@ -571,7 +572,9 @@ pub(crate) fn builtin_symbol_value_1(
     eval: &mut super::eval::Context,
     symbol_value: Value,
 ) -> EvalResult {
-    let symbol = expect_symbol_id_checked(&symbol_value, eval.symbols_with_pos_enabled)?;
+    // The void-variable error reports the argument as given (a
+    // symbol-with-pos keeps its wrapper), so extraction keeps the raw arg.
+    let symbol = SymId::from_value(eval, symbol_value)?;
     match eval.visible_runtime_variable_value_by_id(symbol)? {
         Some(value) => Ok(value),
         None => Err(signal(LispCondition::VoidVariable, vec![symbol_value])),
@@ -594,8 +597,10 @@ pub(crate) fn builtin_symbol_function(
     symbol_function_impl_1_checked(eval.obarray(), args[0], eval.symbols_with_pos_enabled)
 }
 
-pub(crate) fn builtin_symbol_function_1(eval: &mut super::eval::Context, arg: Value) -> EvalResult {
-    symbol_function_impl_1_checked(eval.obarray(), arg, eval.symbols_with_pos_enabled)
+typed_subr! {
+    pub(crate) fn builtin_symbol_function_1(eval, symbol: SymId) -> EvalResult {
+        symbol_function_by_id(eval.obarray(), symbol)
+    }
 }
 
 /// Obarray-only implementation shared by `builtin_symbol_function` and doc.rs.
@@ -616,6 +621,11 @@ pub(crate) fn symbol_function_impl_1_checked(
     symbols_with_pos_enabled: bool,
 ) -> EvalResult {
     let symbol = expect_symbol_id_checked(&arg, symbols_with_pos_enabled)?;
+    symbol_function_by_id(obarray, symbol)
+}
+
+/// `symbol-function` after symbol extraction: the function cell by identity.
+pub(crate) fn symbol_function_by_id(obarray: &Obarray, symbol: SymId) -> EvalResult {
     if obarray.is_function_unbound_id(symbol) {
         return Ok(Value::NIL);
     }
