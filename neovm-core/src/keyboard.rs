@@ -4062,14 +4062,6 @@ impl crate::emacs_core::eval::Context {
                 return Err(crate::emacs_core::error::signal("quit", vec![]));
             }
 
-            if self.input_rx.is_none() {
-                // No host input channel means this evaluator cannot block for
-                // future keyboard input. Once queued Lisp/keyboard events are
-                // drained, report EOF to the caller.
-                self.timer_stop_idle();
-                return Ok(None);
-            }
-
             if deadline.is_some_and(|deadline| std::time::Instant::now() >= deadline) {
                 self.timer_stop_idle();
                 return Ok(None);
@@ -4105,6 +4097,14 @@ impl crate::emacs_core::eval::Context {
             }
             if self.shutdown_request.is_some() {
                 return Err(crate::emacs_core::error::signal("quit", vec![]));
+            }
+
+            if self.input_rx.is_none() {
+                // No host input channel means this evaluator cannot block for
+                // future keyboard input. Once queued Lisp/keyboard events and
+                // due timers are drained, report EOF to the caller.
+                self.timer_stop_idle();
+                return Ok(None);
             }
 
             self.timer_start_idle();
