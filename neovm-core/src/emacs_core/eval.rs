@@ -3259,103 +3259,13 @@ impl Context {
         result.map(|_| ())
     }
 
-    fn new_inner(reset_thread_locals: bool) -> Self {
-        // Create the heap and set thread-locals so tagged constructors work
-        // during evaluator initialization.
-        let mut tagged_heap = Box::new(crate::tagged::gc::TaggedHeap::new());
-        crate::tagged::gc::set_tagged_heap(&mut tagged_heap);
-
-        // Clear any caches that hold heap-allocated Values (tagged pointers) from a
-        // previous heap. Critical for test isolation when multiple Contexts
-        // are created sequentially on the same thread.
-        if reset_thread_locals {
-            super::pdump::runtime::reset_runtime_for_new_heap(
-                super::pdump::runtime::HeapResetMode::FreshContext,
-            );
-        }
-
-        let mut obarray = Obarray::new();
-        // Builtin names are interned by defsubr() during init_builtins(),
-        // which runs after Context construction.
-        let default_directory = std::env::current_dir()
-            .ok()
-            .and_then(|p| p.to_str().map(|s| s.to_string()))
-            .map(|mut s| {
-                if !s.ends_with('/') {
-                    s.push('/');
-                }
-                s
-            })
-            .unwrap_or_else(|| "./".to_string());
-        // Create all keymaps as Emacs-compatible cons-list values
-        let completion_in_region_mode_map = make_sparse_list_keymap();
-        let completion_list_mode_map = make_sparse_list_keymap();
-        let minibuffer_local_map = make_sparse_list_keymap();
-        // Keep only the base minibuffer map here. GNU Lisp defines
-        // `read-expression-map` / `read--expression-map` itself in simple.el via
-        // `defvar-keymap`; prebinding them here causes those definitions to be
-        // skipped, which leaves RET/C-j handling diverged from GNU Emacs.
-        // Standard keymaps required by loadup.el files (normally created by C code)
-        // `global-map`, `esc-map`, `ctl-x-map`, and `help-map` are defined in GNU Lisp,
-        // so keep them unbound here and let the Lisp `defvar` / `defvar-keymap`
-        // initializers run.  Prebinding them here causes GNU definitions like
-        // help.el's `defvar-keymap help-map ...` to skip installing their real
-        // bindings.
-        let special_event_map = make_sparse_list_keymap();
-        let mode_line_window_dedicated_keymap = make_sparse_list_keymap();
-        let indent_rigidly_map = make_sparse_list_keymap();
-        let text_mode_map = make_sparse_list_keymap();
-        let image_slice_map = make_sparse_list_keymap();
-        let tool_bar_map = make_sparse_list_keymap();
-        let key_translation_map = make_sparse_list_keymap();
-        let function_key_map = make_sparse_list_keymap();
-        let input_decode_map = make_sparse_list_keymap();
-        let local_function_key_map = make_sparse_list_keymap();
-        // GNU Emacs: local-function-key-map inherits from function-key-map
-        // (keyboard.c:13097). Without this, bindings in function-key-map
-        // (like [backspace] → [?\C-?]) are not found during key translation.
-        list_keymap_set_parent(local_function_key_map, function_key_map);
-        // GNU keyboard.c seeds special-event-map with delete-frame and focus
-        // handlers at C bootstrap time and leaves hook semantics to frame.el.
-        list_keymap_define(
-            special_event_map,
-            Value::symbol("delete-frame"),
-            Value::symbol("handle-delete-frame"),
-        );
-        list_keymap_define(
-            special_event_map,
-            Value::symbol("focus-in"),
-            Value::symbol("handle-focus-in"),
-        );
-        list_keymap_define(
-            special_event_map,
-            Value::symbol("focus-out"),
-            Value::symbol("handle-focus-out"),
-        );
-        if cfg!(target_os = "linux") {
-            // GNU keyboard.c installs DBus events in `special-event-map` when
-            // dbusbind.c is present.
-            list_keymap_define(
-                special_event_map,
-                Value::symbol("dbus-event"),
-                Value::symbol("dbus-handle-event"),
-            );
-        }
-        // GNU keyboard.c installs file notification events in
-        // `special-event-map` when file notification support is present.
-        list_keymap_define(
-            special_event_map,
-            Value::symbol("file-notify"),
-            Value::symbol("file-notify-handle-event"),
-        );
-
-        let standard_syntax_table = super::syntax::builtin_standard_syntax_table(Vec::new())
-            .expect("startup seeding requires standard syntax table");
-        let syntax_code_objects = super::syntax::snapshot_syntax_code_objects()
-            .unwrap_or_else(super::syntax::ensure_syntax_code_objects);
-        let standard_category_table = super::category::ensure_standard_category_table_object()
-            .expect("startup seeding requires standard category table");
-
+    /// GNU emacs.c / data.c / fns.c-level startup globals: version and
+    /// platform identity, invocation paths, subprocess program names, the
+    /// load/exec path environment, and process/terminal defaults. Pulled
+    /// out of new_inner so the constructor reads as a sequence of phases
+    /// (and stays small enough for reliable debug codegen; see the
+    /// init_builtins note in Context::new).
+    fn seed_startup_platform_variables(obarray: &mut Obarray, default_directory: String) {
         // Set up standard global variables
         // Match GNU data.c: DEFVAR_LISP marks these symbols declared-special,
         // then make_symbol_constant installs the SYMBOL_NOWRITE trap.
@@ -3591,7 +3501,7 @@ impl Context {
         // thread.c:syms_of_threads provides `threads' when thread builtins
         // are installed.
         obarray.set_symbol_value("features", initial_features_value());
-        super::xwidget::init_xwidget_variables(&mut obarray);
+        super::xwidget::init_xwidget_variables(obarray);
         obarray.set_symbol_value_id(lexical_binding_symbol(), Value::NIL);
         obarray.set_symbol_value("load-prefer-newer", Value::NIL);
         obarray.set_symbol_value("load-file-name", Value::NIL);
@@ -3944,8 +3854,18 @@ impl Context {
         obarray.make_special("read-symbol-shorthands");
         obarray.set_symbol_value("macroexp--dynvars", Value::NIL);
         obarray.make_special("macroexp--dynvars");
-        // GNU DEFVAR_LISP variables from eval.c / keyboard.c.
-        let core_eval_symbols = install_core_eval_symbols(&mut obarray, true);
+    }
+
+    /// Reader, printer, keyboard, minibuffer, and display DEFVAR globals
+    /// (GNU lread.c / print.c / keyboard.c / minibuf.c / xdisp.c
+    /// syms_of_* territory).
+    fn seed_reader_keyboard_variables(
+        obarray: &mut Obarray,
+        standard_syntax_table: Value,
+        completion_in_region_mode_map: Value,
+        completion_list_mode_map: Value,
+        minibuffer_local_map: Value,
+    ) {
         obarray.set_symbol_value("inhibit-debugger", Value::NIL);
         obarray.make_special("inhibit-debugger");
         obarray.set_symbol_value("debug-on-error", Value::NIL);
@@ -4517,29 +4437,11 @@ impl Context {
         obarray.make_special("overriding-terminal-local-map");
         obarray.set_symbol_value("overriding-text-conversion-style", Value::symbol("lambda"));
 
-        // ---- C-level bootstrap variables required by loadup.el files ----
+    }
 
-        // Standard keymaps (C creates these in keyboard.c:init_kboard)
-        obarray.set_symbol_value("special-event-map", special_event_map);
-        obarray.set_symbol_value(
-            "mode-line-window-dedicated-keymap",
-            mode_line_window_dedicated_keymap,
-        );
-        obarray.set_symbol_value("indent-rigidly-map", indent_rigidly_map);
-        obarray.set_symbol_value("text-mode-map", text_mode_map);
-        obarray.set_symbol_value("image-slice-map", image_slice_map);
-        obarray.set_symbol_value("tool-bar-map", tool_bar_map);
-        obarray.set_symbol_value("key-translation-map", key_translation_map);
-        obarray.set_symbol_value("function-key-map", function_key_map);
-        obarray.set_symbol_value("input-decode-map", input_decode_map);
-        obarray.make_special("input-decode-map");
-        obarray.set_symbol_value("local-function-key-map", local_function_key_map);
-        obarray.make_special("local-function-key-map");
-        obarray.set_symbol_value("keyboard-translate-table", Value::NIL);
-        // GNU uses DEFVAR_KBOARD here. NeoVM does not yet split keyboard state
-        // per terminal, so model it as a dynamically scoped runtime variable.
-        obarray.make_special("keyboard-translate-table");
-
+    /// Core eval.c / keyboard.c DEFVAR globals plus the standard error
+    /// hierarchy and indentation/font variable seeding.
+    fn seed_core_eval_variables(obarray: &mut Obarray) {
         // Core eval variables (stay in eval.rs)
         obarray.set_symbol_value("purify-flag", Value::NIL);
         obarray.make_special("purify-flag");
@@ -4578,20 +4480,20 @@ impl Context {
         obarray.set_symbol_value("frame--special-parameters", Value::NIL);
 
         // Initialize distributed bootstrap variables
-        super::alloc::register_bootstrap_vars(&mut obarray);
-        super::load::register_bootstrap_vars(&mut obarray);
-        super::fileio::register_bootstrap_vars(&mut obarray);
-        super::process::register_bootstrap_vars(&mut obarray);
-        super::undo::register_bootstrap_vars(&mut obarray);
-        super::window_cmds::register_bootstrap_vars(&mut obarray);
-        super::keyboard::pure::register_bootstrap_vars(&mut obarray);
-        super::composite::register_bootstrap_vars(&mut obarray);
-        super::coding::register_bootstrap_vars(&mut obarray);
-        super::xdisp::register_bootstrap_vars(&mut obarray);
-        super::textprop::register_bootstrap_vars(&mut obarray);
-        super::xfaces::register_bootstrap_vars(&mut obarray);
-        super::frame_vars::register_bootstrap_vars(&mut obarray);
-        super::buffer_vars::register_bootstrap_vars(&mut obarray);
+        super::alloc::register_bootstrap_vars(obarray);
+        super::load::register_bootstrap_vars(obarray);
+        super::fileio::register_bootstrap_vars(obarray);
+        super::process::register_bootstrap_vars(obarray);
+        super::undo::register_bootstrap_vars(obarray);
+        super::window_cmds::register_bootstrap_vars(obarray);
+        super::keyboard::pure::register_bootstrap_vars(obarray);
+        super::composite::register_bootstrap_vars(obarray);
+        super::coding::register_bootstrap_vars(obarray);
+        super::xdisp::register_bootstrap_vars(obarray);
+        super::textprop::register_bootstrap_vars(obarray);
+        super::xfaces::register_bootstrap_vars(obarray);
+        super::frame_vars::register_bootstrap_vars(obarray);
+        super::buffer_vars::register_bootstrap_vars(obarray);
 
         // ---- end C-level bootstrap variables ----
 
@@ -4682,13 +4584,19 @@ impl Context {
         }
 
         // Initialize the standard error hierarchy (error, user-error, etc.)
-        super::errors::init_standard_errors(&mut obarray);
+        super::errors::init_standard_errors(obarray);
 
         // Initialize indentation variables (tab-width, indent-tabs-mode, etc.)
-        super::indent::init_indent_vars(&mut obarray);
-        super::font::init_font_vars(&mut obarray);
+        super::indent::init_indent_vars(obarray);
+        super::font::init_font_vars(obarray);
 
-        let mut custom = CustomManager::new();
+    }
+
+    /// C-level DEFVAR registrations mirroring GNU's per-file syms_of_*()
+    /// functions, plus buffer-local bootstrap variables. If a variable is
+    /// declared via DEFVAR in GNU C, it must be registered here or elisp
+    /// reading or let-binding it gets void-variable.
+    fn seed_c_level_defvars(obarray: &mut Obarray, custom: &mut CustomManager) {
 
         // `case-fold-search` is DEFVAR_LISP + Fmake_variable_buffer_local
         // in GNU `buffer.c:5971-5975`. Install it as a LOCALIZED symbol
@@ -4713,8 +4621,8 @@ impl Context {
             obarray.set_blv_local_if_set(id, true);
         }
 
-        super::textprop::init_textprop_vars(&mut obarray, &mut custom);
-        super::syntax::init_syntax_vars(&mut obarray, &mut custom);
+        super::textprop::init_textprop_vars(obarray, custom);
+        super::syntax::init_syntax_vars(obarray, custom);
         // Register all DEFVAR_PER_BUFFER variables from GNU Emacs buffer.c.
         // These are C-level buffer-local variables that must exist before
         // any .el file loads.  Default values match init_buffer_once().
@@ -5079,6 +4987,141 @@ impl Context {
             obarray.set_symbol_value(name, Value::NIL);
             obarray.make_special(name);
         }
+    }
+
+    fn new_inner(reset_thread_locals: bool) -> Self {
+        // Create the heap and set thread-locals so tagged constructors work
+        // during evaluator initialization.
+        let mut tagged_heap = Box::new(crate::tagged::gc::TaggedHeap::new());
+        crate::tagged::gc::set_tagged_heap(&mut tagged_heap);
+
+        // Clear any caches that hold heap-allocated Values (tagged pointers) from a
+        // previous heap. Critical for test isolation when multiple Contexts
+        // are created sequentially on the same thread.
+        if reset_thread_locals {
+            super::pdump::runtime::reset_runtime_for_new_heap(
+                super::pdump::runtime::HeapResetMode::FreshContext,
+            );
+        }
+
+        let mut obarray = Obarray::new();
+        // Builtin names are interned by defsubr() during init_builtins(),
+        // which runs after Context construction.
+        let default_directory = std::env::current_dir()
+            .ok()
+            .and_then(|p| p.to_str().map(|s| s.to_string()))
+            .map(|mut s| {
+                if !s.ends_with('/') {
+                    s.push('/');
+                }
+                s
+            })
+            .unwrap_or_else(|| "./".to_string());
+        // Create all keymaps as Emacs-compatible cons-list values
+        let completion_in_region_mode_map = make_sparse_list_keymap();
+        let completion_list_mode_map = make_sparse_list_keymap();
+        let minibuffer_local_map = make_sparse_list_keymap();
+        // Keep only the base minibuffer map here. GNU Lisp defines
+        // `read-expression-map` / `read--expression-map` itself in simple.el via
+        // `defvar-keymap`; prebinding them here causes those definitions to be
+        // skipped, which leaves RET/C-j handling diverged from GNU Emacs.
+        // Standard keymaps required by loadup.el files (normally created by C code)
+        // `global-map`, `esc-map`, `ctl-x-map`, and `help-map` are defined in GNU Lisp,
+        // so keep them unbound here and let the Lisp `defvar` / `defvar-keymap`
+        // initializers run.  Prebinding them here causes GNU definitions like
+        // help.el's `defvar-keymap help-map ...` to skip installing their real
+        // bindings.
+        let special_event_map = make_sparse_list_keymap();
+        let mode_line_window_dedicated_keymap = make_sparse_list_keymap();
+        let indent_rigidly_map = make_sparse_list_keymap();
+        let text_mode_map = make_sparse_list_keymap();
+        let image_slice_map = make_sparse_list_keymap();
+        let tool_bar_map = make_sparse_list_keymap();
+        let key_translation_map = make_sparse_list_keymap();
+        let function_key_map = make_sparse_list_keymap();
+        let input_decode_map = make_sparse_list_keymap();
+        let local_function_key_map = make_sparse_list_keymap();
+        // GNU Emacs: local-function-key-map inherits from function-key-map
+        // (keyboard.c:13097). Without this, bindings in function-key-map
+        // (like [backspace] → [?\C-?]) are not found during key translation.
+        list_keymap_set_parent(local_function_key_map, function_key_map);
+        // GNU keyboard.c seeds special-event-map with delete-frame and focus
+        // handlers at C bootstrap time and leaves hook semantics to frame.el.
+        list_keymap_define(
+            special_event_map,
+            Value::symbol("delete-frame"),
+            Value::symbol("handle-delete-frame"),
+        );
+        list_keymap_define(
+            special_event_map,
+            Value::symbol("focus-in"),
+            Value::symbol("handle-focus-in"),
+        );
+        list_keymap_define(
+            special_event_map,
+            Value::symbol("focus-out"),
+            Value::symbol("handle-focus-out"),
+        );
+        if cfg!(target_os = "linux") {
+            // GNU keyboard.c installs DBus events in `special-event-map` when
+            // dbusbind.c is present.
+            list_keymap_define(
+                special_event_map,
+                Value::symbol("dbus-event"),
+                Value::symbol("dbus-handle-event"),
+            );
+        }
+        // GNU keyboard.c installs file notification events in
+        // `special-event-map` when file notification support is present.
+        list_keymap_define(
+            special_event_map,
+            Value::symbol("file-notify"),
+            Value::symbol("file-notify-handle-event"),
+        );
+
+        let standard_syntax_table = super::syntax::builtin_standard_syntax_table(Vec::new())
+            .expect("startup seeding requires standard syntax table");
+        let syntax_code_objects = super::syntax::snapshot_syntax_code_objects()
+            .unwrap_or_else(super::syntax::ensure_syntax_code_objects);
+        let standard_category_table = super::category::ensure_standard_category_table_object()
+            .expect("startup seeding requires standard category table");
+
+        Self::seed_startup_platform_variables(&mut obarray, default_directory);
+        // GNU DEFVAR_LISP variables from eval.c / keyboard.c.
+        let core_eval_symbols = install_core_eval_symbols(&mut obarray, true);
+        Self::seed_reader_keyboard_variables(
+            &mut obarray,
+            standard_syntax_table,
+            completion_in_region_mode_map,
+            completion_list_mode_map,
+            minibuffer_local_map,
+        );
+        // ---- C-level bootstrap variables required by loadup.el files ----
+
+        // Standard keymaps (C creates these in keyboard.c:init_kboard)
+        obarray.set_symbol_value("special-event-map", special_event_map);
+        obarray.set_symbol_value(
+            "mode-line-window-dedicated-keymap",
+            mode_line_window_dedicated_keymap,
+        );
+        obarray.set_symbol_value("indent-rigidly-map", indent_rigidly_map);
+        obarray.set_symbol_value("text-mode-map", text_mode_map);
+        obarray.set_symbol_value("image-slice-map", image_slice_map);
+        obarray.set_symbol_value("tool-bar-map", tool_bar_map);
+        obarray.set_symbol_value("key-translation-map", key_translation_map);
+        obarray.set_symbol_value("function-key-map", function_key_map);
+        obarray.set_symbol_value("input-decode-map", input_decode_map);
+        obarray.make_special("input-decode-map");
+        obarray.set_symbol_value("local-function-key-map", local_function_key_map);
+        obarray.make_special("local-function-key-map");
+        obarray.set_symbol_value("keyboard-translate-table", Value::NIL);
+        // GNU uses DEFVAR_KBOARD here. NeoVM does not yet split keyboard state
+        // per terminal, so model it as a dynamically scoped runtime variable.
+        obarray.make_special("keyboard-translate-table");
+
+        Self::seed_core_eval_variables(&mut obarray);
+        let mut custom = CustomManager::new();
+        Self::seed_c_level_defvars(&mut obarray, &mut custom);
 
         #[cfg(target_os = "windows")]
         super::windows::register_bootstrap_symbols(&mut obarray);
