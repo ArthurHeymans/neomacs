@@ -265,7 +265,7 @@ impl RenderApp {
     }
 
     fn render_frame_corner_mask(
-        renderer: &WgpuRenderer,
+        renderer: &mut WgpuRenderer,
         surface_view: &wgpu::TextureView,
         chrome: &WindowChrome,
         width: u32,
@@ -277,7 +277,7 @@ impl RenderApp {
     }
 
     fn render_frame_visual_bell_overlay(
-        renderer: &WgpuRenderer,
+        renderer: &mut WgpuRenderer,
         surface_view: &wgpu::TextureView,
         visual_bell_start: &mut Option<std::time::Instant>,
         frame_dirty: &mut bool,
@@ -298,7 +298,7 @@ impl RenderApp {
     }
 
     fn render_frame_fps_overlay(
-        renderer: &WgpuRenderer,
+        renderer: &mut WgpuRenderer,
         surface_view: &wgpu::TextureView,
         glyph_atlas: &mut WgpuGlyphAtlas,
         fps: &mut FpsCounter,
@@ -326,7 +326,7 @@ impl RenderApp {
     }
 
     fn render_frame_typing_speed_overlay(
-        renderer: &WgpuRenderer,
+        renderer: &mut WgpuRenderer,
         surface_view: &wgpu::TextureView,
         frame: &crate::core::frame_glyphs::FrameGlyphBuffer,
         glyph_atlas: &mut WgpuGlyphAtlas,

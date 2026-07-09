@@ -18,7 +18,6 @@ use std::sync::{
     OnceLock,
     atomic::{AtomicU64, Ordering},
 };
-use wgpu::util::DeviceExt;
 
 pub(super) const CHAR_OVERLAP_MIN_AXIS: f32 = 0.5;
 const CHAR_OVERLAP_MIN_AREA: f32 = 1.0;
@@ -1078,8 +1077,7 @@ impl WgpuRenderer {
         mouse_pos: (f32, f32),
         background_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
     ) {
-        self.arenas.glyph.begin_frame();
-        self.arenas.subpixel.begin_frame();
+        self.arenas.begin_frame();
 
         let face_debug_call_id = if trace_face_debug_enabled() {
             next_face_debug_call_id()
@@ -1286,6 +1284,7 @@ impl WgpuRenderer {
         stats.cache_hits = glyph_atlas.cache_hits_this_frame;
         stats.cache_misses = glyph_atlas.cache_misses_this_frame;
         stats.glyph_texture_uploads = glyph_atlas.cache_misses_this_frame;
+        stats.buffers_created = self.arenas.buffers_created_since_snapshot() as usize;
         self.glyph_stats = stats.clone();
         stats.log_if_enabled();
 
@@ -1534,24 +1533,20 @@ impl WgpuRenderer {
     }
 
     pub(super) fn draw_rect_vertex_layer(
-        &self,
+        &mut self,
         render_pass: &mut wgpu::RenderPass<'_>,
         rect_vertices: &[RectVertex],
-        vertex_buffer_label: &'static str,
     ) {
-        if rect_vertices.is_empty() {
+        let Some(upload) = self
+            .arenas
+            .rect
+            .upload(&self.device, &self.queue, rect_vertices)
+        else {
             return;
-        }
-        let rect_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(vertex_buffer_label),
-                contents: bytemuck::cast_slice(rect_vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        };
         render_pass.set_pipeline(&self.pipelines.rect);
         render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-        render_pass.set_vertex_buffer(0, rect_buffer.slice(..));
+        render_pass.set_vertex_buffer(0, upload.buffer_slice());
         render_pass.draw(0..rect_vertices.len() as u32, 0..1);
     }
 }

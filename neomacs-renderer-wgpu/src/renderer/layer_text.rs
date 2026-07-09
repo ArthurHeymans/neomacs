@@ -5,7 +5,6 @@
 use std::collections::HashSet;
 
 use cosmic_text::SubpixelBin;
-use wgpu::util::DeviceExt;
 
 use neomacs_display_protocol::face::{BoxType, FaceAttributes, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, FrameGlyph, MaterializedFaceData};
@@ -766,7 +765,7 @@ impl WgpuRenderer {
     }
 
     /// Draw underline/overline/strike-through decorations for one text pass.
-    fn draw_text_decorations(&self, ctx: &mut FramePassCtx<'_, '_>, want_overlay: bool) {
+    fn draw_text_decorations(&mut self, ctx: &mut FramePassCtx<'_, '_>, want_overlay: bool) {
         let render_pass = &mut ctx.pass;
         let frame_glyphs = ctx.params.frame_glyphs;
         let has_line_anims = ctx.params.has_line_anims;
@@ -1118,18 +1117,14 @@ impl WgpuRenderer {
                 }
             }
 
-            if !decoration_vertices.is_empty() {
-                let decoration_buffer =
-                    self.device
-                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some("Decoration Rect Buffer"),
-                            contents: bytemuck::cast_slice(&decoration_vertices),
-                            usage: wgpu::BufferUsages::VERTEX,
-                        });
-
+            if let Some(upload) =
+                self.arenas
+                    .rect
+                    .upload(&self.device, &self.queue, &decoration_vertices)
+            {
                 render_pass.set_pipeline(&self.pipelines.rect);
                 render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                render_pass.set_vertex_buffer(0, decoration_buffer.slice(..));
+                render_pass.set_vertex_buffer(0, upload.buffer_slice());
                 render_pass.draw(0..decoration_vertices.len() as u32, 0..1);
             }
         }
@@ -1288,32 +1283,26 @@ impl WgpuRenderer {
             }
 
             // Draw sharp box borders
-            if !sharp_border_vertices.is_empty() {
-                let sharp_buffer =
-                    self.device
-                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some("Sharp Box Border Buffer"),
-                            contents: bytemuck::cast_slice(&sharp_border_vertices),
-                            usage: wgpu::BufferUsages::VERTEX,
-                        });
+            if let Some(upload) =
+                self.arenas
+                    .rect
+                    .upload(&self.device, &self.queue, &sharp_border_vertices)
+            {
                 render_pass.set_pipeline(&self.pipelines.rect);
                 render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                render_pass.set_vertex_buffer(0, sharp_buffer.slice(..));
+                render_pass.set_vertex_buffer(0, upload.buffer_slice());
                 render_pass.draw(0..sharp_border_vertices.len() as u32, 0..1);
             }
 
             // Draw rounded box borders
-            if !rounded_border_vertices.is_empty() {
-                let rounded_buffer =
-                    self.device
-                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some("Rounded Box Border Buffer"),
-                            contents: bytemuck::cast_slice(&rounded_border_vertices),
-                            usage: wgpu::BufferUsages::VERTEX,
-                        });
+            if let Some(upload) =
+                self.arenas
+                    .rounded
+                    .upload(&self.device, &self.queue, &rounded_border_vertices)
+            {
                 render_pass.set_pipeline(&self.pipelines.rounded_rect);
                 render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                render_pass.set_vertex_buffer(0, rounded_buffer.slice(..));
+                render_pass.set_vertex_buffer(0, upload.buffer_slice());
                 render_pass.draw(0..rounded_border_vertices.len() as u32, 0..1);
             }
         }

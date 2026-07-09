@@ -2,13 +2,12 @@
 
 use super::super::vertex::GlyphVertex;
 use super::WgpuRenderer;
-use wgpu::util::DeviceExt;
 
 impl WgpuRenderer {
     /// Render a crossfade transition within a scissor region
     /// Uses the image_pipeline to blend old and new textures
     pub fn render_crossfade(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
@@ -34,48 +33,6 @@ impl WgpuRenderer {
         // Use logical dimensions for vertex positions since screen_size uniform is logical
         let w = surface_width as f32 / sf;
         let h = surface_height as f32 / sf;
-
-        // Fullscreen quad with UV mapping
-        let vertices = [
-            GlyphVertex {
-                position: [0.0, 0.0],
-                tex_coords: [0.0, 0.0],
-                color: [1.0, 1.0, 1.0, 1.0],
-            },
-            GlyphVertex {
-                position: [w, 0.0],
-                tex_coords: [1.0, 0.0],
-                color: [1.0, 1.0, 1.0, 1.0],
-            },
-            GlyphVertex {
-                position: [w, h],
-                tex_coords: [1.0, 1.0],
-                color: [1.0, 1.0, 1.0, 1.0],
-            },
-            GlyphVertex {
-                position: [0.0, 0.0],
-                tex_coords: [0.0, 0.0],
-                color: [1.0, 1.0, 1.0, 1.0],
-            },
-            GlyphVertex {
-                position: [w, h],
-                tex_coords: [1.0, 1.0],
-                color: [1.0, 1.0, 1.0, 1.0],
-            },
-            GlyphVertex {
-                position: [0.0, h],
-                tex_coords: [0.0, 1.0],
-                color: [1.0, 1.0, 1.0, 1.0],
-            },
-        ];
-
-        let _vertex_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Crossfade Vertex Buffer"),
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
 
         let mut encoder = self
             .device
@@ -118,13 +75,10 @@ impl WgpuRenderer {
                     color: [1.0, 1.0, 1.0, old_alpha],
                 },
             ];
-            let old_vb = self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Crossfade Old VB"),
-                    contents: bytemuck::cast_slice(&old_vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+            let old_upload = self
+                .arenas
+                .image
+                .upload(&self.device, &self.queue, &old_vertices);
 
             // New texture with alpha blend_t
             let new_vertices = [
@@ -159,13 +113,10 @@ impl WgpuRenderer {
                     color: [1.0, 1.0, 1.0, blend_t],
                 },
             ];
-            let new_vb = self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Crossfade New VB"),
-                    contents: bytemuck::cast_slice(&new_vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+            let new_upload = self
+                .arenas
+                .image
+                .upload(&self.device, &self.queue, &new_vertices);
 
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Crossfade Pass"),
@@ -189,14 +140,18 @@ impl WgpuRenderer {
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
             // Draw old with fading alpha
-            render_pass.set_bind_group(1, old_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, old_vb.slice(..));
-            render_pass.draw(0..6, 0..1);
+            if let Some(ref upload) = old_upload {
+                render_pass.set_bind_group(1, old_bind_group, &[]);
+                render_pass.set_vertex_buffer(0, upload.buffer_slice());
+                render_pass.draw(0..6, 0..1);
+            }
 
             // Draw new with increasing alpha
-            render_pass.set_bind_group(1, new_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, new_vb.slice(..));
-            render_pass.draw(0..6, 0..1);
+            if let Some(ref upload) = new_upload {
+                render_pass.set_bind_group(1, new_bind_group, &[]);
+                render_pass.set_vertex_buffer(0, upload.buffer_slice());
+                render_pass.draw(0..6, 0..1);
+            }
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -207,7 +162,7 @@ impl WgpuRenderer {
     /// Uses content-region UV mapping so only the content area of each offscreen
     /// texture is sampled — the mode-line is never included in the sliding quads.
     pub fn render_scroll_slide(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
@@ -294,20 +249,14 @@ impl WgpuRenderer {
         let old_vertices = make_quad(old_y_offset);
         let new_vertices = make_quad(new_y_offset);
 
-        let old_vb = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Scroll Old VB"),
-                contents: bytemuck::cast_slice(&old_vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-        let new_vb = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Scroll New VB"),
-                contents: bytemuck::cast_slice(&new_vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        let old_upload = self
+            .arenas
+            .image
+            .upload(&self.device, &self.queue, &old_vertices);
+        let new_upload = self
+            .arenas
+            .image
+            .upload(&self.device, &self.queue, &new_vertices);
 
         let mut encoder = self
             .device
@@ -338,14 +287,18 @@ impl WgpuRenderer {
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
             // Draw old texture sliding out
-            render_pass.set_bind_group(1, old_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, old_vb.slice(..));
-            render_pass.draw(0..6, 0..1);
+            if let Some(ref upload) = old_upload {
+                render_pass.set_bind_group(1, old_bind_group, &[]);
+                render_pass.set_vertex_buffer(0, upload.buffer_slice());
+                render_pass.draw(0..6, 0..1);
+            }
 
             // Draw new texture sliding in
-            render_pass.set_bind_group(1, new_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, new_vb.slice(..));
-            render_pass.draw(0..6, 0..1);
+            if let Some(ref upload) = new_upload {
+                render_pass.set_bind_group(1, new_bind_group, &[]);
+                render_pass.set_vertex_buffer(0, upload.buffer_slice());
+                render_pass.draw(0..6, 0..1);
+            }
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -357,7 +310,7 @@ impl WgpuRenderer {
     /// active scroll transition. It applies the easing function to `raw_t`,
     /// then delegates to the specific effect renderer.
     pub fn render_scroll_effect(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
@@ -618,7 +571,7 @@ impl WgpuRenderer {
 
     /// Helper: compute scissor rect and content UV from bounds.
     fn scroll_scissor_and_uv(
-        &self,
+        &mut self,
         bounds: &neomacs_display_protocol::types::Rect,
         surface_width: u32,
         surface_height: u32,
@@ -640,20 +593,17 @@ impl WgpuRenderer {
         Some((sx, sy, sw, sh, w, h, uv_left, uv_top, uv_right, uv_bottom))
     }
 
-    /// Helper: create a vertex buffer from GlyphVertex slice.
-    fn create_scroll_vb(&self, vertices: &[GlyphVertex]) -> wgpu::Buffer {
-        use wgpu::util::DeviceExt;
-        self.device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Scroll VB"),
-                contents: bytemuck::cast_slice(vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            })
+    /// Helper: upload a GlyphVertex slice into the per-frame image arena.
+    fn create_scroll_vb(
+        &mut self,
+        vertices: &[GlyphVertex],
+    ) -> Option<super::dynamic_buffer::VertexUpload> {
+        self.arenas.image.upload(&self.device, &self.queue, vertices)
     }
 
     /// Helper: submit a two-quad scroll render pass (old + new textures).
     fn submit_scroll_two_quad_pass(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
@@ -664,8 +614,8 @@ impl WgpuRenderer {
         sw: u32,
         sh: u32,
     ) {
-        let old_vb = self.create_scroll_vb(old_vertices);
-        let new_vb = self.create_scroll_vb(new_vertices);
+        let old_upload = self.create_scroll_vb(old_vertices);
+        let new_upload = self.create_scroll_vb(new_vertices);
 
         let mut encoder = self
             .device
@@ -693,20 +643,24 @@ impl WgpuRenderer {
             rp.set_pipeline(&self.pipelines.image);
             rp.set_bind_group(0, &self.uniform_bind_group, &[]);
 
-            rp.set_bind_group(1, old_bind_group, &[]);
-            rp.set_vertex_buffer(0, old_vb.slice(..));
-            rp.draw(0..old_vertices.len() as u32, 0..1);
+            if let Some(ref upload) = old_upload {
+                rp.set_bind_group(1, old_bind_group, &[]);
+                rp.set_vertex_buffer(0, upload.buffer_slice());
+                rp.draw(0..old_vertices.len() as u32, 0..1);
+            }
 
-            rp.set_bind_group(1, new_bind_group, &[]);
-            rp.set_vertex_buffer(0, new_vb.slice(..));
-            rp.draw(0..new_vertices.len() as u32, 0..1);
+            if let Some(ref upload) = new_upload {
+                rp.set_bind_group(1, new_bind_group, &[]);
+                rp.set_vertex_buffer(0, upload.buffer_slice());
+                rp.draw(0..new_vertices.len() as u32, 0..1);
+            }
         }
         self.queue.submit(std::iter::once(encoder.finish()));
     }
 
     /// Crossfade scroll: alpha blend old → new within content bounds.
     fn render_scroll_crossfade(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
@@ -806,7 +760,7 @@ impl WgpuRenderer {
 
     /// ScaleZoom: old shrinks to 95% and fades; new zooms from 95% to 100%.
     fn render_scroll_scale_zoom(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
@@ -891,7 +845,7 @@ impl WgpuRenderer {
 
     /// FadeEdges: slide with soft fade at viewport top/bottom edges.
     fn render_scroll_fade_edges(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
@@ -992,7 +946,7 @@ impl WgpuRenderer {
 
     /// Cascade: lines drop in with staggered delay (waterfall).
     fn render_scroll_cascade(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
@@ -1091,7 +1045,7 @@ impl WgpuRenderer {
 
     /// Parallax: layers scroll at different speeds for depth illusion.
     fn render_scroll_parallax(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
@@ -1171,7 +1125,7 @@ impl WgpuRenderer {
 
     /// Tilt: subtle perspective tilt during scroll.
     fn render_scroll_tilt(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
@@ -1270,7 +1224,7 @@ impl WgpuRenderer {
 
     /// PageCurl: page curls away revealing new content underneath.
     fn render_scroll_page_curl(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
@@ -1400,7 +1354,7 @@ impl WgpuRenderer {
 
     /// CardFlip: screenful flips like a card around X-axis.
     fn render_scroll_card_flip(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
@@ -1482,7 +1436,7 @@ impl WgpuRenderer {
 
     /// CylinderRoll: content wraps around a vertical cylinder.
     fn render_scroll_cylinder_roll(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
@@ -1584,7 +1538,7 @@ impl WgpuRenderer {
 
     /// Wobbly/jelly: content deforms elastically during scroll.
     fn render_scroll_wobbly(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
@@ -1674,7 +1628,7 @@ impl WgpuRenderer {
 
     /// Wave: horizontal sine-wave displacement during scroll.
     fn render_scroll_wave(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
@@ -1765,7 +1719,7 @@ impl WgpuRenderer {
 
     /// PerLineSpring: each line on own spring with stagger delay.
     fn render_scroll_per_line_spring(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
@@ -1869,7 +1823,7 @@ impl WgpuRenderer {
 
     /// Liquid: noise-based UV warping, text ripples like water.
     fn render_scroll_liquid(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
@@ -1962,7 +1916,7 @@ impl WgpuRenderer {
     /// Since we don't have a separate post-process shader pipeline yet, we approximate
     /// post-processing effects by manipulating vertex colors during the slide transition.
     fn render_scroll_with_post_process(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,
@@ -2105,7 +2059,7 @@ impl WgpuRenderer {
 
     /// TypewriterReveal: new lines appear character-by-character (simulated with strips).
     fn render_scroll_typewriter(
-        &self,
+        &mut self,
         surface_view: &wgpu::TextureView,
         old_bind_group: &wgpu::BindGroup,
         new_bind_group: &wgpu::BindGroup,

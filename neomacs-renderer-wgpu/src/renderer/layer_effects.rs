@@ -8,7 +8,6 @@
 
 use std::collections::HashMap;
 
-use wgpu::util::DeviceExt;
 
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::types::Color;
@@ -21,17 +20,10 @@ use super::frame_pass::BoxSpan;
 macro_rules! draw_effect {
     ($self:ident, $rp:ident, $label:expr, $verts:expr) => {{
         let verts = $verts;
-        if !verts.is_empty() {
-            let buf = $self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some($label),
-                    contents: bytemuck::cast_slice(&verts),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        if let Some(upload) = $self.arenas.rect.upload(&$self.device, &$self.queue, &verts) {
             $rp.set_pipeline(&$self.pipelines.rect);
             $rp.set_bind_group(0, &$self.uniform_bind_group, &[]);
-            $rp.set_vertex_buffer(0, buf.slice(..));
+            $rp.set_vertex_buffer(0, upload.buffer_slice());
             $rp.draw(0..verts.len() as u32, 0..1);
         }
     }};
@@ -40,17 +32,12 @@ macro_rules! draw_effect {
         let verts = $verts;
         if !verts.is_empty() {
             $self.fx.needs_continuous_redraw = true;
-            let buf = $self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some($label),
-                    contents: bytemuck::cast_slice(&verts),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
-            $rp.set_pipeline(&$self.pipelines.rect);
-            $rp.set_bind_group(0, &$self.uniform_bind_group, &[]);
-            $rp.set_vertex_buffer(0, buf.slice(..));
-            $rp.draw(0..verts.len() as u32, 0..1);
+            if let Some(upload) = $self.arenas.rect.upload(&$self.device, &$self.queue, &verts) {
+                $rp.set_pipeline(&$self.pipelines.rect);
+                $rp.set_bind_group(0, &$self.uniform_bind_group, &[]);
+                $rp.set_vertex_buffer(0, upload.buffer_slice());
+                $rp.draw(0..verts.len() as u32, 0..1);
+            }
         }
     }};
 }
@@ -62,17 +49,10 @@ macro_rules! draw_stateful {
         if needs_redraw {
             $self.fx.needs_continuous_redraw = true;
         }
-        if !verts.is_empty() {
-            let buf = $self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some($label),
-                    contents: bytemuck::cast_slice(&verts),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        if let Some(upload) = $self.arenas.rect.upload(&$self.device, &$self.queue, &verts) {
             $rp.set_pipeline(&$self.pipelines.rect);
             $rp.set_bind_group(0, &$self.uniform_bind_group, &[]);
-            $rp.set_vertex_buffer(0, buf.slice(..));
+            $rp.set_vertex_buffer(0, upload.buffer_slice());
             $rp.draw(0..verts.len() as u32, 0..1);
         }
     }};
@@ -124,17 +104,14 @@ impl WgpuRenderer {
                 }
             }
         }
-        if !box_fill_vertices.is_empty() {
-            let fill_buffer = self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Box Fill Buffer"),
-                    contents: bytemuck::cast_slice(&box_fill_vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        if let Some(upload) =
+            self.arenas
+                .rounded
+                .upload(&self.device, &self.queue, &box_fill_vertices)
+        {
             render_pass.set_pipeline(&self.pipelines.rounded_rect);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, fill_buffer.slice(..));
+            render_pass.set_vertex_buffer(0, upload.buffer_slice());
             render_pass.draw(0..box_fill_vertices.len() as u32, 0..1);
         }
     }
@@ -390,17 +367,14 @@ impl WgpuRenderer {
                 }
             }
         }
-        if !border_verts.is_empty() {
-            let border_buf = self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Window Border Radius Buffer"),
-                    contents: bytemuck::cast_slice(&border_verts),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        if let Some(upload) = self
+            .arenas
+            .rounded
+            .upload(&self.device, &self.queue, &border_verts)
+        {
             render_pass.set_pipeline(&self.pipelines.rounded_rect);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, border_buf.slice(..));
+            render_pass.set_vertex_buffer(0, upload.buffer_slice());
             render_pass.draw(0..border_verts.len() as u32, 0..1);
         }
     }

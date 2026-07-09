@@ -5,7 +5,6 @@ use super::super::vertex::{RectVertex, RoundedRectVertex, Uniforms};
 use super::WgpuRenderer;
 use neomacs_display_protocol::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::types::{AnimatedCursor, Color};
-use wgpu::util::DeviceExt;
 
 impl WgpuRenderer {
     /// Render a child frame as a floating overlay on top of the parent frame.
@@ -96,17 +95,14 @@ impl WgpuRenderer {
                         self.add_rect(&mut shadow_verts, sx + total_w, sy + off, off, total_h, &c);
                         self.add_rect(&mut shadow_verts, sx + total_w, sy + total_h, off, off, &c);
                     }
-                    if !shadow_verts.is_empty() {
-                        let buffer =
-                            self.device
-                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                    label: Some("Child Frame Shadow Buffer"),
-                                    contents: bytemuck::cast_slice(&shadow_verts),
-                                    usage: wgpu::BufferUsages::VERTEX,
-                                });
+                    if let Some(upload) =
+                        self.arenas
+                            .rect
+                            .upload(&self.device, &self.queue, &shadow_verts)
+                    {
                         pass.set_pipeline(&self.pipelines.rect);
                         pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                        pass.set_vertex_buffer(0, buffer.slice(..));
+                        pass.set_vertex_buffer(0, upload.buffer_slice());
                         pass.draw(0..shadow_verts.len() as u32, 0..1);
                     }
                 }
@@ -148,17 +144,16 @@ impl WgpuRenderer {
                             occlusion_query_set: None,
                             multiview_mask: None,
                         });
-                        let buffer =
-                            self.device
-                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                    label: Some("Child Frame BG Buffer"),
-                                    contents: bytemuck::cast_slice(&bg_verts),
-                                    usage: wgpu::BufferUsages::VERTEX,
-                                });
-                        pass.set_pipeline(&self.pipelines.rounded_rect);
-                        pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                        pass.set_vertex_buffer(0, buffer.slice(..));
-                        pass.draw(0..bg_verts.len() as u32, 0..1);
+                        if let Some(upload) =
+                            self.arenas
+                                .rounded
+                                .upload(&self.device, &self.queue, &bg_verts)
+                        {
+                            pass.set_pipeline(&self.pipelines.rounded_rect);
+                            pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                            pass.set_vertex_buffer(0, upload.buffer_slice());
+                            pass.draw(0..bg_verts.len() as u32, 0..1);
+                        }
                     }
                 } else {
                     let mut bg_verts: Vec<RectVertex> = Vec::new();
@@ -179,17 +174,16 @@ impl WgpuRenderer {
                         occlusion_query_set: None,
                         multiview_mask: None,
                     });
-                    let buffer =
-                        self.device
-                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Child Frame BG Buffer"),
-                                contents: bytemuck::cast_slice(&bg_verts),
-                                usage: wgpu::BufferUsages::VERTEX,
-                            });
-                    pass.set_pipeline(&self.pipelines.rect);
-                    pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                    pass.set_vertex_buffer(0, buffer.slice(..));
-                    pass.draw(0..bg_verts.len() as u32, 0..1);
+                    if let Some(upload) = self
+                        .arenas
+                        .rect
+                        .upload(&self.device, &self.queue, &bg_verts)
+                    {
+                        pass.set_pipeline(&self.pipelines.rect);
+                        pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                        pass.set_vertex_buffer(0, upload.buffer_slice());
+                        pass.draw(0..bg_verts.len() as u32, 0..1);
+                    }
                 }
             }
 
@@ -228,17 +222,16 @@ impl WgpuRenderer {
                         occlusion_query_set: None,
                         multiview_mask: None,
                     });
-                    let buffer =
-                        self.device
-                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Child Frame Border Buffer"),
-                                contents: bytemuck::cast_slice(&border_verts),
-                                usage: wgpu::BufferUsages::VERTEX,
-                            });
-                    pass.set_pipeline(&self.pipelines.rounded_rect);
-                    pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                    pass.set_vertex_buffer(0, buffer.slice(..));
-                    pass.draw(0..border_verts.len() as u32, 0..1);
+                    if let Some(upload) =
+                        self.arenas
+                            .rounded
+                            .upload(&self.device, &self.queue, &border_verts)
+                    {
+                        pass.set_pipeline(&self.pipelines.rounded_rect);
+                        pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                        pass.set_vertex_buffer(0, upload.buffer_slice());
+                        pass.draw(0..border_verts.len() as u32, 0..1);
+                    }
                 }
             }
 
@@ -289,18 +282,17 @@ impl WgpuRenderer {
                         occlusion_query_set: None,
                         multiview_mask: None,
                     });
-                    let buffer =
-                        self.device
-                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Stencil Write Buffer"),
-                                contents: bytemuck::cast_slice(&stencil_verts),
-                                usage: wgpu::BufferUsages::VERTEX,
-                            });
-                    pass.set_pipeline(&self.pipelines.stencil_write);
-                    pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                    pass.set_vertex_buffer(0, buffer.slice(..));
-                    pass.set_stencil_reference(1);
-                    pass.draw(0..stencil_verts.len() as u32, 0..1);
+                    if let Some(upload) =
+                        self.arenas
+                            .rounded
+                            .upload(&self.device, &self.queue, &stencil_verts)
+                    {
+                        pass.set_pipeline(&self.pipelines.stencil_write);
+                        pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                        pass.set_vertex_buffer(0, upload.buffer_slice());
+                        pass.set_stencil_reference(1);
+                        pass.draw(0..stencil_verts.len() as u32, 0..1);
+                    }
                 }
                 self.queue.submit(std::iter::once(encoder.finish()));
             }

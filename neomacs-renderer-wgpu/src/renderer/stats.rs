@@ -15,6 +15,9 @@ pub struct GlyphRenderStats {
     pub cache_hits: usize,
     pub cache_misses: usize,
     pub page_evictions: usize,
+    /// GPU vertex-buffer allocations this frame (arena growth events).
+    /// Zero in steady state; nonzero only while arenas grow to high water.
+    pub buffers_created: usize,
 }
 
 impl GlyphRenderStats {
@@ -28,7 +31,7 @@ impl GlyphRenderStats {
         }
         tracing::info!(
             "glyph-stats: total={} text={} composed={} unique_single={} unique_composed={} \
-             uploads={} draws={} bind_changes={} vertex_bufs={} composed_draws={} hits={} misses={} evictions={}",
+             uploads={} draws={} bind_changes={} vertex_bufs={} composed_draws={} hits={} misses={} evictions={} bufs_created={}",
             self.total_frame_glyphs,
             self.text_glyphs,
             self.composed_glyphs,
@@ -42,6 +45,7 @@ impl GlyphRenderStats {
             self.cache_hits,
             self.cache_misses,
             self.page_evictions,
+            self.buffers_created,
         );
     }
 }

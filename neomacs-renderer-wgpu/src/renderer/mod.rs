@@ -14,7 +14,6 @@ use super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVer
 use super::video_cache::VideoCache;
 #[cfg(feature = "wpe-webkit")]
 use super::webkit_cache::WgpuWebKitCache;
-use dynamic_buffer::FrameVertexArena;
 
 mod child_frames;
 mod content;
@@ -943,11 +942,7 @@ impl WgpuRenderer {
                 #[cfg(feature = "wpe-webkit")]
                 webkit: webkit_cache,
             },
-            arenas: VertexArenas {
-                glyph: FrameVertexArena::new("Glyph Vertex Arena"),
-                subpixel: FrameVertexArena::new("Subpixel Glyph Vertex Arena"),
-                image: FrameVertexArena::new("Image Vertex Arena"),
-            },
+            arenas: VertexArenas::new(),
             width,
             height,
             scale_factor,
@@ -1769,7 +1764,7 @@ impl WgpuRenderer {
 
     /// Blit a texture to a target view (fullscreen quad)
     pub fn blit_texture_to_view(
-        &self,
+        &mut self,
         src_bind_group: &wgpu::BindGroup,
         dst_view: &wgpu::TextureView,
         width: u32,
@@ -1812,13 +1807,7 @@ impl WgpuRenderer {
             },
         ];
 
-        let vertex_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Blit Vertex Buffer"),
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        let upload = self.arenas.image.upload(&self.device, &self.queue, &vertices);
 
         let mut encoder = self
             .device
@@ -1844,11 +1833,13 @@ impl WgpuRenderer {
                 multiview_mask: None,
             });
 
-            render_pass.set_pipeline(&self.pipelines.image);
-            render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-            render_pass.set_bind_group(1, src_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-            render_pass.draw(0..6, 0..1);
+            if let Some(ref upload) = upload {
+                render_pass.set_pipeline(&self.pipelines.image);
+                render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                render_pass.set_bind_group(1, src_bind_group, &[]);
+                render_pass.set_vertex_buffer(0, upload.buffer_slice());
+                render_pass.draw(0..6, 0..1);
+            }
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));

@@ -12,19 +12,17 @@ use neomacs_display_protocol::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::types::Color;
 use neomacs_display_protocol::{MenuBarItem, ToolBarImageSource, ToolBarItem};
 use std::collections::HashMap;
-use wgpu::util::DeviceExt;
 
 impl WgpuRenderer {
     /// Render a popup menu overlay on top of all content.
     pub fn render_popup_menu(
-        &self,
+        &mut self,
         view: &wgpu::TextureView,
         menu: &crate::overlay_state::PopupMenuState,
         glyph_atlas: &mut WgpuGlyphAtlas,
         surface_width: u32,
         surface_height: u32,
     ) {
-        use wgpu::util::DeviceExt;
 
         let logical_w = surface_width as f32 / self.scale_factor;
         let logical_h = surface_height as f32 / self.scale_factor;
@@ -179,14 +177,11 @@ impl WgpuRenderer {
             }
 
             // Submit rect pass
-            if !rect_vertices.is_empty() {
-                let rect_buffer =
-                    self.device
-                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some("Popup Menu Rect Buffer"),
-                            contents: bytemuck::cast_slice(&rect_vertices),
-                            usage: wgpu::BufferUsages::VERTEX,
-                        });
+            if let Some(rect_buffer) =
+                self.arenas
+                    .rect
+                    .upload(&self.device, &self.queue, &rect_vertices)
+            {
                 let mut encoder =
                     self.device
                         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -211,7 +206,7 @@ impl WgpuRenderer {
                     });
                     pass.set_pipeline(&self.pipelines.rect);
                     pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                    pass.set_vertex_buffer(0, rect_buffer.slice(..));
+                    pass.set_vertex_buffer(0, rect_buffer.buffer_slice());
                     pass.draw(0..rect_vertices.len() as u32, 0..1);
                 }
                 self.queue.submit(Some(encoder.finish()));
@@ -351,12 +346,11 @@ impl WgpuRenderer {
     /// so identical characters share a single bind_group switch, and all
     /// rendering happens in one encoder submit instead of one per glyph.
     fn render_overlay_glyphs(
-        &self,
+        &mut self,
         view: &wgpu::TextureView,
         glyphs: &mut Vec<(GlyphAtlasHandle, f32, f32, [f32; 4])>,
         glyph_atlas: &WgpuGlyphAtlas,
     ) {
-        use wgpu::util::DeviceExt;
 
         if glyphs.is_empty() {
             return;
@@ -417,17 +411,9 @@ impl WgpuRenderer {
             page_ids.push(entry.page_id_value());
         }
 
-        if vertices.is_empty() {
+        let Some(buffer) = self.arenas.glyph.upload(&self.device, &self.queue, &vertices) else {
             return;
-        }
-
-        let buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Overlay Glyph Buffer"),
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        };
 
         let mut encoder = self
             .device
@@ -453,7 +439,7 @@ impl WgpuRenderer {
             });
             pass.set_pipeline(&self.pipelines.glyph);
             pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-            pass.set_vertex_buffer(0, buffer.slice(..));
+            pass.set_vertex_buffer(0, buffer.buffer_slice());
 
             let mut vert_idx = 0u32;
             let mut i = 0;
@@ -489,12 +475,11 @@ impl WgpuRenderer {
 
     /// Render watermark text in windows with small/empty buffers.
     pub fn render_window_watermarks(
-        &self,
+        &mut self,
         view: &wgpu::TextureView,
         frame_glyphs: &FrameGlyphBuffer,
         glyph_atlas: &mut WgpuGlyphAtlas,
     ) {
-        use wgpu::util::DeviceExt;
 
         if !self.effects.window_watermark.enabled {
             return;
@@ -646,17 +631,9 @@ impl WgpuRenderer {
             page_ids.push(entry.page_id_value());
         }
 
-        if vertices.is_empty() {
+        let Some(buffer) = self.arenas.glyph.upload(&self.device, &self.queue, &vertices) else {
             return;
-        }
-
-        let buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Watermark Glyph Buffer"),
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        };
 
         let mut encoder = self
             .device
@@ -682,7 +659,7 @@ impl WgpuRenderer {
             });
             pass.set_pipeline(&self.pipelines.glyph);
             pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-            pass.set_vertex_buffer(0, buffer.slice(..));
+            pass.set_vertex_buffer(0, buffer.buffer_slice());
 
             let mut vert_idx = 0u32;
             let mut i = 0;
@@ -718,14 +695,13 @@ impl WgpuRenderer {
 
     /// Render a tooltip overlay on top of the scene.
     pub fn render_tooltip(
-        &self,
+        &mut self,
         view: &wgpu::TextureView,
         tooltip: &crate::overlay_state::TooltipState,
         glyph_atlas: &mut WgpuGlyphAtlas,
         surface_width: u32,
         surface_height: u32,
     ) {
-        use wgpu::util::DeviceExt;
 
         let logical_w = surface_width as f32 / self.scale_factor;
         let logical_h = surface_height as f32 / self.scale_factor;
@@ -782,14 +758,7 @@ impl WgpuRenderer {
         self.add_rect(&mut rect_vertices, tx, ty, bw, th, &border_color); // left
         self.add_rect(&mut rect_vertices, tx + tw - bw, ty, bw, th, &border_color); // right
 
-        if !rect_vertices.is_empty() {
-            let rect_buffer = self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Tooltip Rect Buffer"),
-                    contents: bytemuck::cast_slice(&rect_vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        if let Some(rect_buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_vertices) {
 
             let mut encoder = self
                 .device
@@ -815,7 +784,7 @@ impl WgpuRenderer {
                 });
                 pass.set_pipeline(&self.pipelines.rect);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, rect_buffer.slice(..));
+                pass.set_vertex_buffer(0, rect_buffer.buffer_slice());
                 pass.draw(0..rect_vertices.len() as u32, 0..1);
             }
             self.queue.submit(Some(encoder.finish()));
@@ -862,7 +831,7 @@ impl WgpuRenderer {
     /// Render a custom title bar overlay for borderless/undecorated windows.
     /// Draws a dark bar at the top with the window title and close/maximize/minimize buttons.
     pub fn render_custom_titlebar(
-        &self,
+        &mut self,
         view: &wgpu::TextureView,
         title: &str,
         titlebar_height: f32,
@@ -872,7 +841,6 @@ impl WgpuRenderer {
         surface_width: u32,
         surface_height: u32,
     ) {
-        use wgpu::util::DeviceExt;
 
         let logical_w = surface_width as f32 / self.scale_factor;
         let logical_h = surface_height as f32 / self.scale_factor;
@@ -999,14 +967,7 @@ impl WgpuRenderer {
         self.add_rect(&mut rect_vertices, min_x, 4.0, 1.0, tb_h - 8.0, &sep_color);
 
         // Render rect pass
-        if !rect_vertices.is_empty() {
-            let rect_buffer = self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Titlebar Rect Buffer"),
-                    contents: bytemuck::cast_slice(&rect_vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        if let Some(rect_buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_vertices) {
 
             let mut encoder = self
                 .device
@@ -1032,7 +993,7 @@ impl WgpuRenderer {
                 });
                 pass.set_pipeline(&self.pipelines.rect);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, rect_buffer.slice(..));
+                pass.set_vertex_buffer(0, rect_buffer.buffer_slice());
                 pass.draw(0..rect_vertices.len() as u32, 0..1);
             }
             self.queue.submit(Some(encoder.finish()));
@@ -1157,13 +1118,12 @@ impl WgpuRenderer {
 
     /// Render thin scroll position indicators on the right edge of each window.
     pub fn render_scroll_indicators(
-        &self,
+        &mut self,
         view: &wgpu::TextureView,
         window_infos: &[neomacs_display_protocol::frame_glyphs::WindowInfo],
         surface_width: u32,
         surface_height: u32,
     ) {
-        use wgpu::util::DeviceExt;
 
         let logical_w = surface_width as f32 / self.scale_factor;
         let logical_h = surface_height as f32 / self.scale_factor;
@@ -1249,17 +1209,9 @@ impl WgpuRenderer {
             self.add_rect(&mut rect_vertices, x, bar_y, indicator_width, bar_h, &color);
         }
 
-        if rect_vertices.is_empty() {
+        let Some(rect_buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_vertices) else {
             return;
-        }
-
-        let rect_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Scroll Indicator Buffer"),
-                contents: bytemuck::cast_slice(&rect_vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        };
 
         let mut encoder = self
             .device
@@ -1285,7 +1237,7 @@ impl WgpuRenderer {
             });
             pass.set_pipeline(&self.pipelines.rect);
             pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-            pass.set_vertex_buffer(0, rect_buffer.slice(..));
+            pass.set_vertex_buffer(0, rect_buffer.buffer_slice());
             pass.draw(0..rect_vertices.len() as u32, 0..1);
         }
         self.queue.submit(Some(encoder.finish()));
@@ -1293,7 +1245,7 @@ impl WgpuRenderer {
 
     /// Render IME preedit text at the cursor position with underline.
     pub fn render_ime_preedit(
-        &self,
+        &mut self,
         view: &wgpu::TextureView,
         preedit_text: &str,
         cursor_x: f32,
@@ -1303,7 +1255,6 @@ impl WgpuRenderer {
         surface_width: u32,
         surface_height: u32,
     ) {
-        use wgpu::util::DeviceExt;
 
         if preedit_text.is_empty() {
             return;
@@ -1346,14 +1297,7 @@ impl WgpuRenderer {
             &underline_color,
         );
 
-        if !rect_vertices.is_empty() {
-            let rect_buffer = self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("IME Preedit Rect Buffer"),
-                    contents: bytemuck::cast_slice(&rect_vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        if let Some(rect_buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_vertices) {
 
             let mut encoder = self
                 .device
@@ -1379,7 +1323,7 @@ impl WgpuRenderer {
                 });
                 pass.set_pipeline(&self.pipelines.rect);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, rect_buffer.slice(..));
+                pass.set_vertex_buffer(0, rect_buffer.buffer_slice());
                 pass.draw(0..rect_vertices.len() as u32, 0..1);
             }
             self.queue.submit(Some(encoder.finish()));
@@ -1419,13 +1363,12 @@ impl WgpuRenderer {
     /// Uses dst = dst * src_alpha blend mode to zero out pixels outside
     /// the rounded rect shape.
     pub fn render_corner_mask(
-        &self,
+        &mut self,
         view: &wgpu::TextureView,
         corner_radius: f32,
         surface_width: u32,
         surface_height: u32,
     ) {
-        use wgpu::util::DeviceExt;
 
         let logical_w = surface_width as f32 / self.scale_factor;
         let logical_h = surface_height as f32 / self.scale_factor;
@@ -1451,13 +1394,9 @@ impl WgpuRenderer {
             &Color::new(1.0, 1.0, 1.0, 1.0), // white, alpha=1
         );
 
-        let buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Corner Mask Buffer"),
-                contents: bytemuck::cast_slice(&vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        let Some(buffer) = self.arenas.rounded.upload(&self.device, &self.queue, &vertices) else {
+            return;
+        };
 
         let mut encoder = self
             .device
@@ -1483,7 +1422,7 @@ impl WgpuRenderer {
             });
             pass.set_pipeline(&self.pipelines.corner_mask);
             pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-            pass.set_vertex_buffer(0, buffer.slice(..));
+            pass.set_vertex_buffer(0, buffer.buffer_slice());
             pass.draw(0..vertices.len() as u32, 0..1);
         }
         self.queue.submit(Some(encoder.finish()));
@@ -1529,7 +1468,6 @@ impl WgpuRenderer {
         frame_glyphs: &FrameGlyphBuffer,
         glyph_atlas: &mut WgpuGlyphAtlas,
     ) {
-        use wgpu::util::DeviceExt;
 
         if !self.effects.breadcrumb.enabled {
             return;
@@ -1785,14 +1723,7 @@ impl WgpuRenderer {
         }
 
         // Draw background rects
-        if !all_rect_vertices.is_empty() {
-            let rect_buffer = self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Breadcrumb Rect Buffer"),
-                    contents: bytemuck::cast_slice(&all_rect_vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        if let Some(rect_buffer) = self.arenas.rect.upload(&self.device, &self.queue, &all_rect_vertices) {
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -1817,7 +1748,7 @@ impl WgpuRenderer {
                 });
                 pass.set_pipeline(&self.pipelines.rect);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, rect_buffer.slice(..));
+                pass.set_vertex_buffer(0, rect_buffer.buffer_slice());
                 pass.draw(0..all_rect_vertices.len() as u32, 0..1);
             }
             self.queue.submit(Some(encoder.finish()));
@@ -1831,13 +1762,12 @@ impl WgpuRenderer {
 
     /// Render typing speed (WPM) indicator in the bottom-right of the selected window
     pub fn render_typing_speed(
-        &self,
+        &mut self,
         view: &wgpu::TextureView,
         frame_glyphs: &FrameGlyphBuffer,
         glyph_atlas: &mut WgpuGlyphAtlas,
         wpm: f32,
     ) {
-        use wgpu::util::DeviceExt;
 
         // Find the selected window (non-minibuffer)
         let selected = frame_glyphs
@@ -1903,14 +1833,7 @@ impl WgpuRenderer {
         }
 
         // Draw background
-        if !rect_vertices.is_empty() {
-            let rect_buffer = self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Typing Speed Rect Buffer"),
-                    contents: bytemuck::cast_slice(&rect_vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        if let Some(rect_buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_vertices) {
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -1935,7 +1858,7 @@ impl WgpuRenderer {
                 });
                 pass.set_pipeline(&self.pipelines.rect);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, rect_buffer.slice(..));
+                pass.set_vertex_buffer(0, rect_buffer.buffer_slice());
                 pass.draw(0..rect_vertices.len() as u32, 0..1);
             }
             self.queue.submit(Some(encoder.finish()));
@@ -1948,14 +1871,13 @@ impl WgpuRenderer {
     }
 
     pub fn render_fps_overlay(
-        &self,
+        &mut self,
         view: &wgpu::TextureView,
         lines: &[String],
         glyph_atlas: &mut WgpuGlyphAtlas,
         surface_width: u32,
         surface_height: u32,
     ) {
-        use wgpu::util::DeviceExt;
 
         if lines.is_empty() {
             return;
@@ -1992,13 +1914,9 @@ impl WgpuRenderer {
         let mut rect_vertices: Vec<RectVertex> = Vec::new();
         self.add_rect(&mut rect_vertices, badge_x, badge_y, badge_w, badge_h, &bg);
 
-        let rect_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("FPS Rect Buffer"),
-                contents: bytemuck::cast_slice(&rect_vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        let Some(rect_buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_vertices) else {
+            return;
+        };
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -2023,7 +1941,7 @@ impl WgpuRenderer {
             });
             pass.set_pipeline(&self.pipelines.rect);
             pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-            pass.set_vertex_buffer(0, rect_buffer.slice(..));
+            pass.set_vertex_buffer(0, rect_buffer.buffer_slice());
             pass.draw(0..rect_vertices.len() as u32, 0..1);
         }
         self.queue.submit(Some(encoder.finish()));
@@ -2063,13 +1981,12 @@ impl WgpuRenderer {
     }
 
     pub fn render_visual_bell(
-        &self,
+        &mut self,
         view: &wgpu::TextureView,
         surface_width: u32,
         surface_height: u32,
         alpha: f32,
     ) {
-        use wgpu::util::DeviceExt;
 
         let logical_w = surface_width as f32 / self.scale_factor;
         let logical_h = surface_height as f32 / self.scale_factor;
@@ -2094,13 +2011,9 @@ impl WgpuRenderer {
             &flash_color,
         );
 
-        let rect_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Visual Bell Buffer"),
-                contents: bytemuck::cast_slice(&rect_vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+        let Some(rect_buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_vertices) else {
+            return;
+        };
 
         let mut encoder = self
             .device
@@ -2126,7 +2039,7 @@ impl WgpuRenderer {
             });
             pass.set_pipeline(&self.pipelines.rect);
             pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-            pass.set_vertex_buffer(0, rect_buffer.slice(..));
+            pass.set_vertex_buffer(0, rect_buffer.buffer_slice());
             pass.draw(0..rect_vertices.len() as u32, 0..1);
         }
         self.queue.submit(Some(encoder.finish()));
@@ -2134,7 +2047,7 @@ impl WgpuRenderer {
 
     /// Render the GPU menu bar overlay at the top of the frame.
     pub fn render_menu_bar(
-        &self,
+        &mut self,
         view: &wgpu::TextureView,
         items: &[MenuBarItem],
         menu_bar_height: f32,
@@ -2219,14 +2132,7 @@ impl WgpuRenderer {
             &border_color,
         );
 
-        if !rect_verts.is_empty() {
-            let buffer = self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Menu Bar Rect Buffer"),
-                    contents: bytemuck::cast_slice(&rect_verts),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        if let Some(buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_verts) {
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -2251,7 +2157,7 @@ impl WgpuRenderer {
                 });
                 pass.set_pipeline(&self.pipelines.rect);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.set_vertex_buffer(0, buffer.buffer_slice());
                 pass.draw(0..rect_verts.len() as u32, 0..1);
             }
             self.queue.submit(std::iter::once(encoder.finish()));
@@ -2441,14 +2347,7 @@ impl WgpuRenderer {
             &border_color,
         );
 
-        if !rect_verts.is_empty() {
-            let buffer = self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Compact Bar Rect Buffer"),
-                    contents: bytemuck::cast_slice(&rect_verts),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        if let Some(buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_verts) {
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -2473,7 +2372,7 @@ impl WgpuRenderer {
                 });
                 pass.set_pipeline(&self.pipelines.rect);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.set_vertex_buffer(0, buffer.buffer_slice());
                 pass.draw(0..rect_verts.len() as u32, 0..1);
             }
             self.queue.submit(std::iter::once(encoder.finish()));
@@ -2742,14 +2641,7 @@ impl WgpuRenderer {
             &border_color,
         );
 
-        if !rect_verts.is_empty() {
-            let buffer = self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Toolbar Rect Buffer"),
-                    contents: bytemuck::cast_slice(&rect_verts),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        if let Some(buffer) = self.arenas.rect.upload(&self.device, &self.queue, &rect_verts) {
             let mut encoder = self
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -2774,7 +2666,7 @@ impl WgpuRenderer {
                 });
                 pass.set_pipeline(&self.pipelines.rect);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.set_vertex_buffer(0, buffer.buffer_slice());
                 pass.draw(0..rect_verts.len() as u32, 0..1);
             }
             self.queue.submit(std::iter::once(encoder.finish()));

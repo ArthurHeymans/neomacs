@@ -386,7 +386,7 @@ pub(super) fn clear_frame_transition_textures(transitions: &mut TransitionState)
 }
 
 pub(super) fn render_frame_transitions(
-    renderer: &WgpuRenderer,
+    renderer: &mut WgpuRenderer,
     transitions: &mut TransitionState,
     surface_view: &wgpu::TextureView,
     width: u32,

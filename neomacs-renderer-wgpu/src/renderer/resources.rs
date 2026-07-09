@@ -7,7 +7,7 @@ use super::super::video_cache::VideoCache;
 #[cfg(feature = "wpe-webkit")]
 use super::super::webkit_cache::WgpuWebKitCache;
 use super::dynamic_buffer::FrameVertexArena;
-use crate::vertex::{GlyphVertex, SubpixelGlyphVertex};
+use crate::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex};
 
 /// All render pipelines. The `stencil_*` variants are identical to their base
 /// counterparts except for stencil state; they draw only where the stencil
@@ -46,8 +46,60 @@ pub(crate) struct RenderCaches {
 }
 
 /// Per-frame reusable vertex upload arenas.
+///
+/// `begin_frame` resets every arena and is called once per frame cycle from
+/// `render_frame_glyphs`, which display-runtime always runs first in a frame.
+/// Later entry points in the same cycle (overlays, child frames, transitions)
+/// bump-allocate after it; each submits its encoder before returning, and the
+/// queue is in-order, so a reset can never clobber an unconsumed region.
 pub(crate) struct VertexArenas {
     pub(crate) glyph: FrameVertexArena<GlyphVertex>,
     pub(crate) subpixel: FrameVertexArena<SubpixelGlyphVertex>,
+    /// Textured quads drawn through the image pipelines (inline/floating
+    /// images, videos, webkit views, blits, transition quads).
     pub(crate) image: FrameVertexArena<GlyphVertex>,
+    /// Solid-color quads (backgrounds, cursors, decorations, effects).
+    pub(crate) rect: FrameVertexArena<RectVertex>,
+    /// SDF rounded-rect quads (box fills/borders, scroll thumbs, masks).
+    pub(crate) rounded: FrameVertexArena<RoundedRectVertex>,
+    /// `buffers_created` total at the previous per-frame snapshot.
+    created_snapshot: u64,
+}
+
+impl VertexArenas {
+    pub(crate) fn new() -> Self {
+        Self {
+            glyph: FrameVertexArena::new("Glyph Vertex Arena"),
+            subpixel: FrameVertexArena::new("Subpixel Glyph Vertex Arena"),
+            image: FrameVertexArena::new("Image Vertex Arena"),
+            rect: FrameVertexArena::new("Rect Vertex Arena"),
+            rounded: FrameVertexArena::new("Rounded Rect Vertex Arena"),
+            created_snapshot: 0,
+        }
+    }
+
+    pub(crate) fn begin_frame(&mut self) {
+        self.glyph.begin_frame();
+        self.subpixel.begin_frame();
+        self.image.begin_frame();
+        self.rect.begin_frame();
+        self.rounded.begin_frame();
+    }
+
+    fn buffers_created_total(&self) -> u64 {
+        self.glyph.buffers_created()
+            + self.subpixel.buffers_created()
+            + self.image.buffers_created()
+            + self.rect.buffers_created()
+            + self.rounded.buffers_created()
+    }
+
+    /// GPU buffer allocations since the previous snapshot (i.e. this frame).
+    /// Zero in steady state once the arenas reach their high-water capacity.
+    pub(crate) fn buffers_created_since_snapshot(&mut self) -> u64 {
+        let total = self.buffers_created_total();
+        let delta = total - self.created_snapshot;
+        self.created_snapshot = total;
+        delta
+    }
 }

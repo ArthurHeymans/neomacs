@@ -14,6 +14,7 @@ use super::super::glyph_atlas::{
 use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelGlyphVertex};
 use super::GlyphRenderStats;
 use super::WgpuRenderer;
+use super::layer_media::{MediaQuad, textured_quad_vertices};
 use cosmic_text::SubpixelBin;
 use neomacs_display_protocol::face::{BoxType, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::{
@@ -21,7 +22,6 @@ use neomacs_display_protocol::frame_glyphs::{
 };
 use neomacs_display_protocol::types::{AnimatedCursor, Color};
 use std::collections::HashSet;
-use wgpu::util::DeviceExt;
 
 fn subpixel_foreground_color(bg: Color, fg: Color, blend: f32) -> [f32; 4] {
     let t = blend.clamp(0.0, 1.0);
@@ -1047,64 +1047,52 @@ impl WgpuRenderer {
             }
 
             // --- Draw backgrounds ---
-            if !bg_vertices.is_empty() {
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content BG Buffer"),
-                        contents: bytemuck::cast_slice(&bg_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+            if let Some(upload) = self
+                .arenas
+                .rect
+                .upload(&self.device, &self.queue, &bg_vertices)
+            {
                 pass.set_pipeline(rect_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.set_vertex_buffer(0, upload.buffer_slice());
                 pass.draw(0..bg_vertices.len() as u32, 0..1);
             }
 
             // --- Draw fringe bitmaps (own column, above backgrounds, below
             // text — fringes never overlap the text area). ---
-            if !fringe_vertices.is_empty() {
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content Fringe Buffer"),
-                        contents: bytemuck::cast_slice(&fringe_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+            if let Some(upload) = self
+                .arenas
+                .rect
+                .upload(&self.device, &self.queue, &fringe_vertices)
+            {
                 pass.set_pipeline(rect_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.set_vertex_buffer(0, upload.buffer_slice());
                 pass.draw(0..fringe_vertices.len() as u32, 0..1);
             }
 
             // Filled-box cursor backgrounds must be below text so the covered
             // glyph can be drawn with inverse foreground on top.
-            if !cursor_bg_vertices.is_empty() {
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content Cursor BG Buffer"),
-                        contents: bytemuck::cast_slice(&cursor_bg_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+            if let Some(upload) =
+                self.arenas
+                    .rect
+                    .upload(&self.device, &self.queue, &cursor_bg_vertices)
+            {
                 pass.set_pipeline(rect_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.set_vertex_buffer(0, upload.buffer_slice());
                 pass.draw(0..cursor_bg_vertices.len() as u32, 0..1);
             }
 
             // --- Draw rounded box fills ---
-            if !rounded_fill_vertices.is_empty() {
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content Box Fill Buffer"),
-                        contents: bytemuck::cast_slice(&rounded_fill_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+            if let Some(upload) =
+                self.arenas
+                    .rounded
+                    .upload(&self.device, &self.queue, &rounded_fill_vertices)
+            {
                 pass.set_pipeline(rounded_rect_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.set_vertex_buffer(0, upload.buffer_slice());
                 pass.draw(0..rounded_fill_vertices.len() as u32, 0..1);
             }
 
@@ -1241,47 +1229,38 @@ impl WgpuRenderer {
             }
 
             // --- Draw text decorations ---
-            if !decoration_vertices.is_empty() {
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content Decoration Buffer"),
-                        contents: bytemuck::cast_slice(&decoration_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+            if let Some(upload) =
+                self.arenas
+                    .rect
+                    .upload(&self.device, &self.queue, &decoration_vertices)
+            {
                 pass.set_pipeline(rect_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.set_vertex_buffer(0, upload.buffer_slice());
                 pass.draw(0..decoration_vertices.len() as u32, 0..1);
             }
 
             // --- Draw sharp box borders ---
-            if !sharp_border_vertices.is_empty() {
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content Sharp Box Border Buffer"),
-                        contents: bytemuck::cast_slice(&sharp_border_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+            if let Some(upload) =
+                self.arenas
+                    .rect
+                    .upload(&self.device, &self.queue, &sharp_border_vertices)
+            {
                 pass.set_pipeline(rect_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.set_vertex_buffer(0, upload.buffer_slice());
                 pass.draw(0..sharp_border_vertices.len() as u32, 0..1);
             }
 
             // --- Draw rounded box borders ---
-            if !rounded_border_vertices.is_empty() {
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content Rounded Box Border Buffer"),
-                        contents: bytemuck::cast_slice(&rounded_border_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+            if let Some(upload) =
+                self.arenas
+                    .rounded
+                    .upload(&self.device, &self.queue, &rounded_border_vertices)
+            {
                 pass.set_pipeline(rounded_rect_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.set_vertex_buffer(0, upload.buffer_slice());
                 pass.draw(0..rounded_border_vertices.len() as u32, 0..1);
             }
 
@@ -1289,6 +1268,7 @@ impl WgpuRenderer {
             pass.set_pipeline(image_pl);
             pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
+            let mut image_quads = Vec::new();
             for glyph in &frame.glyphs {
                 if let FrameGlyph::Image {
                     image_id,
@@ -1299,7 +1279,7 @@ impl WgpuRenderer {
                     ..
                 } = glyph
                 {
-                    if let Some(cached) = self.caches.image.get(image_id.get()) {
+                    if self.caches.image.get(image_id.get()).is_some() {
                         let ix = *x + offset_x;
                         let iy = *y + offset_y;
                         tracing::debug!(
@@ -1310,55 +1290,35 @@ impl WgpuRenderer {
                             width,
                             height,
                         );
-                        let vertices = [
-                            GlyphVertex {
-                                position: [ix, iy],
-                                tex_coords: [0.0, 0.0],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [ix + *width, iy],
-                                tex_coords: [1.0, 0.0],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [ix + *width, iy + *height],
-                                tex_coords: [1.0, 1.0],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [ix, iy],
-                                tex_coords: [0.0, 0.0],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [ix + *width, iy + *height],
-                                tex_coords: [1.0, 1.0],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [ix, iy + *height],
-                                tex_coords: [0.0, 1.0],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                        ];
-                        let buffer =
-                            self.device
-                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                    label: Some("Content Image Buffer"),
-                                    contents: bytemuck::cast_slice(&vertices),
-                                    usage: wgpu::BufferUsages::VERTEX,
-                                });
+                        image_quads.push(MediaQuad {
+                            id: image_id.get(),
+                            vertices: textured_quad_vertices(ix, iy, *width, *height, 0.0, 1.0),
+                        });
+                    }
+                }
+            }
+            let image_vertices: Vec<GlyphVertex> = image_quads
+                .iter()
+                .flat_map(|quad| quad.vertices.iter().copied())
+                .collect();
+            if let Some(upload) =
+                self.arenas
+                    .image
+                    .upload(&self.device, &self.queue, &image_vertices)
+            {
+                pass.set_vertex_buffer(0, upload.buffer_slice());
+                for (i, quad) in image_quads.iter().enumerate() {
+                    if let Some(cached) = self.caches.image.get(quad.id) {
                         pass.set_bind_group(1, &cached.bind_group, &[]);
-                        pass.set_vertex_buffer(0, buffer.slice(..));
-                        pass.draw(0..6, 0..1);
+                        pass.draw((i * 6) as u32..(i * 6 + 6) as u32, 0..1);
                     }
                 }
             }
 
-            // --- Draw inline videos ---
+            // --- Draw inline videos (inherit the image pipeline set above) ---
             #[cfg(feature = "video")]
             {
+                let mut video_quads = Vec::new();
                 for glyph in &frame.glyphs {
                     if let FrameGlyph::Video {
                         video_id,
@@ -1370,7 +1330,7 @@ impl WgpuRenderer {
                     } = glyph
                     {
                         if let Some(cached) = self.caches.video.get(video_id.get()) {
-                            if let Some(ref bind_group) = cached.bind_group {
+                            if cached.bind_group.is_some() {
                                 let vx = *x + offset_x;
                                 let vy = *y + offset_y;
                                 tracing::debug!(
@@ -1381,49 +1341,32 @@ impl WgpuRenderer {
                                     width,
                                     height,
                                 );
-                                let vertices = [
-                                    GlyphVertex {
-                                        position: [vx, vy],
-                                        tex_coords: [0.0, 0.0],
-                                        color: [1.0, 1.0, 1.0, 1.0],
-                                    },
-                                    GlyphVertex {
-                                        position: [vx + *width, vy],
-                                        tex_coords: [1.0, 0.0],
-                                        color: [1.0, 1.0, 1.0, 1.0],
-                                    },
-                                    GlyphVertex {
-                                        position: [vx + *width, vy + *height],
-                                        tex_coords: [1.0, 1.0],
-                                        color: [1.0, 1.0, 1.0, 1.0],
-                                    },
-                                    GlyphVertex {
-                                        position: [vx, vy],
-                                        tex_coords: [0.0, 0.0],
-                                        color: [1.0, 1.0, 1.0, 1.0],
-                                    },
-                                    GlyphVertex {
-                                        position: [vx + *width, vy + *height],
-                                        tex_coords: [1.0, 1.0],
-                                        color: [1.0, 1.0, 1.0, 1.0],
-                                    },
-                                    GlyphVertex {
-                                        position: [vx, vy + *height],
-                                        tex_coords: [0.0, 1.0],
-                                        color: [1.0, 1.0, 1.0, 1.0],
-                                    },
-                                ];
-                                let buffer = self.device.create_buffer_init(
-                                    &wgpu::util::BufferInitDescriptor {
-                                        label: Some("Content Video Buffer"),
-                                        contents: bytemuck::cast_slice(&vertices),
-                                        usage: wgpu::BufferUsages::VERTEX,
-                                    },
-                                );
-                                pass.set_bind_group(1, bind_group, &[]);
-                                pass.set_vertex_buffer(0, buffer.slice(..));
-                                pass.draw(0..6, 0..1);
+                                video_quads.push(MediaQuad {
+                                    id: video_id.get(),
+                                    vertices: textured_quad_vertices(
+                                        vx, vy, *width, *height, 0.0, 1.0,
+                                    ),
+                                });
                             }
+                        }
+                    }
+                }
+                let video_vertices: Vec<GlyphVertex> = video_quads
+                    .iter()
+                    .flat_map(|quad| quad.vertices.iter().copied())
+                    .collect();
+                if let Some(upload) =
+                    self.arenas
+                        .image
+                        .upload(&self.device, &self.queue, &video_vertices)
+                {
+                    pass.set_vertex_buffer(0, upload.buffer_slice());
+                    for (i, quad) in video_quads.iter().enumerate() {
+                        if let Some(cached) = self.caches.video.get(quad.id)
+                            && let Some(ref bind_group) = cached.bind_group
+                        {
+                            pass.set_bind_group(1, bind_group, &[]);
+                            pass.draw((i * 6) as u32..(i * 6 + 6) as u32, 0..1);
                         }
                     }
                 }
@@ -1435,6 +1378,7 @@ impl WgpuRenderer {
                 pass.set_pipeline(_opaque_image_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
+                let mut webkit_quads = Vec::new();
                 for glyph in &frame.glyphs {
                     if let FrameGlyph::Xwidget {
                         xwidget_id,
@@ -1445,7 +1389,7 @@ impl WgpuRenderer {
                         ..
                     } = glyph
                     {
-                        if let Some(cached) = self.caches.webkit.get(*xwidget_id) {
+                        if self.caches.webkit.get(*xwidget_id).is_some() {
                             let wx = *x + offset_x;
                             let wy = *y + offset_y;
                             tracing::debug!(
@@ -1456,65 +1400,41 @@ impl WgpuRenderer {
                                 width,
                                 height,
                             );
-                            let vertices = [
-                                GlyphVertex {
-                                    position: [wx, wy],
-                                    tex_coords: [0.0, 0.0],
-                                    color: [1.0, 1.0, 1.0, 1.0],
-                                },
-                                GlyphVertex {
-                                    position: [wx + *width, wy],
-                                    tex_coords: [1.0, 0.0],
-                                    color: [1.0, 1.0, 1.0, 1.0],
-                                },
-                                GlyphVertex {
-                                    position: [wx + *width, wy + *height],
-                                    tex_coords: [1.0, 1.0],
-                                    color: [1.0, 1.0, 1.0, 1.0],
-                                },
-                                GlyphVertex {
-                                    position: [wx, wy],
-                                    tex_coords: [0.0, 0.0],
-                                    color: [1.0, 1.0, 1.0, 1.0],
-                                },
-                                GlyphVertex {
-                                    position: [wx + *width, wy + *height],
-                                    tex_coords: [1.0, 1.0],
-                                    color: [1.0, 1.0, 1.0, 1.0],
-                                },
-                                GlyphVertex {
-                                    position: [wx, wy + *height],
-                                    tex_coords: [0.0, 1.0],
-                                    color: [1.0, 1.0, 1.0, 1.0],
-                                },
-                            ];
-                            let buffer =
-                                self.device
-                                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                        label: Some("Content WebKit Buffer"),
-                                        contents: bytemuck::cast_slice(&vertices),
-                                        usage: wgpu::BufferUsages::VERTEX,
-                                    });
+                            webkit_quads.push(MediaQuad {
+                                id: *xwidget_id,
+                                vertices: textured_quad_vertices(wx, wy, *width, *height, 0.0, 1.0),
+                            });
+                        }
+                    }
+                }
+                let webkit_vertices: Vec<GlyphVertex> = webkit_quads
+                    .iter()
+                    .flat_map(|quad| quad.vertices.iter().copied())
+                    .collect();
+                if let Some(upload) =
+                    self.arenas
+                        .image
+                        .upload(&self.device, &self.queue, &webkit_vertices)
+                {
+                    pass.set_vertex_buffer(0, upload.buffer_slice());
+                    for (i, quad) in webkit_quads.iter().enumerate() {
+                        if let Some(cached) = self.caches.webkit.get(quad.id) {
                             pass.set_bind_group(1, &cached.bind_group, &[]);
-                            pass.set_vertex_buffer(0, buffer.slice(..));
-                            pass.draw(0..6, 0..1);
+                            pass.draw((i * 6) as u32..(i * 6 + 6) as u32, 0..1);
                         }
                     }
                 }
             }
 
             // --- Draw cursors and borders (on top of everything) ---
-            if !cursor_vertices.is_empty() {
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content Cursor Buffer"),
-                        contents: bytemuck::cast_slice(&cursor_vertices),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
+            if let Some(upload) = self
+                .arenas
+                .rect
+                .upload(&self.device, &self.queue, &cursor_vertices)
+            {
                 pass.set_pipeline(rect_pl);
                 pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.set_vertex_buffer(0, upload.buffer_slice());
                 pass.draw(0..cursor_vertices.len() as u32, 0..1);
             }
 
@@ -1533,17 +1453,16 @@ impl WgpuRenderer {
                         color,
                     );
                 }
-                let buffer = self
-                    .device
-                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("Content Scroll Thumb Buffer"),
-                        contents: bytemuck::cast_slice(&rounded_verts),
-                        usage: wgpu::BufferUsages::VERTEX,
-                    });
-                pass.set_pipeline(rounded_rect_pl);
-                pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                pass.set_vertex_buffer(0, buffer.slice(..));
-                pass.draw(0..rounded_verts.len() as u32, 0..1);
+                if let Some(upload) =
+                    self.arenas
+                        .rounded
+                        .upload(&self.device, &self.queue, &rounded_verts)
+                {
+                    pass.set_pipeline(rounded_rect_pl);
+                    pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                    pass.set_vertex_buffer(0, upload.buffer_slice());
+                    pass.draw(0..rounded_verts.len() as u32, 0..1);
+                }
             }
         }
 

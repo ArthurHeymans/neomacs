@@ -6,6 +6,9 @@ pub struct FrameVertexArena<T: Pod> {
     capacity_bytes: wgpu::BufferAddress,
     cursor_bytes: wgpu::BufferAddress,
     retired: Vec<wgpu::Buffer>,
+    /// Monotonic count of GPU buffer allocations (growth events) over the
+    /// arena's lifetime. Snapshotted per frame for the `buffers_created` stat.
+    buffers_created: u64,
     label: &'static str,
     _marker: PhantomData<T>,
 }
@@ -19,6 +22,12 @@ pub struct VertexUpload {
 impl VertexUpload {
     pub fn byte_range(&self) -> std::ops::Range<wgpu::BufferAddress> {
         upload_byte_range(self.offset_bytes, self.len_bytes)
+    }
+
+    /// Slice of the arena buffer holding this upload. The upload owns a
+    /// handle to the buffer, so the slice needs no borrow of the arena.
+    pub fn buffer_slice(&self) -> wgpu::BufferSlice<'_> {
+        self.buffer.slice(self.byte_range())
     }
 }
 
@@ -35,6 +44,26 @@ fn upload_byte_range(
     offset..offset + len
 }
 
+/// Pure growth policy: the capacity after ensuring `needed_bytes` fit.
+/// Returns `None` when the current capacity already suffices (no new buffer).
+fn grown_capacity(
+    capacity_bytes: wgpu::BufferAddress,
+    needed_bytes: wgpu::BufferAddress,
+) -> Option<wgpu::BufferAddress> {
+    if needed_bytes <= capacity_bytes {
+        return None;
+    }
+    Some(if capacity_bytes == 0 {
+        needed_bytes.max(4096)
+    } else {
+        let mut c = capacity_bytes;
+        while c < needed_bytes {
+            c *= 2;
+        }
+        c
+    })
+}
+
 impl<T: Pod> FrameVertexArena<T> {
     pub fn new(label: &'static str) -> Self {
         Self {
@@ -42,6 +71,7 @@ impl<T: Pod> FrameVertexArena<T> {
             capacity_bytes: 0,
             cursor_bytes: 0,
             retired: Vec::new(),
+            buffers_created: 0,
             label,
             _marker: PhantomData,
         }
@@ -50,6 +80,12 @@ impl<T: Pod> FrameVertexArena<T> {
     pub fn begin_frame(&mut self) {
         self.cursor_bytes = 0;
         self.retired.clear();
+    }
+
+    /// Total GPU buffer allocations over the arena's lifetime (monotonic;
+    /// steady-state frames add zero).
+    pub fn buffers_created(&self) -> u64 {
+        self.buffers_created
     }
 
     pub fn upload(
@@ -85,18 +121,8 @@ impl<T: Pod> FrameVertexArena<T> {
     }
 
     fn ensure_capacity(&mut self, device: &wgpu::Device, needed_bytes: wgpu::BufferAddress) {
-        if needed_bytes <= self.capacity_bytes {
+        let Some(new_capacity) = grown_capacity(self.capacity_bytes, needed_bytes) else {
             return;
-        }
-
-        let new_capacity = if self.capacity_bytes == 0 {
-            needed_bytes.max(4096)
-        } else {
-            let mut c = self.capacity_bytes;
-            while c < needed_bytes {
-                c *= 2;
-            }
-            c
         };
 
         if let Some(old) = self.buffer.take() {
@@ -110,6 +136,7 @@ impl<T: Pod> FrameVertexArena<T> {
             mapped_at_creation: false,
         }));
         self.capacity_bytes = new_capacity;
+        self.buffers_created += 1;
     }
 }
 
@@ -135,5 +162,24 @@ mod tests {
         assert_eq!(align_up(5, 4), 8);
         assert_eq!(align_up(48, 4), 48);
         assert_eq!(align_up(49, 4), 52);
+    }
+
+    #[test]
+    fn grown_capacity_first_allocation_is_at_least_4096() {
+        assert_eq!(grown_capacity(0, 1), Some(4096));
+        assert_eq!(grown_capacity(0, 4096), Some(4096));
+        assert_eq!(grown_capacity(0, 5000), Some(5000));
+    }
+
+    #[test]
+    fn grown_capacity_doubles_until_fit() {
+        assert_eq!(grown_capacity(4096, 4097), Some(8192));
+        assert_eq!(grown_capacity(4096, 20000), Some(32768));
+    }
+
+    #[test]
+    fn grown_capacity_steady_state_allocates_nothing() {
+        assert_eq!(grown_capacity(4096, 4096), None);
+        assert_eq!(grown_capacity(8192, 100), None);
     }
 }

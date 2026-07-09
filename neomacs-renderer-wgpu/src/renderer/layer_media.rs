@@ -1,7 +1,6 @@
 //! Inline media draw phases of `render_frame_glyphs` (z-order step 7):
 //! images, videos, and WebKit xwidget views.
 
-use wgpu::util::DeviceExt;
 
 use neomacs_display_protocol::frame_glyphs::FrameGlyph;
 
@@ -11,14 +10,66 @@ use super::WgpuRenderer;
 use super::frame_pass::FrameParams;
 use super::frame_pass::FramePassCtx;
 
+/// A textured quad gathered for a batched arena draw: the cache id to bind
+/// plus its six vertices. All quads of a phase upload as one arena region;
+/// each draws its own range so the draw sequence matches the gather order.
+pub(super) struct MediaQuad<Id> {
+    pub(super) id: Id,
+    pub(super) vertices: [GlyphVertex; 6],
+}
+
+/// Untinted (white) textured quad spanning the full u range and the given
+/// (possibly clip-trimmed) v range.
+pub(super) fn textured_quad_vertices(
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    tex_v_min: f32,
+    tex_v_max: f32,
+) -> [GlyphVertex; 6] {
+    let white = [1.0, 1.0, 1.0, 1.0];
+    [
+        GlyphVertex {
+            position: [x, y],
+            tex_coords: [0.0, tex_v_min],
+            color: white,
+        },
+        GlyphVertex {
+            position: [x + width, y],
+            tex_coords: [1.0, tex_v_min],
+            color: white,
+        },
+        GlyphVertex {
+            position: [x + width, y + height],
+            tex_coords: [1.0, tex_v_max],
+            color: white,
+        },
+        GlyphVertex {
+            position: [x, y],
+            tex_coords: [0.0, tex_v_min],
+            color: white,
+        },
+        GlyphVertex {
+            position: [x + width, y + height],
+            tex_coords: [1.0, tex_v_max],
+            color: white,
+        },
+        GlyphVertex {
+            position: [x, y + height],
+            tex_coords: [0.0, tex_v_max],
+            color: white,
+        },
+    ]
+}
+
 impl WgpuRenderer {
     /// Draw inline images on top of text.
-    pub(super) fn draw_inline_images(&self, ctx: &mut FramePassCtx<'_, '_>) {
-        let render_pass = &mut ctx.pass;
+    pub(super) fn draw_inline_images(&mut self, ctx: &mut FramePassCtx<'_, '_>) {
         let frame_glyphs = ctx.params.frame_glyphs;
-        // Draw inline images
-        render_pass.set_pipeline(&self.pipelines.image);
-        render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+        // Gather quads for images with a ready texture (same skip logic the
+        // per-quad draw used), then upload once and draw per-image ranges.
+        let mut quads = Vec::new();
 
         for glyph in &frame_glyphs.glyphs {
             if let FrameGlyph::Image {
@@ -79,53 +130,45 @@ impl WgpuRenderer {
                     clipped_height
                 );
                 // Check if image texture is ready
-                if let Some(cached) = self.caches.image.get(image_id.get()) {
+                if self.caches.image.get(image_id.get()).is_some() {
                     // Create vertices for image quad (white color = no tinting)
-                    let vertices = [
-                        GlyphVertex {
-                            position: [*x, draw_y],
-                            tex_coords: [0.0, tex_v_min],
-                            color: [1.0, 1.0, 1.0, 1.0],
-                        },
-                        GlyphVertex {
-                            position: [*x + *width, draw_y],
-                            tex_coords: [1.0, tex_v_min],
-                            color: [1.0, 1.0, 1.0, 1.0],
-                        },
-                        GlyphVertex {
-                            position: [*x + *width, draw_y + clipped_height],
-                            tex_coords: [1.0, tex_v_max],
-                            color: [1.0, 1.0, 1.0, 1.0],
-                        },
-                        GlyphVertex {
-                            position: [*x, draw_y],
-                            tex_coords: [0.0, tex_v_min],
-                            color: [1.0, 1.0, 1.0, 1.0],
-                        },
-                        GlyphVertex {
-                            position: [*x + *width, draw_y + clipped_height],
-                            tex_coords: [1.0, tex_v_max],
-                            color: [1.0, 1.0, 1.0, 1.0],
-                        },
-                        GlyphVertex {
-                            position: [*x, draw_y + clipped_height],
-                            tex_coords: [0.0, tex_v_max],
-                            color: [1.0, 1.0, 1.0, 1.0],
-                        },
-                    ];
-
-                    let image_buffer =
-                        self.device
-                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Image Vertex Buffer"),
-                                contents: bytemuck::cast_slice(&vertices),
-                                usage: wgpu::BufferUsages::VERTEX,
-                            });
-
-                    render_pass.set_bind_group(1, &cached.bind_group, &[]);
-                    render_pass.set_vertex_buffer(0, image_buffer.slice(..));
-                    render_pass.draw(0..6, 0..1);
+                    quads.push(MediaQuad {
+                        id: image_id.get(),
+                        vertices: textured_quad_vertices(
+                            *x,
+                            draw_y,
+                            *width,
+                            clipped_height,
+                            tex_v_min,
+                            tex_v_max,
+                        ),
+                    });
                 }
+            }
+        }
+
+        let all_vertices: Vec<GlyphVertex> = quads
+            .iter()
+            .flat_map(|quad| quad.vertices.iter().copied())
+            .collect();
+        let upload = self
+            .arenas
+            .image
+            .upload(&self.device, &self.queue, &all_vertices);
+
+        // Pipeline + uniforms are set even with zero images: the inline-video
+        // phase that follows inherits this pipeline state.
+        let render_pass = &mut ctx.pass;
+        render_pass.set_pipeline(&self.pipelines.image);
+        render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+        let Some(upload) = upload else {
+            return;
+        };
+        render_pass.set_vertex_buffer(0, upload.buffer_slice());
+        for (i, quad) in quads.iter().enumerate() {
+            if let Some(cached) = self.caches.image.get(quad.id) {
+                render_pass.set_bind_group(1, &cached.bind_group, &[]);
+                render_pass.draw((i * 6) as u32..(i * 6 + 6) as u32, 0..1);
             }
         }
     }
@@ -160,12 +203,14 @@ impl WgpuRenderer {
         }
     }
 
-    /// Draw inline videos.
+    /// Draw inline videos (inherits the image pipeline set by the inline
+    /// image phase).
     #[cfg(feature = "video")]
-    pub(super) fn draw_inline_videos(&self, ctx: &mut FramePassCtx<'_, '_>) {
-        let render_pass = &mut ctx.pass;
+    pub(super) fn draw_inline_videos(&mut self, ctx: &mut FramePassCtx<'_, '_>) {
         let frame_glyphs = ctx.params.frame_glyphs;
-        // Draw inline videos
+        // Gather quads for videos with a ready texture, then upload once and
+        // draw per-video ranges.
+        let mut quads = Vec::new();
         for glyph in &frame_glyphs.glyphs {
             if let FrameGlyph::Video {
                 video_id,
@@ -227,52 +272,19 @@ impl WgpuRenderer {
                         clipped_height,
                         cached.frame_count
                     );
-                    if let Some(ref bind_group) = cached.bind_group {
+                    if cached.bind_group.is_some() {
                         // Create vertices for video quad (white color = no tinting)
-                        let vertices = [
-                            GlyphVertex {
-                                position: [*x, draw_y],
-                                tex_coords: [0.0, tex_v_min],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [*x + *width, draw_y],
-                                tex_coords: [1.0, tex_v_min],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [*x + *width, draw_y + clipped_height],
-                                tex_coords: [1.0, tex_v_max],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [*x, draw_y],
-                                tex_coords: [0.0, tex_v_min],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [*x + *width, draw_y + clipped_height],
-                                tex_coords: [1.0, tex_v_max],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [*x, draw_y + clipped_height],
-                                tex_coords: [0.0, tex_v_max],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                        ];
-
-                        let video_buffer =
-                            self.device
-                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                    label: Some("Video Vertex Buffer"),
-                                    contents: bytemuck::cast_slice(&vertices),
-                                    usage: wgpu::BufferUsages::VERTEX,
-                                });
-
-                        render_pass.set_bind_group(1, bind_group, &[]);
-                        render_pass.set_vertex_buffer(0, video_buffer.slice(..));
-                        render_pass.draw(0..6, 0..1);
+                        quads.push(MediaQuad {
+                            id: video_id.get(),
+                            vertices: textured_quad_vertices(
+                                *x,
+                                draw_y,
+                                *width,
+                                clipped_height,
+                                tex_v_min,
+                                tex_v_max,
+                            ),
+                        });
                     } else {
                         tracing::warn!("Video {} has no bind_group!", video_id);
                     }
@@ -281,18 +293,38 @@ impl WgpuRenderer {
                 }
             }
         }
+
+        let all_vertices: Vec<GlyphVertex> = quads
+            .iter()
+            .flat_map(|quad| quad.vertices.iter().copied())
+            .collect();
+        let Some(upload) = self
+            .arenas
+            .image
+            .upload(&self.device, &self.queue, &all_vertices)
+        else {
+            return;
+        };
+
+        let render_pass = &mut ctx.pass;
+        render_pass.set_vertex_buffer(0, upload.buffer_slice());
+        for (i, quad) in quads.iter().enumerate() {
+            if let Some(cached) = self.caches.video.get(quad.id)
+                && let Some(ref bind_group) = cached.bind_group
+            {
+                render_pass.set_bind_group(1, bind_group, &[]);
+                render_pass.draw((i * 6) as u32..(i * 6 + 6) as u32, 0..1);
+            }
+        }
     }
 
     /// Draw inline WebKit views (opaque pipeline: DMA-BUF XRGB has alpha=0).
     #[cfg(feature = "wpe-webkit")]
-    pub(super) fn draw_inline_webkit_views(&self, ctx: &mut FramePassCtx<'_, '_>) {
-        let render_pass = &mut ctx.pass;
+    pub(super) fn draw_inline_webkit_views(&mut self, ctx: &mut FramePassCtx<'_, '_>) {
         let frame_glyphs = ctx.params.frame_glyphs;
         // Draw inline webkit views (use opaque pipeline — DMA-BUF XRGB has alpha=0)
         {
-            render_pass.set_pipeline(&self.pipelines.opaque_image);
-            render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-
+            let mut quads = Vec::new();
             for glyph in &frame_glyphs.glyphs {
                 if let FrameGlyph::Xwidget {
                     xwidget_id,
@@ -344,7 +376,7 @@ impl WgpuRenderer {
                     }
 
                     // Check if webkit texture is ready
-                    if let Some(cached) = self.caches.webkit.get(*xwidget_id) {
+                    if self.caches.webkit.get(*xwidget_id).is_some() {
                         tracing::debug!(
                             "Rendering webkit {} at ({}, {}) size {}x{} (clipped to {})",
                             xwidget_id,
@@ -355,53 +387,43 @@ impl WgpuRenderer {
                             clipped_height
                         );
                         // Create vertices for webkit quad (white color = no tinting)
-                        let vertices = [
-                            GlyphVertex {
-                                position: [*x, draw_y],
-                                tex_coords: [0.0, tex_v_min],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [*x + *width, draw_y],
-                                tex_coords: [1.0, tex_v_min],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [*x + *width, draw_y + clipped_height],
-                                tex_coords: [1.0, tex_v_max],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [*x, draw_y],
-                                tex_coords: [0.0, tex_v_min],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [*x + *width, draw_y + clipped_height],
-                                tex_coords: [1.0, tex_v_max],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [*x, draw_y + clipped_height],
-                                tex_coords: [0.0, tex_v_max],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                        ];
-
-                        let webkit_buffer =
-                            self.device
-                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                    label: Some("WebKit Vertex Buffer"),
-                                    contents: bytemuck::cast_slice(&vertices),
-                                    usage: wgpu::BufferUsages::VERTEX,
-                                });
-
-                        render_pass.set_bind_group(1, &cached.bind_group, &[]);
-                        render_pass.set_vertex_buffer(0, webkit_buffer.slice(..));
-                        render_pass.draw(0..6, 0..1);
+                        quads.push(MediaQuad {
+                            id: *xwidget_id,
+                            vertices: textured_quad_vertices(
+                                *x,
+                                draw_y,
+                                *width,
+                                clipped_height,
+                                tex_v_min,
+                                tex_v_max,
+                            ),
+                        });
                     } else {
                         tracing::debug!("WebKit xwidget {} not found in cache", xwidget_id);
                     }
+                }
+            }
+
+            let all_vertices: Vec<GlyphVertex> = quads
+                .iter()
+                .flat_map(|quad| quad.vertices.iter().copied())
+                .collect();
+            let upload = self
+                .arenas
+                .image
+                .upload(&self.device, &self.queue, &all_vertices);
+
+            let render_pass = &mut ctx.pass;
+            render_pass.set_pipeline(&self.pipelines.opaque_image);
+            render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+            let Some(upload) = upload else {
+                return;
+            };
+            render_pass.set_vertex_buffer(0, upload.buffer_slice());
+            for (i, quad) in quads.iter().enumerate() {
+                if let Some(cached) = self.caches.webkit.get(quad.id) {
+                    render_pass.set_bind_group(1, &cached.bind_group, &[]);
+                    render_pass.draw((i * 6) as u32..(i * 6 + 6) as u32, 0..1);
                 }
             }
         }

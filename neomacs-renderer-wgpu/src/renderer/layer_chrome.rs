@@ -1,7 +1,6 @@
 //! Cursor, window border, and scroll bar phases of `render_frame_glyphs`
 //! (z-order steps 2-3 collection and step 8 draws).
 
-use wgpu::util::DeviceExt;
 
 use neomacs_display_protocol::frame_glyphs::FrameGlyph;
 use neomacs_display_protocol::types::Color;
@@ -174,46 +173,38 @@ impl WgpuRenderer {
         // === Step 2: Draw cursor bg rect (inverse video background) ===
         // Drawn after window/char backgrounds but before text, so the cursor
         // background color is visible behind the inverse-video character.
-        self.draw_rect_vertex_layer(render_pass, cursor_bg_vertices, "Cursor BG Rect Buffer");
+        self.draw_rect_vertex_layer(render_pass, cursor_bg_vertices);
 
         // === Step 3: Draw animated cursor trail behind text ===
         // The spring trail or animated rect for filled box cursor appears
         // behind text so characters remain readable during cursor motion.
-        self.draw_rect_vertex_layer(
-            render_pass,
-            behind_text_cursor_vertices,
-            "Behind-Text Cursor Buffer",
-        );
+        self.draw_rect_vertex_layer(render_pass, behind_text_cursor_vertices);
     }
 
     /// Draw front cursors and window borders (after text).
     pub(super) fn draw_cursor_layer(
-        &self,
+        &mut self,
         ctx: &mut FramePassCtx<'_, '_>,
         chrome: &ChromeLayerVertices,
     ) {
         let render_pass = &mut ctx.pass;
         let cursor_vertices = &chrome.cursors;
         // Draw cursors and borders (after text)
-        if !cursor_vertices.is_empty() {
-            let cursor_buffer = self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Cursor Vertex Buffer"),
-                    contents: bytemuck::cast_slice(cursor_vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
-
+        if let Some(upload) = self
+            .arenas
+            .rect
+            .upload(&self.device, &self.queue, &chrome.cursors)
+        {
             render_pass.set_pipeline(&self.pipelines.rect);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, cursor_buffer.slice(..));
+            render_pass.set_vertex_buffer(0, upload.buffer_slice());
             render_pass.draw(0..cursor_vertices.len() as u32, 0..1);
         }
     }
 
     /// Draw scroll bar thumbs as filled rounded rects.
     pub(super) fn draw_scroll_bar_thumbs(
-        &self,
+        &mut self,
         ctx: &mut FramePassCtx<'_, '_>,
         chrome: &ChromeLayerVertices,
     ) {
@@ -226,17 +217,16 @@ impl WgpuRenderer {
                 // border_width = 0 triggers filled mode in the shader
                 self.add_rounded_rect(&mut rounded_verts, *tx, *ty, *tw, *th, 0.0, *radius, color);
             }
-            let thumb_buffer = self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Scroll Bar Thumb Buffer"),
-                    contents: bytemuck::cast_slice(&rounded_verts),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
-            render_pass.set_pipeline(&self.pipelines.rounded_rect);
-            render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, thumb_buffer.slice(..));
-            render_pass.draw(0..rounded_verts.len() as u32, 0..1);
+            if let Some(upload) = self
+                .arenas
+                .rounded
+                .upload(&self.device, &self.queue, &rounded_verts)
+            {
+                render_pass.set_pipeline(&self.pipelines.rounded_rect);
+                render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
+                render_pass.set_vertex_buffer(0, upload.buffer_slice());
+                render_pass.draw(0..rounded_verts.len() as u32, 0..1);
+            }
         }
     }
 }

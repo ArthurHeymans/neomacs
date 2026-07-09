@@ -241,15 +241,49 @@ impl WgpuRenderer {
     /// This renders video frames at fixed screen positions (not inline with text).
     #[cfg(feature = "video")]
     pub fn render_floating_videos(
-        &self,
+        &mut self,
         view: &wgpu::TextureView,
         floating_videos: &[neomacs_display_protocol::scene::FloatingVideo],
     ) {
-        use wgpu::util::DeviceExt;
+        use super::layer_media::{MediaQuad, textured_quad_vertices};
 
         if floating_videos.is_empty() {
             return;
         }
+
+        let mut quads = Vec::new();
+        for fv in floating_videos {
+            tracing::debug!(
+                "Rendering floating video {} at ({}, {}) size {}x{}",
+                fv.video_id,
+                fv.x,
+                fv.y,
+                fv.width,
+                fv.height
+            );
+
+            if let Some(cached) = self.caches.video.get(fv.video_id.get()) {
+                if cached.bind_group.is_some() {
+                    quads.push(MediaQuad {
+                        id: fv.video_id.get(),
+                        vertices: textured_quad_vertices(fv.x, fv.y, fv.width, fv.height, 0.0, 1.0),
+                    });
+                } else {
+                    tracing::debug!("Video {} has no bind_group yet", fv.video_id);
+                }
+            } else {
+                tracing::debug!("Video {} not found in cache", fv.video_id);
+            }
+        }
+
+        let all_vertices: Vec<GlyphVertex> = quads
+            .iter()
+            .flat_map(|quad| quad.vertices.iter().copied())
+            .collect();
+        let upload = self
+            .arenas
+            .image
+            .upload(&self.device, &self.queue, &all_vertices);
 
         let mut encoder = self
             .device
@@ -278,67 +312,15 @@ impl WgpuRenderer {
             render_pass.set_pipeline(&self.pipelines.image);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
-            for fv in floating_videos {
-                tracing::debug!(
-                    "Rendering floating video {} at ({}, {}) size {}x{}",
-                    fv.video_id,
-                    fv.x,
-                    fv.y,
-                    fv.width,
-                    fv.height
-                );
-
-                if let Some(cached) = self.caches.video.get(fv.video_id.get()) {
-                    if let Some(ref bind_group) = cached.bind_group {
-                        let vertices = [
-                            GlyphVertex {
-                                position: [fv.x, fv.y],
-                                tex_coords: [0.0, 0.0],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [fv.x + fv.width, fv.y],
-                                tex_coords: [1.0, 0.0],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [fv.x + fv.width, fv.y + fv.height],
-                                tex_coords: [1.0, 1.0],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [fv.x, fv.y],
-                                tex_coords: [0.0, 0.0],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [fv.x + fv.width, fv.y + fv.height],
-                                tex_coords: [1.0, 1.0],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                            GlyphVertex {
-                                position: [fv.x, fv.y + fv.height],
-                                tex_coords: [0.0, 1.0],
-                                color: [1.0, 1.0, 1.0, 1.0],
-                            },
-                        ];
-
-                        let video_buffer =
-                            self.device
-                                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                    label: Some("Floating Video Vertex Buffer"),
-                                    contents: bytemuck::cast_slice(&vertices),
-                                    usage: wgpu::BufferUsages::VERTEX,
-                                });
-
+            if let Some(ref upload) = upload {
+                render_pass.set_vertex_buffer(0, upload.buffer_slice());
+                for (i, quad) in quads.iter().enumerate() {
+                    if let Some(cached) = self.caches.video.get(quad.id)
+                        && let Some(ref bind_group) = cached.bind_group
+                    {
                         render_pass.set_bind_group(1, bind_group, &[]);
-                        render_pass.set_vertex_buffer(0, video_buffer.slice(..));
-                        render_pass.draw(0..6, 0..1);
-                    } else {
-                        tracing::debug!("Video {} has no bind_group yet", fv.video_id);
+                        render_pass.draw((i * 6) as u32..(i * 6 + 6) as u32, 0..1);
                     }
-                } else {
-                    tracing::debug!("Video {} not found in cache", fv.video_id);
                 }
             }
         }
@@ -420,15 +402,45 @@ impl WgpuRenderer {
     /// This draws the cached webkit textures at their specified positions.
     #[cfg(feature = "wpe-webkit")]
     pub fn render_floating_webkits(
-        &self,
+        &mut self,
         view: &wgpu::TextureView,
         floating_webkits: &[neomacs_display_protocol::scene::FloatingWebKit],
     ) {
-        use wgpu::util::DeviceExt;
+        use super::layer_media::{MediaQuad, textured_quad_vertices};
 
         if floating_webkits.is_empty() {
             return;
         }
+
+        let mut quads = Vec::new();
+        for fw in floating_webkits {
+            tracing::debug!(
+                "Rendering floating webkit {} at ({}, {}) size {}x{}",
+                fw.webkit_id,
+                fw.x,
+                fw.y,
+                fw.width,
+                fw.height
+            );
+
+            if self.caches.webkit.get(fw.webkit_id).is_some() {
+                quads.push(MediaQuad {
+                    id: fw.webkit_id,
+                    vertices: textured_quad_vertices(fw.x, fw.y, fw.width, fw.height, 0.0, 1.0),
+                });
+            } else {
+                tracing::debug!("WebKit {} not found in cache", fw.webkit_id);
+            }
+        }
+
+        let all_vertices: Vec<GlyphVertex> = quads
+            .iter()
+            .flat_map(|quad| quad.vertices.iter().copied())
+            .collect();
+        let upload = self
+            .arenas
+            .image
+            .upload(&self.device, &self.queue, &all_vertices);
 
         let mut encoder = self
             .device
@@ -457,63 +469,13 @@ impl WgpuRenderer {
             render_pass.set_pipeline(&self.pipelines.opaque_image);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
 
-            for fw in floating_webkits {
-                tracing::debug!(
-                    "Rendering floating webkit {} at ({}, {}) size {}x{}",
-                    fw.webkit_id,
-                    fw.x,
-                    fw.y,
-                    fw.width,
-                    fw.height
-                );
-
-                if let Some(cached) = self.caches.webkit.get(fw.webkit_id) {
-                    let vertices = [
-                        GlyphVertex {
-                            position: [fw.x, fw.y],
-                            tex_coords: [0.0, 0.0],
-                            color: [1.0, 1.0, 1.0, 1.0],
-                        },
-                        GlyphVertex {
-                            position: [fw.x + fw.width, fw.y],
-                            tex_coords: [1.0, 0.0],
-                            color: [1.0, 1.0, 1.0, 1.0],
-                        },
-                        GlyphVertex {
-                            position: [fw.x + fw.width, fw.y + fw.height],
-                            tex_coords: [1.0, 1.0],
-                            color: [1.0, 1.0, 1.0, 1.0],
-                        },
-                        GlyphVertex {
-                            position: [fw.x, fw.y],
-                            tex_coords: [0.0, 0.0],
-                            color: [1.0, 1.0, 1.0, 1.0],
-                        },
-                        GlyphVertex {
-                            position: [fw.x + fw.width, fw.y + fw.height],
-                            tex_coords: [1.0, 1.0],
-                            color: [1.0, 1.0, 1.0, 1.0],
-                        },
-                        GlyphVertex {
-                            position: [fw.x, fw.y + fw.height],
-                            tex_coords: [0.0, 1.0],
-                            color: [1.0, 1.0, 1.0, 1.0],
-                        },
-                    ];
-
-                    let webkit_buffer =
-                        self.device
-                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Floating WebKit Vertex Buffer"),
-                                contents: bytemuck::cast_slice(&vertices),
-                                usage: wgpu::BufferUsages::VERTEX,
-                            });
-
-                    render_pass.set_bind_group(1, &cached.bind_group, &[]);
-                    render_pass.set_vertex_buffer(0, webkit_buffer.slice(..));
-                    render_pass.draw(0..6, 0..1);
-                } else {
-                    tracing::debug!("WebKit {} not found in cache", fw.webkit_id);
+            if let Some(ref upload) = upload {
+                render_pass.set_vertex_buffer(0, upload.buffer_slice());
+                for (i, quad) in quads.iter().enumerate() {
+                    if let Some(cached) = self.caches.webkit.get(quad.id) {
+                        render_pass.set_bind_group(1, &cached.bind_group, &[]);
+                        render_pass.draw((i * 6) as u32..(i * 6 + 6) as u32, 0..1);
+                    }
                 }
             }
         }

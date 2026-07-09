@@ -1,7 +1,6 @@
 //! Background collection and overlay-background draw phases of
 //! `render_frame_glyphs` (z-order steps 1 and 5).
 
-use wgpu::util::DeviceExt;
 
 use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::frame_glyphs::{FrameGlyph, MaterializedFaceData};
@@ -662,17 +661,13 @@ impl WgpuRenderer {
         non_overlay_rect_vertices: &[RectVertex],
     ) {
         // === Step 1: Draw non-overlay backgrounds ===
-        self.draw_rect_vertex_layer(
-            render_pass,
-            non_overlay_rect_vertices,
-            "Non-overlay Rect Buffer",
-        );
+        self.draw_rect_vertex_layer(render_pass, non_overlay_rect_vertices);
     }
 
     /// Draw the overlay background rects and rounded box fills. Runs at the
     /// start of the overlay text pass so overlay text lands on top.
     pub(super) fn draw_overlay_background_layer(
-        &self,
+        &mut self,
         ctx: &mut FramePassCtx<'_, '_>,
         spans: &BoxSpanSet,
         overlay_rect_vertices: &[RectVertex],
@@ -680,18 +675,14 @@ impl WgpuRenderer {
         let render_pass = &mut ctx.pass;
         let faces = ctx.params.faces;
         let box_spans = &spans.spans;
-        if !overlay_rect_vertices.is_empty() {
-            let rect_buffer = self
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Overlay Rect Buffer"),
-                    contents: bytemuck::cast_slice(overlay_rect_vertices),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
-
+        if let Some(upload) =
+            self.arenas
+                .rect
+                .upload(&self.device, &self.queue, overlay_rect_vertices)
+        {
             render_pass.set_pipeline(&self.pipelines.rect);
             render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, rect_buffer.slice(..));
+            render_pass.set_vertex_buffer(0, upload.buffer_slice());
             render_pass.draw(0..overlay_rect_vertices.len() as u32, 0..1);
         }
 
@@ -724,17 +715,14 @@ impl WgpuRenderer {
                     }
                 }
             }
-            if !overlay_box_fill.is_empty() {
-                let fill_buffer =
-                    self.device
-                        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                            label: Some("Overlay Box Fill Buffer"),
-                            contents: bytemuck::cast_slice(&overlay_box_fill),
-                            usage: wgpu::BufferUsages::VERTEX,
-                        });
+            if let Some(upload) =
+                self.arenas
+                    .rounded
+                    .upload(&self.device, &self.queue, &overlay_box_fill)
+            {
                 render_pass.set_pipeline(&self.pipelines.rounded_rect);
                 render_pass.set_bind_group(0, &self.uniform_bind_group, &[]);
-                render_pass.set_vertex_buffer(0, fill_buffer.slice(..));
+                render_pass.set_vertex_buffer(0, upload.buffer_slice());
                 render_pass.draw(0..overlay_box_fill.len() as u32, 0..1);
             }
         }
