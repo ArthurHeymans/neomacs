@@ -4,7 +4,6 @@
 //! source walking and generic row/source append rendering: hscroll skip,
 //! selective display, invisible text, line breaks, and end-of-buffer tails.
 
-use neomacs_display_protocol::types::FaceId;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_walk::BufferSourceWalk;
 use crate::display_cursor::{
@@ -41,6 +40,7 @@ use crate::neovm_bridge::{LayoutBufferView, RustTextPropAccess};
 use crate::unicode::is_wide_char;
 use crate::window_output::{DisplayTextRowTransition, WindowOutputEmitter};
 use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 
 #[derive(Clone, Copy)]

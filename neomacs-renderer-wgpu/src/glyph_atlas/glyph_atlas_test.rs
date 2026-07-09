@@ -1,9 +1,9 @@
-use neomacs_display_protocol::types::FaceId;
 use super::{
     FontconfigSubpixelOrder, GlyphAtlasError, GlyphKey, RasterizeResult, SubpixelBin,
     WgpuGlyphAtlas, effective_font_size, glyph_font_identity, key_uses_default_font_metrics,
     normalize_subpixel_mask,
 };
+use neomacs_display_protocol::types::FaceId;
 
 #[test]
 fn normalize_subpixel_mask_preserves_rgb_order() {

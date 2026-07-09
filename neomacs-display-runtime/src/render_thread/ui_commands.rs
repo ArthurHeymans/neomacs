@@ -1,7 +1,7 @@
 //! UI overlay, animation, and effect render commands.
 
-use crate::core::types::Color;
 use super::{PopupMenuState, RenderApp, TooltipState};
+use crate::core::types::Color;
 use crate::thread_comm::{ConfigCommand, ToolBarItem, UiCommand};
 use neomacs_display_protocol::ToolBarImageSource;
 use neomacs_display_protocol::glyph_matrix::{GuiMenuBarState, GuiToolBarState};

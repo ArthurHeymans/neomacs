@@ -1,6 +1,5 @@
 //! Buffer source post-loop tail rendering and install context.
 
-use neomacs_display_protocol::types::FaceId;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -22,6 +21,7 @@ use crate::display_text_window_row_lifecycle::{
 use crate::hit_test::{HitRow, WindowHitData};
 use crate::neovm_bridge::{LayoutBufferView, RustBufferAccess};
 use crate::types::WindowParams;
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::window::{DisplayRowSnapshot, WindowDisplaySnapshot};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

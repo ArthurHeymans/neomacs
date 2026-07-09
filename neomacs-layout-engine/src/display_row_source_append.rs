@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
@@ -21,6 +20,7 @@ use crate::display_source_append_plan::{
 };
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::face::BasicFaceId;
+use neomacs_display_protocol::types::FaceId;
 
 const SYNTHETIC_SOURCE_INVISIBLE_ELLIPSIS: u64 = 3;
 const SYNTHETIC_SOURCE_HSCROLL_TRUNCATION: u64 = 4;
@@ -84,7 +84,14 @@ struct PreparedSingleDisplayItemSourceAppend {
 }
 
 impl PreparedSingleDisplayItemSourceAppend {
-    fn into_parts(self) -> (DisplayItem, FaceId, DisplayRowAppendKind, DisplayRowPosition) {
+    fn into_parts(
+        self,
+    ) -> (
+        DisplayItem,
+        FaceId,
+        DisplayRowAppendKind,
+        DisplayRowPosition,
+    ) {
         (self.item, self.face_id, self.kind, self.position)
     }
 }

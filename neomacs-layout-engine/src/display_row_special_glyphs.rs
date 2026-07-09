@@ -1,6 +1,5 @@
 //! Right-edge truncation/continuation markers and the right window border — GNU's special glyphs (`produce_special_glyphs`, xdisp.c; `IT_TRUNCATION`/`IT_CONTINUATION`). Relocated out of display_row_append.rs (pure move, no behavior change).
 
-use neomacs_display_protocol::types::FaceId;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
@@ -19,6 +18,7 @@ use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow};
+use neomacs_display_protocol::types::FaceId;
 
 const RIGHT_EDGE_MARKER_SOURCE_ID: u64 = 0x7265_6467;
 const RIGHT_BORDER_SOURCE_ID: u64 = 0x7262_6f72;

@@ -24,13 +24,13 @@
 //! the empty-line filler (which run first / on separate rows) keep precedence,
 //! matching GNU's `row->left_user_fringe_bitmap` short-circuit.
 
-use neomacs_display_protocol::types::FaceId;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_output_row_request::DisplayWindowRowMutation;
 use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowFlags};
 use crate::neovm_bridge::{LayoutBufferView, resolve_fringe_indicator_bitmap_index};
 use crate::types::WindowParams;
 use neomacs_display_protocol::glyph_matrix::{FringeBitmapInfo, GlyphRow};
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::emacs_core::intern::intern;
 use neovm_core::emacs_core::{Context, Value};
 

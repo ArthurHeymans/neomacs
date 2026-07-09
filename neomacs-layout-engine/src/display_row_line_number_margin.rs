@@ -1,6 +1,5 @@
 //! Display-line-number left-margin rendering — GNU `maybe_produce_line_number` (xdisp.c:25447). Relocated out of display_row_append.rs (pure move, no behavior change).
 
-use neomacs_display_protocol::types::FaceId;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLength, DisplayStretch, DisplayStretchWidth,
@@ -12,6 +11,7 @@ use crate::display_row_source_state::DisplayRowSourceState;
 use crate::display_row_walk_state::{FaceScanCheckpoint, LineNumberRenderState};
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use neomacs_display_protocol::glyph_matrix::GlyphArea;
+use neomacs_display_protocol::types::FaceId;
 
 const LINE_NUMBER_MARGIN_SOURCE_ID: u64 = 0x6c6e_756d;
 

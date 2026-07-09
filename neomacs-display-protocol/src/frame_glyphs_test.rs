@@ -229,7 +229,10 @@ fn set_face_with_font_registers_baseline_render_face() {
         false,
     );
 
-    let face = buf.faces.get(&FaceId::new(42)).expect("face entry should exist");
+    let face = buf
+        .faces
+        .get(&FaceId::new(42))
+        .expect("face entry should exist");
     assert_eq!(face.id, FaceId::new(42));
     assert_eq!(face.font_family, "DejaVu Sans");
     assert_eq!(face.font_size, 18.0);
@@ -274,11 +277,39 @@ fn set_face_uses_current_font_context_for_face_entry() {
     let fg = Color::rgb(0.4, 0.5, 0.6);
 
     buf.set_face_with_font(
-        FaceId::new(1), fg, None, "Iosevka", 400, false, 15.0, 0, None, 0, None, 0, None, false,
+        FaceId::new(1),
+        fg,
+        None,
+        "Iosevka",
+        400,
+        false,
+        15.0,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+        false,
     );
-    buf.set_face(FaceId::new(2), fg, None, 600, true, 0, None, 0, None, 1, None);
+    buf.set_face(
+        FaceId::new(2),
+        fg,
+        None,
+        600,
+        true,
+        0,
+        None,
+        0,
+        None,
+        1,
+        None,
+    );
 
-    let face = buf.faces.get(&FaceId::new(2)).expect("face entry should exist");
+    let face = buf
+        .faces
+        .get(&FaceId::new(2))
+        .expect("face entry should exist");
     assert_eq!(face.font_family, "Iosevka");
     assert_eq!(face.font_size, 15.0);
     assert_eq!(face.font_weight, 600);
@@ -572,7 +603,19 @@ fn add_composed_char_stores_text_and_base() {
 fn add_composed_char_uses_current_face() {
     let mut buf = FrameGlyphBuffer::new();
     let fg = Color::rgb(0.5, 0.5, 0.5);
-    buf.set_face(FaceId::new(10), fg, None, 400, false, 0, None, 0, None, 0, None);
+    buf.set_face(
+        FaceId::new(10),
+        fg,
+        None,
+        400,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
     buf.add_composed_char("e\u{0301}", 'e', 0.0, 0.0, 8.0, 16.0, 12.0, false);
 
     match &buf.glyphs[0] {
@@ -612,7 +655,13 @@ fn add_cursor_appends_window_cursor_visual() {
     assert_eq!(cursor.window_id.get(), 42);
     assert_eq!(
         cursor.slot_id,
-        DisplaySlotId::from_pixels(DisplayWindowId::new(42), Px(100.0), Px(200.0), Px(8.0), Px(16.0))
+        DisplaySlotId::from_pixels(
+            DisplayWindowId::new(42),
+            Px(100.0),
+            Px(200.0),
+            Px(8.0),
+            Px(16.0)
+        )
     );
     assert_eq!(cursor.x, 100.0);
     assert_eq!(cursor.y, 200.0);
@@ -966,7 +1015,19 @@ fn set_face_affects_subsequent_chars() {
 
     // Change face
     let red = Color::rgb(1.0, 0.0, 0.0);
-    buf.set_face(FaceId::new(5), red, None, 700, true, 0, None, 0, None, 0, None);
+    buf.set_face(
+        FaceId::new(5),
+        red,
+        None,
+        700,
+        true,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
     buf.add_char('B', 8.0, 0.0, 8.0, 16.0, 12.0, false);
 
     // First char uses default face
@@ -1191,7 +1252,15 @@ fn set_phys_cursor_normalizes_text_slot_geometry() {
     let mut buf = FrameGlyphBuffer::new();
     buf.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::Text, None);
     buf.add_char('2', 8.0, 70.0, 8.108109, 18.0, 14.0, false);
-    buf.add_stretch(16.108109, 70.0, 8.108109, 18.0, Color::WHITE, FaceId::new(0), false);
+    buf.add_stretch(
+        16.108109,
+        70.0,
+        8.108109,
+        18.0,
+        Color::WHITE,
+        FaceId::new(0),
+        false,
+    );
     buf.add_char('d', 24.216217, 70.0, 8.0, 18.0, 14.0, false);
     let text_slot = buf.glyphs[2].slot_id().expect("text slot");
 
@@ -1272,7 +1341,19 @@ fn font_size_accessors() {
 
     // The current font size flows into the face synthesized by set_face, and
     // a char added afterwards resolves its size from that face.
-    buf.set_face(FaceId::new(1), Color::WHITE, None, 400, false, 0, None, 0, None, 0, None);
+    buf.set_face(
+        FaceId::new(1),
+        Color::WHITE,
+        None,
+        400,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
     buf.add_char('X', 0.0, 0.0, 10.0, 20.0, 15.0, false);
     match &buf.glyphs[0] {
         FrameGlyph::Char { face_id, .. } => {
@@ -1547,7 +1628,20 @@ fn full_frame_simulation() {
     // Window 1: some text
     let text_fg = Color::rgb(0.87, 0.87, 0.87);
     buf.set_face_with_font(
-        FaceId::new(0), text_fg, None, "Iosevka", 400, false, 14.0, 0, None, 0, None, 0, None, false,
+        FaceId::new(0),
+        text_fg,
+        None,
+        "Iosevka",
+        400,
+        false,
+        14.0,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+        false,
     );
     for (i, ch) in "Hello, Neomacs!".chars().enumerate() {
         buf.add_char(ch, i as f32 * 8.0, 0.0, 8.0, 16.0, 12.0, false);

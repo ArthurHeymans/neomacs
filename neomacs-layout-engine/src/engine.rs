@@ -4,7 +4,6 @@
 //! character position, computes line breaks, positions glyphs on a fixed-width
 //! grid, and publishes `FrameDisplayState` snapshots for render backends.
 
-use neomacs_display_protocol::types::{FaceId, Px};
 #[cfg(test)]
 use super::display_status_line::eval_status_line_format;
 use super::display_status_line::{
@@ -74,6 +73,7 @@ use neomacs_display_protocol::types::Color;
 #[cfg(test)]
 use neomacs_display_protocol::types::Rect;
 use neomacs_display_protocol::types::{DisplayFrameId, DisplayWindowId};
+use neomacs_display_protocol::types::{FaceId, Px};
 use neovm_core::emacs_core::Value;
 use neovm_core::window::WindowDisplaySnapshot;
 

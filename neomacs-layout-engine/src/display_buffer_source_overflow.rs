@@ -4,7 +4,6 @@
 //! special display items while delegating actual item appends to the shared row
 //! source append pipeline.
 
-use neomacs_display_protocol::types::FaceId;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_walk::BufferSourceWalk;
 use crate::display_row_builder::DisplayRowGlyphCheckpoint;
@@ -32,6 +31,7 @@ use crate::neovm_bridge::LayoutBufferView;
 use crate::types::LineWrapMode;
 use crate::window_output::{DisplayTextRowTransition, WindowOutputEmitter};
 use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::EmacsBytePos;
 
 #[derive(Clone, Copy, Debug, PartialEq)]

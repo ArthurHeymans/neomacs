@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use crate::display_cursor::{CapturedCursorInfo, display_property_replacement_cursor_info};
 use crate::display_face_id::FrameFaceIdAllocator;
 #[cfg(test)]
@@ -39,6 +38,7 @@ use crate::display_source_resolver::{
 use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
 use crate::types::WindowParams;
+use neomacs_display_protocol::types::FaceId;
 #[cfg(test)]
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;

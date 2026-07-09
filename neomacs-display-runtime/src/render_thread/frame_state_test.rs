@@ -1,8 +1,8 @@
-use neomacs_display_protocol::types::FaceId;
 use super::*;
 use crate::core::face::Face;
 use crate::core::frame_glyphs::{CursorStyle, FrameGlyphBuffer, GlyphRowRole, PhysCursor};
 use crate::thread_comm::ThreadComms;
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

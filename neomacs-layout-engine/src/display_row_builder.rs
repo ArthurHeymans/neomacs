@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use crate::composition::base_width_cols;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{
@@ -18,6 +17,7 @@ use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use crate::glyph_row_writer;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{CharPos0, EmacsBytePos};
 
 use crate::display_text_run_measurement::DisplayTextRunMeasurement;
@@ -1619,7 +1619,10 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     }
 
     fn face_id(&self, face: RenderFaceRef) -> FaceId {
-        render_face_ref_id(face, render_face_ref_id(self.layout.base_face, FaceId::new(0)))
+        render_face_ref_id(
+            face,
+            render_face_ref_id(self.layout.base_face, FaceId::new(0)),
+        )
     }
 }
 

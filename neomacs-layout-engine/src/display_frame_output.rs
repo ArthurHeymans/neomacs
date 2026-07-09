@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_status_line::{
     ChromeRowRenderServices, FrameChromeOutputTarget, FrameTabBarDisplayRowRender,
@@ -15,6 +14,7 @@ use neomacs_display_protocol::frame_glyphs::{
     WindowTransitionKind, derive_window_transition_hint,
 };
 use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, FrameDisplayState, ScrollBarItem};
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::emacs_core::eval::DisplayHost;
 use std::collections::{HashMap, HashSet};

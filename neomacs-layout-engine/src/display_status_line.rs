@@ -12,7 +12,6 @@
 //! display-engine unification plan merged it into the backend
 //! trait and renamed the file to reflect its new role.
 
-use neomacs_display_protocol::types::FaceId;
 use super::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, buffer_local_value};
 use super::window_output::{
     ChromeRowOutput, ChromeRowProgress, DisplayProgressSink, TextWindowOutputTarget,
@@ -42,6 +41,7 @@ use crate::types::WindowParams;
 #[cfg(test)]
 use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::glyph_matrix::{FrameChromeRow, GlyphArea, GlyphRow};
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::Rect;
 use neomacs_display_protocol::ui_types::TabBarItem;
 use neovm_core::buffer::BufferId;

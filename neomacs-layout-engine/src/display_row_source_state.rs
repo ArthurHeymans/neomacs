@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::DisplayItem;
 use crate::display_source::DisplayItemSource;
@@ -7,6 +6,7 @@ use crate::display_source_resolver::{
     resolve_next_display_source_item,
 };
 use crate::neovm_bridge::ResolvedFace;
+use neomacs_display_protocol::types::FaceId;
 
 #[derive(Default)]
 pub(crate) struct DisplayRowSourceState {

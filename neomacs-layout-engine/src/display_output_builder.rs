@@ -6,7 +6,6 @@
 //! consumer side; layout no longer treats `FrameGlyphBuffer` as the primary
 //! output contract.
 
-use neomacs_display_protocol::types::FaceId;
 use crate::display_cursor::CursorVisualColumnResolutionContext;
 #[cfg(test)]
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
@@ -40,6 +39,7 @@ use neomacs_display_protocol::frame_glyphs::{
     PhysCursor, WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
 use neomacs_display_protocol::glyph_matrix::*;
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayFrameId, DisplayWindowId, Rect};
 #[cfg(test)]
 use std::collections::HashMap;

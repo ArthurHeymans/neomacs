@@ -4,7 +4,6 @@
 //! reservation policy into a generic `DisplayRowAppendSurface`, then install
 //! rendered rows, cursor effects, retry metadata, and final window snapshots.
 
-use neomacs_display_protocol::types::FaceId;
 use crate::display_row_append_context::{DisplayRowAppendArea, DisplayRowAppendSurface};
 use crate::display_row_builder::DisplayTabPolicy;
 use crate::display_row_geometry::{
@@ -31,6 +30,7 @@ use crate::window_output::{
     install_text_window_cursor_effects,
 };
 use neomacs_display_protocol::effect_config::EffectsConfig;
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::LispCharPos1;
 use neovm_core::emacs_core::Context;
 use neovm_core::window::{DisplayRowSnapshot, FrameId, WindowDisplaySnapshot, WindowId};

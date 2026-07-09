@@ -6,7 +6,6 @@
 //! helpers in `display_row_append.rs`, so that the append module does not
 //! need to own the render-state facade.
 
-use neomacs_display_protocol::types::FaceId;
 use crate::display_current_row_output::{DisplayCurrentRowMutation, DisplayRowCurrentRowOutput};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
@@ -53,6 +52,7 @@ use neomacs_display_protocol::glyph_matrix::{
     FringeBitmapInfo, Glyph, GlyphArea, GlyphRow, NO_BUFFER_POSITION_CHARPOS,
 };
 use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::emacs_core::Context;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;

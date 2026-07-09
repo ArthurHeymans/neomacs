@@ -1,7 +1,7 @@
-use neomacs_display_protocol::types::FaceId;
 use super::*;
 use crate::core::frame_glyphs::DisplaySlotId;
 use crate::core::types::DisplayWindowId;
+use neomacs_display_protocol::types::FaceId;
 
 // -------------------------------------------------------------------
 // ANSI escape sequence generation
@@ -596,7 +596,19 @@ fn test_rasterize_char_glyph() {
     frame.char_height = 16.0;
 
     let fg = Color::rgb(1.0, 0.0, 0.0);
-    frame.set_face(FaceId::new(0), fg, None, 700, false, 0, None, 0, None, 0, None);
+    frame.set_face(
+        FaceId::new(0),
+        fg,
+        None,
+        700,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
     // Place 'H' at pixel (0, 0) -> col 0, row 0
     frame.add_char('H', 0.0, 0.0, 8.0, 16.0, 12.0, false);
     // Place 'i' at pixel (8, 0) -> col 1, row 0
@@ -752,7 +764,19 @@ fn test_rasterize_glyph_out_of_bounds() {
     frame.char_height = 16.0;
 
     let fg = Color::WHITE;
-    frame.set_face(FaceId::new(0), fg, None, 400, false, 0, None, 0, None, 0, None);
+    frame.set_face(
+        FaceId::new(0),
+        fg,
+        None,
+        400,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
     // Place char way outside the grid
     frame.add_char('Z', 1000.0, 1000.0, 8.0, 16.0, 12.0, false);
 
@@ -768,7 +792,19 @@ fn test_rasterize_composed_char() {
     frame.char_height = 16.0;
 
     let fg = Color::WHITE;
-    frame.set_face(FaceId::new(0), fg, None, 400, false, 0, None, 0, None, 0, None);
+    frame.set_face(
+        FaceId::new(0),
+        fg,
+        None,
+        400,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
     frame.add_composed_char("e\u{0301}", 'e', 0.0, 0.0, 8.0, 16.0, 12.0, false);
 
     let mut grid = TtyGrid::new(10, 5);
@@ -784,7 +820,19 @@ fn test_rasterize_bold_face() {
     frame.char_height = 16.0;
 
     let fg = Color::WHITE;
-    frame.set_face(FaceId::new(0), fg, None, 700, false, 0, None, 0, None, 0, None);
+    frame.set_face(
+        FaceId::new(0),
+        fg,
+        None,
+        700,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
     frame.add_char('B', 0.0, 0.0, 8.0, 16.0, 12.0, false);
 
     let mut grid = TtyGrid::new(10, 5);
@@ -800,7 +848,19 @@ fn test_rasterize_italic_face() {
     frame.char_height = 16.0;
 
     let fg = Color::WHITE;
-    frame.set_face(FaceId::new(0), fg, None, 400, true, 0, None, 0, None, 0, None);
+    frame.set_face(
+        FaceId::new(0),
+        fg,
+        None,
+        400,
+        true,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
     frame.add_char('I', 0.0, 0.0, 8.0, 16.0, 12.0, false);
 
     let mut grid = TtyGrid::new(10, 5);
@@ -817,7 +877,19 @@ fn test_rasterize_underline_with_color() {
 
     let fg = Color::WHITE;
     let ul_color = Color::rgb(1.0, 0.0, 0.0);
-    frame.set_face(FaceId::new(0), fg, None, 400, false, 1, Some(ul_color), 0, None, 0, None);
+    frame.set_face(
+        FaceId::new(0),
+        fg,
+        None,
+        400,
+        false,
+        1,
+        Some(ul_color),
+        0,
+        None,
+        0,
+        None,
+    );
     frame.add_char('U', 0.0, 0.0, 8.0, 16.0, 12.0, false);
 
     let mut grid = TtyGrid::new(10, 5);
@@ -835,7 +907,19 @@ fn test_rasterize_strikethrough() {
     frame.char_height = 16.0;
 
     let fg = Color::WHITE;
-    frame.set_face(FaceId::new(0), fg, None, 400, false, 0, None, 1, None, 0, None);
+    frame.set_face(
+        FaceId::new(0),
+        fg,
+        None,
+        400,
+        false,
+        0,
+        None,
+        1,
+        None,
+        0,
+        None,
+    );
     frame.add_char('S', 0.0, 0.0, 8.0, 16.0, 12.0, false);
 
     let mut grid = TtyGrid::new(10, 5);
@@ -1405,7 +1489,19 @@ fn test_rasterize_multiple_rows() {
     frame.char_height = 16.0;
 
     let fg = Color::WHITE;
-    frame.set_face(FaceId::new(0), fg, None, 400, false, 0, None, 0, None, 0, None);
+    frame.set_face(
+        FaceId::new(0),
+        fg,
+        None,
+        400,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
 
     // Row 0: "ABC"
     frame.add_char('A', 0.0, 0.0, 8.0, 16.0, 12.0, false);
@@ -1457,7 +1553,19 @@ fn test_rasterize_zero_char_dimensions() {
     frame.char_height = 0.0;
 
     let fg = Color::WHITE;
-    frame.set_face(FaceId::new(0), fg, None, 400, false, 0, None, 0, None, 0, None);
+    frame.set_face(
+        FaceId::new(0),
+        fg,
+        None,
+        400,
+        false,
+        0,
+        None,
+        0,
+        None,
+        0,
+        None,
+    );
     frame.add_char('A', 0.0, 0.0, 8.0, 16.0, 12.0, false);
 
     let mut grid = TtyGrid::new(10, 5);

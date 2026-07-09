@@ -1,6 +1,5 @@
 //! UI overlay rendering methods for WgpuRenderer.
 
-use neomacs_display_protocol::types::FaceId;
 use super::super::glyph_atlas::{
     AnyAtlasEntry, GlyphAtlasHandle, GlyphKey, GlyphMaterialKind, SubpixelRequest, WgpuGlyphAtlas,
     glyph_font_identity,
@@ -11,6 +10,7 @@ use super::WgpuRenderer;
 use cosmic_text::SubpixelBin;
 use neomacs_display_protocol::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::{MenuBarItem, ToolBarImageSource, ToolBarItem};
 use std::collections::HashMap;
 

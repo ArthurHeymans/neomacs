@@ -3,7 +3,6 @@
 //! This module resolves buffer source faces at scan checkpoints and prepares
 //! display source items whose layout changes require derived measured faces.
 
-use neomacs_display_protocol::types::FaceId;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_ref::render_face_ref_id;
@@ -21,6 +20,7 @@ use crate::display_source_resolver::{
 use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::emacs_core::eval::DisplayHost;
 
 pub(crate) struct BufferSourceFaceResolutionContext<'a, B: LayoutBufferView> {

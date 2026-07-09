@@ -1,6 +1,6 @@
-use crate::core::types::Color;
 use super::*;
 use crate::core::frame_glyphs::FrameGlyphBuffer;
+use crate::core::types::Color;
 use crate::render_thread::frame_windows::{FrameLifecycle, GuiFrameRenderState};
 use crate::thread_comm::{MenuBarItem, ToolBarImageSource, ToolBarItem, ToolBarItemType};
 use neomacs_display_protocol::frame_glyphs::FrameTabBarState;

@@ -12,12 +12,12 @@
 //! Spec: docs/superpowers/specs/2026-06-26-neomacs-incremental-layout-design.md
 //! (§4.1 retained structure, §4.6 RowDamage, §5 Phase 0a, §7 go-criteria).
 
-use neomacs_display_protocol::types::FaceId;
 use crate::types::{LineWrapMode, WindowParams};
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
 pub use neomacs_display_protocol::glyph_matrix::RowDamage;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphMatrix, GlyphRow};
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::Rect;
 use neovm_core::buffer::position::LispCharPos1;
 use neovm_core::window::{DisplayPointSnapshot, DisplayRowSnapshot};

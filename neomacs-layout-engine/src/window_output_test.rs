@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use super::ChromeRowOutput;
 use super::ChromeRowProgress;
 use super::DisplayProgressSink;
@@ -44,6 +43,7 @@ use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, WindowInfo,
 };
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, Rect};
 use neomacs_display_protocol::{Glyph, GlyphArea, GlyphType};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};

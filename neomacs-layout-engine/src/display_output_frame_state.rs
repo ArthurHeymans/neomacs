@@ -1,6 +1,5 @@
 //! Mutable non-row frame output state owned while layout builds a frame snapshot.
 
-use neomacs_display_protocol::types::FaceId;
 use crate::display_output_install_request::{
     OutputCursorInstallRequest, OutputFrameArtifactInstallRequest, OutputFrameStateInstallRequest,
     OutputMediaInstallKind, OutputMediaInstallRequest, OutputWindowMetadataInstallRequest,
@@ -14,6 +13,7 @@ use neomacs_display_protocol::glyph_matrix::{
     BackgroundItem, BorderItem, CursorItem, FaceFillItem, FrameDisplayState, ImageItem,
     ScrollBarItem, VideoItem, XwidgetItem,
 };
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayFrameId, DisplayWindowId};
 use std::collections::HashMap;
 

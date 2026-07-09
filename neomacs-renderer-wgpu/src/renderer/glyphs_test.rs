@@ -1,10 +1,10 @@
-use neomacs_display_protocol::types::FaceId;
 use super::{
     RenderedCharBounds, char_overlap, cursor_glyph_slot_rect, frame_default_glyph_metrics,
 };
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, WindowCursor,
 };
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId};
 
 fn make_cursor(

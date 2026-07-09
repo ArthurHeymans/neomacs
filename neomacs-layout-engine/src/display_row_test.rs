@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use super::*;
 use crate::display_current_row_output::DisplayRowCurrentRowOutput;
 use crate::display_item::{DisplayItem, DisplayItemKind, DisplayMediaReplacement, SourceSpan};
@@ -17,6 +16,7 @@ use neomacs_display_protocol::Rect;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::eval::{
     DisplayHost, GuiFrameHostRequest, ImageResolveRequest, ResolvedImage, ResolvedVideo,
@@ -199,7 +199,10 @@ fn display_row_render_item_lowers_media_replacement_to_row_stretch() {
     let render_item = DisplayRowRenderItem::from_source_item(source.clone());
 
     assert_eq!(render_item.source_item(), &source);
-    assert_eq!(render_item.row_face(), RenderFaceRef::FaceId(FaceId::new(7)));
+    assert_eq!(
+        render_item.row_face(),
+        RenderFaceRef::FaceId(FaceId::new(7))
+    );
     let DisplayItemKind::Stretch(stretch) = &render_item.row_item().kind else {
         panic!("media replacement should lower to a row stretch item");
     };
@@ -250,7 +253,13 @@ fn current_display_row_cluster_tail_reports_live_text_row_tail() {
 
     builder
         .edit_current_row_for_test(|row| {
-            crate::glyph_row_writer::push_wide_char_to_row(row, '\u{1F1EF}', FaceId::new(3), 100, 0.0);
+            crate::glyph_row_writer::push_wide_char_to_row(
+                row,
+                '\u{1F1EF}',
+                FaceId::new(3),
+                100,
+                0.0,
+            );
         })
         .expect("current row");
     assert_eq!(
@@ -261,7 +270,12 @@ fn current_display_row_cluster_tail_reports_live_text_row_tail() {
 
     builder
         .edit_current_row_for_test(|row| {
-            crate::glyph_row_writer::push_cluster_continuation_to_row(row, '\u{1F1F5}', FaceId::new(3), 101);
+            crate::glyph_row_writer::push_cluster_continuation_to_row(
+                row,
+                '\u{1F1F5}',
+                FaceId::new(3),
+                101,
+            );
         })
         .expect("current row");
     assert_eq!(
@@ -330,8 +344,12 @@ fn display_row_source_geometry_builds_whole_row_request() {
         tab_policy: DisplayTabPolicy::every(4),
     };
 
-    let request =
-        display_row_request_for_face(geometry.clone(), FaceId::new(17), &face, GlyphRowRole::Minibuffer);
+    let request = display_row_request_for_face(
+        geometry.clone(),
+        FaceId::new(17),
+        &face,
+        GlyphRowRole::Minibuffer,
+    );
 
     assert_eq!(request.geometry(), &geometry);
     assert_eq!(
@@ -573,7 +591,10 @@ fn display_row_resolved_measured_face_installs_render_and_measurement_identity()
         realized.font_metrics(),
     );
 
-    let rendered = builder.faces().get(&FaceId::new(12)).expect("installed face");
+    let rendered = builder
+        .faces()
+        .get(&FaceId::new(12))
+        .expect("installed face");
     assert_eq!(realized.face_id(), FaceId::new(12));
     assert_eq!(rendered.id, FaceId::new(12));
     assert_eq!(rendered.font_ascent, 11);
@@ -816,9 +837,12 @@ fn display_row_source_state_reuses_face_cache_across_items() {
             },
         ],
     );
-    let mut source =
-        crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(FaceId::new(0)))
-            .expect("string source");
+    let mut source = crate::display_source::LispStringSourceCursor::new(
+        1,
+        value,
+        RenderFaceRef::FaceId(FaceId::new(0)),
+    )
+    .expect("string source");
     let mut state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(20);
     let (first, second, third) = {
@@ -2013,8 +2037,14 @@ fn display_row_glyph_measurer_uses_face_specific_widths() {
     ];
     let mut measurer = DisplayRowGlyphMeasurer::new(&faces, None, 5.0);
 
-    assert_eq!(measurer.glyph_advance_px('a', FaceId::new(1), 1, 5.0), Some(5.0));
-    assert_eq!(measurer.glyph_advance_px('中', FaceId::new(2), 2, 10.0), Some(18.0));
+    assert_eq!(
+        measurer.glyph_advance_px('a', FaceId::new(1), 1, 5.0),
+        Some(5.0)
+    );
+    assert_eq!(
+        measurer.glyph_advance_px('中', FaceId::new(2), 2, 10.0),
+        Some(18.0)
+    );
 }
 
 #[test]
@@ -2024,7 +2054,10 @@ fn display_row_glyph_measurer_preserves_fractional_gui_advances() {
     let faces = vec![DisplayRowFace::from_resolved(FaceId::new(1), &base)];
     let mut measurer = DisplayRowGlyphMeasurer::new(&faces, None, 7.2);
 
-    assert_eq!(measurer.glyph_advance_px('x', FaceId::new(1), 1, 7.2), Some(7.2));
+    assert_eq!(
+        measurer.glyph_advance_px('x', FaceId::new(1), 1, 7.2),
+        Some(7.2)
+    );
 }
 
 #[test]
@@ -2039,7 +2072,10 @@ fn display_row_glyph_measurer_can_snap_terminal_advances() {
         GlyphAdvanceQuantization::SnapToIntegerPixels,
     );
 
-    assert_eq!(measurer.glyph_advance_px('x', FaceId::new(1), 1, 7.2), Some(7.0));
+    assert_eq!(
+        measurer.glyph_advance_px('x', FaceId::new(1), 1, 7.2),
+        Some(7.0)
+    );
 }
 
 #[test]
@@ -2069,8 +2105,12 @@ fn display_row_glyph_measurement_face_measures_single_char_columns() {
 fn display_row_glyph_measurement_face_constructs_from_resolved_face_policy() {
     let mut base = base_face();
     base.set_measured_char_width_px(7.2);
-    let measurement_face =
-        DisplayRowMeasurementPolicy::for_frame(false).measurement_face(FaceId::new(8), &base, None, 7.2);
+    let measurement_face = DisplayRowMeasurementPolicy::for_frame(false).measurement_face(
+        FaceId::new(8),
+        &base,
+        None,
+        7.2,
+    );
     let mut font_metrics = None;
 
     assert_eq!(
@@ -2101,8 +2141,12 @@ fn display_row_gui_measurement_preserves_narrow_proportional_glyph_advance() {
     base.font_size = 9.12871;
     base.font_weight = 400;
     base.set_measured_char_width_px(7.2);
-    let gui_face =
-        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(FaceId::new(8), &base, None, 7.2);
+    let gui_face = DisplayRowMeasurementPolicy::for_frame(true).measurement_face(
+        FaceId::new(8),
+        &base,
+        None,
+        7.2,
+    );
     let mut font_metrics = Some(FontMetricsService::new());
 
     let width = gui_face.advance_for_char(&mut font_metrics, '.', 7.2);
@@ -2165,8 +2209,12 @@ fn display_row_gui_measurement_preserves_narrow_proportional_text_run_advances()
     base.font_size = 9.12871;
     base.font_weight = 400;
     base.set_measured_char_width_px(7.2);
-    let gui_face =
-        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(FaceId::new(8), &base, None, 7.2);
+    let gui_face = DisplayRowMeasurementPolicy::for_frame(true).measurement_face(
+        FaceId::new(8),
+        &base,
+        None,
+        7.2,
+    );
     let mut font_metrics = Some(FontMetricsService::new());
 
     let measurement = gui_face.text_run_measurement(&mut font_metrics, ".agent-sh");
@@ -2327,8 +2375,12 @@ fn display_row_glyph_measurement_face_shapes_text_runs_as_measurement_plans() {
     base.font_family = "monospace".to_string();
     base.font_size = 14.0;
     base.set_measured_char_width_px(8.0);
-    let measurement_face =
-        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(FaceId::new(8), &base, None, 8.0);
+    let measurement_face = DisplayRowMeasurementPolicy::for_frame(true).measurement_face(
+        FaceId::new(8),
+        &base,
+        None,
+        8.0,
+    );
     let mut font_metrics = Some(FontMetricsService::new());
 
     let measurement = measurement_face.text_run_measurement(&mut font_metrics, "سلام");
@@ -2422,8 +2474,12 @@ fn display_row_glyph_measurement_face_builds_text_run_measurement_plan() {
     base.font_family = "monospace".to_string();
     base.font_size = 14.0;
     base.set_measured_char_width_px(8.0);
-    let measurement_face =
-        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(FaceId::new(8), &base, None, 8.0);
+    let measurement_face = DisplayRowMeasurementPolicy::for_frame(true).measurement_face(
+        FaceId::new(8),
+        &base,
+        None,
+        8.0,
+    );
     let mut font_metrics = Some(FontMetricsService::new());
 
     let measurement = measurement_face.text_run_measurement(&mut font_metrics, "abc");
@@ -2446,8 +2502,12 @@ fn display_row_glyph_measurement_face_builds_text_run_measurement_plan() {
 fn display_row_glyph_measurement_face_builds_fallback_text_run_measurement_plan() {
     let mut base = base_face();
     base.set_measured_char_width_px(7.2);
-    let measurement_face =
-        DisplayRowMeasurementPolicy::for_frame(false).measurement_face(FaceId::new(8), &base, None, 7.2);
+    let measurement_face = DisplayRowMeasurementPolicy::for_frame(false).measurement_face(
+        FaceId::new(8),
+        &base,
+        None,
+        7.2,
+    );
     let mut font_metrics = None;
 
     let measurement = measurement_face.text_run_measurement(&mut font_metrics, "a中");

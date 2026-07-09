@@ -1,6 +1,5 @@
 //! Buffer source body walk setup and render pass driver.
 
-use neomacs_display_protocol::types::FaceId;
 use crate::display_buffer_source_face_resolution::*;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
@@ -46,6 +45,7 @@ use crate::window_output::{
     TextWindowOutputTarget, TextWindowRedisplayPositions, WindowOutputEmitter,
 };
 use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::emacs_core::Context;
 
 pub(crate) struct BufferSourceWalkSetupRequest<'a> {

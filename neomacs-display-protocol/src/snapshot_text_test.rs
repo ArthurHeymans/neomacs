@@ -1,10 +1,10 @@
 use crate::cursor::CursorStyle;
-use crate::types::FaceId;
 use crate::face::Face;
 use crate::frame_glyphs::{DisplaySlotId, GlyphRowRole, PhysCursor, WindowInfo};
 use crate::glyph_matrix::{
     FrameDisplayState, Glyph, GlyphArea, GlyphMatrix, GlyphType, WindowMatrixEntry,
 };
+use crate::types::FaceId;
 use crate::types::{Color, DisplayFrameId, DisplayWindowId, Rect};
 
 /// Two-row state exercising every glyph kind: chars, a stretch, an image,
@@ -139,10 +139,20 @@ fn face_run_name_falls_back_to_basic_face_and_raw_id() {
     unnamed_basic.lisp_name = None;
     state.faces.insert(FaceId::new(1), unnamed_basic);
     // Unnamed dynamic face falls back to face:<id>.
-    state.faces.insert(FaceId::new(99), Face::new(FaceId::new(99)));
+    state
+        .faces
+        .insert(FaceId::new(99), Face::new(FaceId::new(99)));
     let text_area = GlyphArea::Text as usize;
-    state.window_matrices[0].matrix.rows[1].glyphs[text_area].push(Glyph::char('m', FaceId::new(1), 10));
-    state.window_matrices[0].matrix.rows[1].glyphs[text_area].push(Glyph::char('d', FaceId::new(99), 11));
+    state.window_matrices[0].matrix.rows[1].glyphs[text_area].push(Glyph::char(
+        'm',
+        FaceId::new(1),
+        10,
+    ));
+    state.window_matrices[0].matrix.rows[1].glyphs[text_area].push(Glyph::char(
+        'd',
+        FaceId::new(99),
+        11,
+    ));
     let out = state.render_text_faces();
     assert!(
         out.contains("mode-line-active fg=#"),

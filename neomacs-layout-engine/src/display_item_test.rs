@@ -1,6 +1,6 @@
-use neomacs_display_protocol::types::FaceId;
 use super::*;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
 
 fn buffer_span(buffer_id: BufferId, start_char: usize, end_char: usize) -> SourceSpan {

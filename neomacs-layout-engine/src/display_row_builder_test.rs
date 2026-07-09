@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use super::*;
 use crate::display_item::{
     DisplayGlyphless, DisplayItem, DisplayItemKind, DisplayLength, DisplaySourceMappedText,
@@ -13,6 +12,7 @@ use crate::display_text_run_measurement::{
 };
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphType};
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::Rect;
 use neovm_core::emacs_core::{Context, Value};
 
@@ -428,8 +428,12 @@ fn display_row_append_cursor_appends_explicit_source_item() {
     let mut matrix = DisplayOutputBuilder::new();
     matrix.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     matrix.begin_row(0, GlyphRowRole::Text);
-    let mut source = LispStringSourceCursor::new(1, Value::string("abc"), RenderFaceRef::FaceId(FaceId::new(2)))
-        .expect("source");
+    let mut source = LispStringSourceCursor::new(
+        1,
+        Value::string("abc"),
+        RenderFaceRef::FaceId(FaceId::new(2)),
+    )
+    .expect("source");
     let mut context = DisplaySourceContext::empty();
 
     let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition::new(8.0, 1), 80.0);
@@ -458,8 +462,12 @@ fn display_row_append_cursor_appends_explicit_source_item_with_glyph_measurer() 
     measurer.insert('i', FaceId::new(2), 4.0);
     matrix.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     matrix.begin_row(0, GlyphRowRole::Text);
-    let mut source = LispStringSourceCursor::new(1, Value::string("mi"), RenderFaceRef::FaceId(FaceId::new(2)))
-        .expect("source");
+    let mut source = LispStringSourceCursor::new(
+        1,
+        Value::string("mi"),
+        RenderFaceRef::FaceId(FaceId::new(2)),
+    )
+    .expect("source");
     let mut context = DisplaySourceContext::empty();
 
     let mut cursor = DisplayRowAppendCursor::new(DisplayRowPosition::new(0.0, 0), 80.0);
@@ -483,7 +491,10 @@ fn display_row_append_cursor_appends_explicit_source_item_with_glyph_measurer() 
 fn fixed_glyph_advance_matches_only_configured_glyph() {
     let mut measurer = FixedGlyphAdvance::new('m', FaceId::new(7), 13.0);
 
-    assert_eq!(measurer.glyph_advance_px('m', FaceId::new(7), 1, 8.0), Some(13.0));
+    assert_eq!(
+        measurer.glyph_advance_px('m', FaceId::new(7), 1, 8.0),
+        Some(13.0)
+    );
     assert_eq!(measurer.glyph_advance_px('m', FaceId::new(8), 1, 8.0), None);
     assert_eq!(measurer.glyph_advance_px('i', FaceId::new(7), 1, 8.0), None);
 }
@@ -494,8 +505,14 @@ fn fixed_glyph_advances_return_inserted_widths() {
     measurer.insert('m', FaceId::new(7), 13.0);
     measurer.insert('i', FaceId::new(7), 4.0);
 
-    assert_eq!(measurer.glyph_advance_px('m', FaceId::new(7), 1, 8.0), Some(13.0));
-    assert_eq!(measurer.glyph_advance_px('i', FaceId::new(7), 1, 8.0), Some(4.0));
+    assert_eq!(
+        measurer.glyph_advance_px('m', FaceId::new(7), 1, 8.0),
+        Some(13.0)
+    );
+    assert_eq!(
+        measurer.glyph_advance_px('i', FaceId::new(7), 1, 8.0),
+        Some(4.0)
+    );
     assert_eq!(measurer.glyph_advance_px('m', FaceId::new(8), 1, 8.0), None);
 }
 
@@ -606,8 +623,12 @@ fn display_row_builder_emits_ascii_text_items() {
 #[test]
 fn display_row_builder_consumes_display_item_source() {
     let _eval = Context::new();
-    let mut source = LispStringSourceCursor::new(1, Value::string("abc"), RenderFaceRef::FaceId(FaceId::new(2)))
-        .expect("source");
+    let mut source = LispStringSourceCursor::new(
+        1,
+        Value::string("abc"),
+        RenderFaceRef::FaceId(FaceId::new(2)),
+    )
+    .expect("source");
     let mut context = DisplaySourceContext::empty();
     let mut builder = DisplayRowBuilder::new(layout());
 
@@ -670,9 +691,12 @@ fn display_row_writer_consumes_display_item_source() {
     let mut row = neomacs_display_protocol::glyph_matrix::GlyphRow::new(GlyphRowRole::Text);
     row.enabled = true;
     crate::glyph_row_writer::push_char_to_row(&mut row, 'x', FaceId::new(2), 0, 8.0);
-    let mut source =
-        LispStringSourceCursor::new(1, Value::string("a\tb"), RenderFaceRef::FaceId(FaceId::new(2)))
-            .expect("source");
+    let mut source = LispStringSourceCursor::new(
+        1,
+        Value::string("a\tb"),
+        RenderFaceRef::FaceId(FaceId::new(2)),
+    )
+    .expect("source");
     let mut context = DisplaySourceContext::empty();
 
     let row_layout = layout();
@@ -932,7 +956,13 @@ fn resumed_writer_counts_live_run_member_padding_once() {
     let first = chars.next().expect("non-empty word");
     crate::glyph_row_writer::push_char_to_row(&mut row, first, FaceId::new(2), 8, 8.0);
     for (offset, ch) in chars.enumerate() {
-        crate::glyph_row_writer::push_run_member_to_row(&mut row, ch, FaceId::new(2), 9 + offset, 8.0);
+        crate::glyph_row_writer::push_run_member_to_row(
+            &mut row,
+            ch,
+            FaceId::new(2),
+            9 + offset,
+            8.0,
+        );
     }
     // Sanity: exactly what the live writer produces — one non-padding Composite
     // base plus per-member padding cells with positive pixel widths.

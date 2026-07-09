@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use super::*;
 use crate::display_cursor::{
     CapturedTextWindowCursorPublishContext, CapturedTextWindowCursorPublishOutcome,
@@ -35,6 +34,7 @@ use crate::window_output::{TextWindowOutputTarget, WindowOutputEmitter};
 use neomacs_display_protocol::cursor::CursorBarWidth;
 use neomacs_display_protocol::frame_glyphs::{CursorKind, DisplaySlotId, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{
     BufferId, BufferTextBackendKind, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1,
 };
@@ -10687,8 +10687,12 @@ fn display_row_measurement_face_preserves_fractional_gui_cell_width_without_font
     resolved.font_family = "JetBrainsMono Nerd Font".to_string();
     resolved.font_size = 12.0;
     resolved.set_measured_char_width_px(7.2);
-    let current_face =
-        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(FaceId::new(42), &resolved, None, 7.2);
+    let current_face = DisplayRowMeasurementPolicy::for_frame(true).measurement_face(
+        FaceId::new(42),
+        &resolved,
+        None,
+        7.2,
+    );
     let mut font_metrics_svc = None;
 
     let width = current_face.advance_for_char(&mut font_metrics_svc, 'x', 7.2);
@@ -10719,8 +10723,12 @@ fn display_row_glyph_measurement_face_carries_engine_measurement_policy() {
     resolved.font_family = "monospace".to_string();
     resolved.font_size = 14.0;
     resolved.set_measured_char_width_px(7.2);
-    let current_face =
-        DisplayRowMeasurementPolicy::for_frame(false).measurement_face(FaceId::new(42), &resolved, None, 7.2);
+    let current_face = DisplayRowMeasurementPolicy::for_frame(false).measurement_face(
+        FaceId::new(42),
+        &resolved,
+        None,
+        7.2,
+    );
     let mut font_metrics_svc = None;
 
     let width = current_face.glyph_advance_px(&mut font_metrics_svc, 'x', 1, 7.2);
@@ -14109,7 +14117,10 @@ fn child_frame_resolves_faces_and_width_independently_from_parent() {
         faces: vec![Face::new(FaceId::new(0))],
         windows: vec![MockWindowContent {
             window_id: 1,
-            lines: vec![MockStyledLine::from_str("parent buffer text", FaceId::new(0))],
+            lines: vec![MockStyledLine::from_str(
+                "parent buffer text",
+                FaceId::new(0),
+            )],
             mode_line: MockStyledLine::from_str("-- parent --", FaceId::new(0)),
             // Wide parent window: 800px / 8px = 100 cols.
             pixel_bounds: Rect::new(0.0, 0.0, 800.0, 15.0 * char_h),

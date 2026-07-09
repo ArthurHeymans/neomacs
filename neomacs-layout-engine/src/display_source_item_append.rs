@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info, update_cursor_info_for_main_char,
@@ -32,6 +31,7 @@ use crate::display_source_progress::DisplaySourceProgressState;
 use crate::display_text_run_measurement::ComplexTextRunAdvanceResolver;
 use crate::neovm_bridge::ResolvedFace;
 use crate::types::{LineWrapMode, WindowParams};
+use neomacs_display_protocol::types::FaceId;
 
 pub(crate) trait DisplaySourceCharAppendContext {
     fn append_source_char_plan_to_text_row(

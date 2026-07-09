@@ -1,6 +1,5 @@
 //! Buffer source render plan construction and completion.
 
-use neomacs_display_protocol::types::FaceId;
 use crate::display_buffer_empty_line_fringe::EmptyLineFringeFillRequest;
 use crate::display_buffer_fringe_arrows::TruncationContinuationFringeRequest;
 use crate::display_buffer_source_body_render::BufferSourceWalkSetup;
@@ -38,6 +37,7 @@ use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
 };
 use neomacs_display_protocol::glyph_matrix::{FaceFillItem, GlyphArea};
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::buffer::BufferId;
 use neovm_core::window::{FrameId, WindowId};

@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use super::*;
 use crate::display_buffer_source_consumption::{
     BufferSourceConsumedItem, BufferSourceConsumptionState,
@@ -14,6 +13,7 @@ use crate::display_item::{
 use crate::display_property::DisplayReplacementProperty;
 use crate::display_source::DisplaySourceTextPosition;
 use crate::neovm_bridge::{LayoutBufferSnapshot, LayoutBufferView};
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange};
 use neovm_core::emacs_core::value::StringTextPropertyRun;
 use neovm_core::emacs_core::{Context, Value};
@@ -224,9 +224,12 @@ fn buffer_display_replacement_string_source_maps_text_to_buffer_slot() {
     let _eval = Context::new();
     let replacement_source =
         BufferDisplayReplacementSource::new(BufferId(7), CharPos0::new(3), EmacsBytePos::new(12));
-    let string_source =
-        LispStringSourceCursor::new(1, Value::string("fallback"), RenderFaceRef::FaceId(FaceId::new(42)))
-            .expect("string source");
+    let string_source = LispStringSourceCursor::new(
+        1,
+        Value::string("fallback"),
+        RenderFaceRef::FaceId(FaceId::new(42)),
+    )
+    .expect("string source");
     let mut source = BufferDisplayReplacementStringSource::new(replacement_source, string_source);
     let mut context = DisplaySourceContext::empty();
 
@@ -252,8 +255,8 @@ fn buffer_display_replacement_string_source_maps_text_to_buffer_slot() {
 fn lisp_string_source_cursor_emits_text_runs_with_source_spans() {
     let _eval = Context::new();
     let value = Value::string("abc");
-    let mut source =
-        LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(FaceId::new(3))).expect("string source");
+    let mut source = LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(FaceId::new(3)))
+        .expect("string source");
 
     let items = collect_items(&mut source);
 
@@ -437,8 +440,8 @@ fn lisp_string_source_cursor_resolves_face_property() {
             plist: Value::list(vec![Value::symbol("face"), Value::symbol("bold")]),
         }],
     );
-    let mut source =
-        LispStringSourceCursor::new(2, value, RenderFaceRef::FaceId(FaceId::new(3))).expect("string source");
+    let mut source = LispStringSourceCursor::new(2, value, RenderFaceRef::FaceId(FaceId::new(3)))
+        .expect("string source");
     let mut resolver = SymbolFaceResolver;
     let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
 
@@ -470,8 +473,8 @@ fn lisp_string_source_cursor_resolves_display_property_through_context() {
             ]),
         }],
     );
-    let mut source =
-        LispStringSourceCursor::new(4, value, RenderFaceRef::FaceId(FaceId::new(3))).expect("string source");
+    let mut source = LispStringSourceCursor::new(4, value, RenderFaceRef::FaceId(FaceId::new(3)))
+        .expect("string source");
     let mut resolver = ResolvedDisplayPropertyResolver { seen_face: None };
 
     let item = {
@@ -481,7 +484,10 @@ fn lisp_string_source_cursor_resolves_display_property_through_context() {
         item
     };
 
-    assert_eq!(resolver.seen_face, Some(RenderFaceRef::FaceId(FaceId::new(7))));
+    assert_eq!(
+        resolver.seen_face,
+        Some(RenderFaceRef::FaceId(FaceId::new(7)))
+    );
     assert!(matches!(
         item.kind,
         DisplayItemKind::MediaReplacement(DisplayMediaReplacement {
@@ -507,8 +513,8 @@ fn lisp_string_source_cursor_uses_font_lock_face_when_face_is_absent() {
             ]),
         }],
     );
-    let mut source =
-        LispStringSourceCursor::new(3, value, RenderFaceRef::FaceId(FaceId::new(3))).expect("string source");
+    let mut source = LispStringSourceCursor::new(3, value, RenderFaceRef::FaceId(FaceId::new(3)))
+        .expect("string source");
     let mut resolver = SymbolFaceResolver;
     let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
 
@@ -545,8 +551,8 @@ fn lisp_string_source_cursor_parses_display_space_width_as_stretch() {
             ]),
         }],
     );
-    let mut source =
-        LispStringSourceCursor::new(4, value, RenderFaceRef::FaceId(FaceId::new(3))).expect("string source");
+    let mut source = LispStringSourceCursor::new(4, value, RenderFaceRef::FaceId(FaceId::new(3)))
+        .expect("string source");
 
     let items = collect_items(&mut source);
 
@@ -583,8 +589,8 @@ fn lisp_string_source_cursor_parses_display_space_align_to_as_typed_expression()
             ]),
         }],
     );
-    let mut source =
-        LispStringSourceCursor::new(5, value, RenderFaceRef::FaceId(FaceId::new(3))).expect("string source");
+    let mut source = LispStringSourceCursor::new(5, value, RenderFaceRef::FaceId(FaceId::new(3)))
+        .expect("string source");
 
     let item = source
         .next_item(&mut DisplaySourceContext::empty())
@@ -607,8 +613,8 @@ fn lisp_string_source_cursor_parses_display_space_align_to_as_typed_expression()
 fn lisp_string_source_cursor_emits_explicit_newline_row_breaks() {
     let _eval = Context::new();
     let value = Value::string("a\nb");
-    let mut source =
-        LispStringSourceCursor::new(6, value, RenderFaceRef::FaceId(FaceId::new(3))).expect("string source");
+    let mut source = LispStringSourceCursor::new(6, value, RenderFaceRef::FaceId(FaceId::new(3)))
+        .expect("string source");
     let items = collect_items(&mut source);
 
     assert_eq!(item_texts(&items), ["a", "b"]);
@@ -619,8 +625,8 @@ fn lisp_string_source_cursor_emits_explicit_newline_row_breaks() {
 fn lisp_string_source_cursor_emits_control_and_glyphless_items() {
     let _eval = Context::new();
     let value = Value::string("a\u{0001}\u{fff0}b");
-    let mut source =
-        LispStringSourceCursor::new(7, value, RenderFaceRef::FaceId(FaceId::new(3))).expect("string source");
+    let mut source = LispStringSourceCursor::new(7, value, RenderFaceRef::FaceId(FaceId::new(3)))
+        .expect("string source");
 
     let items = collect_items(&mut source);
 
@@ -650,8 +656,8 @@ fn lisp_string_source_cursor_pushes_display_string_replacement_source() {
             plist: Value::list(vec![Value::symbol("display"), replacement]),
         }],
     );
-    let mut source =
-        LispStringSourceCursor::new(7, value, RenderFaceRef::FaceId(FaceId::new(3))).expect("string source");
+    let mut source = LispStringSourceCursor::new(7, value, RenderFaceRef::FaceId(FaceId::new(3)))
+        .expect("string source");
 
     let items = collect_items(&mut source);
 

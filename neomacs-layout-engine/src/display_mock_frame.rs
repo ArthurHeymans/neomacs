@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_frame_output::FrameOutputIdentity;
 use crate::display_item::{
@@ -24,6 +23,7 @@ use neomacs_display_protocol::face::{BasicFaceId, Face, FaceAttributes};
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{FrameDisplayState, GlyphArea, GlyphRow};
 use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::face::FaceTable;
 
 fn install_mock_display_row(builder: &mut DisplayOutputBuilder, row_index: usize, row: &GlyphRow) {

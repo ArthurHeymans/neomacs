@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use crate::display_row_builder::{DisplayGlyphMeasurer, DisplayRowLayout};
 use crate::display_row_metrics::{DisplayRowFallbackMetrics, DisplayRowMeasuredFaceMetrics};
 use crate::display_row_width::DisplayRowCharWidthPolicy;
@@ -9,8 +8,11 @@ use crate::display_text_run_measurement::{
 use crate::font_metrics::{FontMetrics, FontMetricsService};
 use crate::glyph_advance::GlyphAdvanceQuantization;
 use crate::neovm_bridge::ResolvedFace;
-use neomacs_display_protocol::face::{BoxBorderStyle, BoxType, Face, FaceAttributes, UnderlineStyle};
+use neomacs_display_protocol::face::{
+    BoxBorderStyle, BoxType, Face, FaceAttributes, UnderlineStyle,
+};
 use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::types::FaceId;
 
 fn underline_style_from_code(code: u8) -> UnderlineStyle {
     UnderlineStyle::from_gnu_code(code).unwrap_or_default()
@@ -314,7 +316,13 @@ impl<'a> DisplayRowFaceRealizer<'a> {
         if char_w <= 1.0 && fallback_row_height <= 1.0 {
             return fallback_row_height.max(1.0);
         }
-        let face = self.realize_face(FaceId::new(0), face, char_w, fallback_ascent, fallback_row_height);
+        let face = self.realize_face(
+            FaceId::new(0),
+            face,
+            char_w,
+            fallback_ascent,
+            fallback_row_height,
+        );
         let line_height = face.metrics.line_height_px().ceil();
         let box_pixels = if face.box_type != BoxType::None && face.box_h_line_width != 0 {
             2.0 * face.box_h_line_width.unsigned_abs() as f32

@@ -138,7 +138,7 @@ pub fn install_frame_snapshot_fn(evaluator: &mut Context) {
                 protocol_version: neomacs_display_protocol::PROTOCOL_VERSION,
                 frames: &states,
             })
-                .map_err(|error| format!("frame snapshot JSON serialization failed: {error}"))?,
+            .map_err(|error| format!("frame snapshot JSON serialization failed: {error}"))?,
             SnapshotFormat::Text => states
                 .iter()
                 .map(|state| state.render_text())

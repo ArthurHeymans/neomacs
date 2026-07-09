@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
@@ -28,6 +27,7 @@ use crate::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace};
 use crate::types::WindowParams;
 use crate::unicode::decode_utf8;
 use neomacs_display_protocol::face::BasicFaceId;
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
 use neovm_core::emacs_core::eval::DisplayHost;

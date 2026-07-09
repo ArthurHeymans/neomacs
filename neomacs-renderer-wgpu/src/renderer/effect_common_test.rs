@@ -1,7 +1,7 @@
-use neomacs_display_protocol::types::Px;
 use super::*;
 use neomacs_display_protocol::CursorStyle;
 use neomacs_display_protocol::types::DisplayWindowId;
+use neomacs_display_protocol::types::Px;
 use neomacs_display_protocol::{DisplaySlotId, PhysCursor};
 
 #[test]
@@ -111,7 +111,13 @@ fn test_find_cursor_pos_from_phys_cursor() {
         charpos: 12,
         row: 3,
         col: 5,
-        slot_id: DisplaySlotId::from_pixels(DisplayWindowId::new(1), Px(50.0), Px(60.0), Px(8.0), Px(16.0)),
+        slot_id: DisplaySlotId::from_pixels(
+            DisplayWindowId::new(1),
+            Px(50.0),
+            Px(60.0),
+            Px(8.0),
+            Px(16.0),
+        ),
         x: 50.0,
         y: 60.0,
         width: 8.0,
@@ -137,7 +143,13 @@ fn test_find_cursor_pos_prefers_phys_cursor() {
         charpos: 20,
         row: 4,
         col: 7,
-        slot_id: DisplaySlotId::from_pixels(DisplayWindowId::new(2), Px(30.0), Px(40.0), Px(2.0), Px(16.0)),
+        slot_id: DisplaySlotId::from_pixels(
+            DisplayWindowId::new(2),
+            Px(30.0),
+            Px(40.0),
+            Px(2.0),
+            Px(16.0),
+        ),
         x: 30.0,
         y: 40.0,
         width: 2.0,

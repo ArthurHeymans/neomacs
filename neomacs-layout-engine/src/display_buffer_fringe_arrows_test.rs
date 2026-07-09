@@ -136,7 +136,10 @@ fn mutation_sets_right_arrow_on_truncated_row() {
         Some(11),
         "truncated row gets right-arrow in the right fringe",
     );
-    assert_eq!(row.right_fringe_bitmap.map(|i| i.face_id), Some(FaceId::new(7)));
+    assert_eq!(
+        row.right_fringe_bitmap.map(|i| i.face_id),
+        Some(FaceId::new(7))
+    );
     assert!(row.left_fringe_bitmap.is_none());
 }
 

@@ -1,6 +1,5 @@
 //! Glyphs methods for WgpuRenderer.
 
-use neomacs_display_protocol::types::FaceId;
 use super::super::glyph_atlas::{ComposedGlyphKey, GlyphKey, WgpuGlyphAtlas};
 use super::super::vertex::{RectVertex, SubpixelGlyphVertex, Uniforms};
 use super::GlyphRenderStats;
@@ -13,6 +12,7 @@ use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole, WindowCursor,
 };
 use neomacs_display_protocol::gradient::{ColorStop, Gradient};
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{AnimatedCursor, Color, DisplayWindowId, Rect};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::{

@@ -1,5 +1,3 @@
-use neomacs_display_protocol::types::DisplayWindowId;
-use neomacs_display_protocol::types::FaceId;
 use super::*;
 use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementRenderOutcome,
@@ -109,6 +107,8 @@ use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::BasicFaceId;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphType};
+use neomacs_display_protocol::types::DisplayWindowId;
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, Rect};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, EmacsByteRange, LispCharPos1};
 use neovm_core::emacs_core::eval::{
@@ -3420,7 +3420,13 @@ fn word_wrap_break_glyph_checkpoint_rolls_partial_word_off_first_row() {
     // Now the partial next word (`wo` of `word10`) fits and gets drawn before the
     // overflow is detected.
     for (offset, ch) in "wo".chars().enumerate() {
-        write_char_to_current_row_with_width(&mut context.builder, ch, FaceId::new(0), 7 + offset, 8.0);
+        write_char_to_current_row_with_width(
+            &mut context.builder,
+            ch,
+            FaceId::new(0),
+            7 + offset,
+            8.0,
+        );
     }
     {
         let row = context.builder.current_row_for_test().expect("current row");
@@ -4381,8 +4387,13 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
         0.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     );
-    let source_item =
-        buffer_source_mapped_display_item(buf_id, 0, 1, "\u{0633}", RenderFaceRef::FaceId(FaceId::new(7)));
+    let source_item = buffer_source_mapped_display_item(
+        buf_id,
+        0,
+        1,
+        "\u{0633}",
+        RenderFaceRef::FaceId(FaceId::new(7)),
+    );
 
     let resolved = append_context.resolve_source_render_plan_to_text_row(
         &geometry,
@@ -4412,8 +4423,12 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
 
 #[test]
 fn synthetic_display_text_item_builds_synthetic_text_run() {
-    let mut source =
-        crate::display_source::SyntheticTextItemSource::new(9, "...", RenderFaceRef::FaceId(FaceId::new(7)), 0);
+    let mut source = crate::display_source::SyntheticTextItemSource::new(
+        9,
+        "...",
+        RenderFaceRef::FaceId(FaceId::new(7)),
+        0,
+    );
     let item = source
         .next_item(&mut crate::display_source::DisplaySourceContext::empty())
         .expect("synthetic item");
@@ -5199,8 +5214,14 @@ fn render_natural_display_item_source_into_current_text_row_stamps_slots_at_curr
 
 #[test]
 fn render_face_ref_id_uses_fallback_for_inherit() {
-    assert_eq!(render_face_ref_id(RenderFaceRef::FaceId(FaceId::new(12)), FaceId::new(7)), FaceId::new(12));
-    assert_eq!(render_face_ref_id(RenderFaceRef::Inherit, FaceId::new(7)), FaceId::new(7));
+    assert_eq!(
+        render_face_ref_id(RenderFaceRef::FaceId(FaceId::new(12)), FaceId::new(7)),
+        FaceId::new(12)
+    );
+    assert_eq!(
+        render_face_ref_id(RenderFaceRef::Inherit, FaceId::new(7)),
+        FaceId::new(7)
+    );
 }
 
 #[test]
@@ -5379,7 +5400,10 @@ fn display_row_append_surface_builds_positioned_source_requests() {
         DisplayRowMaxX::Bounded(128.0)
     );
     assert_eq!(request.role(), GlyphRowRole::Text);
-    assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(FaceId::new(42)));
+    assert_eq!(
+        request.base_face_ref(),
+        RenderFaceRef::FaceId(FaceId::new(42))
+    );
     assert_eq!(
         *request.geometry(),
         DisplayRowGeometry::new(20.0, 120.0, 16.0, 9.0, 11.0, tab_policy)
@@ -5434,8 +5458,12 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
     assert_eq!(ordinary_output.glyph_y(), 22.0);
     assert_eq!(ordinary_output.height(), 16.0);
 
-    let tab =
-        frame.source_append_render_request(position, FaceId::new(42), base_face, DisplayRowAppendKind::Tab);
+    let tab = frame.source_append_render_request(
+        position,
+        FaceId::new(42),
+        base_face,
+        DisplayRowAppendKind::Tab,
+    );
     let tab_output = tab.output();
     let tab = tab.row_request();
     assert_eq!(tab.render_bounds().max_x(), DisplayRowMaxX::Unbounded);
@@ -5597,7 +5625,10 @@ fn display_row_append_frame_builds_positioned_source_append_render_request() {
         request.render_bounds().max_x(),
         DisplayRowMaxX::Bounded(128.0)
     );
-    assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(FaceId::new(42)));
+    assert_eq!(
+        request.base_face_ref(),
+        RenderFaceRef::FaceId(FaceId::new(42))
+    );
     assert_eq!(request.role(), GlyphRowRole::Text);
     assert_eq!(request.geometry().y(), 20.0);
     assert_eq!(request.geometry().char_width(), 9.0);
@@ -5639,7 +5670,10 @@ fn display_row_append_frame_exposes_source_row_request_through_append_request() 
         request.render_bounds().max_x(),
         DisplayRowMaxX::Bounded(128.0)
     );
-    assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(FaceId::new(42)));
+    assert_eq!(
+        request.base_face_ref(),
+        RenderFaceRef::FaceId(FaceId::new(42))
+    );
     assert_eq!(request.role(), GlyphRowRole::Text);
     assert_eq!(request.geometry().y(), 20.0);
     assert_eq!(request.geometry().char_width(), 9.0);
@@ -5675,7 +5709,10 @@ fn display_row_append_frame_builds_source_measure_request() {
 
     assert_eq!(request.render_bounds().start(), position);
     assert_eq!(request.render_bounds().max_x(), DisplayRowMaxX::Unbounded);
-    assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(FaceId::new(42)));
+    assert_eq!(
+        request.base_face_ref(),
+        RenderFaceRef::FaceId(FaceId::new(42))
+    );
     assert_eq!(request.role(), GlyphRowRole::Text);
     assert_eq!(request.geometry().char_width(), 9.0);
 }
@@ -6003,9 +6040,12 @@ fn resolve_next_display_source_item_returns_item_and_pending_faces() {
             ]),
         }],
     );
-    let mut source =
-        crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(FaceId::new(0)))
-            .expect("string source");
+    let mut source = crate::display_source::LispStringSourceCursor::new(
+        1,
+        value,
+        RenderFaceRef::FaceId(FaceId::new(0)),
+    )
+    .expect("string source");
 
     let resolved = crate::display_source_resolver::resolve_next_display_source_item(
         &mut source,
@@ -6052,9 +6092,12 @@ fn resolve_next_display_source_item_resolves_height_modifier_to_pending_face() {
             ]),
         }],
     );
-    let mut source =
-        crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(FaceId::new(0)))
-            .expect("string source");
+    let mut source = crate::display_source::LispStringSourceCursor::new(
+        1,
+        value,
+        RenderFaceRef::FaceId(FaceId::new(0)),
+    )
+    .expect("string source");
 
     let resolved = crate::display_source_resolver::resolve_next_display_source_item(
         &mut source,
@@ -6111,9 +6154,12 @@ fn display_row_source_walker_reuses_face_cache_across_items() {
             },
         ],
     );
-    let source =
-        crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(FaceId::new(0)))
-            .expect("string source");
+    let source = crate::display_source::LispStringSourceCursor::new(
+        1,
+        value,
+        RenderFaceRef::FaceId(FaceId::new(0)),
+    )
+    .expect("string source");
     let mut source = DisplayRowSourceWalker::new(source);
     let (first, second, third) = {
         let mut next_item = |label: &str| {
@@ -6141,7 +6187,10 @@ fn display_row_source_walker_reuses_face_cache_across_items() {
     assert_eq!(third.face, RenderFaceRef::FaceId(FaceId::new(20)));
     assert_eq!(face_ids.finish(), 21);
     assert_eq!(
-        builder.faces().get(&FaceId::new(20)).map(|face| face.foreground),
+        builder
+            .faces()
+            .get(&FaceId::new(20))
+            .map(|face| face.foreground),
         Some(Color::from_pixel(0x00ff0000))
     );
 }
@@ -6211,7 +6260,10 @@ fn append_lisp_string_to_text_row_appends_propertized_string_items() {
     assert_eq!(end, DisplayRowPosition::new(16.0, 2));
     assert_eq!(face_ids.finish(), 21);
     assert_eq!(
-        builder.faces().get(&FaceId::new(20)).map(|face| face.foreground),
+        builder
+            .faces()
+            .get(&FaceId::new(20))
+            .map(|face| face.foreground),
         Some(Color::from_pixel(0x00ff0000))
     );
     builder
@@ -6272,7 +6324,8 @@ fn lisp_string_append_context_appends_fragment_items() {
         LispStringSourceId::PREFIX,
         Value::string("=>"),
     );
-    let session_request = LispStringSourceAppendSessionRequest::new(request, FaceId::new(0), base_face);
+    let session_request =
+        LispStringSourceAppendSessionRequest::new(request, FaceId::new(0), base_face);
     let end = append_context.render_active_face_source_request_to_text_row_and_emit(
         &mut text_row_source_render_state(
             &mut builder,
@@ -7539,7 +7592,17 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
     let mut face_ids = FrameFaceIdAllocator::new(10);
     let mut font_metrics = None;
     let positions = TextWindowBodyInstallRequest::new(TextWindowBodyInstallRenderContext::new(
-        41, 3, 100, 4, true, false, 0, 5, &row_flags, FaceId::new(9), 8.0,
+        41,
+        3,
+        100,
+        4,
+        true,
+        false,
+        0,
+        5,
+        &row_flags,
+        FaceId::new(9),
+        8.0,
     ))
     .install_and_apply(TextWindowBodyInstallState::new(
         TextWindowOutputTarget::from_builder(&mut builder),
@@ -7792,7 +7855,10 @@ fn buffer_text_window_terminal_right_border_request_pads_blank_rows_and_preserve
     assert_eq!(row_text(0), "ABC$");
     assert_eq!(row_text(1), "    ");
     assert_eq!(row_text(2), "Z   ");
-    assert_eq!(matrix.rows[0].glyphs[GlyphArea::Text.index()][3].face_id, FaceId::new(0));
+    assert_eq!(
+        matrix.rows[0].glyphs[GlyphArea::Text.index()][3].face_id,
+        FaceId::new(0)
+    );
     assert!(
         matrix.rows[1].glyphs[GlyphArea::Text.index()]
             .iter()
@@ -8254,7 +8320,10 @@ fn buffer_text_source_append_context_uses_resolved_item_face_for_fragment_base()
             assert_eq!(text[0].face_id, FaceId::new(32));
         })
         .expect("current row");
-    let face = builder.faces().get(&FaceId::new(32)).expect("item face installed");
+    let face = builder
+        .faces()
+        .get(&FaceId::new(32))
+        .expect("item face installed");
     assert_eq!(face.foreground, Color::from_pixel(0x0051afef));
     assert_eq!(face.background, Color::from_pixel(0x00282c34));
     assert!(!face.use_default_background);
@@ -9148,7 +9217,8 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
         LispStringSourceId::OVERLAY_STRING,
         Value::string("a\nb"),
     );
-    let session_request = LispStringSourceAppendSessionRequest::new(request, FaceId::new(7), base_face);
+    let session_request =
+        LispStringSourceAppendSessionRequest::new(request, FaceId::new(7), base_face);
     let row_session_request = LispStringSourceRowAppendSessionRequest::new(
         session_request,
         &surface,
@@ -9348,7 +9418,11 @@ impl DisplayRowRenderPolicy for SourceMappedTextWidthByFace {
         let DisplayItemKind::SourceMappedText(text) = &item.kind else {
             return DisplayRowItemMeasurement::Default;
         };
-        let advance_px = if face_id == FaceId::new(20) { 13.0 } else { 11.0 };
+        let advance_px = if face_id == FaceId::new(20) {
+            13.0
+        } else {
+            11.0
+        };
         let advances = text
             .text
             .char_indices()
@@ -9428,8 +9502,12 @@ fn display_replacement_string_append_item_measures_source_text_from_active_face(
         DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("abc")),
     );
 
-    let measurement =
-        item.measurement_from_active_face(&active_face, &source_item, FaceId::new(7), &mut font_metrics);
+    let measurement = item.measurement_from_active_face(
+        &active_face,
+        &source_item,
+        FaceId::new(7),
+        &mut font_metrics,
+    );
 
     let DisplayRowItemMeasurement::TextRun(measurement) = measurement else {
         panic!("replacement string text should use a direct text-run measurement");
@@ -10452,7 +10530,10 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
     assert_eq!(end, DisplayRowPosition::new(24.0, 2));
     assert_eq!(face_ids.finish(), 21);
     assert_eq!(
-        builder.faces().get(&FaceId::new(20)).map(|face| face.foreground),
+        builder
+            .faces()
+            .get(&FaceId::new(20))
+            .map(|face| face.foreground),
         Some(Color::from_pixel(0x00ff0000))
     );
     builder

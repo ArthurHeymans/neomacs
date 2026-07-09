@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_output_install_request::OutputFrameStateInstallRequest;
 use crate::display_output_row_request::OutputRowLifecycleRequest;
@@ -7,6 +6,7 @@ use crate::display_row_face_state::resolved_display_row_face;
 use crate::font_metrics::FontMetrics;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::glyph_matrix::GlyphRow;
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::Rect;
 
 pub(crate) struct DisplayRowOutputInstall<'a> {

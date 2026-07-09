@@ -1,7 +1,7 @@
-use neomacs_display_protocol::types::FaceId;
 use super::*;
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow, GlyphType};
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, Rect};
 
 fn push_text(row: &mut neomacs_display_protocol::glyph_matrix::GlyphRow, text: &str) {

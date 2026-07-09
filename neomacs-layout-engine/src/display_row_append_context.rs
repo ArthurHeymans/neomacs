@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use crate::composition::{
     base_width_cols, continues_cluster, continues_complex_run, last_text_cluster_tail_in_glyphs,
 };
@@ -13,6 +12,7 @@ use crate::font_metrics::FontMetricsService;
 use crate::neovm_bridge::ResolvedFace;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::Glyph;
+use neomacs_display_protocol::types::FaceId;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct DisplayRowAppendPlacement {

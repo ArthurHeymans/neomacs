@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_row_append_context::{
@@ -27,6 +26,7 @@ use crate::display_source_item_append::{
     DisplaySourceTextCharAppendPlan, DisplaySourceTextCharPreparedAppend,
 };
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace};
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::BufferId;
 
 #[derive(Clone, Copy, Debug, PartialEq)]

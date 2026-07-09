@@ -9,10 +9,10 @@
 //!   --gui       Render via wgpu GPU window instead of TTY
 //!   --dump      Dump grid as plain text (no terminal setup)
 
-use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::face::{Face, FaceAttributes};
 use neomacs_display_protocol::glyph_matrix::*;
 use neomacs_display_protocol::tty_rif::TtyRif;
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, Rect};
 use neomacs_layout_engine::engine::LayoutEngine;
 use neomacs_layout_engine::mock_frame::{
@@ -290,9 +290,15 @@ fn scratch_buffer_lines() -> Vec<(&'static str, FaceId)> {
         ("(setq neomacs-version \"0.1.0\")", FaceId::new(0)),
         ("(setq display-pipeline 'glyph-matrix)", FaceId::new(0)),
         ("", FaceId::new(0)),
-        (";; GNU Emacs compatible glyph matrix model", FaceId::new(12)),
+        (
+            ";; GNU Emacs compatible glyph matrix model",
+            FaceId::new(12),
+        ),
         (";; TTY rendering via TtyRif", FaceId::new(12)),
-        (";; Single-thread, no channel, matching GNU", FaceId::new(12)),
+        (
+            ";; Single-thread, no channel, matching GNU",
+            FaceId::new(12),
+        ),
         ("", FaceId::new(0)),
         ("", FaceId::new(0)),
         ("", FaceId::new(0)),
@@ -307,7 +313,10 @@ fn scratch_buffer_lines() -> Vec<(&'static str, FaceId)> {
 fn messages_buffer_lines() -> Vec<(&'static str, FaceId)> {
     vec![
         ("Loading /usr/share/emacs/site-lisp/...", FaceId::new(0)),
-        ("For information about GNU Emacs, type C-h C-a.", FaceId::new(0)),
+        (
+            "For information about GNU Emacs, type C-h C-a.",
+            FaceId::new(0),
+        ),
         ("Starting new Emacs daemon...", FaceId::new(0)),
         ("Loaded custom theme 'modus-vivendi'", FaceId::new(4)),
         ("Loading org-mode...done", FaceId::new(0)),
@@ -479,7 +488,10 @@ fn build_vsplit(
             MockWindowContent {
                 window_id: 1,
                 lines: scratch,
-                mode_line: MockStyledLine::from_str(&format!("{}|{}", ml_left, ml_right), FaceId::new(1)),
+                mode_line: MockStyledLine::from_str(
+                    &format!("{}|{}", ml_left, ml_right),
+                    FaceId::new(1),
+                ),
                 pixel_bounds: Rect::new(
                     0.,
                     0.,
@@ -546,7 +558,10 @@ fn build_triple(
             MockWindowContent {
                 window_id: 1,
                 lines: scratch,
-                mode_line: MockStyledLine::from_str(" -:**-  *scratch*      (Lisp Interaction)", FaceId::new(1)),
+                mode_line: MockStyledLine::from_str(
+                    " -:**-  *scratch*      (Lisp Interaction)",
+                    FaceId::new(1),
+                ),
                 pixel_bounds: Rect::new(0., 0., left_cols as f32 * char_w, (r - 2) as f32 * char_h),
                 selected: true,
                 truncated_lines: false,
@@ -554,7 +569,10 @@ fn build_triple(
             MockWindowContent {
                 window_id: 2,
                 lines: messages,
-                mode_line: MockStyledLine::from_str(" -:---  *Messages*     (Messages)", FaceId::new(1)),
+                mode_line: MockStyledLine::from_str(
+                    " -:---  *Messages*     (Messages)",
+                    FaceId::new(1),
+                ),
                 pixel_bounds: Rect::new(
                     rx,
                     0.,
@@ -567,7 +585,10 @@ fn build_triple(
             MockWindowContent {
                 window_id: 3,
                 lines: help,
-                mode_line: MockStyledLine::from_str(" -:---  *Help*         (Help)", FaceId::new(1)),
+                mode_line: MockStyledLine::from_str(
+                    " -:---  *Help*         (Help)",
+                    FaceId::new(1),
+                ),
                 pixel_bounds: Rect::new(
                     rx,
                     right_half as f32 * char_h,
@@ -626,7 +647,10 @@ fn build_default(
     let cf_h = (cf_rows as f32 + 2.0) * char_h;
     let cf_y = (top_text as f32 - (cf_rows as f32 + 2.0)) * 0.5 * char_h;
     let title_str = format!(" {:-<w$}", "Completions ", w = cf_cols.saturating_sub(1));
-    let mut cf_lines = vec![MockStyledLine::from_str(&" ".repeat(cf_cols), FaceId::new(9))];
+    let mut cf_lines = vec![MockStyledLine::from_str(
+        &" ".repeat(cf_cols),
+        FaceId::new(9),
+    )];
     cf_lines.push(MockStyledLine::from_str(&title_str, FaceId::new(11)));
     let items = [
         "  describe-function     ",
@@ -641,7 +665,14 @@ fn build_default(
         "  describe-package      ",
     ];
     for (i, item) in items.iter().enumerate() {
-        cf_lines.push(MockStyledLine::from_str(item, if i == 2 { FaceId::new(10) } else { FaceId::new(9) }));
+        cf_lines.push(MockStyledLine::from_str(
+            item,
+            if i == 2 {
+                FaceId::new(10)
+            } else {
+                FaceId::new(9)
+            },
+        ));
     }
 
     MockFrameContent {
@@ -651,7 +682,10 @@ fn build_default(
             MockWindowContent {
                 window_id: 1,
                 lines: scratch,
-                mode_line: MockStyledLine::from_str(" -:**-  *scratch*      (Lisp Interaction)", FaceId::new(1)),
+                mode_line: MockStyledLine::from_str(
+                    " -:**-  *scratch*      (Lisp Interaction)",
+                    FaceId::new(1),
+                ),
                 pixel_bounds: Rect::new(
                     0.,
                     0.,
@@ -664,7 +698,10 @@ fn build_default(
             MockWindowContent {
                 window_id: 2,
                 lines: messages,
-                mode_line: MockStyledLine::from_str(" -:---  *Messages*     (Messages)", FaceId::new(1)),
+                mode_line: MockStyledLine::from_str(
+                    " -:---  *Messages*     (Messages)",
+                    FaceId::new(1),
+                ),
                 pixel_bounds: Rect::new(
                     rx,
                     0.,
@@ -677,7 +714,10 @@ fn build_default(
             MockWindowContent {
                 window_id: 3,
                 lines: help,
-                mode_line: MockStyledLine::from_str(" -:---  *Help*         (Help)", FaceId::new(1)),
+                mode_line: MockStyledLine::from_str(
+                    " -:---  *Help*         (Help)",
+                    FaceId::new(1),
+                ),
                 pixel_bounds: Rect::new(
                     0.,
                     top_half as f32 * char_h,
@@ -728,7 +768,21 @@ fn build_faces() -> HashMap<FaceId, Face> {
     use neomacs_display_protocol::gradient::{ColorStop, Gradient};
 
     let mut f = HashMap::new();
-    f.insert(FaceId::new(0), mk(FaceId::new(0), 0.87, 0.87, 0.87, 0.0, 0.0, 0.0, 400, false, None));
+    f.insert(
+        FaceId::new(0),
+        mk(
+            FaceId::new(0),
+            0.87,
+            0.87,
+            0.87,
+            0.0,
+            0.0,
+            0.0,
+            400,
+            false,
+            None,
+        ),
+    );
 
     // Face 1: Mode-line with noise gradient, black foreground
     let mode_line_gradient = Some(Box::new(Gradient::Noise {
@@ -754,7 +808,21 @@ fn build_faces() -> HashMap<FaceId, Face> {
     );
 
     // Face 2: Line numbers — gutter style
-    f.insert(FaceId::new(2), mk(FaceId::new(2), 0.2, 0.65, 0.75, 0.0, 0.04, 0.06, 300, true, None));
+    f.insert(
+        FaceId::new(2),
+        mk(
+            FaceId::new(2),
+            0.2,
+            0.65,
+            0.75,
+            0.0,
+            0.04,
+            0.06,
+            300,
+            true,
+            None,
+        ),
+    );
 
     // Face 3: Comments with radial gradient
     let comment_gradient = Some(Box::new(Gradient::Radial {
@@ -799,15 +867,65 @@ fn build_faces() -> HashMap<FaceId, Face> {
     }));
     f.insert(
         FaceId::new(4),
-        mk(FaceId::new(4), 0.4, 0.9, 0.4, 0.0, 0.0, 0.0, 400, false, string_gradient),
+        mk(
+            FaceId::new(4),
+            0.4,
+            0.9,
+            0.4,
+            0.0,
+            0.0,
+            0.0,
+            400,
+            false,
+            string_gradient,
+        ),
     );
 
-    f.insert(FaceId::new(5), mk(FaceId::new(5), 0.4, 0.7, 0.7, 0.0, 0.0, 0.0, 400, true, None));
+    f.insert(
+        FaceId::new(5),
+        mk(
+            FaceId::new(5),
+            0.4,
+            0.7,
+            0.7,
+            0.0,
+            0.0,
+            0.0,
+            400,
+            true,
+            None,
+        ),
+    );
     f.insert(
         FaceId::new(6),
-        mk(FaceId::new(6), 0.87, 0.87, 0.87, 0.15, 0.15, 0.15, 400, false, None),
+        mk(
+            FaceId::new(6),
+            0.87,
+            0.87,
+            0.87,
+            0.15,
+            0.15,
+            0.15,
+            400,
+            false,
+            None,
+        ),
     );
-    f.insert(FaceId::new(7), mk(FaceId::new(7), 0.4, 0.4, 0.4, 0.0, 0.0, 0.0, 400, false, None));
+    f.insert(
+        FaceId::new(7),
+        mk(
+            FaceId::new(7),
+            0.4,
+            0.4,
+            0.4,
+            0.0,
+            0.0,
+            0.0,
+            400,
+            false,
+            None,
+        ),
+    );
 
     // Face 8: Rounded box for key bindings — gray bg, black fg, gold border
     {
@@ -823,18 +941,68 @@ fn build_faces() -> HashMap<FaceId, Face> {
     }
 
     // Faces 9-11: Child-frame backgrounds
-    f.insert(FaceId::new(9), mk(FaceId::new(9), 0.9, 0.9, 0.95, 0.08, 0.08, 0.14, 400, false, None));
+    f.insert(
+        FaceId::new(9),
+        mk(
+            FaceId::new(9),
+            0.9,
+            0.9,
+            0.95,
+            0.08,
+            0.08,
+            0.14,
+            400,
+            false,
+            None,
+        ),
+    );
     f.insert(
         FaceId::new(10),
-        mk(FaceId::new(10), 0.9, 0.9, 0.95, 0.18, 0.22, 0.38, 400, false, None),
+        mk(
+            FaceId::new(10),
+            0.9,
+            0.9,
+            0.95,
+            0.18,
+            0.22,
+            0.38,
+            400,
+            false,
+            None,
+        ),
     );
     f.insert(
         FaceId::new(11),
-        mk(FaceId::new(11), 0.9, 0.9, 0.95, 0.15, 0.20, 0.35, 400, false, None),
+        mk(
+            FaceId::new(11),
+            0.9,
+            0.9,
+            0.95,
+            0.15,
+            0.20,
+            0.35,
+            400,
+            false,
+            None,
+        ),
     );
 
     // Face 12: Comments — warm orange-red italic
-    f.insert(FaceId::new(12), mk(FaceId::new(12), 1.0, 0.5, 0.3, 0.0, 0.0, 0.0, 400, true, None));
+    f.insert(
+        FaceId::new(12),
+        mk(
+            FaceId::new(12),
+            1.0,
+            0.5,
+            0.3,
+            0.0,
+            0.0,
+            0.0,
+            400,
+            true,
+            None,
+        ),
+    );
     f
 }
 

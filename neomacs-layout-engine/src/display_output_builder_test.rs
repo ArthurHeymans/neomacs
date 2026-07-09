@@ -1,8 +1,8 @@
-use neomacs_display_protocol::types::FaceId;
 use super::*;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
 };
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::Rect;
 
 fn write_char_to_current_row(
@@ -68,7 +68,11 @@ fn write_run_member_to_current_row(
         .expect("current row");
 }
 
-fn write_stretch_to_current_row(builder: &mut DisplayOutputBuilder, width_cols: u16, face_id: FaceId) {
+fn write_stretch_to_current_row(
+    builder: &mut DisplayOutputBuilder,
+    width_cols: u16,
+    face_id: FaceId,
+) {
     builder
         .edit_current_row_for_test(|row| {
             crate::glyph_row_writer::push_stretch_to_row(row, width_cols, face_id, 0.0, 0.0, 0.0);
@@ -360,7 +364,10 @@ fn builder_install_display_row_preserves_row_and_relative_metrics() {
     let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(1, 3, 80, Rect::new(0.0, 20.0, 640.0, 60.0), true);
 
-    let mut row = external_text_row(GlyphRowRole::Text, vec![Glyph::char('z', FaceId::new(7), 42)]);
+    let mut row = external_text_row(
+        GlyphRowRole::Text,
+        vec![Glyph::char('z', FaceId::new(7), 42)],
+    );
     row.pixel_y = 44.0;
     row.height_px = 18.0;
     row.ascent_px = 13.0;
@@ -402,7 +409,10 @@ fn builder_status_line_empty_row_when_no_chars_pushed() {
 #[test]
 fn builder_display_row_without_window_is_noop() {
     let mut builder = DisplayOutputBuilder::new();
-    let row = external_text_row(GlyphRowRole::ModeLine, vec![Glyph::char('x', FaceId::new(0), 0)]);
+    let row = external_text_row(
+        GlyphRowRole::ModeLine,
+        vec![Glyph::char('x', FaceId::new(0), 0)],
+    );
     builder.install_display_row(0, &row);
     let state = builder.finish(80, 24, 8.0, 16.0);
     assert!(state.window_matrices.is_empty());
@@ -1033,7 +1043,10 @@ fn builder_reorders_status_line_rtl_row() {
 
     let row = external_text_row(
         GlyphRowRole::ModeLine,
-        vec![Glyph::char('א', FaceId::new(5), 0), Glyph::char('ב', FaceId::new(5), 1)],
+        vec![
+            Glyph::char('א', FaceId::new(5), 0),
+            Glyph::char('ב', FaceId::new(5), 1),
+        ],
     );
     builder.install_display_row(1, &row);
     builder.end_window();
@@ -1072,7 +1085,10 @@ fn rtl_text_and_chrome_rows_reorder_identically() {
     // Row 1 — ModeLine chrome row copied into the matrix row.
     let chrome = external_text_row(
         GlyphRowRole::ModeLine,
-        vec![Glyph::char('א', FaceId::new(5), 0), Glyph::char('ב', FaceId::new(5), 1)],
+        vec![
+            Glyph::char('א', FaceId::new(5), 0),
+            Glyph::char('ב', FaceId::new(5), 1),
+        ],
     );
     builder.install_display_row(1, &chrome);
     builder.end_window();

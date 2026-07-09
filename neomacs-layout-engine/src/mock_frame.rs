@@ -5,8 +5,8 @@
 //! `neomacs-layout-engine/src/engine.rs: layout_mock_frame()`.  The real
 //! neomacs GUI pipeline goes through `layout_frame_rust(evaluator)` instead.
 
-use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::face::Face;
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, Rect};
 
 /// A single glyph with its face assignment and display property.

@@ -5,7 +5,6 @@
 //! while simultaneously recording immutable row snapshots for renderer
 //! handoff.
 
-use neomacs_display_protocol::types::FaceId;
 use super::display_status_line::{
     ChromeRowRenderServices, DisplayRowOutputProgress, WindowChromeMeasuredHeights,
     WindowChromeRowsRenderRequest, WindowChromeRowsRenderState,
@@ -48,6 +47,7 @@ use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, DisplaySlotId, GlyphRowRole, PhysCursor,
 };
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, DisplayWindowId, Rect};
 use neovm_core::buffer::{EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;

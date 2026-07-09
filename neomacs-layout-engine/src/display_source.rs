@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use crate::display_item::{
     BufferDisplayReplacementSource, DisplayGlyphless, DisplayItem, DisplayItemKind,
     DisplayItemLayout, DisplayLength, DisplayMediaReplacement, DisplayRowBreak,
@@ -20,6 +19,7 @@ use crate::display_spec::{DisplaySpaceKey, display_space_positive_number};
 use crate::neovm_bridge::LayoutBufferView;
 use crate::types::WindowParams;
 use crate::unicode::decode_utf8;
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{
     BufferId, CharLen, CharPos0, EmacsBytePos, text_props::TextPropertyTable,
 };

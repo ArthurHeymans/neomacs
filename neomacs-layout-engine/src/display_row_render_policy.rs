@@ -1,7 +1,7 @@
-use neomacs_display_protocol::types::FaceId;
 use crate::display_item::DisplayItem;
 use crate::display_row_builder::DisplayRowItemMeasurement;
 use crate::font_metrics::FontMetricsService;
+use neomacs_display_protocol::types::FaceId;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum DisplayRowRenderClipBehavior {

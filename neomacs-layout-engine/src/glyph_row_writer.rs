@@ -1,6 +1,6 @@
-use neomacs_display_protocol::types::FaceId;
 use crate::bidi::{self, BidiDir};
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
+use neomacs_display_protocol::types::FaceId;
 
 #[derive(Clone)]
 struct BidiGlyphUnit {

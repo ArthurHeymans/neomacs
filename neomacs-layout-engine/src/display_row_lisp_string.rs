@@ -1,4 +1,3 @@
-use neomacs_display_protocol::types::FaceId;
 use crate::display_face_id::FrameFaceIdAllocator;
 #[cfg(test)]
 use crate::display_face_policy::BaseFacePolicy;
@@ -27,6 +26,7 @@ use crate::display_source_resolver::PendingDisplaySourceFace;
 #[cfg(test)]
 use crate::display_text_output_install::install_output_resolved_face;
 use crate::neovm_bridge::{LayoutBufferView, ResolvedFace, RustTextPropAccess};
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::CharPos0;
 use neovm_core::emacs_core::Value;
 

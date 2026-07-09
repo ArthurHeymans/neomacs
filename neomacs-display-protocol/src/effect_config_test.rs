@@ -1,5 +1,5 @@
-use crate::types::FaceId;
 use super::*;
+use crate::types::FaceId;
 use std::time::Duration;
 
 // ── Helper: assert a config is Clone + Debug ───────────────────────

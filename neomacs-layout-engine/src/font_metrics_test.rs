@@ -1612,11 +1612,16 @@ fn realize_frame_fonts_publishes_face_identity_and_table() {
 
     // TTY frames (no service) must stay untouched.
     let mut tty_state = FrameDisplayState::new(80, 24, 1.0, 1.0);
-    tty_state.faces.insert(FaceId::new(0), Face::new(FaceId::new(0)));
+    tty_state
+        .faces
+        .insert(FaceId::new(0), Face::new(FaceId::new(0)));
     let mut no_service: Option<FontMetricsService> = None;
     realize_frame_fonts(&mut tty_state, &mut no_service);
     assert!(tty_state.fonts.is_empty());
-    assert_eq!(tty_state.faces[&FaceId::new(0)].default_resolved_font_id, None);
+    assert_eq!(
+        tty_state.faces[&FaceId::new(0)].default_resolved_font_id,
+        None
+    );
 }
 
 /// Not a pass/fail perf gate (wall-clock asserts flake in CI) — this prints

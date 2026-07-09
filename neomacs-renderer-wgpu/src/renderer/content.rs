@@ -8,7 +8,6 @@
 //! Background, Border, Cursor (all styles with animation), ScrollBar (with rounded
 //! thumbs), Image, Video, WebKit.
 
-use neomacs_display_protocol::types::FaceId;
 use super::super::glyph_atlas::{
     AnyAtlasEntry, ComposedGlyphKey, GlyphKey, SubpixelRequest, WgpuGlyphAtlas, glyph_font_identity,
 };
@@ -21,6 +20,7 @@ use neomacs_display_protocol::face::{BoxType, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, FrameGlyph, FrameGlyphBuffer, MaterializedFaceData,
 };
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{AnimatedCursor, Color};
 use std::collections::HashSet;
 

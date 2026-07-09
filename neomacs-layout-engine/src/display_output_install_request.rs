@@ -1,6 +1,5 @@
 //! Typed output install requests consumed by `DisplayOutputBuilder`.
 
-use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
@@ -8,6 +7,7 @@ use neomacs_display_protocol::frame_glyphs::{
     WindowTransitionHint,
 };
 use neomacs_display_protocol::glyph_matrix::{CursorItem, FaceFillItem, ScrollBarItem};
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{
     Color, DisplayFrameId, DisplayWindowId, ImageId, Rect, VideoId, XwidgetId,
 };

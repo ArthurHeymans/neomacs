@@ -6,9 +6,9 @@ use crate::core::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 #[cfg(feature = "neo-term")]
 use crate::core::frame_glyphs::{DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole};
 #[cfg(feature = "neo-term")]
-use crate::core::types::{Color, FaceId, Px};
-#[cfg(feature = "neo-term")]
 use crate::core::types::DisplayWindowId;
+#[cfg(feature = "neo-term")]
+use crate::core::types::{Color, FaceId, Px};
 #[cfg(any(
     feature = "neo-term",
     all(feature = "wpe-webkit", wpe_platform_available)

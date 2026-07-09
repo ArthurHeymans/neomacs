@@ -7,9 +7,9 @@
 //! rendered glyph widths — eliminating gaps and overlaps caused by the
 //! C fontconfig and cosmic-text resolving different font files.
 
-use neomacs_display_protocol::types::FaceId;
 use crate::font_loader::FontFileCache;
 use cosmic_text::{Attrs, Buffer, Family, FontSystem, Style, Weight};
+use neomacs_display_protocol::types::FaceId;
 
 /// Safe wrapper around cosmic_text::Metrics that ensures font_size and
 /// line_height are never zero.  cosmic-text panics with "line height

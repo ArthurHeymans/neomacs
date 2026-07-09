@@ -1,6 +1,5 @@
 //! Shared mutable state for buffer text visible-loop rendering.
 
-use neomacs_display_protocol::types::FaceId;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row_append_context::DisplayRowAppendSurface;
@@ -18,6 +17,7 @@ use crate::display_row_walk_state::{
 use crate::display_source_progress::DisplaySourceProgressState;
 use crate::hit_test::HitRow;
 use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::types::FaceId;
 
 pub(crate) struct BufferSourceLoopMutableState<'rows, 'emit, 'surface> {
     pub(crate) invisible_text_checkpoint: &'emit mut InvisibleTextScanCheckpoint,
