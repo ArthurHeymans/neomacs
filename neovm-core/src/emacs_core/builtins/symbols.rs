@@ -295,11 +295,9 @@ pub(crate) fn builtin_default_boundp(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("default-boundp", &args, 1)?;
+    let symbol = SymId::from_value(eval, args[0])?;
     let obarray = eval.obarray();
-    let resolved = resolve_variable_alias_id_in_obarray(
-        obarray,
-        expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?,
-    )?;
+    let resolved = resolve_variable_alias_id_in_obarray(obarray, symbol)?;
     // boundp_id already returns true for BUFFER_OBJFWD slots
     // (Phase 10D), so default-boundp picks that up automatically.
     Ok(Value::bool_val(
@@ -312,8 +310,8 @@ pub(crate) fn builtin_default_toplevel_value(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("default-toplevel-value", &args, 1)?;
+    let symbol = SymId::from_value(eval, args[0])?;
     let obarray = eval.obarray();
-    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
     let resolved = resolve_variable_alias_id_in_obarray(obarray, symbol)?;
     let resolved_name = resolve_sym(resolved);
     match crate::emacs_core::eval::default_toplevel_value_in_state(
@@ -335,7 +333,7 @@ pub(crate) fn builtin_internal_define_uninitialized_variable(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_range_args("internal--define-uninitialized-variable", &args, 1, 2)?;
-    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
+    let symbol = SymId::from_value(eval, args[0])?;
     let documentation = args.get(1).copied().unwrap_or(Value::NIL);
 
     if !eval.obarray().is_special_id(symbol) && eval.lexbound_p_in_specpdl(symbol) {
@@ -373,7 +371,7 @@ pub(crate) fn builtin_set_default_toplevel_value(
     eval: &mut super::eval::Context,
     args: Vec<Value>,
 ) -> EvalResult {
-    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
+    let symbol = SymId::from_value(eval, args[0])?;
     let resolved = resolve_variable_alias_id(eval, symbol)?;
     let value = args[1];
     if let Some(result) = constant_set_outcome_in_obarray(eval.obarray(), resolved, args[0], value)
@@ -394,7 +392,7 @@ pub(crate) fn set_default_toplevel_value_impl(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("set-default-toplevel-value", &args, 2)?;
-    let symbol = expect_symbol_id_checked(&args[0], ctx.symbols_with_pos_enabled)?;
+    let symbol = SymId::from_value(ctx, args[0])?;
     let resolved = resolve_variable_alias_id_in_obarray(&ctx.obarray, symbol)?;
     if let Some(result) = constant_set_outcome_in_obarray(&ctx.obarray, resolved, args[0], args[1])
     {
@@ -458,8 +456,8 @@ pub(crate) fn defvaralias_impl(
     args: Vec<Value>,
 ) -> Result<DefvaraliasStateChange, Flow> {
     expect_range_args("defvaralias", &args, 2, 3)?;
-    let new_symbol = expect_symbol_id_checked(&args[0], ctx.symbols_with_pos_enabled)?;
-    let old_symbol = expect_symbol_id_checked(&args[1], ctx.symbols_with_pos_enabled)?;
+    let new_symbol = SymId::from_value(ctx, args[0])?;
+    let old_symbol = SymId::from_value(ctx, args[1])?;
     let new_name = resolve_sym(new_symbol).to_string();
     if ctx.obarray.is_constant_id(new_symbol) {
         return Err(signal(
@@ -525,7 +523,7 @@ pub(crate) fn builtin_internal_delete_indirect_variable(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("internal-delete-indirect-variable", &args, 1)?;
-    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
+    let symbol = SymId::from_value(eval, args[0])?;
     if !eval.obarray().is_alias_id(symbol) {
         return Err(signal(
             "error",
@@ -706,7 +704,7 @@ pub(crate) fn builtin_set_2(
     symbol_value: Value,
     value: Value,
 ) -> EvalResult {
-    let symbol = expect_symbol_id_checked(&symbol_value, eval.symbols_with_pos_enabled)?;
+    let symbol = SymId::from_value(eval, symbol_value)?;
     let resolved = resolve_variable_alias_id(eval, symbol)?;
     if let Some(result) =
         constant_set_outcome_in_obarray(eval.obarray(), resolved, symbol_value, value)
@@ -735,7 +733,7 @@ pub(crate) fn builtin_fset_2(
     symbol_value: Value,
     def: Value,
 ) -> EvalResult {
-    let symbol = expect_symbol_id_checked(&symbol_value, eval.symbols_with_pos_enabled)?;
+    let symbol = SymId::from_value(eval, symbol_value)?;
     if symbol == intern("nil") && !def.is_nil() {
         return Err(signal(
             LispCondition::SettingConstant,
@@ -804,7 +802,7 @@ pub(crate) fn would_create_function_alias_cycle_in_obarray(
 
 pub(crate) fn builtin_makunbound(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("makunbound", &args, 1)?;
-    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
+    let symbol = SymId::from_value(eval, args[0])?;
     let resolved = resolve_variable_alias_id(eval, symbol)?;
     if eval.obarray().is_constant_id(resolved) {
         return Err(signal(LispCondition::SettingConstant, vec![args[0]]));
@@ -817,7 +815,7 @@ pub(crate) fn builtin_makunbound(eval: &mut super::eval::Context, args: Vec<Valu
 
 pub(crate) fn builtin_defvar_1(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_range_args("defvar-1", &args, 2, 3)?;
-    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
+    let symbol = SymId::from_value(eval, args[0])?;
     let documentation = args.get(2).copied().unwrap_or(Value::NIL);
     let was_bound = builtin_default_boundp(eval, vec![args[0]])?.is_truthy();
 
@@ -836,7 +834,7 @@ pub(crate) fn builtin_defvar_1(eval: &mut super::eval::Context, args: Vec<Value>
 
 pub(crate) fn builtin_defconst_1(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_range_args("defconst-1", &args, 2, 3)?;
-    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
+    let symbol = SymId::from_value(eval, args[0])?;
     let documentation = args.get(2).copied().unwrap_or(Value::NIL);
 
     if documentation.is_nil() {
@@ -855,7 +853,7 @@ pub(crate) fn builtin_defconst_1(eval: &mut super::eval::Context, args: Vec<Valu
 
 pub(crate) fn builtin_fmakunbound(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("fmakunbound", &args, 1)?;
-    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
+    let symbol = SymId::from_value(eval, args[0])?;
     if symbol == intern("nil") || symbol == intern("t") {
         return Err(signal(LispCondition::SettingConstant, vec![args[0]]));
     }
@@ -977,7 +975,7 @@ pub(crate) fn builtin_symbol_plist_fn(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("symbol-plist", &args, 1)?;
-    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
+    let symbol = SymId::from_value(eval, args[0])?;
     Ok(eval.obarray().symbol_plist_id(symbol))
 }
 
@@ -1116,7 +1114,7 @@ pub(super) fn builtin_register_ccl_program(
 
 pub(crate) fn builtin_setplist(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_args("setplist", &args, 2)?;
-    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
+    let symbol = SymId::from_value(eval, args[0])?;
     let plist = args[1];
     eval.obarray_mut().set_symbol_plist_id(symbol, plist);
     Ok(plist)
@@ -4190,7 +4188,7 @@ pub(crate) fn builtin_variable_binding_locus(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("variable-binding-locus", &args, 1)?;
-    let symbol = expect_symbol_id_checked(&args[0], ctx.symbols_with_pos_enabled)?;
+    let symbol = SymId::from_value(ctx, args[0])?;
     let resolved = resolve_variable_alias_id_in_obarray(&ctx.obarray, symbol)?;
 
     use crate::emacs_core::symbol::SymbolRedirect;
@@ -4711,7 +4709,7 @@ pub(crate) fn builtin_local_variable_if_set_p(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_range_args("local-variable-if-set-p", &args, 1, 2)?;
-    let symbol = expect_symbol_id_checked(&args[0], ctx.symbols_with_pos_enabled)?;
+    let symbol = SymId::from_value(ctx, args[0])?;
     let resolved_id = resolve_variable_alias_id_in_obarray(&ctx.obarray, symbol)?;
     // Mirror the GNU switch on `sym->u.s.redirect` at
     // src/data.c:2445-2461 exactly. PLAINVAL short-circuits to nil
@@ -5096,7 +5094,7 @@ pub(crate) fn builtin_internal_event_symbol_parse_modifiers(
     args: Vec<Value>,
 ) -> EvalResult {
     expect_args("internal-event-symbol-parse-modifiers", &args, 1)?;
-    let symbol = expect_symbol_id_checked(&args[0], eval.symbols_with_pos_enabled)?;
+    let symbol = SymId::from_value(eval, args[0])?;
     cache_event_symbol_properties_in_obarray(eval.obarray_mut(), symbol)?;
     Ok(eval
         .obarray()
