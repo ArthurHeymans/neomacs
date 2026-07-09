@@ -509,12 +509,6 @@ pub(crate) fn builtin_secure_hash_algorithms(args: Vec<Value>) -> EvalResult {
     ]))
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_symbol_name(args: Vec<Value>) -> EvalResult {
-    expect_args("symbol-name", &args, 1)?;
-    builtin_symbol_name_value(args[0], false)
-}
-
 pub(crate) fn builtin_symbol_name_1(eval: &mut super::eval::Context, symbol: Value) -> EvalResult {
     builtin_symbol_name_value(symbol, eval.symbols_with_pos_enabled)
 }
@@ -531,12 +525,6 @@ fn builtin_symbol_name_value(symbol: Value, symbols_with_pos_enabled: bool) -> E
             vec![Value::symbol("symbolp"), symbol],
         )),
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_make_symbol(args: Vec<Value>) -> EvalResult {
-    expect_args("make-symbol", &args, 1)?;
-    make_symbol_value(args[0])
 }
 
 pub(crate) fn builtin_make_symbol_1(_eval: &mut super::eval::Context, arg: Value) -> EvalResult {

@@ -43,17 +43,6 @@ pub(crate) fn builtin_run_hook_wrapped(
     hook_runtime::run_named_hook_wrapped(eval, &args)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_run_hook_query_error_with_timeout(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("run-hook-query-error-with-timeout", &args, 1)?;
-    let hook_sym = hook_runtime::resolve_hook_symbol(eval, args[0])?;
-    let hook_value = hook_runtime::hook_value_by_id(eval, hook_sym).unwrap_or(Value::NIL);
-    hook_runtime::run_hook_query_error_with_timeout(eval, hook_sym, hook_value)
-}
-
 fn expect_optional_live_frame_designator(
     value: &Value,
     eval: &super::eval::Context,

@@ -2228,33 +2228,9 @@ pub(crate) fn builtin_remember_mouse_glyph(
 // image.c gap-fill stubs
 // =========================================================================
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_lookup_image(args: Vec<Value>) -> EvalResult {
-    expect_args("lookup-image", &args, 1)?;
-    Ok(Value::NIL)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_imagemagick_types(args: Vec<Value>) -> EvalResult {
-    expect_args("imagemagick-types", &args, 0)?;
-    Ok(Value::NIL)
-}
-
 // =========================================================================
 // font.c gap-fill stubs
 // =========================================================================
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_font_drive_otf(args: Vec<Value>) -> EvalResult {
-    expect_args("font-drive-otf", &args, 6)?;
-    Ok(Value::NIL)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_font_otf_alternates(args: Vec<Value>) -> EvalResult {
-    expect_args("font-otf-alternates", &args, 3)?;
-    Ok(Value::NIL)
-}
 
 // =========================================================================
 // emacs.c / version.c gap-fill stubs for loadup.el

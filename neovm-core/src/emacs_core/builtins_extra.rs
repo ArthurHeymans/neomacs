@@ -548,12 +548,6 @@ pub(crate) fn builtin_byte_code_function_p(args: Vec<Value>) -> EvalResult {
 }
 
 /// `(compiled-function-p OBJ)` -> t if compiled function.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_compiled_function_p(args: Vec<Value>) -> EvalResult {
-    expect_args("compiled-function-p", &args, 1)?;
-    Ok(Value::bool_val(args[0].is_bytecode()))
-}
-
 /// `(closurep OBJ)` -> t if closure.
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_closurep(args: Vec<Value>) -> EvalResult {

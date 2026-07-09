@@ -1897,12 +1897,6 @@ pub(crate) fn builtin_minibuffer_innermost_command_loop_p(args: Vec<Value>) -> E
     Ok(Value::NIL)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_minibuffer_prompt_end(args: Vec<Value>) -> EvalResult {
-    expect_args("minibuffer-prompt-end", &args, 0)?;
-    Ok(Value::fixnum(1))
-}
-
 pub(crate) fn builtin_next_frame(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
     expect_range_args("next-frame", &args, 0, 2)?;
     if let Some(frame) = args.first() {
@@ -3187,12 +3181,6 @@ pub(crate) fn builtin_record(args: Vec<Value>) -> EvalResult {
         ));
     }
     Ok(Value::make_record(args))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_recordp(args: Vec<Value>) -> EvalResult {
-    expect_args("recordp", &args, 1)?;
-    Ok(Value::bool_val(args[0].is_record()))
 }
 
 pub(crate) fn builtin_recordp_1(_eval: &mut super::eval::Context, arg: Value) -> EvalResult {
@@ -5899,12 +5887,6 @@ pub(crate) fn builtin_dump_emacs_portable_sort_predicate(args: Vec<Value>) -> Ev
 
 pub(crate) fn builtin_dump_emacs_portable_sort_predicate_copied(args: Vec<Value>) -> EvalResult {
     expect_args("dump-emacs-portable--sort-predicate-copied", &args, 2)?;
-    Ok(Value::NIL)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_byte_code(args: Vec<Value>) -> EvalResult {
-    expect_args("byte-code", &args, 3)?;
     Ok(Value::NIL)
 }
 

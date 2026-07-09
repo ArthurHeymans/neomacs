@@ -10318,26 +10318,7 @@ pub(crate) fn builtin_isearch_process_search_char(
 }
 
 /// (isearch-process-search-string STRING MESSAGE) -> nil
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_isearch_process_search_string(
-    _eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("isearch-process-search-string", &args, 2)?;
-    Ok(Value::NIL)
-}
-
 /// (minibuffer--sort-preprocess-history HISTORY) -> nil
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_minibuffer_sort_preprocess_history(
-    _eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("minibuffer--sort-preprocess-history", &args, 1)?;
-    expect_sequence(&args[0])?;
-    Ok(Value::NIL)
-}
-
 /// (print--preprocess OBJECT) -> nil
 ///
 /// Extracts sharing info from OBJECT needed to print it: fills the
@@ -10394,68 +10375,11 @@ pub(crate) fn builtin_print_preprocess(
 }
 
 /// (syntax-propertize--in-process-p) -> nil
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_syntax_propertize_in_process_p(
-    _eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("syntax-propertize--in-process-p", &args, 0)?;
-    Ok(Value::NIL)
-}
-
 /// (window--adjust-process-windows) -> nil
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_window_adjust_process_windows(
-    _eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("window--adjust-process-windows", &args, 0)?;
-    Ok(Value::NIL)
-}
-
 /// (window--process-window-list) -> nil
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_window_process_window_list(
-    _eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("window--process-window-list", &args, 0)?;
-    Ok(Value::NIL)
-}
-
 /// (window-adjust-process-window-size PROCESS WINDOW) -> nil
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_window_adjust_process_window_size(
-    _eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("window-adjust-process-window-size", &args, 2)?;
-    expect_list(&args[1])?;
-    Ok(Value::NIL)
-}
-
 /// (window-adjust-process-window-size-largest PROCESS WINDOW) -> nil
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_window_adjust_process_window_size_largest(
-    _eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("window-adjust-process-window-size-largest", &args, 2)?;
-    expect_list(&args[1])?;
-    Ok(Value::NIL)
-}
-
 /// (window-adjust-process-window-size-smallest PROCESS WINDOW) -> nil
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_window_adjust_process_window_size_smallest(
-    _eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("window-adjust-process-window-size-smallest", &args, 2)?;
-    expect_list(&args[1])?;
-    Ok(Value::NIL)
-}
-
 /// (format-network-address ADDRESS &optional OMIT-PORT) -> string-or-nil
 pub(crate) fn builtin_format_network_address(
     _eval: &mut super::eval::Context,
@@ -15193,12 +15117,6 @@ pub(crate) fn builtin_set_process_window_size_impl(
 }
 
 /// (process-kill-buffer-query-function) -> bool
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_process_kill_buffer_query_function(args: Vec<Value>) -> EvalResult {
-    expect_args("process-kill-buffer-query-function", &args, 0)?;
-    Ok(Value::T)
-}
-
 /// (process-menu-delete-process) -> nil
 #[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
 pub(crate) fn builtin_process_menu_delete_process(
@@ -15227,19 +15145,6 @@ pub(crate) fn builtin_process_menu_delete_process(
 }
 
 /// (process-menu-visit-buffer LINE) -> nil
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_process_menu_visit_buffer(
-    _eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("process-menu-visit-buffer", &args, 1)?;
-    let _line = expect_int_or_marker(&args[0])?;
-    Err(signal(
-        LispCondition::WrongTypeArgument,
-        vec![Value::symbol("stringp"), Value::NIL],
-    ))
-}
-
 /// (process-tty-name PROCESS &optional STREAM) -> string-or-nil
 pub(crate) fn builtin_process_tty_name(
     eval: &mut super::eval::Context,

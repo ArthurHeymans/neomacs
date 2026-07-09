@@ -3685,12 +3685,6 @@ fn self_insert_should_auto_fill(eval: &Context, ch: char) -> bool {
 }
 
 /// `(keyboard-quit)` -- cancel the current command sequence.
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_keyboard_quit(_eval: &mut Context, args: Vec<Value>) -> EvalResult {
-    expect_args("keyboard-quit", &args, 0)?;
-    Err(signal(LispCondition::Quit, vec![]))
-}
-
 /// `(key-binding KEY &optional ACCEPT-DEFAULTS NO-REMAP POSITION)`
 /// Return the binding for KEY in the current keymaps.
 pub(crate) fn builtin_key_binding(eval: &mut Context, args: Vec<Value>) -> EvalResult {

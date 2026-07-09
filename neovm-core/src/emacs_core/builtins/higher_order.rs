@@ -168,11 +168,6 @@ fn apply1(eval: &mut super::eval::Context, func: Value, arg: Value) -> EvalResul
     args.push(arg);
     eval.apply(func, args)
 }
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_apply(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    builtin_apply_slice(eval, &args)
-}
-
 pub(crate) fn builtin_apply_slice(eval: &mut super::eval::Context, args: &[Value]) -> EvalResult {
     // GNU eval.c Fapply: with one argument, the argument itself is the spread
     // list.  Its first element is the function and the remaining elements are
@@ -236,25 +231,12 @@ pub(crate) fn builtin_apply_slice(eval: &mut super::eval::Context, args: &[Value
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_funcall(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    builtin_funcall_slice(eval, &args)
-}
-
 pub(crate) fn builtin_funcall_slice(eval: &mut super::eval::Context, args: &[Value]) -> EvalResult {
     expect_min_args("funcall", args, 1)?;
     let func = args[0];
     let mut call_args = LispArgVec::new();
     call_args.extend_from_slice(&args[1..]);
     eval.apply_from_lisp_funcall(func, call_args)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_funcall_interactively(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    builtin_funcall_interactively_slice(eval, &args)
 }
 
 pub(crate) fn builtin_funcall_interactively_slice(
@@ -346,17 +328,6 @@ where
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_mapcar(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    if args.len() != 2 {
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol("mapcar"), Value::fixnum(args.len() as i64)],
-        ));
-    }
-    builtin_mapcar_2(eval, args[0], args[1])
-}
-
 pub(crate) fn builtin_mapcar_2(
     eval: &mut super::eval::Context,
     func: Value,
@@ -383,17 +354,6 @@ pub(crate) fn builtin_mapcar_2(
     let result_list = list_from_map_results(eval, &results);
     eval.restore_vm_roots(roots);
     Ok(result_list)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_mapc(eval: &mut super::eval::Context, args: Vec<Value>) -> EvalResult {
-    if args.len() != 2 {
-        return Err(signal(
-            LispCondition::WrongNumberOfArguments,
-            vec![Value::symbol("mapc"), Value::fixnum(args.len() as i64)],
-        ));
-    }
-    builtin_mapc_2(eval, args[0], args[1])
 }
 
 pub(crate) fn builtin_mapc_2(

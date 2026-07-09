@@ -184,15 +184,6 @@ pub(crate) fn builtin_inotify_watch_list(args: Vec<Value>) -> EvalResult {
     })
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_inotify_allocated_p(args: Vec<Value>) -> EvalResult {
-    expect_args("inotify-allocated-p", &args, 0)?;
-    FILE_NOTIFY_STATE.with(|slot| {
-        let state = slot.borrow();
-        Ok(Value::bool_val(state.backend.allocated_p()))
-    })
-}
-
 pub(crate) fn builtin_inotify_valid_p(args: Vec<Value>) -> EvalResult {
     expect_args("inotify-valid-p", &args, 1)?;
     let Some(descriptor) = extract_valid_watch_descriptor(args[0]) else {

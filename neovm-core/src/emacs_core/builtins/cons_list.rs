@@ -6,12 +6,6 @@ use malachite::integer::Integer;
 // Cons / List operations
 // ===========================================================================
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_cons(args: Vec<Value>) -> EvalResult {
-    expect_args("cons", &args, 2)?;
-    builtin_cons_values(args[0], args[1])
-}
-
 pub(crate) fn builtin_cons_2(
     _eval: &mut super::eval::Context,
     car: Value,
@@ -438,40 +432,16 @@ fn cdr_value(value: &Value) -> Result<Value, Flow> {
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_car(args: Vec<Value>) -> EvalResult {
-    expect_args("car", &args, 1)?;
-    car_value(&args[0])
-}
-
 pub(crate) fn builtin_car_1(_eval: &mut super::eval::Context, arg: Value) -> EvalResult {
     car_value(&arg)
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_cdr(args: Vec<Value>) -> EvalResult {
-    expect_args("cdr", &args, 1)?;
-    cdr_value(&args[0])
 }
 
 pub(crate) fn builtin_cdr_1(_eval: &mut super::eval::Context, arg: Value) -> EvalResult {
     cdr_value(&arg)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_car_safe(args: Vec<Value>) -> EvalResult {
-    expect_args("car-safe", &args, 1)?;
-    Ok(car_safe_value(&args[0]))
-}
-
 pub(crate) fn builtin_car_safe_1(_eval: &mut super::eval::Context, arg: Value) -> EvalResult {
     Ok(car_safe_value(&arg))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_cdr_safe(args: Vec<Value>) -> EvalResult {
-    expect_args("cdr-safe", &args, 1)?;
-    Ok(cdr_safe_value(&args[0]))
 }
 
 pub(crate) fn builtin_cdr_safe_1(_eval: &mut super::eval::Context, arg: Value) -> EvalResult {
@@ -508,12 +478,6 @@ fn cdr_safe_value(val: &Value) -> Value {
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_setcar(args: Vec<Value>) -> EvalResult {
-    expect_args("setcar", &args, 2)?;
-    builtin_setcar_values(args[0], args[1])
-}
-
 pub(crate) fn builtin_setcar_2(
     _eval: &mut super::eval::Context,
     cons: Value,
@@ -533,12 +497,6 @@ fn builtin_setcar_values(cons: Value, new_car: Value) -> EvalResult {
             vec![Value::symbol("consp"), cons],
         )),
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_setcdr(args: Vec<Value>) -> EvalResult {
-    expect_args("setcdr", &args, 2)?;
-    builtin_setcdr_values(args[0], args[1])
 }
 
 pub(crate) fn builtin_setcdr_2(

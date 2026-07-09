@@ -1216,12 +1216,6 @@ pub(crate) fn finish_read_variable_in_vm_runtime(
 /// `(minibuffer-prompt)` — returns the current minibuffer prompt or nil.
 ///
 /// Stub: returns nil (no active minibuffer in non-interactive mode).
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_minibuffer_prompt(args: Vec<Value>) -> EvalResult {
-    expect_args("minibuffer-prompt", &args, 0)?;
-    Ok(Value::NIL)
-}
-
 pub(crate) fn builtin_minibuffer_prompt_ctx(
     eval: &mut super::eval::Context,
     args: Vec<Value>,

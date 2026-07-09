@@ -2360,11 +2360,6 @@ pub(crate) fn builtin_make_string(args: Vec<Value>) -> EvalResult {
     }
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_string(args: Vec<Value>) -> EvalResult {
-    builtin_string_slice(&args)
-}
-
 pub(crate) fn builtin_string_slice(args: &[Value]) -> EvalResult {
     use crate::emacs_core::emacs_char;
     let mut result = Vec::new();

@@ -1190,19 +1190,6 @@ pub(crate) fn builtin_bury_buffer_internal(
     Ok(Value::NIL)
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_bury_buffer_internal_impl(
-    buffers: &mut crate::buffer::BufferManager,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("bury-buffer-internal", &args, 1)?;
-    let id = expect_buffer_id(&args[0])?;
-    if buffers.get(id).is_some() {
-        buffers.note_buffer_order_tail(id);
-    }
-    Ok(Value::NIL)
-}
-
 pub(crate) fn builtin_cancel_kbd_macro_events(
     eval: &mut super::eval::Context,
     args: Vec<Value>,

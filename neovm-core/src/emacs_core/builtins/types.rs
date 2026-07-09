@@ -89,30 +89,6 @@ pub(crate) fn builtin_eq_2(
 // Type predicates
 // ===========================================================================
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_null(args: Vec<Value>) -> EvalResult {
-    expect_args("null", &args, 1)?;
-    Ok(Value::bool_val(args[0].is_nil()))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_atom(args: Vec<Value>) -> EvalResult {
-    expect_args("atom", &args, 1)?;
-    Ok(Value::bool_val(!args[0].is_cons()))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_consp(args: Vec<Value>) -> EvalResult {
-    expect_args("consp", &args, 1)?;
-    Ok(Value::bool_val(args[0].is_cons()))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_listp(args: Vec<Value>) -> EvalResult {
-    expect_args("listp", &args, 1)?;
-    Ok(Value::bool_val(args[0].is_list()))
-}
-
 pub(crate) fn builtin_list_of_strings_p(args: Vec<Value>) -> EvalResult {
     expect_args("list-of-strings-p", &args, 1)?;
     let mut seen = HashSet::new();
@@ -135,36 +111,6 @@ pub(crate) fn builtin_list_of_strings_p(args: Vec<Value>) -> EvalResult {
             _ => return Ok(Value::NIL),
         }
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_nlistp(args: Vec<Value>) -> EvalResult {
-    expect_args("nlistp", &args, 1)?;
-    Ok(Value::bool_val(!args[0].is_list()))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_symbolp(args: Vec<Value>) -> EvalResult {
-    expect_args("symbolp", &args, 1)?;
-    Ok(Value::bool_val(args[0].is_symbol()))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_booleanp(args: Vec<Value>) -> EvalResult {
-    expect_args("booleanp", &args, 1)?;
-    Ok(Value::bool_val(args[0].is_nil() || args[0].is_t()))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_numberp(args: Vec<Value>) -> EvalResult {
-    expect_args("numberp", &args, 1)?;
-    Ok(Value::bool_val(args[0].is_number()))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_integerp(args: Vec<Value>) -> EvalResult {
-    expect_args("integerp", &args, 1)?;
-    Ok(Value::bool_val(args[0].is_integer()))
 }
 
 pub(crate) fn builtin_integer_or_null_p(args: Vec<Value>) -> EvalResult {
@@ -193,28 +139,6 @@ pub(crate) fn builtin_number_or_marker_p(args: Vec<Value>) -> EvalResult {
     let is_number_or_marker =
         args[0].is_number() || args[0].as_char().is_some() || super::marker::is_marker(&args[0]);
     Ok(Value::bool_val(is_number_or_marker))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_floatp(args: Vec<Value>) -> EvalResult {
-    expect_args("floatp", &args, 1)?;
-    Ok(Value::bool_val(args[0].is_float()))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_stringp(args: Vec<Value>) -> EvalResult {
-    expect_args("stringp", &args, 1)?;
-    Ok(Value::bool_val(args[0].is_string()))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_vectorp(args: Vec<Value>) -> EvalResult {
-    expect_args("vectorp", &args, 1)?;
-    // GNU: vectorp returns nil for char-tables and bool-vectors
-    let is_vec = args[0].is_vector()
-        && !super::chartable::is_char_table(&args[0])
-        && !super::chartable::is_bool_vector(&args[0]);
-    Ok(Value::bool_val(is_vec))
 }
 
 pub(crate) fn builtin_vector_or_char_table_p(args: Vec<Value>) -> EvalResult {
@@ -337,12 +261,6 @@ pub(crate) fn builtin_functionp_1(eval: &mut super::eval::Context, arg: Value) -
         }
     };
     Ok(Value::bool_val(is_function))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_keywordp(args: Vec<Value>) -> EvalResult {
-    expect_args("keywordp", &args, 1)?;
-    Ok(Value::bool_val(keywordp_swp(args[0], false)))
 }
 
 pub(crate) fn builtin_hash_table_p(args: Vec<Value>) -> EvalResult {
@@ -484,35 +402,10 @@ pub(crate) fn builtin_arrayp(args: Vec<Value>) -> EvalResult {
 // Equality
 // ===========================================================================
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_eq(args: Vec<Value>) -> EvalResult {
-    expect_args("eq", &args, 2)?;
-    Ok(Value::bool_val(eq_value(&args[0], &args[1])))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_eql(args: Vec<Value>) -> EvalResult {
-    expect_args("eql", &args, 2)?;
-    Ok(Value::bool_val(eql_value(&args[0], &args[1])))
-}
-
 pub(crate) fn builtin_eql_2(eval: &mut super::eval::Context, a: Value, b: Value) -> EvalResult {
     Ok(Value::bool_val(eql_value_swp(
         &a,
         &b,
-        eval.symbols_with_pos_enabled,
-    )))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_eql_with_ctx(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("eql", &args, 2)?;
-    Ok(Value::bool_val(eql_value_swp(
-        &args[0],
-        &args[1],
         eval.symbols_with_pos_enabled,
     )))
 }
@@ -534,20 +427,6 @@ pub(crate) fn builtin_equal_2(eval: &mut super::eval::Context, a: Value, b: Valu
     )?))
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_equal_with_ctx(
-    eval: &mut super::eval::Context,
-    args: Vec<Value>,
-) -> EvalResult {
-    expect_args("equal", &args, 2)?;
-    Ok(Value::bool_val(try_equal_value_swp(
-        &args[0],
-        &args[1],
-        0,
-        eval.symbols_with_pos_enabled,
-    )?))
-}
-
 pub(crate) fn builtin_function_equal(args: Vec<Value>) -> EvalResult {
     expect_args("function-equal", &args, 2)?;
     Ok(Value::bool_val(eq_value(&args[0], &args[1])))
@@ -563,23 +442,11 @@ pub(crate) fn builtin_user_ptrp(args: Vec<Value>) -> EvalResult {
     Ok(Value::bool_val(args[0].is_user_ptr()))
 }
 
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_symbol_with_pos_p(args: Vec<Value>) -> EvalResult {
-    expect_args("symbol-with-pos-p", &args, 1)?;
-    Ok(Value::bool_val(args[0].is_symbol_with_pos()))
-}
-
 pub(crate) fn builtin_symbol_with_pos_p_1(
     _eval: &mut super::eval::Context,
     arg: Value,
 ) -> EvalResult {
     Ok(Value::bool_val(arg.is_symbol_with_pos()))
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_symbol_with_pos_pos(args: Vec<Value>) -> EvalResult {
-    expect_args("symbol-with-pos-pos", &args, 1)?;
-    builtin_symbol_with_pos_pos_1_value(args[0])
 }
 
 pub(crate) fn builtin_symbol_with_pos_pos_1(
@@ -636,10 +503,4 @@ pub(crate) fn builtin_char_equal(eval: &mut super::eval::Context, args: Vec<Valu
         (Some(a), Some(b)) => Ok(Value::bool_val(a == b)),
         _ => Ok(Value::bool_val(left == right)),
     }
-}
-
-#[allow(dead_code)] // grandfathered when dead_code lint was enabled; delete or wire up
-pub(crate) fn builtin_not(args: Vec<Value>) -> EvalResult {
-    expect_args("not", &args, 1)?;
-    Ok(Value::bool_val(args[0].is_nil()))
 }
