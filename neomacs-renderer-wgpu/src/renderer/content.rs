@@ -15,12 +15,12 @@ use super::super::vertex::{GlyphVertex, RectVertex, RoundedRectVertex, SubpixelG
 use super::GlyphRenderStats;
 use super::WgpuRenderer;
 use cosmic_text::SubpixelBin;
-use neomacs_display_protocol::face::{BoxType, Face, UnderlineStyle};
+use neomacs_display_protocol::face::{BoxType, UnderlineStyle};
 use neomacs_display_protocol::frame_glyphs::{
     CursorStyle, FrameGlyph, FrameGlyphBuffer, MaterializedFaceData,
 };
 use neomacs_display_protocol::types::{AnimatedCursor, Color};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use wgpu::util::DeviceExt;
 
 fn subpixel_foreground_color(bg: Color, fg: Color, blend: f32) -> [f32; 4] {
@@ -103,7 +103,6 @@ impl WgpuRenderer {
         view: &wgpu::TextureView,
         frame: &FrameGlyphBuffer,
         glyph_atlas: &mut WgpuGlyphAtlas,
-        faces: &HashMap<u32, Face>,
         _surface_width: u32,
         _surface_height: u32,
         offset_x: f32,
@@ -128,9 +127,10 @@ impl WgpuRenderer {
         stats.total_frame_glyphs = frame.glyphs.len();
         let mut seen_single_keys: HashSet<GlyphKey> = HashSet::new();
         let mut seen_composed_keys: HashSet<ComposedGlyphKey> = HashSet::new();
+        let faces = &frame.faces;
 
         // --- Box span merging (for proper border rendering) ---
-        let box_spans = self.merge_box_spans(frame, faces);
+        let box_spans = self.merge_box_spans(frame);
 
         // --- Collect vertices by category for correct z-ordering ---
         //
@@ -1559,11 +1559,8 @@ impl WgpuRenderer {
     ///
     /// All box faces get span-merged. Rounded boxes (corner_radius > 0) get SDF
     /// treatment; standard boxes (corner_radius = 0) get rect borders.
-    fn merge_box_spans(
-        &self,
-        frame: &FrameGlyphBuffer,
-        faces: &HashMap<u32, Face>,
-    ) -> Vec<BoxSpan> {
+    fn merge_box_spans(&self, frame: &FrameGlyphBuffer) -> Vec<BoxSpan> {
+        let faces = &frame.faces;
         let mut box_spans: Vec<BoxSpan> = Vec::new();
 
         for glyph in &frame.glyphs {

@@ -1033,7 +1033,6 @@ impl WgpuRenderer {
         view: &wgpu::TextureView,
         frame_glyphs: &FrameGlyphBuffer,
         glyph_atlas: &mut WgpuGlyphAtlas,
-        faces: &HashMap<u32, Face>,
         surface_width: u32,
         surface_height: u32,
         cursor_visible: bool,
@@ -1049,6 +1048,7 @@ impl WgpuRenderer {
         } else {
             0
         };
+        let faces = &frame_glyphs.faces;
 
         tracing::trace!(
             "render_frame_glyphs: frame={}x{} surface={}x{}, {} glyphs, {} faces",

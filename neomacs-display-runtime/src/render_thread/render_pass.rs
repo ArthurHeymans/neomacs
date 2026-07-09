@@ -344,7 +344,6 @@ impl RenderApp {
 
     fn render_frame_window_contents_to_surface(
         renderer: &mut WgpuRenderer,
-        faces: &std::collections::HashMap<u32, crate::core::face::Face>,
         window_state: &mut GuiFrameWindowState,
         bg_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
         child_frame_style: &ChildFrameStyle,
@@ -358,7 +357,6 @@ impl RenderApp {
     )> {
         Self::render_frame_window_contents_to_acquired_surface(
             renderer,
-            faces,
             window_state,
             bg_gradient,
             child_frame_style,
@@ -373,7 +371,6 @@ impl RenderApp {
     #[allow(clippy::too_many_arguments)]
     fn render_frame_window_contents_to_acquired_surface(
         renderer: &mut WgpuRenderer,
-        faces: &std::collections::HashMap<u32, crate::core::face::Face>,
         window_state: &mut GuiFrameWindowState,
         bg_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
         child_frame_style: &ChildFrameStyle,
@@ -450,21 +447,6 @@ impl RenderApp {
             return None;
         };
         frame = drained_frame;
-        // Install the layout-resolved font tables before any text draws so
-        // the glyph atlas can rasterize the exact fonts layout measured with
-        // (font realization / render boundary design, Phase 2). Child frames
-        // share the same layout-side id interner, so merging is safe.
-        if let Some(atlas) = render.compositor.glyph_atlas.as_mut() {
-            atlas.begin_frame_fonts();
-            atlas.install_frame_fonts(&frame.fonts, &frame.char_fonts, &frame.shaped_clusters);
-            for entry in render.compositor.child_frames.frames.values() {
-                atlas.install_frame_fonts(
-                    &entry.frame.fonts,
-                    &entry.frame.char_fonts,
-                    &entry.frame.shaped_clusters,
-                );
-            }
-        }
         if extra_line_spacing != 0.0 || extra_letter_spacing != 0.0 {
             Self::apply_extra_spacing(
                 &mut frame.glyphs,
@@ -513,7 +495,6 @@ impl RenderApp {
             if let Some(current_view) = current_view {
                 Self::render_frame_window_contents(
                     renderer,
-                    faces,
                     native,
                     render,
                     unsafe { &*current_view },
@@ -580,7 +561,6 @@ impl RenderApp {
             }
             Self::render_frame_window_overlays_with_toolbar_resources(
                 renderer,
-                faces,
                 native,
                 render,
                 &surface_view,
@@ -594,7 +574,6 @@ impl RenderApp {
         } else {
             Self::render_frame_window_contents(
                 renderer,
-                faces,
                 native,
                 render,
                 &surface_view,
@@ -629,7 +608,6 @@ impl RenderApp {
 
     fn render_frame_window_overlays(
         renderer: &mut WgpuRenderer,
-        faces: &std::collections::HashMap<u32, crate::core::face::Face>,
         native: &GuiFrameNativeWindowState,
         render: &mut GuiFrameRenderState,
         surface_view: &wgpu::TextureView,
@@ -642,7 +620,6 @@ impl RenderApp {
         let empty_toolbar = ToolbarResources::default();
         Self::render_frame_window_overlays_with_toolbar_resources(
             renderer,
-            faces,
             native,
             render,
             surface_view,
@@ -658,7 +635,6 @@ impl RenderApp {
     #[allow(clippy::too_many_arguments)]
     fn render_frame_window_overlays_with_toolbar_resources(
         renderer: &mut WgpuRenderer,
-        faces: &std::collections::HashMap<u32, crate::core::face::Face>,
         native: &GuiFrameNativeWindowState,
         render: &mut GuiFrameRenderState,
         surface_view: &wgpu::TextureView,
@@ -671,7 +647,6 @@ impl RenderApp {
     ) {
         Self::render_frame_content_overlays(
             renderer,
-            faces,
             native,
             render,
             surface_view,
@@ -803,7 +778,6 @@ impl RenderApp {
     #[allow(clippy::too_many_arguments)]
     fn render_frame_root_glyphs(
         renderer: &mut WgpuRenderer,
-        faces: &std::collections::HashMap<u32, crate::core::face::Face>,
         native: &GuiFrameNativeWindowState,
         render: &mut GuiFrameRenderState,
         surface_view: &wgpu::TextureView,
@@ -812,13 +786,15 @@ impl RenderApp {
         root_animated_cursor: Option<crate::core::types::AnimatedCursor>,
         bg_gradient: Option<((f32, f32, f32), (f32, f32, f32))>,
     ) {
+        if let Some(atlas) = render.compositor.glyph_atlas.as_mut() {
+            atlas.set_current_frame_fonts(&frame.fonts, &frame.char_fonts, &frame.shaped_clusters);
+        }
         renderer.with_frame_effects(&mut render.compositor.renderer_effects, |renderer| {
             renderer.set_idle_dim_alpha(render.overlays.idle_dim.current_alpha);
             renderer.render_frame_glyphs(
                 surface_view,
                 frame,
                 &mut render.compositor.glyph_atlas.as_mut().unwrap(),
-                faces,
                 native.width,
                 native.height,
                 cursor_visible,
@@ -832,7 +808,6 @@ impl RenderApp {
     #[allow(clippy::too_many_arguments)]
     fn render_frame_content_overlays(
         renderer: &mut WgpuRenderer,
-        faces: &std::collections::HashMap<u32, crate::core::face::Face>,
         native: &GuiFrameNativeWindowState,
         render: &mut GuiFrameRenderState,
         surface_view: &wgpu::TextureView,
@@ -845,13 +820,19 @@ impl RenderApp {
         renderer.with_frame_effects(&mut render.compositor.renderer_effects, |renderer| {
             for &child_id in render.compositor.child_frames.sorted_for_rendering() {
                 if let Some(child_entry) = render.compositor.child_frames.frames.get(&child_id) {
+                    if let Some(atlas) = render.compositor.glyph_atlas.as_mut() {
+                        atlas.set_current_frame_fonts(
+                            &child_entry.frame.fonts,
+                            &child_entry.frame.char_fonts,
+                            &child_entry.frame.shaped_clusters,
+                        );
+                    }
                     renderer.render_child_frame(
                         surface_view,
                         &child_entry.frame,
                         child_entry.abs_x,
                         child_entry.abs_y,
                         &mut render.compositor.glyph_atlas.as_mut().unwrap(),
-                        faces,
                         native.width,
                         native.height,
                         cursor_visible,
@@ -867,6 +848,10 @@ impl RenderApp {
         });
         if render.compositor.renderer_effects.needs_redraw() {
             render.mark_dirty();
+        }
+
+        if let Some(atlas) = render.compositor.glyph_atlas.as_mut() {
+            atlas.set_current_frame_fonts(&frame.fonts, &frame.char_fonts, &frame.shaped_clusters);
         }
 
         #[cfg(feature = "wpe-webkit")]
@@ -893,7 +878,6 @@ impl RenderApp {
     #[allow(clippy::too_many_arguments)]
     fn render_frame_window_contents(
         renderer: &mut WgpuRenderer,
-        faces: &std::collections::HashMap<u32, crate::core::face::Face>,
         native: &GuiFrameNativeWindowState,
         render: &mut GuiFrameRenderState,
         surface_view: &wgpu::TextureView,
@@ -909,7 +893,6 @@ impl RenderApp {
     ) {
         Self::render_frame_root_glyphs(
             renderer,
-            faces,
             native,
             render,
             surface_view,
@@ -927,7 +910,6 @@ impl RenderApp {
 
         Self::render_frame_window_overlays_with_toolbar_resources(
             renderer,
-            faces,
             native,
             render,
             surface_view,
@@ -969,7 +951,6 @@ impl RenderApp {
 
         if let Some((output, frame)) = Self::render_frame_window_contents_to_surface(
             renderer,
-            &self.faces,
             window_state,
             bg_gradient,
             &self.child_frame_style,

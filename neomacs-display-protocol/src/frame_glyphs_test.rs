@@ -245,6 +245,30 @@ fn set_face_with_font_registers_baseline_render_face() {
 }
 
 #[test]
+fn render_face_treats_face_ids_as_frame_local() {
+    let mut root = FrameGlyphBuffer::new();
+    let mut child = FrameGlyphBuffer::new();
+
+    let mut root_face = Face::new(7);
+    root_face.font_family = "Root Mono".to_string();
+    root_face.font_size = 11.0;
+    root.faces.insert(7, root_face);
+
+    let mut child_face = Face::new(7);
+    child_face.font_family = "Child Mono".to_string();
+    child_face.font_size = 23.0;
+    child.faces.insert(7, child_face);
+
+    let root_render_face = root.render_face(7).expect("root face");
+    let child_render_face = child.render_face(7).expect("child face");
+
+    assert_eq!(root_render_face.font_family, "Root Mono");
+    assert_eq!(root_render_face.font_size, 11.0);
+    assert_eq!(child_render_face.font_family, "Child Mono");
+    assert_eq!(child_render_face.font_size, 23.0);
+}
+
+#[test]
 fn set_face_uses_current_font_context_for_face_entry() {
     let mut buf = FrameGlyphBuffer::new();
     let fg = Color::rgb(0.4, 0.5, 0.6);

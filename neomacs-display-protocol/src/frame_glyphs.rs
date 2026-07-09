@@ -1249,6 +1249,14 @@ impl FrameGlyphBuffer {
             .unwrap_or("monospace")
     }
 
+    /// Return the frame-local face entry used to render `face_id`.
+    ///
+    /// Face ids are scoped to the owning frame buffer. Parent and child frames
+    /// may legally reuse the same numeric id for different face data.
+    pub fn render_face(&self, face_id: u32) -> Option<&Face> {
+        self.faces.get(&face_id)
+    }
+
     /// Resolve the face-derived visual attributes for `face_id`.
     ///
     /// Returns exactly what `materialize` previously inlined onto every

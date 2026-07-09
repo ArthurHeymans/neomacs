@@ -809,9 +809,8 @@ impl WgpuGlyphAtlas {
     /// Font ids are interned by the layout-side resolver and stable across
     /// frames, so entries are upserted (a re-sent id always carries the same
     /// identity; overwriting also heals a hypothetical resolver restart).
-    /// Char entries keep the FIRST binding per (face, char) within a render
-    /// pass, matching how the render thread merges face tables across the
-    /// main and child frames.
+    /// Call [`Self::set_current_frame_fonts`] at frame draw boundaries; the
+    /// face-id-keyed tables are only valid for the current frame.
     pub fn install_frame_fonts(
         &mut self,
         fonts: &ResolvedFontTable,
@@ -833,6 +832,23 @@ impl WgpuGlyphAtlas {
                 entry.entry(text.clone()).or_insert_with(|| glyphs.clone());
             }
         }
+    }
+
+    /// Replace face-id-keyed font bindings with the frame currently being
+    /// drawn.
+    ///
+    /// `frame_fonts` itself is keyed by stable resolved-font ids and can
+    /// accumulate safely. `frame_char_fonts` and `frame_shaped_clusters` are
+    /// keyed by frame-local face ids, so drawing a child frame must not inherit
+    /// the parent's bindings for the same numeric face id.
+    pub fn set_current_frame_fonts(
+        &mut self,
+        fonts: &ResolvedFontTable,
+        char_fonts: &CharFontTable,
+        shaped_clusters: &ShapedClusterTable,
+    ) {
+        self.begin_frame_fonts();
+        self.install_frame_fonts(fonts, char_fonts, shaped_clusters);
     }
 
     /// Total emergency (unresolved-face) text lookups so far; see field doc.

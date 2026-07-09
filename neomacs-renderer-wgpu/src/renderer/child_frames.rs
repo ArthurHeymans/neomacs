@@ -3,10 +3,8 @@
 use super::super::glyph_atlas::WgpuGlyphAtlas;
 use super::super::vertex::{RectVertex, RoundedRectVertex, Uniforms};
 use super::WgpuRenderer;
-use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::FrameGlyphBuffer;
 use neomacs_display_protocol::types::{AnimatedCursor, Color};
-use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
 impl WgpuRenderer {
@@ -23,7 +21,6 @@ impl WgpuRenderer {
         offset_x: f32,
         offset_y: f32,
         glyph_atlas: &mut WgpuGlyphAtlas,
-        faces: &HashMap<u32, Face>,
         surface_width: u32,
         surface_height: u32,
         cursor_visible: bool,
@@ -313,7 +310,6 @@ impl WgpuRenderer {
             view,
             child,
             glyph_atlas,
-            faces,
             surface_width,
             surface_height,
             offset_x,
