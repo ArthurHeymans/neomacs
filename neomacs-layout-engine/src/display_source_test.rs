@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use super::*;
 use crate::display_buffer_source_consumption::{
     BufferSourceConsumedItem, BufferSourceConsumptionState,
@@ -45,7 +46,7 @@ fn display_source_step_item_splits_text_run_at_buffer_charpos() {
             DisplaySourcePosition::buffer(buffer_id, CharPos0::new(5), EmacsBytePos::new(110)),
             DisplaySourcePosition::buffer(buffer_id, CharPos0::new(8), EmacsBytePos::new(115)),
         ),
-        RenderFaceRef::FaceId(3),
+        RenderFaceRef::FaceId(FaceId::new(3)),
         DisplayItemKind::TextRun(DisplayTextRun::new("éβx")),
     );
     let source_item = DisplaySourceItem::new_for_test(item, 10, 5, Some('é'));
@@ -141,14 +142,14 @@ fn buffer_display_replacement_source_builds_items_without_appending() {
         BufferDisplayReplacementSource::new(BufferId(7), CharPos0::new(3), EmacsBytePos::new(12));
 
     let stretch_item = source.display_item(
-        42,
+        FaceId::new(42),
         DisplayItemKind::Stretch(DisplayStretch {
             width: DisplayStretchWidth::Length(DisplayLength::Pixels(16.0)),
             height: Some(DisplayLength::Pixels(9.0)),
             ascent: Some(DisplayLength::Pixels(7.0)),
         }),
     );
-    assert_eq!(stretch_item.face, RenderFaceRef::FaceId(42));
+    assert_eq!(stretch_item.face, RenderFaceRef::FaceId(FaceId::new(42)));
     assert!(matches!(
         stretch_item.kind,
         DisplayItemKind::Stretch(DisplayStretch {
@@ -159,10 +160,10 @@ fn buffer_display_replacement_source_builds_items_without_appending() {
     ));
 
     let text_item = source.display_item(
-        43,
+        FaceId::new(43),
         DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("fallback")),
     );
-    assert_eq!(text_item.face, RenderFaceRef::FaceId(43));
+    assert_eq!(text_item.face, RenderFaceRef::FaceId(FaceId::new(43)));
     assert!(matches!(
         text_item.kind,
         DisplayItemKind::SourceMappedText(text) if text.text.as_ref() == "fallback"
@@ -180,7 +181,7 @@ fn buffer_display_replacement_source_can_span_covered_buffer_text() {
     );
 
     let text_item = source.display_item(
-        43,
+        FaceId::new(43),
         DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("fallback")),
     );
 
@@ -204,7 +205,7 @@ fn buffer_text_item_source_single_char_maps_one_buffer_character() {
     );
 
     let item = source.item(
-        RenderFaceRef::FaceId(42),
+        RenderFaceRef::FaceId(FaceId::new(42)),
         DisplayItemKind::TextRun(DisplayTextRun::new("x")),
     );
 
@@ -224,14 +225,14 @@ fn buffer_display_replacement_string_source_maps_text_to_buffer_slot() {
     let replacement_source =
         BufferDisplayReplacementSource::new(BufferId(7), CharPos0::new(3), EmacsBytePos::new(12));
     let string_source =
-        LispStringSourceCursor::new(1, Value::string("fallback"), RenderFaceRef::FaceId(42))
+        LispStringSourceCursor::new(1, Value::string("fallback"), RenderFaceRef::FaceId(FaceId::new(42)))
             .expect("string source");
     let mut source = BufferDisplayReplacementStringSource::new(replacement_source, string_source);
     let mut context = DisplaySourceContext::empty();
 
     let item = source.next_item(&mut context).expect("replacement item");
 
-    assert_eq!(item.face, RenderFaceRef::FaceId(42));
+    assert_eq!(item.face, RenderFaceRef::FaceId(FaceId::new(42)));
     assert_eq!(
         item.span.start,
         DisplaySourcePosition::buffer(BufferId(7), CharPos0::new(3), EmacsBytePos::new(12))
@@ -252,12 +253,12 @@ fn lisp_string_source_cursor_emits_text_runs_with_source_spans() {
     let _eval = Context::new();
     let value = Value::string("abc");
     let mut source =
-        LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(3)).expect("string source");
+        LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(FaceId::new(3))).expect("string source");
 
     let items = collect_items(&mut source);
 
     assert_eq!(item_texts(&items), ["abc"]);
-    assert_eq!(items[0].face, RenderFaceRef::FaceId(3));
+    assert_eq!(items[0].face, RenderFaceRef::FaceId(FaceId::new(3)));
     assert_eq!(
         items[0].span.start,
         DisplaySourcePosition::lisp_string(1, 0, 0)
@@ -273,8 +274,8 @@ struct SymbolFaceResolver;
 impl DisplayItemFaceResolver for SymbolFaceResolver {
     fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef {
         match face_value.as_symbol_name() {
-            Some("bold") => RenderFaceRef::FaceId(7),
-            Some("font-lock-string-face") => RenderFaceRef::FaceId(9),
+            Some("bold") => RenderFaceRef::FaceId(FaceId::new(7)),
+            Some("font-lock-string-face") => RenderFaceRef::FaceId(FaceId::new(9)),
             _ => base,
         }
     }
@@ -287,7 +288,7 @@ struct ResolvedDisplayPropertyResolver {
 impl DisplayItemFaceResolver for ResolvedDisplayPropertyResolver {
     fn resolve_face_ref(&mut self, base: RenderFaceRef, face_value: Value) -> RenderFaceRef {
         match face_value.as_symbol_name() {
-            Some("bold") => RenderFaceRef::FaceId(7),
+            Some("bold") => RenderFaceRef::FaceId(FaceId::new(7)),
             _ => base,
         }
     }
@@ -313,7 +314,7 @@ impl DisplayItemFaceResolver for ResolvedDisplayPropertyResolver {
 #[test]
 fn display_property_source_action_classifies_strings_typed_items_and_resolver_fallback() {
     let _eval = Context::new();
-    let base_face = RenderFaceRef::FaceId(7);
+    let base_face = RenderFaceRef::FaceId(FaceId::new(7));
     let mut resolver = ResolvedDisplayPropertyResolver { seen_face: None };
 
     {
@@ -326,7 +327,7 @@ fn display_property_source_action_classifies_strings_typed_items_and_resolver_fa
                     value.as_runtime_string_owned().as_deref(),
                     Some("displayed")
                 );
-                assert_eq!(base_face, RenderFaceRef::FaceId(7));
+                assert_eq!(base_face, RenderFaceRef::FaceId(FaceId::new(7)));
             }
             action => panic!("expected replacement string action, got {action:?}"),
         }
@@ -385,7 +386,7 @@ fn display_property_source_replacement_resolves_direct_media_item() {
         &mut context,
         Value::NIL,
         Some(&replacement_property),
-        RenderFaceRef::FaceId(7),
+        RenderFaceRef::FaceId(FaceId::new(7)),
     );
 
     let DisplayPropertySourceReplacement::Item(DisplayItemKind::MediaReplacement(resolved)) =
@@ -399,7 +400,7 @@ fn display_property_source_replacement_resolves_direct_media_item() {
 #[test]
 fn display_property_source_action_builds_cursor_actions() {
     let span = SourceSpan::synthetic(3, 0, 1);
-    let face = RenderFaceRef::FaceId(7);
+    let face = RenderFaceRef::FaceId(FaceId::new(7));
     let layout = DisplayItemLayout {
         raise: Some(0.25),
         height: None,
@@ -437,7 +438,7 @@ fn lisp_string_source_cursor_resolves_face_property() {
         }],
     );
     let mut source =
-        LispStringSourceCursor::new(2, value, RenderFaceRef::FaceId(3)).expect("string source");
+        LispStringSourceCursor::new(2, value, RenderFaceRef::FaceId(FaceId::new(3))).expect("string source");
     let mut resolver = SymbolFaceResolver;
     let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
 
@@ -447,9 +448,9 @@ fn lisp_string_source_cursor_resolves_face_property() {
     }
 
     assert_eq!(item_texts(&items), ["a", "b", "c"]);
-    assert_eq!(items[0].face, RenderFaceRef::FaceId(3));
-    assert_eq!(items[1].face, RenderFaceRef::FaceId(7));
-    assert_eq!(items[2].face, RenderFaceRef::FaceId(3));
+    assert_eq!(items[0].face, RenderFaceRef::FaceId(FaceId::new(3)));
+    assert_eq!(items[1].face, RenderFaceRef::FaceId(FaceId::new(7)));
+    assert_eq!(items[2].face, RenderFaceRef::FaceId(FaceId::new(3)));
 }
 
 #[test]
@@ -470,7 +471,7 @@ fn lisp_string_source_cursor_resolves_display_property_through_context() {
         }],
     );
     let mut source =
-        LispStringSourceCursor::new(4, value, RenderFaceRef::FaceId(3)).expect("string source");
+        LispStringSourceCursor::new(4, value, RenderFaceRef::FaceId(FaceId::new(3))).expect("string source");
     let mut resolver = ResolvedDisplayPropertyResolver { seen_face: None };
 
     let item = {
@@ -480,7 +481,7 @@ fn lisp_string_source_cursor_resolves_display_property_through_context() {
         item
     };
 
-    assert_eq!(resolver.seen_face, Some(RenderFaceRef::FaceId(7)));
+    assert_eq!(resolver.seen_face, Some(RenderFaceRef::FaceId(FaceId::new(7))));
     assert!(matches!(
         item.kind,
         DisplayItemKind::MediaReplacement(DisplayMediaReplacement {
@@ -489,7 +490,7 @@ fn lisp_string_source_cursor_resolves_display_property_through_context() {
             ..
         })
     ));
-    assert_eq!(item.face, RenderFaceRef::FaceId(7));
+    assert_eq!(item.face, RenderFaceRef::FaceId(FaceId::new(7)));
 }
 
 #[test]
@@ -507,7 +508,7 @@ fn lisp_string_source_cursor_uses_font_lock_face_when_face_is_absent() {
         }],
     );
     let mut source =
-        LispStringSourceCursor::new(3, value, RenderFaceRef::FaceId(3)).expect("string source");
+        LispStringSourceCursor::new(3, value, RenderFaceRef::FaceId(FaceId::new(3))).expect("string source");
     let mut resolver = SymbolFaceResolver;
     let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
 
@@ -518,12 +519,12 @@ fn lisp_string_source_cursor_uses_font_lock_face_when_face_is_absent() {
         first.kind,
         DisplayItemKind::TextRun(DisplayTextRun::new("x"))
     );
-    assert_eq!(first.face, RenderFaceRef::FaceId(9));
+    assert_eq!(first.face, RenderFaceRef::FaceId(FaceId::new(9)));
     assert_eq!(
         second.kind,
         DisplayItemKind::TextRun(DisplayTextRun::new("y"))
     );
-    assert_eq!(second.face, RenderFaceRef::FaceId(3));
+    assert_eq!(second.face, RenderFaceRef::FaceId(FaceId::new(3)));
 }
 
 #[test]
@@ -545,7 +546,7 @@ fn lisp_string_source_cursor_parses_display_space_width_as_stretch() {
         }],
     );
     let mut source =
-        LispStringSourceCursor::new(4, value, RenderFaceRef::FaceId(3)).expect("string source");
+        LispStringSourceCursor::new(4, value, RenderFaceRef::FaceId(FaceId::new(3))).expect("string source");
 
     let items = collect_items(&mut source);
 
@@ -583,7 +584,7 @@ fn lisp_string_source_cursor_parses_display_space_align_to_as_typed_expression()
         }],
     );
     let mut source =
-        LispStringSourceCursor::new(5, value, RenderFaceRef::FaceId(3)).expect("string source");
+        LispStringSourceCursor::new(5, value, RenderFaceRef::FaceId(FaceId::new(3))).expect("string source");
 
     let item = source
         .next_item(&mut DisplaySourceContext::empty())
@@ -607,7 +608,7 @@ fn lisp_string_source_cursor_emits_explicit_newline_row_breaks() {
     let _eval = Context::new();
     let value = Value::string("a\nb");
     let mut source =
-        LispStringSourceCursor::new(6, value, RenderFaceRef::FaceId(3)).expect("string source");
+        LispStringSourceCursor::new(6, value, RenderFaceRef::FaceId(FaceId::new(3))).expect("string source");
     let items = collect_items(&mut source);
 
     assert_eq!(item_texts(&items), ["a", "b"]);
@@ -619,7 +620,7 @@ fn lisp_string_source_cursor_emits_control_and_glyphless_items() {
     let _eval = Context::new();
     let value = Value::string("a\u{0001}\u{fff0}b");
     let mut source =
-        LispStringSourceCursor::new(7, value, RenderFaceRef::FaceId(3)).expect("string source");
+        LispStringSourceCursor::new(7, value, RenderFaceRef::FaceId(FaceId::new(3))).expect("string source");
 
     let items = collect_items(&mut source);
 
@@ -650,7 +651,7 @@ fn lisp_string_source_cursor_pushes_display_string_replacement_source() {
         }],
     );
     let mut source =
-        LispStringSourceCursor::new(7, value, RenderFaceRef::FaceId(3)).expect("string source");
+        LispStringSourceCursor::new(7, value, RenderFaceRef::FaceId(FaceId::new(3))).expect("string source");
 
     let items = collect_items(&mut source);
 
@@ -697,7 +698,7 @@ fn display_sources_parse_xwidget_display_specs_as_typed_items() {
                 plist: Value::list(vec![Value::symbol("display"), display_spec]),
             }],
         ),
-        RenderFaceRef::FaceId(3),
+        RenderFaceRef::FaceId(FaceId::new(3)),
     )
     .expect("string source");
     let lisp_items = collect_items(&mut lisp_source);
@@ -733,7 +734,7 @@ fn display_sources_parse_xwidget_display_specs_as_typed_items() {
         &snapshot,
         CharPos0::ZERO,
         end,
-        RenderFaceRef::FaceId(3),
+        RenderFaceRef::FaceId(FaceId::new(3)),
     );
     let buffer_items = collect_items(&mut buffer_source);
 
@@ -748,13 +749,13 @@ fn buffer_text_source_cursor_emits_text_runs_with_buffer_spans() {
         &snapshot,
         CharPos0::ZERO,
         end,
-        RenderFaceRef::FaceId(3),
+        RenderFaceRef::FaceId(FaceId::new(3)),
     );
 
     let items = collect_items(&mut source);
 
     assert_eq!(item_texts(&items), ["ab中"]);
-    assert_eq!(items[0].face, RenderFaceRef::FaceId(3));
+    assert_eq!(items[0].face, RenderFaceRef::FaceId(FaceId::new(3)));
     assert_eq!(
         items[0].span.start,
         DisplaySourcePosition::buffer(
@@ -803,7 +804,7 @@ fn buffer_text_source_cursor_resolves_face_property_runs() {
         &snapshot,
         CharPos0::ZERO,
         end,
-        RenderFaceRef::FaceId(3),
+        RenderFaceRef::FaceId(FaceId::new(3)),
     );
     let mut resolver = SymbolFaceResolver;
     let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
@@ -814,9 +815,9 @@ fn buffer_text_source_cursor_resolves_face_property_runs() {
     }
 
     assert_eq!(item_texts(&items), ["a", "b", "c"]);
-    assert_eq!(items[0].face, RenderFaceRef::FaceId(3));
-    assert_eq!(items[1].face, RenderFaceRef::FaceId(7));
-    assert_eq!(items[2].face, RenderFaceRef::FaceId(3));
+    assert_eq!(items[0].face, RenderFaceRef::FaceId(FaceId::new(3)));
+    assert_eq!(items[1].face, RenderFaceRef::FaceId(FaceId::new(7)));
+    assert_eq!(items[2].face, RenderFaceRef::FaceId(FaceId::new(3)));
 }
 
 #[test]
@@ -849,7 +850,7 @@ fn buffer_text_source_cursor_pushes_display_string_replacement_source() {
         &snapshot,
         CharPos0::ZERO,
         end,
-        RenderFaceRef::FaceId(3),
+        RenderFaceRef::FaceId(FaceId::new(3)),
     );
 
     let items = collect_items(&mut source);
@@ -907,7 +908,7 @@ fn buffer_text_source_cursor_emits_propertized_display_string_as_atomic_replacem
         &snapshot,
         CharPos0::ZERO,
         end,
-        RenderFaceRef::FaceId(3),
+        RenderFaceRef::FaceId(FaceId::new(3)),
     );
     let mut context = DisplaySourceContext::empty();
     let mut source_consumption = BufferSourceConsumptionState::new(0);
@@ -974,7 +975,7 @@ fn buffer_text_source_cursor_emits_display_space_as_atomic_replacement() {
         &snapshot,
         CharPos0::ZERO,
         end,
-        RenderFaceRef::FaceId(3),
+        RenderFaceRef::FaceId(FaceId::new(3)),
     );
     let mut context = DisplaySourceContext::empty();
     let mut source_consumption = BufferSourceConsumptionState::new(0);
@@ -1031,7 +1032,7 @@ fn buffer_text_source_consumption_keeps_plain_text_run_renderable() {
         &snapshot,
         CharPos0::ZERO,
         buffer.total_char_end_pos(),
-        RenderFaceRef::FaceId(3),
+        RenderFaceRef::FaceId(FaceId::new(3)),
     );
     let mut context = DisplaySourceContext::empty();
     let mut source_consumption = BufferSourceConsumptionState::new(0);
@@ -1085,7 +1086,7 @@ fn buffer_text_source_cursor_reports_nested_replacement_source_position() {
         &snapshot,
         CharPos0::ZERO,
         end,
-        RenderFaceRef::FaceId(3),
+        RenderFaceRef::FaceId(FaceId::new(3)),
     );
     let mut resolver = SymbolFaceResolver;
     let mut context = DisplaySourceContext::with_face_resolver(&mut resolver);
@@ -1120,7 +1121,7 @@ fn buffer_text_source_cursor_emits_explicit_newline_row_breaks() {
         &snapshot,
         CharPos0::ZERO,
         end,
-        RenderFaceRef::FaceId(3),
+        RenderFaceRef::FaceId(FaceId::new(3)),
     );
 
     let items = collect_items(&mut source);
@@ -1137,7 +1138,7 @@ fn buffer_text_source_cursor_emits_control_and_glyphless_items() {
         &snapshot,
         CharPos0::ZERO,
         end,
-        RenderFaceRef::FaceId(3),
+        RenderFaceRef::FaceId(FaceId::new(3)),
     );
 
     let items = collect_items(&mut source);

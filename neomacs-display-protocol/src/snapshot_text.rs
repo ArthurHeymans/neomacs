@@ -32,13 +32,13 @@ use std::fmt::Write as _;
 use crate::face::BasicFaceId;
 use crate::frame_glyphs::GlyphRowRole;
 use crate::glyph_matrix::{FrameDisplayState, GlyphRow, GlyphType};
-use crate::types::Color;
+use crate::types::{Color, FaceId};
 
 /// One run of consecutive printed chars sharing a face id.
 struct FaceRun {
     start: usize,
     end: usize,
-    face_id: u32,
+    face_id: FaceId,
 }
 
 impl FrameDisplayState {
@@ -154,7 +154,7 @@ impl FrameDisplayState {
             let (name, fg, bg) = match self.faces.get(&run.face_id) {
                 Some(face) => (
                     face.lisp_name.clone().unwrap_or_else(|| {
-                        BasicFaceId::from_gnu_code(face.id)
+                        BasicFaceId::from_gnu_code(face.id.get())
                             .map(|basic| basic.name().to_string())
                             .unwrap_or_else(|| format!("face:{}", face.id))
                     }),

@@ -10,7 +10,7 @@
 use crate::face::{Face, FaceAttributes};
 use crate::frame_glyphs::CursorStyle;
 use crate::glyph_matrix::*;
-use crate::types::Color;
+use crate::types::{Color, FaceId};
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
@@ -190,7 +190,7 @@ pub struct TtyRif {
     /// Visible terminal cursor shape when the hardware cursor is shown.
     cursor_shape: TerminalCursorShape,
     /// Face lookup table (face_id -> Face).
-    faces: HashMap<u32, Face>,
+    faces: HashMap<FaceId, Face>,
     /// Default background color (r, g, b).
     default_bg: Option<(u8, u8, u8)>,
     /// Default foreground color (r, g, b).
@@ -246,7 +246,7 @@ impl TtyRif {
     }
 
     /// Set the face table for resolving face_ids.
-    pub fn set_faces(&mut self, faces: HashMap<u32, Face>) {
+    pub fn set_faces(&mut self, faces: HashMap<FaceId, Face>) {
         self.faces = faces;
     }
 
@@ -262,7 +262,7 @@ impl TtyRif {
 
     fn install_state_faces(&mut self, state: &FrameDisplayState) {
         self.faces = state.faces.clone();
-        let default_face = self.faces.get(&0);
+        let default_face = self.faces.get(&FaceId::new(0));
         self.default_bg = if default_face.is_some_and(|face| face.use_default_background) {
             None
         } else {
@@ -426,7 +426,7 @@ impl TtyRif {
             return;
         }
         self.install_state_faces(child);
-        let attrs = self.resolve_attrs(0);
+        let attrs = self.resolve_attrs(FaceId::new(0));
         let width = child.frame_cols;
         let height = child.frame_rows;
         if width == 0 || height == 0 {
@@ -558,7 +558,7 @@ impl TtyRif {
     }
 
     /// Resolve face_id into terminal cell attributes.
-    fn resolve_attrs(&self, face_id: u32) -> CellAttrs {
+    fn resolve_attrs(&self, face_id: FaceId) -> CellAttrs {
         if let Some(face) = self.faces.get(&face_id) {
             CellAttrs {
                 fg: (!face.use_default_foreground).then(|| color_to_rgb8(&face.foreground)),

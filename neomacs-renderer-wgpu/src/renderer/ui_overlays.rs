@@ -1,5 +1,6 @@
 //! UI overlay rendering methods for WgpuRenderer.
 
+use neomacs_display_protocol::types::FaceId;
 use super::super::glyph_atlas::{
     AnyAtlasEntry, GlyphAtlasHandle, GlyphKey, GlyphMaterialKind, SubpixelRequest, WgpuGlyphAtlas,
     glyph_font_identity,
@@ -221,7 +222,7 @@ impl WgpuRenderer {
                     for (ci, ch) in title.chars().enumerate() {
                         let key = GlyphKey {
                             charcode: ch as u32,
-                            face_id: 0,
+                            face_id: FaceId::new(0),
                             font_size_bits,
                             font_identity: glyph_font_identity(None),
                             x_bin: SubpixelBin::Zero,
@@ -262,7 +263,7 @@ impl WgpuRenderer {
                 for (ci, ch) in item.label.chars().enumerate() {
                     let key = GlyphKey {
                         charcode: ch as u32,
-                        face_id: 0,
+                        face_id: FaceId::new(0),
                         font_size_bits,
                         font_identity: glyph_font_identity(None),
                         x_bin: SubpixelBin::Zero,
@@ -290,7 +291,7 @@ impl WgpuRenderer {
                     for (ci, ch) in item.shortcut.chars().enumerate() {
                         let key = GlyphKey {
                             charcode: ch as u32,
-                            face_id: 0,
+                            face_id: FaceId::new(0),
                             font_size_bits,
                             font_identity: glyph_font_identity(None),
                             x_bin: SubpixelBin::Zero,
@@ -317,7 +318,7 @@ impl WgpuRenderer {
                     let arrow_x = mx + mw - padding * 2.0 - char_width;
                     let key = GlyphKey {
                         charcode: '\u{25B8}' as u32,
-                        face_id: 0,
+                        face_id: FaceId::new(0),
                         font_size_bits,
                         font_identity: glyph_font_identity(None),
                         x_bin: SubpixelBin::Zero,
@@ -544,7 +545,7 @@ impl WgpuRenderer {
                 }
                 let key = GlyphKey {
                     charcode: ch as u32,
-                    face_id: 0,
+                    face_id: FaceId::new(0),
                     font_size_bits,
                     font_identity: glyph_font_identity(None),
                     x_bin: SubpixelBin::Zero,
@@ -809,7 +810,7 @@ impl WgpuRenderer {
             for (ci, ch) in line.chars().enumerate() {
                 let key = GlyphKey {
                     charcode: ch as u32,
-                    face_id: 0,
+                    face_id: FaceId::new(0),
                     font_size_bits,
                     font_identity: glyph_font_identity(None),
                     x_bin: SubpixelBin::Zero,
@@ -1022,7 +1023,7 @@ impl WgpuRenderer {
         for (ci, ch) in title.chars().enumerate() {
             let key = GlyphKey {
                 charcode: ch as u32,
-                face_id: 0,
+                face_id: FaceId::new(0),
                 font_size_bits,
                 font_identity: glyph_font_identity(None),
                 x_bin: SubpixelBin::Zero,
@@ -1066,7 +1067,7 @@ impl WgpuRenderer {
         let min_icon_x = min_x + (btn_w - char_width) / 2.0;
         let min_key = GlyphKey {
             charcode: 0x2500,
-            face_id: 0,
+            face_id: FaceId::new(0),
             font_size_bits,
             font_identity: glyph_font_identity(None),
             x_bin: SubpixelBin::Zero,
@@ -1086,7 +1087,7 @@ impl WgpuRenderer {
         let max_icon_x = max_x + (btn_w - char_width) / 2.0;
         let max_key = GlyphKey {
             charcode: 0x25A1,
-            face_id: 0,
+            face_id: FaceId::new(0),
             font_size_bits,
             font_identity: glyph_font_identity(None),
             x_bin: SubpixelBin::Zero,
@@ -1106,7 +1107,7 @@ impl WgpuRenderer {
         let close_icon_x = close_x + (btn_w - char_width) / 2.0;
         let close_key = GlyphKey {
             charcode: 0x00D7,
-            face_id: 0,
+            face_id: FaceId::new(0),
             font_size_bits,
             font_identity: glyph_font_identity(None),
             x_bin: SubpixelBin::Zero,
@@ -1352,7 +1353,7 @@ impl WgpuRenderer {
         for (ci, ch) in preedit_text.chars().enumerate() {
             let key = GlyphKey {
                 charcode: ch as u32,
-                face_id: 0,
+                face_id: FaceId::new(0),
                 font_size_bits,
                 font_identity: glyph_font_identity(None),
                 x_bin: SubpixelBin::Zero,
@@ -1610,7 +1611,7 @@ impl WgpuRenderer {
                     }
                     let key = GlyphKey {
                         charcode: ch as u32,
-                        face_id: 0,
+                        face_id: FaceId::new(0),
                         font_size_bits,
                         font_identity: glyph_font_identity(None),
                         x_bin: SubpixelBin::Zero,
@@ -1645,7 +1646,7 @@ impl WgpuRenderer {
                     }
                     let key = GlyphKey {
                         charcode: ch as u32,
-                        face_id: 0,
+                        face_id: FaceId::new(0),
                         font_size_bits,
                         font_identity: glyph_font_identity(None),
                         x_bin: SubpixelBin::Zero,
@@ -1710,7 +1711,7 @@ impl WgpuRenderer {
                     }
                     let key = GlyphKey {
                         charcode: ch as u32,
-                        face_id: 0,
+                        face_id: FaceId::new(0),
                         font_size_bits,
                         font_identity: glyph_font_identity(None),
                         x_bin: SubpixelBin::Zero,
@@ -1834,7 +1835,7 @@ impl WgpuRenderer {
             let cx = bar_x + padding_x + ci as f32 * char_width;
             let key = GlyphKey {
                 charcode: ch as u32,
-                face_id: 0,
+                face_id: FaceId::new(0),
                 font_size_bits,
                 font_identity: glyph_font_identity(None),
                 x_bin: SubpixelBin::Zero,
@@ -1981,7 +1982,7 @@ impl WgpuRenderer {
             for (ci, ch) in line.chars().enumerate() {
                 let key = GlyphKey {
                     charcode: ch as u32,
-                    face_id: 0,
+                    face_id: FaceId::new(0),
                     font_size_bits,
                     font_identity: glyph_font_identity(None),
                     x_bin: SubpixelBin::Zero,
@@ -2211,7 +2212,7 @@ impl WgpuRenderer {
             for (ci, ch) in item.label.chars().enumerate() {
                 let key = GlyphKey {
                     charcode: ch as u32,
-                    face_id: 0,
+                    face_id: FaceId::new(0),
                     font_size_bits,
                     font_identity: glyph_font_identity(None),
                     x_bin: SubpixelBin::Zero,
@@ -2427,7 +2428,7 @@ impl WgpuRenderer {
             for (ci, ch) in item.label.chars().enumerate() {
                 let key = GlyphKey {
                     charcode: ch as u32,
-                    face_id: 0,
+                    face_id: FaceId::new(0),
                     font_size_bits,
                     font_identity: glyph_font_identity(None),
                     x_bin: SubpixelBin::Zero,

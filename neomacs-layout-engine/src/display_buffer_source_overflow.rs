@@ -4,6 +4,7 @@
 //! special display items while delegating actual item appends to the shared row
 //! source append pipeline.
 
+use neomacs_display_protocol::types::FaceId;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_walk::BufferSourceWalk;
 use crate::display_row_builder::DisplayRowGlyphCheckpoint;
@@ -408,7 +409,7 @@ impl BufferSourceTruncationSkipAction {
     pub(crate) fn apply_before_row_transition(
         self,
         line_numbers: &mut LineNumberRenderState,
-        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
         x: &mut f32,
         content_x: f32,
     ) {
@@ -488,7 +489,7 @@ impl BufferSourceWordWrapAction {
         output_emitter: &mut WindowOutputEmitter,
         position: &mut DisplaySourceTextPosition,
         col: &mut usize,
-        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
         x: &mut f32,
         content_x: f32,
     ) {
@@ -555,7 +556,7 @@ impl BufferSourceSpecialWrapAction {
 
     pub(crate) fn apply_before_row_transition(
         self,
-        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
         x: &mut f32,
         content_x: f32,
     ) {
@@ -619,7 +620,7 @@ impl BufferSourceCharacterWrapAction {
 
     pub(crate) fn apply_before_row_transition(
         self,
-        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
         x: &mut f32,
         content_x: f32,
     ) {

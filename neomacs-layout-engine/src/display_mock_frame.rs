@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_frame_output::FrameOutputIdentity;
 use crate::display_item::{
@@ -45,7 +46,7 @@ pub(crate) fn resolved_mock_face(
 ) -> ResolvedFace {
     let mut resolved = ResolvedFace::default();
     if let Some(face) = face {
-        resolved.face_id = face.id;
+        resolved.set_display_face_id(face.id);
         resolved.fg = protocol_color_to_pixel(face.foreground);
         resolved.bg = protocol_color_to_pixel(face.background);
         resolved.use_default_foreground = face.use_default_foreground;
@@ -111,7 +112,7 @@ fn new_empty_mock_display_row(
         role,
         geometry.char_width().max(1.0),
         geometry.ascent().max(0.0).min(geometry.height().max(1.0)),
-        RenderFaceRef::FaceId(base_face.face_id),
+        RenderFaceRef::FaceId(base_face.display_face_id()),
         crate::display_pixel_calc::PixelCalcContext::for_chrome_row(
             geometry.width(),
             geometry.char_width().max(1.0),
@@ -123,7 +124,7 @@ fn new_empty_mock_display_row(
 
 fn mock_display_text_item(
     text: impl Into<Box<str>>,
-    face_id: u32,
+    face_id: FaceId,
     source_offset: usize,
 ) -> DisplayItem {
     let text = text.into();
@@ -144,13 +145,13 @@ struct MockDisplayItemSource {
 }
 
 impl MockDisplayItemSource {
-    fn from_text(text: impl Into<Box<str>>, face_id: u32) -> Self {
+    fn from_text(text: impl Into<Box<str>>, face_id: FaceId) -> Self {
         let mut builder = MockDisplayItemSourceBuilder::default();
         builder.push_text(text, face_id);
         builder.finish()
     }
 
-    fn from_line(line: &MockStyledLine, fill_to_cols: Option<(usize, u32)>) -> Self {
+    fn from_line(line: &MockStyledLine, fill_to_cols: Option<(usize, FaceId)>) -> Self {
         let mut builder = MockDisplayItemSourceBuilder::default();
         let mut visible_cols = 0usize;
         for glyph in &line.glyphs {
@@ -197,7 +198,7 @@ struct MockDisplayItemSourceBuilder {
 }
 
 impl MockDisplayItemSourceBuilder {
-    fn push_text(&mut self, text: impl Into<Box<str>>, face_id: u32) {
+    fn push_text(&mut self, text: impl Into<Box<str>>, face_id: FaceId) {
         let text = text.into();
         let char_len = text.chars().count();
         if char_len == 0 {
@@ -246,7 +247,7 @@ fn render_mock_display_area(request: MockDisplayAreaRenderRequest<'_>) {
     let render_width = geometry.width();
     let mut source_state = DisplayRowSourceState::default();
     let row_request =
-        DisplayRowSourceFragmentFrame::new(geometry, role, base_face.face_id, base_face)
+        DisplayRowSourceFragmentFrame::new(geometry, role, base_face.display_face_id(), base_face)
             .render_request_for_area(
                 DisplayRowRenderBounds::new(
                     DisplayRowPosition::new(0.0, 0),
@@ -268,7 +269,7 @@ pub(crate) fn mock_display_row_from_line(
     char_h: f32,
     ascent: f32,
     left_margin: Option<&str>,
-    fill_to_cols: Option<(usize, u32)>,
+    fill_to_cols: Option<(usize, FaceId)>,
     base_face: &ResolvedFace,
     face_resolver: &FaceResolver,
     font_metrics: &mut Option<FontMetricsService>,
@@ -280,7 +281,7 @@ pub(crate) fn mock_display_row_from_line(
         render_mock_display_area(MockDisplayAreaRenderRequest {
             role,
             area: GlyphArea::LeftMargin,
-            source: MockDisplayItemSource::from_text(left_margin.to_owned(), 2),
+            source: MockDisplayItemSource::from_text(left_margin.to_owned(), FaceId::new(2)),
             row: &mut row,
             geometry: geometry.clone(),
             base_face,
@@ -448,7 +449,7 @@ pub(crate) fn layout_mock_frame_content(
             char_h,
             ascent,
             None,
-            Some((ml_ncols, 1)),
+            Some((ml_ncols, FaceId::new(1))),
             &mock_base_face,
             &mock_face_resolver,
             font_metrics,
@@ -507,7 +508,7 @@ pub(crate) fn layout_mock_frame_content(
                 char_h,
                 ascent,
                 None,
-                Some((mini_ncols, 1)),
+                Some((mini_ncols, FaceId::new(1))),
                 &mock_base_face,
                 &mock_face_resolver,
                 font_metrics,

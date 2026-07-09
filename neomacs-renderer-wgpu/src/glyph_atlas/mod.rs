@@ -10,6 +10,7 @@ pub use types::{
     AnyAtlasEntry, GlyphAtlasError, GlyphAtlasHandle, GlyphMaterialKind, SubpixelRequest,
 };
 
+use neomacs_display_protocol::types::FaceId;
 use std::collections::{HashMap, HashSet, hash_map::DefaultHasher};
 use std::hash::{Hash, Hasher};
 
@@ -33,7 +34,7 @@ pub struct GlyphKey {
     /// Character code
     pub charcode: u32,
     /// Face ID (determines font, style)
-    pub face_id: u32,
+    pub face_id: FaceId,
     /// Font size in pixels (for text-scale-increase support)
     /// Using u32 bits of f32 for hashing
     pub font_size_bits: u32,
@@ -57,7 +58,7 @@ pub struct ComposedGlyphKey {
     /// The full text of the composed grapheme cluster
     pub text: Box<str>,
     /// Face ID (determines font, style)
-    pub face_id: u32,
+    pub face_id: FaceId,
     /// Font size in pixels (using u32 bits of f32 for hashing)
     pub font_size_bits: u32,
     /// Realized font identity; see [`GlyphKey::font_identity`].
@@ -242,7 +243,7 @@ pub struct WgpuGlyphAtlas {
     unresolved_face_text_total: u64,
     /// Face ids already warned about, so the emergency path logs once per
     /// face instead of per glyph.
-    unresolved_face_warned: HashSet<u32>,
+    unresolved_face_warned: HashSet<FaceId>,
 }
 
 impl WgpuGlyphAtlas {
@@ -1027,7 +1028,7 @@ impl WgpuGlyphAtlas {
                 // the same call.
                 tracing::trace!(
                     target: "font_boundary",
-                    face_id = f.id,
+                    face_id = f.id.get(),
                     family = %effective_family,
                     ch = %ch,
                     "render-side per-char font fallback"
@@ -1061,7 +1062,7 @@ impl WgpuGlyphAtlas {
                 if self.unresolved_face_warned.insert(f.id) {
                     tracing::warn!(
                         target: "font_boundary",
-                        face_id = f.id,
+                        face_id = f.id.get(),
                         family = %f.font_family,
                         weight = f.font_weight,
                         lisp_name = f.lisp_name.as_deref().unwrap_or(""),
@@ -1847,7 +1848,7 @@ impl WgpuGlyphAtlas {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         text: &str,
-        face_id: u32,
+        face_id: FaceId,
         font_size_bits: u32,
         face: Option<&Face>,
         x_bin: SubpixelBin,
@@ -1878,7 +1879,7 @@ impl WgpuGlyphAtlas {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         text: &str,
-        face_id: u32,
+        face_id: FaceId,
         font_size_bits: u32,
         face: Option<&Face>,
         x_bin: SubpixelBin,
@@ -2001,7 +2002,7 @@ impl WgpuGlyphAtlas {
 }
 
 fn key_uses_default_font_metrics(key: &GlyphKey, default_font_size: f32) -> bool {
-    if key.face_id != 0 {
+    if key.face_id != FaceId::new(0) {
         return false;
     }
     let font_size = f32::from_bits(key.font_size_bits);

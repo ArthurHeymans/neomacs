@@ -343,7 +343,7 @@ impl GuiFrameRenderState {
     pub(super) fn extend_current_frame_glyphs_and_faces(
         &mut self,
         glyphs: Vec<FrameGlyph>,
-        faces: HashMap<u32, crate::core::face::Face>,
+        faces: HashMap<crate::core::types::FaceId, crate::core::face::Face>,
     ) -> bool {
         if glyphs.is_empty() {
             return false;

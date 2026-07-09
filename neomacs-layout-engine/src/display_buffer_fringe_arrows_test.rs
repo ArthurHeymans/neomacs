@@ -128,7 +128,7 @@ fn mutation_sets_right_arrow_on_truncated_row() {
         has_left_fringe: true,
         has_right_fringe: true,
         bitmaps: bitmaps(),
-        face_id: 7,
+        face_id: FaceId::new(7),
     };
     mutation.apply(&mut row, 80);
     assert_eq!(
@@ -136,7 +136,7 @@ fn mutation_sets_right_arrow_on_truncated_row() {
         Some(11),
         "truncated row gets right-arrow in the right fringe",
     );
-    assert_eq!(row.right_fringe_bitmap.map(|i| i.face_id), Some(7));
+    assert_eq!(row.right_fringe_bitmap.map(|i| i.face_id), Some(FaceId::new(7)));
     assert!(row.left_fringe_bitmap.is_none());
 }
 
@@ -150,7 +150,7 @@ fn mutation_sets_curly_arrow_on_continued_row() {
         has_left_fringe: true,
         has_right_fringe: true,
         bitmaps: bitmaps(),
-        face_id: 7,
+        face_id: FaceId::new(7),
     };
     mutation.apply(&mut row, 80);
     assert_eq!(
@@ -168,7 +168,7 @@ fn mutation_does_not_clobber_existing_left_fringe_spec() {
     row.truncated_left = true;
     row.left_fringe_bitmap = Some(FringeBitmapInfo {
         bitmap_index: 99,
-        face_id: 3,
+        face_id: FaceId::new(3),
     });
     let mutation = FringeArrowRowMutation {
         continued: false,
@@ -177,7 +177,7 @@ fn mutation_does_not_clobber_existing_left_fringe_spec() {
         has_left_fringe: true,
         has_right_fringe: true,
         bitmaps: bitmaps(),
-        face_id: 7,
+        face_id: FaceId::new(7),
     };
     mutation.apply(&mut row, 80);
     assert_eq!(
@@ -199,7 +199,7 @@ fn mutation_reads_truncated_left_from_row() {
         has_left_fringe: true,
         has_right_fringe: true,
         bitmaps: bitmaps(),
-        face_id: 7,
+        face_id: FaceId::new(7),
     };
     mutation.apply(&mut row, 80);
     assert_eq!(
@@ -220,7 +220,7 @@ fn disabled_row_is_skipped() {
         has_left_fringe: true,
         has_right_fringe: true,
         bitmaps: bitmaps(),
-        face_id: 7,
+        face_id: FaceId::new(7),
     };
     mutation.apply(&mut row, 80);
     assert!(row.right_fringe_bitmap.is_none());

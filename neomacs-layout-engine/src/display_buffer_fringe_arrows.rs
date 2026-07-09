@@ -24,6 +24,7 @@
 //! the empty-line filler (which run first / on separate rows) keep precedence,
 //! matching GNU's `row->left_user_fringe_bitmap` short-circuit.
 
+use neomacs_display_protocol::types::FaceId;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_output_row_request::DisplayWindowRowMutation;
 use crate::display_row_geometry::{DisplayRowFlagKind, DisplayRowFlags};
@@ -85,7 +86,7 @@ pub(crate) struct TruncationContinuationFringeRequest {
     /// Resolved bitmap indices for the four logical arrow cases.
     bitmaps: FringeArrowBitmaps,
     /// Face id for the fringe bitmap quads (the `fringe` face).
-    face_id: u32,
+    face_id: FaceId,
 }
 
 impl TruncationContinuationFringeRequest {
@@ -97,7 +98,7 @@ impl TruncationContinuationFringeRequest {
         ctx: &Context,
         params: &WindowParams,
         display_text_row_base: usize,
-        face_id: u32,
+        face_id: FaceId,
     ) -> Option<Self> {
         let has_left_fringe = params.left_fringe_width > 0.0;
         let has_right_fringe = params.right_fringe_width > 0.0;
@@ -218,7 +219,7 @@ struct FringeArrowRowMutation {
     has_left_fringe: bool,
     has_right_fringe: bool,
     bitmaps: FringeArrowBitmaps,
-    face_id: u32,
+    face_id: FaceId,
 }
 
 impl DisplayWindowRowMutation for FringeArrowRowMutation {

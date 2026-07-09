@@ -42,7 +42,7 @@ fn test_scene_defaults() {
 fn test_scene_clear_resets_windows_and_root_but_preserves_faces() {
     let mut scene = Scene::new(800.0, 600.0);
     // Add a face
-    let face = Face::new(1);
+    let face = Face::new(FaceId::new(1));
     scene.set_face(face);
     // Add a window
     scene.windows.push(make_window(42, 0.0, 0.0, 400.0, 300.0));
@@ -56,7 +56,7 @@ fn test_scene_clear_resets_windows_and_root_but_preserves_faces() {
     assert!(scene.windows.is_empty());
     assert!(scene.root.is_none());
     // Faces should be preserved
-    assert!(scene.get_face(1).is_some());
+    assert!(scene.get_face(FaceId::new(1)).is_some());
     // clear marks the scene dirty
     assert!(scene.dirty.is_some());
 }
@@ -64,31 +64,31 @@ fn test_scene_clear_resets_windows_and_root_but_preserves_faces() {
 #[test]
 fn test_scene_set_and_get_face() {
     let mut scene = Scene::new(800.0, 600.0);
-    let mut face = Face::new(5);
+    let mut face = Face::new(FaceId::new(5));
     face.font_size = 16.0;
     face.font_family = "Iosevka".to_string();
     scene.set_face(face);
 
-    let retrieved = scene.get_face(5).unwrap();
-    assert_eq!(retrieved.id, 5);
+    let retrieved = scene.get_face(FaceId::new(5)).unwrap();
+    assert_eq!(retrieved.id, FaceId::new(5));
     assert_eq!(retrieved.font_size, 16.0);
     assert_eq!(retrieved.font_family, "Iosevka");
     // Non-existent face
-    assert!(scene.get_face(99).is_none());
+    assert!(scene.get_face(FaceId::new(99)).is_none());
 }
 
 #[test]
 fn test_scene_set_face_overwrites() {
     let mut scene = Scene::new(800.0, 600.0);
-    let mut face = Face::new(1);
+    let mut face = Face::new(FaceId::new(1));
     face.font_size = 12.0;
     scene.set_face(face);
 
-    let mut updated = Face::new(1);
+    let mut updated = Face::new(FaceId::new(1));
     updated.font_size = 20.0;
     scene.set_face(updated);
 
-    let f = scene.get_face(1).unwrap();
+    let f = scene.get_face(FaceId::new(1)).unwrap();
     assert_eq!(f.font_size, 20.0);
 }
 
@@ -113,7 +113,7 @@ fn test_node_color_rect() {
 #[test]
 fn test_node_text_run() {
     let bounds = Rect::new(0.0, 0.0, 200.0, 16.0);
-    let node = Node::text_run("hello world".into(), 3, 5.0, 10.0, bounds);
+    let node = Node::text_run("hello world".into(), FaceId::new(3), 5.0, 10.0, bounds);
     match &node.kind {
         NodeKind::TextRun {
             text,
@@ -122,7 +122,7 @@ fn test_node_text_run() {
             y,
         } => {
             assert_eq!(text, "hello world");
-            assert_eq!(*face_id, 3);
+            assert_eq!(*face_id, FaceId::new(3));
             assert_eq!(*x, 5.0);
             assert_eq!(*y, 10.0);
         }

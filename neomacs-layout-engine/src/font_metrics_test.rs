@@ -1581,20 +1581,20 @@ fn realize_frame_fonts_publishes_face_identity_and_table() {
     use neomacs_display_protocol::glyph_matrix::FrameDisplayState;
 
     let mut state = FrameDisplayState::new(80, 24, 8.0, 16.0);
-    let mut default_face = Face::new(0);
+    let mut default_face = Face::new(FaceId::new(0));
     default_face.font_family = "Monospace".to_string();
     default_face.font_size = 24.0;
-    state.faces.insert(0, default_face);
-    let mut bold_face = Face::new(21);
+    state.faces.insert(FaceId::new(0), default_face);
+    let mut bold_face = Face::new(FaceId::new(21));
     bold_face.font_family = "Monospace".to_string();
     bold_face.font_size = 24.0;
     bold_face.font_weight = 700;
-    state.faces.insert(21, bold_face);
+    state.faces.insert(FaceId::new(21), bold_face);
 
     let mut service = Some(make_svc());
     realize_frame_fonts(&mut state, &mut service);
 
-    for face_id in [0u32, 21] {
+    for face_id in [FaceId::new(0), FaceId::new(21)] {
         let face = &state.faces[&face_id];
         let font_id = face
             .default_resolved_font_id
@@ -1612,11 +1612,11 @@ fn realize_frame_fonts_publishes_face_identity_and_table() {
 
     // TTY frames (no service) must stay untouched.
     let mut tty_state = FrameDisplayState::new(80, 24, 1.0, 1.0);
-    tty_state.faces.insert(0, Face::new(0));
+    tty_state.faces.insert(FaceId::new(0), Face::new(FaceId::new(0)));
     let mut no_service: Option<FontMetricsService> = None;
     realize_frame_fonts(&mut tty_state, &mut no_service);
     assert!(tty_state.fonts.is_empty());
-    assert_eq!(tty_state.faces[&0].default_resolved_font_id, None);
+    assert_eq!(tty_state.faces[&FaceId::new(0)].default_resolved_font_id, None);
 }
 
 /// Not a pass/fail perf gate (wall-clock asserts flake in CI) — this prints
@@ -1633,11 +1633,11 @@ fn realize_frame_fonts_steady_state_cost_probe() {
         let mut state = FrameDisplayState::new(120, 40, 8.0, 16.0);
         // 40 faces across a few realistic attr combos (default, bold,
         // italic, size variants) — a typical GUI frame's face table.
-        for id in 0..40u32 {
+        for id in (0..40u32).map(FaceId::new) {
             let mut face = Face::new(id);
             face.font_family = "Monospace".to_string();
-            face.font_size = 14.0 + (id % 3) as f32;
-            face.font_weight = if id % 4 == 0 { 700 } else { 400 };
+            face.font_size = 14.0 + (id.get() % 3) as f32;
+            face.font_weight = if id.get() % 4 == 0 { 700 } else { 400 };
             state.faces.insert(id, face);
         }
         state
@@ -1689,15 +1689,15 @@ fn realize_frame_char_fonts_stamps_cjk_fallback() {
     use neomacs_display_protocol::types::Rect;
 
     let mut state = FrameDisplayState::new(20, 1, 8.0, 16.0);
-    let mut face = Face::new(0);
+    let mut face = Face::new(FaceId::new(0));
     face.font_family = "Monospace".to_string();
     face.font_size = 14.0;
-    state.faces.insert(0, face);
+    state.faces.insert(FaceId::new(0), face);
 
     let mut matrix = GlyphMatrix::new(1, 20);
     matrix.rows[0].enabled = true;
     for (i, ch) in "a好b".chars().enumerate() {
-        matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, 0, i));
+        matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), i));
     }
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
@@ -1714,7 +1714,7 @@ fn realize_frame_char_fonts_stamps_cjk_fallback() {
     // ASCII chars must NOT get char-fallback entries; the CJK char must.
     let by_char = state
         .char_fonts
-        .get(&0)
+        .get(&FaceId::new(0))
         .expect("face 0 has char fallback entries");
     assert!(!by_char.contains_key(&'a'));
     let font_id = by_char.get(&'好').copied().expect("好 resolved");
@@ -1784,14 +1784,14 @@ fn realize_frame_fonts_publishes_shaped_clusters_for_composites() {
     use neomacs_display_protocol::types::Rect;
 
     let mut state = FrameDisplayState::new(20, 1, 8.0, 16.0);
-    let mut face = Face::new(0);
+    let mut face = Face::new(FaceId::new(0));
     face.font_family = "Monospace".to_string();
     face.font_size = 14.0;
-    state.faces.insert(0, face);
+    state.faces.insert(FaceId::new(0), face);
 
     let mut matrix = GlyphMatrix::new(1, 20);
     matrix.rows[0].enabled = true;
-    let mut composite = Glyph::char('e', 0, 0);
+    let mut composite = Glyph::char('e', FaceId::new(0), 0);
     composite.glyph_type = GlyphType::Composite {
         text: "e\u{0301}".into(),
     };
@@ -1810,7 +1810,7 @@ fn realize_frame_fonts_publishes_shaped_clusters_for_composites() {
 
     let glyphs = state
         .shaped_clusters
-        .get(&0)
+        .get(&FaceId::new(0))
         .and_then(|by_text| by_text.get("e\u{0301}"))
         .expect("composite cluster published");
     assert!(!glyphs.is_empty());

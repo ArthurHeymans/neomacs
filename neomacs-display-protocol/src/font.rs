@@ -6,6 +6,7 @@
 //! resolved font identity and only rasterizes. See
 //! `docs/plans/2026-07-05-font-realization-render-boundary-design.md`.
 
+use crate::types::FaceId;
 use std::collections::HashMap;
 
 /// Snapshot-local id referencing an entry in a frame state's resolved
@@ -168,7 +169,7 @@ pub struct ResolvedGlyph {
 /// this publishes the exact shaped output — glyph ids in exact fonts — so
 /// the render thread rasterizes those glyphs instead of re-shaping the
 /// cluster text and risking a different font or cluster segmentation.
-pub type ShapedClusterTable = HashMap<u32, HashMap<Box<str>, Vec<ResolvedGlyph>>>;
+pub type ShapedClusterTable = HashMap<FaceId, HashMap<Box<str>, Vec<ResolvedGlyph>>>;
 
 /// Per-frame character fallback font table: `face_id → representative char →
 /// resolved font`.
@@ -179,7 +180,7 @@ pub type ShapedClusterTable = HashMap<u32, HashMap<Box<str>, Vec<ResolvedGlyph>>
 /// measurement and publishes the answer here so the render thread rasterizes
 /// the same font instead of re-running its own per-character matching.
 /// Entries reference [`ResolvedFontTable`] ids.
-pub type CharFontTable = HashMap<u32, HashMap<char, ResolvedFontId>>;
+pub type CharFontTable = HashMap<FaceId, HashMap<char, ResolvedFontId>>;
 
 #[cfg(test)]
 #[path = "font_test.rs"]

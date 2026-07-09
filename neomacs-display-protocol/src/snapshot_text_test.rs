@@ -1,4 +1,5 @@
 use crate::cursor::CursorStyle;
+use crate::types::FaceId;
 use crate::face::Face;
 use crate::frame_glyphs::{DisplaySlotId, GlyphRowRole, PhysCursor, WindowInfo};
 use crate::glyph_matrix::{
@@ -13,27 +14,27 @@ fn golden_state() -> FrameDisplayState {
     let mut state = FrameDisplayState::new(16, 2, 8.0, 16.0);
     state.frame_id = DisplayFrameId::new(1);
 
-    let mut default_face = Face::new(0);
+    let mut default_face = Face::new(FaceId::new(0));
     default_face.lisp_name = Some("default".to_string());
     default_face.foreground = Color::WHITE;
     default_face.background = Color::BLACK;
-    state.faces.insert(0, default_face);
+    state.faces.insert(FaceId::new(0), default_face);
 
     let mut matrix = GlyphMatrix::new(2, 16);
     let text_area = GlyphArea::Text as usize;
 
     matrix.rows[0].enabled = true;
-    matrix.rows[0].glyphs[text_area].push(Glyph::char('h', 0, 1));
-    matrix.rows[0].glyphs[text_area].push(Glyph::char('i', 0, 2));
-    matrix.rows[0].glyphs[text_area].push(Glyph::stretch(2, 0));
+    matrix.rows[0].glyphs[text_area].push(Glyph::char('h', FaceId::new(0), 1));
+    matrix.rows[0].glyphs[text_area].push(Glyph::char('i', FaceId::new(0), 2));
+    matrix.rows[0].glyphs[text_area].push(Glyph::stretch(2, FaceId::new(0)));
     matrix.rows[0].glyphs[text_area].push(Glyph {
         glyph_type: GlyphType::Image { image_id: 7 },
-        ..Glyph::char('x', 0, 3)
+        ..Glyph::char('x', FaceId::new(0), 3)
     });
-    let mut wide = Glyph::char('你', 0, 4);
+    let mut wide = Glyph::char('你', FaceId::new(0), 4);
     wide.wide = true;
     matrix.rows[0].glyphs[text_area].push(wide);
-    let mut padding = Glyph::char('你', 0, 4);
+    let mut padding = Glyph::char('你', FaceId::new(0), 4);
     padding.padding = true;
     matrix.rows[0].glyphs[text_area].push(padding);
 
@@ -41,7 +42,7 @@ fn golden_state() -> FrameDisplayState {
     matrix.rows[1].role = GlyphRowRole::ModeLine;
     matrix.rows[1].mode_line = true;
     for (i, ch) in "-U:--".chars().enumerate() {
-        matrix.rows[1].glyphs[text_area].push(Glyph::char(ch, 0, i));
+        matrix.rows[1].glyphs[text_area].push(Glyph::char(ch, FaceId::new(0), i));
     }
 
     state.window_matrices.push(WindowMatrixEntry {
@@ -134,14 +135,14 @@ fn render_text_skips_disabled_rows_and_falls_back_without_window_info() {
 fn face_run_name_falls_back_to_basic_face_and_raw_id() {
     let mut state = golden_state();
     // Unnamed face with a basic id resolves to the canonical basic name.
-    let mut unnamed_basic = Face::new(1); // BasicFaceId::ModeLineActive
+    let mut unnamed_basic = Face::new(FaceId::new(1)); // BasicFaceId::ModeLineActive
     unnamed_basic.lisp_name = None;
-    state.faces.insert(1, unnamed_basic);
+    state.faces.insert(FaceId::new(1), unnamed_basic);
     // Unnamed dynamic face falls back to face:<id>.
-    state.faces.insert(99, Face::new(99));
+    state.faces.insert(FaceId::new(99), Face::new(FaceId::new(99)));
     let text_area = GlyphArea::Text as usize;
-    state.window_matrices[0].matrix.rows[1].glyphs[text_area].push(Glyph::char('m', 1, 10));
-    state.window_matrices[0].matrix.rows[1].glyphs[text_area].push(Glyph::char('d', 99, 11));
+    state.window_matrices[0].matrix.rows[1].glyphs[text_area].push(Glyph::char('m', FaceId::new(1), 10));
+    state.window_matrices[0].matrix.rows[1].glyphs[text_area].push(Glyph::char('d', FaceId::new(99), 11));
     let out = state.render_text_faces();
     assert!(
         out.contains("mode-line-active fg=#"),

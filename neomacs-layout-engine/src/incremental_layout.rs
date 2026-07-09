@@ -12,6 +12,7 @@
 //! Spec: docs/superpowers/specs/2026-06-26-neomacs-incremental-layout-design.md
 //! (§4.1 retained structure, §4.6 RowDamage, §5 Phase 0a, §7 go-criteria).
 
+use neomacs_display_protocol::types::FaceId;
 use crate::types::{LineWrapMode, WindowParams};
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::CursorStyle;
@@ -280,7 +281,7 @@ pub struct RetainedWindowMatrix {
     /// installs these rows verbatim must RE-REGISTER these faces into the new
     /// frame's table (and reserve their id range against the chrome re-walk), or
     /// the reused glyphs resolve to the wrong/missing face at render time.
-    pub faces: std::collections::HashMap<u32, Face>,
+    pub faces: std::collections::HashMap<FaceId, Face>,
 }
 
 /// Everything the cursor-only fast path (Phase 1) needs to replay a window
@@ -313,7 +314,7 @@ pub struct CursorOnlyReplay {
     /// Resolved faces for the reused rows' (prior-frame) face_ids, re-registered
     /// into the current frame's faces table before the rows are installed. See
     /// [`RetainedWindowMatrix::faces`].
-    pub faces: std::collections::HashMap<u32, Face>,
+    pub faces: std::collections::HashMap<FaceId, Face>,
 }
 
 /// Reuse plan for the pure-scroll fast path (Phase 2): the overlapping retained
@@ -361,7 +362,7 @@ pub struct ScrollReplay {
     /// Resolved faces for the reused rows' (prior-frame) face_ids, re-registered
     /// into the current frame's faces table before the rows are installed. See
     /// [`RetainedWindowMatrix::faces`].
-    pub faces: std::collections::HashMap<u32, Face>,
+    pub faces: std::collections::HashMap<FaceId, Face>,
 }
 
 impl RetainedWindowMatrix {
@@ -1009,7 +1010,7 @@ mod scroll_classifier_tests {
         let mut m = synthetic_matrix(0, 5); // rows start at 0,10,20,30,40
         // Give the edited row (row 2, chars [20,29]) 10 monospace (8px) glyphs.
         for c in 0..10 {
-            let mut g = Glyph::char('a', 0, (20 + c) as usize);
+            let mut g = Glyph::char('a', FaceId::new(0), (20 + c) as usize);
             g.pixel_width = 8.0;
             m.matrix.rows[2].glyphs[GlyphArea::Text.index()].push(g);
         }

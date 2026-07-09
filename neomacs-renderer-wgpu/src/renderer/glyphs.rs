@@ -1,5 +1,6 @@
 //! Glyphs methods for WgpuRenderer.
 
+use neomacs_display_protocol::types::FaceId;
 use super::super::glyph_atlas::{ComposedGlyphKey, GlyphKey, WgpuGlyphAtlas};
 use super::super::vertex::{RectVertex, SubpixelGlyphVertex, Uniforms};
 use super::GlyphRenderStats;
@@ -30,7 +31,7 @@ pub(super) struct RenderedCharBounds {
     pub(super) row_role: GlyphRowRole,
     pub(super) slot_id: DisplaySlotId,
     pub(super) label: String,
-    pub(super) face_id: u32,
+    pub(super) face_id: FaceId,
     pub(super) font_size: f32,
     pub(super) cell_x: f32,
     pub(super) cell_y: f32,
@@ -657,7 +658,7 @@ fn log_frame_glyph_debug_scan(frame_glyphs: &FrameGlyphBuffer) {
 fn log_face_debug_summary(
     call_id: u64,
     frame_glyphs: &FrameGlyphBuffer,
-    faces: &HashMap<u32, Face>,
+    faces: &HashMap<FaceId, Face>,
 ) {
     if !trace_face_debug_enabled() {
         return;
@@ -1475,7 +1476,7 @@ impl WgpuRenderer {
         (logical_w, logical_h)
     }
 
-    fn face_has_rounded_box(faces: &HashMap<u32, Face>, face_id: u32) -> bool {
+    fn face_has_rounded_box(faces: &HashMap<FaceId, Face>, face_id: FaceId) -> bool {
         faces
             .get(&face_id)
             .map(|f| f.box_corner_radius > 0)
@@ -1490,7 +1491,7 @@ impl WgpuRenderer {
         gy: f32,
         want_overlay: bool,
         box_spans: &[BoxSpan],
-        faces: &HashMap<u32, Face>,
+        faces: &HashMap<FaceId, Face>,
         box_margin: f32,
     ) -> bool {
         if box_margin <= 0.0 {

@@ -1,5 +1,6 @@
 //! Buffer source body walk setup and render pass driver.
 
+use neomacs_display_protocol::types::FaceId;
 use crate::display_buffer_source_face_resolution::*;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
@@ -87,7 +88,7 @@ pub(crate) struct BufferSourceWalkSetup {
     pub(crate) row_geometry: DisplayRowGeometryState,
     pub(crate) row_y_positions: DisplayRowYPositions,
     pub(crate) trailing_whitespace: TrailingWhitespaceRenderState,
-    pub(crate) row_extend: DisplayRowScopedValue<(Color, u32)>,
+    pub(crate) row_extend: DisplayRowScopedValue<(Color, FaceId)>,
     pub(crate) box_face: BoxFaceRowState,
     pub(crate) cursor_info: CursorCaptureState,
     pub(crate) hit_rows: Vec<HitRow>,

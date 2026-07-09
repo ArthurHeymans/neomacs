@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use crate::display_row_builder::{DisplayGlyphMeasurer, DisplayRowLayout};
 use crate::display_row_metrics::{DisplayRowFallbackMetrics, DisplayRowMeasuredFaceMetrics};
 use crate::display_row_width::DisplayRowCharWidthPolicy;
@@ -18,7 +19,7 @@ fn underline_style_from_code(code: u8) -> UnderlineStyle {
 /// Shared render-facing face state for display rows.
 #[derive(Debug, Clone)]
 pub(crate) struct DisplayRowFace {
-    pub(crate) face_id: u32,
+    pub(crate) face_id: FaceId,
     pub(crate) foreground: Color,
     pub(crate) background: Color,
     pub(crate) use_default_foreground: bool,
@@ -141,7 +142,7 @@ impl DisplayRowFaceMetrics {
 }
 
 impl DisplayRowFace {
-    pub(crate) fn from_resolved(face_id: u32, face: &ResolvedFace) -> Self {
+    pub(crate) fn from_resolved(face_id: FaceId, face: &ResolvedFace) -> Self {
         let box_type = BoxType::from_gnu_code(face.box_type).unwrap_or_default();
         Self {
             face_id,
@@ -260,7 +261,7 @@ impl DisplayRowFace {
             background_gradient: None,
             default_resolved_font_id: None,
             lisp_name: self.lisp_name.clone().or_else(|| {
-                neomacs_display_protocol::face::BasicFaceId::from_gnu_code(self.face_id)
+                neomacs_display_protocol::face::BasicFaceId::from_gnu_code(self.face_id.get())
                     .map(|basic| basic.name().to_string())
             }),
         }
@@ -268,7 +269,7 @@ impl DisplayRowFace {
 }
 
 pub(crate) fn resolved_display_row_face(
-    face_id: u32,
+    face_id: FaceId,
     face: &ResolvedFace,
     metrics: Option<FontMetrics>,
 ) -> DisplayRowFace {
@@ -290,7 +291,7 @@ impl<'a> DisplayRowFaceRealizer<'a> {
 
     pub(crate) fn realize_face(
         &mut self,
-        face_id: u32,
+        face_id: FaceId,
         face: &ResolvedFace,
         char_w: f32,
         ascent: f32,
@@ -313,7 +314,7 @@ impl<'a> DisplayRowFaceRealizer<'a> {
         if char_w <= 1.0 && fallback_row_height <= 1.0 {
             return fallback_row_height.max(1.0);
         }
-        let face = self.realize_face(0, face, char_w, fallback_ascent, fallback_row_height);
+        let face = self.realize_face(FaceId::new(0), face, char_w, fallback_ascent, fallback_row_height);
         let line_height = face.metrics.line_height_px().ceil();
         let box_pixels = if face.box_type != BoxType::None && face.box_h_line_width != 0 {
             2.0 * face.box_h_line_width.unsigned_abs() as f32
@@ -442,7 +443,7 @@ impl<'a> DisplayRowGlyphMeasurer<'a> {
         }
     }
 
-    fn face(&self, face_id: u32) -> Option<&DisplayRowFace> {
+    fn face(&self, face_id: FaceId) -> Option<&DisplayRowFace> {
         self.faces.iter().find(|face| face.face_id == face_id)
     }
 }
@@ -451,7 +452,7 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
     fn glyph_advance_px(
         &mut self,
         ch: char,
-        face_id: u32,
+        face_id: FaceId,
         columns: u8,
         fallback_advance_px: f32,
     ) -> Option<f32> {
@@ -485,7 +486,7 @@ impl DisplayGlyphMeasurer for DisplayRowGlyphMeasurer<'_> {
     fn text_run_advances_px(
         &mut self,
         text: &str,
-        face_id: u32,
+        face_id: FaceId,
         fallback_char_width_px: f32,
     ) -> DisplayTextRunMeasurement {
         if text.is_empty() {
@@ -566,7 +567,7 @@ impl DisplayRowMeasurementPolicy {
 
     pub(crate) fn measurement_face(
         self,
-        face_id: u32,
+        face_id: FaceId,
         face: &ResolvedFace,
         metrics: Option<FontMetrics>,
         fallback_char_width: f32,
@@ -581,7 +582,7 @@ impl DisplayRowMeasurementPolicy {
 
     pub(crate) fn measured_face(
         self,
-        face_id: u32,
+        face_id: FaceId,
         face: &ResolvedFace,
         metrics: Option<FontMetrics>,
         fallback_char_width: f32,
@@ -620,7 +621,7 @@ impl DisplayRowMeasurementPolicy {
 
     pub(crate) fn resolved_measured_face(
         self,
-        face_id: u32,
+        face_id: FaceId,
         face: ResolvedFace,
         metrics: Option<FontMetrics>,
         fallback_char_width: f32,
@@ -652,7 +653,7 @@ pub(crate) struct DisplayRowGlyphMeasurementFace {
 }
 
 impl DisplayRowGlyphMeasurementFace {
-    pub(crate) fn face_id(&self) -> u32 {
+    pub(crate) fn face_id(&self) -> FaceId {
         self.face.face_id
     }
 
@@ -777,7 +778,7 @@ pub(crate) struct DisplayRowMeasuredFace {
 }
 
 impl DisplayRowMeasuredFace {
-    pub(crate) fn face_id(&self) -> u32 {
+    pub(crate) fn face_id(&self) -> FaceId {
         self.measurement_face.face_id()
     }
 
@@ -798,7 +799,7 @@ pub(crate) struct DisplayRowResolvedMeasuredFace {
 }
 
 impl DisplayRowResolvedMeasuredFace {
-    pub(crate) fn face_id(&self) -> u32 {
+    pub(crate) fn face_id(&self) -> FaceId {
         self.measured_face.face_id()
     }
 
@@ -817,7 +818,7 @@ impl DisplayRowResolvedMeasuredFace {
 
 #[derive(Clone, Debug)]
 pub(crate) struct DisplayRowActiveFaceRenderState {
-    pub(crate) face_id: u32,
+    pub(crate) face_id: FaceId,
     pub(crate) background: Color,
     resolved_face: ResolvedFace,
 }
@@ -912,7 +913,7 @@ impl DisplayRowActiveFaceState {
         }
     }
 
-    pub(crate) fn face_id(&self) -> u32 {
+    pub(crate) fn face_id(&self) -> FaceId {
         self.render.face_id
     }
 
@@ -924,7 +925,7 @@ impl DisplayRowActiveFaceState {
         self.render.resolved_face()
     }
 
-    pub(crate) fn row_extend_fill(&self) -> Option<(Color, u32)> {
+    pub(crate) fn row_extend_fill(&self) -> Option<(Color, FaceId)> {
         self.resolved_face()
             .extend
             .then(|| (self.background(), self.face_id()))

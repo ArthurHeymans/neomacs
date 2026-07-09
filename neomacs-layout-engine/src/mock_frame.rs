@@ -5,6 +5,7 @@
 //! `neomacs-layout-engine/src/engine.rs: layout_mock_frame()`.  The real
 //! neomacs GUI pipeline goes through `layout_frame_rust(evaluator)` instead.
 
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::types::{Color, Rect};
 
@@ -12,7 +13,7 @@ use neomacs_display_protocol::types::{Color, Rect};
 #[derive(Debug, Clone)]
 pub struct MockStyledGlyph {
     pub ch: char,
-    pub face_id: u32,
+    pub face_id: FaceId,
     pub display: Option<MockDisplayProperty>,
 }
 
@@ -22,7 +23,7 @@ pub enum MockDisplayProperty {
     /// Character is invisible (invisible text property).
     Invisible,
     /// Replace with a different string and face.
-    Replace(String, u32),
+    Replace(String, FaceId),
     /// A composed sequence (combining marks, ZWJ sequences, etc.).
     Composition(Vec<MockStyledGlyph>),
 }
@@ -34,7 +35,7 @@ pub struct MockStyledLine {
 }
 
 impl MockStyledLine {
-    pub fn from_str(text: &str, face_id: u32) -> Self {
+    pub fn from_str(text: &str, face_id: FaceId) -> Self {
         Self {
             glyphs: text
                 .chars()

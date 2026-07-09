@@ -7,6 +7,7 @@
 //! rendered glyph widths — eliminating gaps and overlaps caused by the
 //! C fontconfig and cosmic-text resolving different font files.
 
+use neomacs_display_protocol::types::FaceId;
 use crate::font_loader::FontFileCache;
 use cosmic_text::{Attrs, Buffer, Family, FontSystem, Style, Weight};
 
@@ -1554,7 +1555,7 @@ pub fn realize_frame_fonts(
         return;
     };
     // Deterministic interner allocation order across identical frames.
-    let mut face_ids: Vec<u32> = state.faces.keys().copied().collect();
+    let mut face_ids: Vec<FaceId> = state.faces.keys().copied().collect();
     face_ids.sort_unstable();
     for face_id in face_ids {
         let Some(face) = state.faces.get_mut(&face_id) else {
@@ -1581,7 +1582,7 @@ pub fn realize_frame_fonts(
                 // its independent semantic fallback.
                 tracing::warn!(
                     target: "font_boundary",
-                    face_id,
+                    face_id = face_id.get(),
                     family = %face.font_family,
                     weight = face.font_weight,
                     "GUI face has no resolvable primary font; renderer will re-select"
@@ -1610,10 +1611,10 @@ fn realize_frame_char_fonts(
     // Pass 1: collect the (face, repr char) pairs and composed clusters on
     // screen. Bounded by the number of distinct non-ASCII chars/clusters
     // visible, not by grid size.
-    let mut wanted: Vec<(u32, char)> = Vec::new();
-    let mut seen: std::collections::HashSet<(u32, char)> = std::collections::HashSet::new();
-    let mut wanted_clusters: Vec<(u32, Box<str>)> = Vec::new();
-    let mut seen_clusters: std::collections::HashSet<(u32, Box<str>)> =
+    let mut wanted: Vec<(FaceId, char)> = Vec::new();
+    let mut seen: std::collections::HashSet<(FaceId, char)> = std::collections::HashSet::new();
+    let mut wanted_clusters: Vec<(FaceId, Box<str>)> = Vec::new();
+    let mut seen_clusters: std::collections::HashSet<(FaceId, Box<str>)> =
         std::collections::HashSet::new();
     let mut collect_row = |row: &GlyphRow| {
         if !row.enabled {
@@ -1692,7 +1693,7 @@ fn realize_frame_char_fonts(
             None => {
                 tracing::trace!(
                     target: "font_boundary",
-                    face_id,
+                    face_id = face_id.get(),
                     ch = %repr,
                     "no per-char fallback font resolved; renderer will re-select"
                 );
@@ -1738,7 +1739,7 @@ fn realize_frame_char_fonts(
             None => {
                 tracing::trace!(
                     target: "font_boundary",
-                    face_id,
+                    face_id = face_id.get(),
                     cluster = %text,
                     "cluster did not shape; renderer will re-shape"
                 );

@@ -4,6 +4,7 @@
 //! character position, computes line breaks, positions glyphs on a fixed-width
 //! grid, and publishes `FrameDisplayState` snapshots for render backends.
 
+use neomacs_display_protocol::types::FaceId;
 #[cfg(test)]
 use super::display_status_line::eval_status_line_format;
 use super::display_status_line::{
@@ -190,7 +191,7 @@ pub struct LayoutEngine {
     /// DIFFERENT faces get different ids.
     ///
     /// Before this field existed, `layout_window_rust` used a
-    /// function-local `let mut current_face_id: u32 = 1;` which
+    /// function-local `let mut current_face_id: FaceId = 1;` which
     /// reset to 1 for every window. That collided with the
     /// frame-wide output face map: the first window
     /// inserted `mode-line` at face_id=2, the second window then
@@ -199,7 +200,9 @@ pub struct LayoutEngine {
     /// render with the inactive face after `C-x 2`.
     /// Frame-scoped face-ID counter.  Starts at
     /// [`BasicFaceId::SENTINEL`] so dynamic face IDs never collide
-    /// with the fixed basic-face slots (0–19).
+    /// with the fixed basic-face slots (0–19).  Raw `u32` on purpose:
+    /// this is `FrameFaceIdAllocator` seed state, not an id value —
+    /// ids only leave the allocator as typed `FaceId`s.
     pub(crate) frame_face_id_counter: u32,
     /// Per-window retained layout, owned across cycles (incremental-layout
     /// Phase 0a). Committed at the accepted `break` only; NOT read yet — the
@@ -1057,7 +1060,7 @@ impl LayoutEngine {
             // render (face-id collision audit fix).
             let mut window_face_snapshots: std::collections::HashMap<
                 DisplayWindowId,
-                std::collections::HashMap<u32, neomacs_display_protocol::face::Face>,
+                std::collections::HashMap<FaceId, neomacs_display_protocol::face::Face>,
             > = frame_state
                 .window_matrices
                 .iter()

@@ -7,7 +7,9 @@
 use crate::effect_config::EffectsConfig;
 use crate::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 use crate::scroll_animation::{ScrollEasing, ScrollEffect};
-use crate::types::{Color, DisplayFrameId, DisplayWindowId, ImageId, Rect, VideoId, XwidgetId};
+use crate::types::{
+    Color, DisplayFrameId, DisplayWindowId, FaceId, ImageId, Rect, VideoId, XwidgetId,
+};
 use crate::ui_types::TabBarItem;
 use std::collections::HashMap;
 
@@ -172,7 +174,7 @@ pub enum FrameGlyph {
         /// build paths (`materialize` and `set_face`/`set_face_with_font`)
         /// populate `FrameGlyphBuffer::faces` for every emitted `face_id`, so
         /// the lookup is always valid.
-        face_id: u32,
+        face_id: FaceId,
     },
 
     /// Stretch (whitespace) glyph
@@ -194,7 +196,7 @@ pub enum FrameGlyph {
         width: f32,
         height: f32,
         bg: Color,
-        face_id: u32,
+        face_id: FaceId,
         /// Stipple pattern ID (0 = none, references stipple_patterns in FrameGlyphBuffer)
         stipple_id: i32,
         /// Foreground color for stipple pattern (stipple bits use fg, gaps use bg)
@@ -262,7 +264,7 @@ pub enum FrameGlyph {
         /// Resolved registry index into `FrameGlyphBuffer::fringe_bitmaps`.
         bitmap_index: u16,
         /// Face id for fg/bg colors (resolved via `resolved_face`).
-        face_id: u32,
+        face_id: FaceId,
         /// Which fringe this bitmap belongs to.
         side: FringeSide,
     },
@@ -542,7 +544,7 @@ impl FrameGlyph {
     }
 
     /// Face id for the kinds that resolve a face (Char and Stretch).
-    pub fn face_id(&self) -> Option<u32> {
+    pub fn face_id(&self) -> Option<FaceId> {
         match self {
             FrameGlyph::Char { face_id, .. } | FrameGlyph::Stretch { face_id, .. } => {
                 Some(*face_id)
@@ -840,7 +842,7 @@ pub struct FrameGlyphBuffer {
     /// the font family/size plus overstrike flag consumed when synthesizing the
     /// baseline `Face` for `face_id`. The other face attributes live only in the
     /// synthesized `Face` (resolved later via `resolved_face`).
-    current_face_id: u32,
+    current_face_id: FaceId,
     current_fg: Color,
     current_bg: Option<Color>,
     current_font_family: String,
@@ -852,7 +854,7 @@ pub struct FrameGlyphBuffer {
 
     /// Full face data: face_id -> Face (includes box, underline, etc.)
     /// Rebuilt from scratch each frame by apply_face() in the layout engine.
-    pub faces: HashMap<u32, Face>,
+    pub faces: HashMap<FaceId, Face>,
 
     /// Resolved font table referenced by `Face::default_resolved_font_id`
     /// (and eventually shaped glyph runs). Carried alongside `faces` so the
@@ -955,7 +957,7 @@ pub fn derive_window_transition_hint(
 impl FrameGlyphBuffer {
     fn synthesize_face(
         &self,
-        face_id: u32,
+        face_id: FaceId,
         fg: Color,
         bg: Option<Color>,
         font_family: &str,
@@ -1046,7 +1048,7 @@ impl FrameGlyphBuffer {
             window_cursors: Vec::with_capacity(8),
             cursor_effects_by_window: HashMap::new(),
             tab_bar: None,
-            current_face_id: 0,
+            current_face_id: FaceId::new(0),
             current_fg: Color::WHITE,
             current_bg: None,
             current_font_family: "monospace".to_string(),
@@ -1145,7 +1147,7 @@ impl FrameGlyphBuffer {
     /// current face state and does not separately populate `faces`.
     pub fn set_face_with_font(
         &mut self,
-        face_id: u32,
+        face_id: FaceId,
         fg: Color,
         bg: Option<Color>,
         font_family: &str,
@@ -1193,7 +1195,7 @@ impl FrameGlyphBuffer {
     /// `Face` entry for `face_id`.
     pub fn set_face(
         &mut self,
-        face_id: u32,
+        face_id: FaceId,
         fg: Color,
         bg: Option<Color>,
         font_weight: u16,
@@ -1242,7 +1244,7 @@ impl FrameGlyphBuffer {
     }
 
     /// Get font family for a face_id
-    pub fn get_face_font(&self, face_id: u32) -> &str {
+    pub fn get_face_font(&self, face_id: FaceId) -> &str {
         self.faces
             .get(&face_id)
             .map(|f| f.font_family.as_str())
@@ -1253,7 +1255,7 @@ impl FrameGlyphBuffer {
     ///
     /// Face ids are scoped to the owning frame buffer. Parent and child frames
     /// may legally reuse the same numeric id for different face data.
-    pub fn render_face(&self, face_id: u32) -> Option<&Face> {
+    pub fn render_face(&self, face_id: FaceId) -> Option<&Face> {
         self.faces.get(&face_id)
     }
 
@@ -1266,7 +1268,7 @@ impl FrameGlyphBuffer {
     /// from this buffer's own `faces`, `background`, and `font_pixel_size`. The
     /// not-found fallback matches materialization: white fg, frame background,
     /// font weight 400, the frame font pixel size, and no decorations.
-    pub fn resolved_face(&self, face_id: u32) -> MaterializedFaceData {
+    pub fn resolved_face(&self, face_id: FaceId) -> MaterializedFaceData {
         if let Some(face) = self.faces.get(&face_id) {
             let underline = face.underline_style.gnu_code();
             MaterializedFaceData {
@@ -1419,7 +1421,7 @@ impl FrameGlyphBuffer {
         width: f32,
         height: f32,
         bg: Color,
-        face_id: u32,
+        face_id: FaceId,
         _overlay_hint: bool,
     ) {
         self.glyphs.push(FrameGlyph::Stretch {
@@ -1448,7 +1450,7 @@ impl FrameGlyphBuffer {
         height: f32,
         bg: Color,
         fg: Color,
-        face_id: u32,
+        face_id: FaceId,
         _overlay_hint: bool,
         stipple_id: i32,
     ) {
@@ -1542,7 +1544,7 @@ impl FrameGlyphBuffer {
         width: f32,
         height: f32,
         bitmap_index: u16,
-        face_id: u32,
+        face_id: FaceId,
         side: FringeSide,
     ) {
         self.glyphs.push(FrameGlyph::FringeBitmap {

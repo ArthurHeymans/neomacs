@@ -1,5 +1,6 @@
 //! Display-line-number left-margin rendering — GNU `maybe_produce_line_number` (xdisp.c:25447). Relocated out of display_row_append.rs (pure move, no behavior change).
 
+use neomacs_display_protocol::types::FaceId;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayLength, DisplayStretch, DisplayStretchWidth,
@@ -18,7 +19,7 @@ const LINE_NUMBER_MARGIN_SOURCE_ID: u64 = 0x6c6e_756d;
 struct TextWindowLineNumberMargin<'a> {
     text: &'a str,
     cols: i32,
-    face_id: u32,
+    face_id: FaceId,
 }
 
 struct LineNumberMarginItemSource {
@@ -105,7 +106,7 @@ impl BufferLineNumberMarginRenderRequest {
     }
 }
 
-fn line_number_margin_text_item(text: &str, face_id: u32, start_offset: usize) -> DisplayItem {
+fn line_number_margin_text_item(text: &str, face_id: FaceId, start_offset: usize) -> DisplayItem {
     let end_offset = start_offset.saturating_add(text.chars().count());
     DisplayItem::new(
         SourceSpan::synthetic(LINE_NUMBER_MARGIN_SOURCE_ID, start_offset, end_offset),
@@ -114,7 +115,7 @@ fn line_number_margin_text_item(text: &str, face_id: u32, start_offset: usize) -
     )
 }
 
-fn line_number_margin_stretch_item(cols: u16, face_id: u32, start_offset: usize) -> DisplayItem {
+fn line_number_margin_stretch_item(cols: u16, face_id: FaceId, start_offset: usize) -> DisplayItem {
     DisplayItem::new(
         SourceSpan::synthetic(
             LINE_NUMBER_MARGIN_SOURCE_ID,

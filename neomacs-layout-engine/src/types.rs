@@ -5,6 +5,7 @@
 //! that renderers consume without owning display semantics.
 
 use neomacs_display_protocol::cursor::CursorBarWidth;
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::types::{Color, Rect};
 
 /// Complete layout output for one frame.
@@ -80,7 +81,7 @@ pub enum LayoutGlyph {
         /// Pixel width
         width: f32,
         /// Face ID
-        face_id: u32,
+        face_id: FaceId,
         /// Buffer position this glyph represents
         charpos: i64,
     },
@@ -92,7 +93,7 @@ pub enum LayoutGlyph {
         /// Pixel width
         width: f32,
         /// Face ID
-        face_id: u32,
+        face_id: FaceId,
     },
 
     /// Image glyph
@@ -126,7 +127,7 @@ pub struct CursorLayout {
     /// Character under cursor (for inverse video with filled box)
     pub char_under: Option<char>,
     /// Face ID of character under cursor
-    pub char_face_id: Option<u32>,
+    pub char_face_id: Option<FaceId>,
 }
 
 /// Parameters for a window that the layout engine needs.

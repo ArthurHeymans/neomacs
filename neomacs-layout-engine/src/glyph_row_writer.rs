@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use crate::bidi::{self, BidiDir};
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 
@@ -216,7 +217,7 @@ fn mark_displays_text_if_text_area(row: &mut GlyphRow, area_index: usize) {
 pub(crate) fn push_char_to_row(
     row: &mut GlyphRow,
     ch: char,
-    face_id: u32,
+    face_id: FaceId,
     charpos: usize,
     pixel_width: f32,
 ) {
@@ -234,7 +235,7 @@ pub(crate) fn push_char_to_area(
     row: &mut GlyphRow,
     area_index: usize,
     ch: char,
-    face_id: u32,
+    face_id: FaceId,
     charpos: usize,
     pixel_width: f32,
 ) {
@@ -250,7 +251,7 @@ pub(crate) fn push_char_to_area(
 pub(crate) fn push_wide_char_to_row(
     row: &mut GlyphRow,
     ch: char,
-    face_id: u32,
+    face_id: FaceId,
     charpos: usize,
     pixel_width: f32,
 ) {
@@ -268,7 +269,7 @@ pub(crate) fn push_wide_char_to_area(
     row: &mut GlyphRow,
     area_index: usize,
     ch: char,
-    face_id: u32,
+    face_id: FaceId,
     charpos: usize,
     pixel_width: f32,
 ) {
@@ -297,7 +298,7 @@ pub(crate) fn push_wide_char_to_area(
 pub(crate) fn push_cluster_continuation_to_row(
     row: &mut GlyphRow,
     ch: char,
-    face_id: u32,
+    face_id: FaceId,
     charpos: usize,
 ) {
     push_cluster_continuation_to_area(row, GlyphArea::Text.index(), ch, face_id, charpos);
@@ -307,7 +308,7 @@ pub(crate) fn push_cluster_continuation_to_area(
     row: &mut GlyphRow,
     area_index: usize,
     ch: char,
-    face_id: u32,
+    face_id: FaceId,
     charpos: usize,
 ) {
     let area = &mut row.glyphs[area_index];
@@ -330,7 +331,7 @@ pub(crate) fn push_cluster_continuation_to_area(
 pub(crate) fn push_run_member_to_row(
     row: &mut GlyphRow,
     ch: char,
-    face_id: u32,
+    face_id: FaceId,
     charpos: usize,
     pixel_width: f32,
 ) {
@@ -348,7 +349,7 @@ pub(crate) fn push_run_member_to_area(
     row: &mut GlyphRow,
     area_index: usize,
     ch: char,
-    face_id: u32,
+    face_id: FaceId,
     charpos: usize,
     pixel_width: f32,
 ) {
@@ -376,7 +377,7 @@ pub(crate) fn push_run_member_to_area(
 pub(crate) fn push_stretch_to_row(
     row: &mut GlyphRow,
     width_cols: u16,
-    face_id: u32,
+    face_id: FaceId,
     pixel_width: f32,
     pixel_height: f32,
     pixel_ascent: f32,
@@ -396,7 +397,7 @@ pub(crate) fn push_stretch_to_area(
     row: &mut GlyphRow,
     area_index: usize,
     width_cols: u16,
-    face_id: u32,
+    face_id: FaceId,
     pixel_width: f32,
     pixel_height: f32,
     pixel_ascent: f32,

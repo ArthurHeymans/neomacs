@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use super::*;
 use crate::display_cursor::{
     CapturedTextWindowCursorPublishContext, CapturedTextWindowCursorPublishOutcome,
@@ -511,13 +512,13 @@ fn cursor_capture_state_captures_once_and_refines_matching_main_char_width() {
 fn frame_face_id_allocator_clamps_to_sentinel_and_allocates_sequential_ids() {
     let mut allocator = FrameFaceIdAllocator::new(100);
 
-    assert_eq!(allocator.allocate(), 100);
-    assert_eq!(allocator.allocate(), 101);
+    assert_eq!(allocator.allocate(), FaceId::new(100));
+    assert_eq!(allocator.allocate(), FaceId::new(101));
     assert_eq!(allocator.finish(), 102);
 
     let mut clamped = FrameFaceIdAllocator::new(0);
 
-    assert_eq!(clamped.allocate(), BasicFaceId::SENTINEL);
+    assert_eq!(clamped.allocate(), FaceId::new(BasicFaceId::SENTINEL));
     assert_eq!(clamped.finish(), BasicFaceId::SENTINEL + 1);
 
     let mut frame_counter = 0;
@@ -852,7 +853,7 @@ fn captured_cursor_info_builds_from_active_face_state() {
     face.bg = 0x00445566;
     let mut font_metrics = None;
     let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
-        9,
+        FaceId::new(9),
         &face,
         None,
         7.5,
@@ -905,7 +906,7 @@ fn captured_cursor_info_builds_display_box_from_active_face_state() {
     face.bg = 0x00445566;
     let mut font_metrics = None;
     let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
-        9,
+        FaceId::new(9),
         &face,
         None,
         7.5,
@@ -960,7 +961,7 @@ fn captured_cursor_info_builds_line_break_from_active_face_state() {
     face.bg = 0x00445566;
     let mut font_metrics = None;
     let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
-        9,
+        FaceId::new(9),
         &face,
         None,
         7.5,
@@ -1563,7 +1564,7 @@ fn render_buffer_text_source_shadow_row(
         snapshot,
         CharPos0::ZERO,
         line_end,
-        RenderFaceRef::FaceId(0),
+        RenderFaceRef::FaceId(FaceId::new(0)),
     );
     let mut font_metrics = None;
     let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
@@ -1580,7 +1581,7 @@ fn render_buffer_text_source_shadow_row(
             DisplayTabPolicy::every(8),
         ),
         GlyphRowRole::Text,
-        0,
+        FaceId::new(0),
         resolver.default_face(),
     )
     .render_request(DisplayRowRenderBounds::new(
@@ -1764,7 +1765,7 @@ struct GlyphTrace {
 impl GlyphTrace {
     fn from_glyph(
         glyph: &Glyph,
-        faces: &std::collections::HashMap<u32, neomacs_display_protocol::face::Face>,
+        faces: &std::collections::HashMap<FaceId, neomacs_display_protocol::face::Face>,
     ) -> Self {
         let kind = match &glyph.glyph_type {
             GlyphType::Char { ch } => GlyphKindTrace::Char(*ch),
@@ -1780,7 +1781,7 @@ impl GlyphTrace {
                 .map(|f| {
                     // Compare CONTENT — normalize the allocation-dependent Face.id.
                     let mut f = f.clone();
-                    f.id = 0;
+                    f.id = FaceId::new(0);
                     format!("{f:?}")
                 })
                 .unwrap_or_else(|| format!("UNREGISTERED#{}", glyph.face_id)),
@@ -1817,7 +1818,7 @@ struct RowTrace {
 impl RowTrace {
     fn from_row(
         row: &GlyphRow,
-        faces: &std::collections::HashMap<u32, neomacs_display_protocol::face::Face>,
+        faces: &std::collections::HashMap<FaceId, neomacs_display_protocol::face::Face>,
     ) -> Self {
         Self {
             role: row.role,
@@ -5712,7 +5713,7 @@ fn layout_frame_rust_normal_text_keeps_base_face_not_escape_glyph() {
         .expect("text row");
     let text_glyphs = &text_row.glyphs[GlyphArea::Text.index()];
 
-    let default_face_id = u32::from(neomacs_display_protocol::face::BasicFaceId::Default);
+    let default_face_id = FaceId::from(neomacs_display_protocol::face::BasicFaceId::Default);
     let default_fg = state
         .faces
         .get(&default_face_id)
@@ -5820,7 +5821,7 @@ fn layout_frame_rust_nbsp_uses_nobreak_space_foreground() {
         .expect("text row");
     let text_glyphs = &text_row.glyphs[GlyphArea::Text.index()];
 
-    let default_face_id = u32::from(neomacs_display_protocol::face::BasicFaceId::Default);
+    let default_face_id = FaceId::from(neomacs_display_protocol::face::BasicFaceId::Default);
     let default_fg = state
         .faces
         .get(&default_face_id)
@@ -5956,7 +5957,7 @@ fn layout_frame_rust_nobreak_hyphen_uses_nobreak_hyphen_foreground() {
         .expect("text row");
     let text_glyphs = &text_row.glyphs[GlyphArea::Text.index()];
 
-    let default_face_id = u32::from(neomacs_display_protocol::face::BasicFaceId::Default);
+    let default_face_id = FaceId::from(neomacs_display_protocol::face::BasicFaceId::Default);
     let default_fg = state
         .faces
         .get(&default_face_id)
@@ -10659,8 +10660,8 @@ fn display_row_measurement_face_distinguishes_semantic_font_identity() {
     let mut bold = regular.clone();
     bold.font_weight = 700;
     let measurement_policy = DisplayRowMeasurementPolicy::for_frame(true);
-    let regular_face = measurement_policy.measurement_face(42, &regular, None, 8.0);
-    let bold_face = measurement_policy.measurement_face(43, &bold, None, 8.0);
+    let regular_face = measurement_policy.measurement_face(FaceId::new(42), &regular, None, 8.0);
+    let bold_face = measurement_policy.measurement_face(FaceId::new(43), &bold, None, 8.0);
 
     let regular_width = regular_face.advance_for_char(&mut font_metrics_svc, 'A', 8.0);
     let bold_width = bold_face.advance_for_char(&mut font_metrics_svc, 'A', 8.0);
@@ -10687,7 +10688,7 @@ fn display_row_measurement_face_preserves_fractional_gui_cell_width_without_font
     resolved.font_size = 12.0;
     resolved.set_measured_char_width_px(7.2);
     let current_face =
-        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(42, &resolved, None, 7.2);
+        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(FaceId::new(42), &resolved, None, 7.2);
     let mut font_metrics_svc = None;
 
     let width = current_face.advance_for_char(&mut font_metrics_svc, 'x', 7.2);
@@ -10701,12 +10702,12 @@ fn display_row_glyph_measurer_is_reusable_for_engine_measurements() {
     resolved.font_family = "monospace".to_string();
     resolved.font_size = 14.0;
     resolved.set_measured_char_width_px(8.0);
-    let faces = [DisplayRowFace::from_resolved(42, &resolved)];
+    let faces = [DisplayRowFace::from_resolved(FaceId::new(42), &resolved)];
     let mut font_metrics_svc = None;
     let mut measurer = DisplayRowGlyphMeasurer::new(&faces, font_metrics_svc.as_mut(), 7.2);
 
     let width = measurer
-        .glyph_advance_px('x', 42, 1, 7.2)
+        .glyph_advance_px('x', FaceId::new(42), 1, 7.2)
         .expect("measure known face");
 
     assert_eq!(width, 8.0);
@@ -10719,7 +10720,7 @@ fn display_row_glyph_measurement_face_carries_engine_measurement_policy() {
     resolved.font_size = 14.0;
     resolved.set_measured_char_width_px(7.2);
     let current_face =
-        DisplayRowMeasurementPolicy::for_frame(false).measurement_face(42, &resolved, None, 7.2);
+        DisplayRowMeasurementPolicy::for_frame(false).measurement_face(FaceId::new(42), &resolved, None, 7.2);
     let mut font_metrics_svc = None;
 
     let width = current_face.glyph_advance_px(&mut font_metrics_svc, 'x', 1, 7.2);
@@ -12774,7 +12775,7 @@ fn layout_frame_rust_overlay_before_string_uses_overlay_string_base_face() {
         .expect("window matrix entry");
     let default_bg = state
         .faces
-        .get(&u32::from(
+        .get(&FaceId::from(
             neomacs_display_protocol::face::BasicFaceId::Default,
         ))
         .expect("default face")
@@ -12885,7 +12886,7 @@ fn layout_frame_rust_merges_overlay_face_with_text_property_face() {
         .expect("window matrix entry");
     let default_face = state
         .faces
-        .get(&u32::from(
+        .get(&FaceId::from(
             neomacs_display_protocol::face::BasicFaceId::Default,
         ))
         .expect("default face");
@@ -14105,11 +14106,11 @@ fn child_frame_resolves_faces_and_width_independently_from_parent() {
 
     let content = MockFrameContent {
         frame_id: 1,
-        faces: vec![Face::new(0)],
+        faces: vec![Face::new(FaceId::new(0))],
         windows: vec![MockWindowContent {
             window_id: 1,
-            lines: vec![MockStyledLine::from_str("parent buffer text", 0)],
-            mode_line: MockStyledLine::from_str("-- parent --", 0),
+            lines: vec![MockStyledLine::from_str("parent buffer text", FaceId::new(0))],
+            mode_line: MockStyledLine::from_str("-- parent --", FaceId::new(0)),
             // Wide parent window: 800px / 8px = 100 cols.
             pixel_bounds: Rect::new(0.0, 0.0, 800.0, 15.0 * char_h),
             selected: true,
@@ -14119,8 +14120,8 @@ fn child_frame_resolves_faces_and_width_independently_from_parent() {
             frame_id: 100,
             window: MockWindowContent {
                 window_id: 2,
-                lines: vec![MockStyledLine::from_str("child", 0)],
-                mode_line: MockStyledLine::from_str("", 0),
+                lines: vec![MockStyledLine::from_str("child", FaceId::new(0))],
+                mode_line: MockStyledLine::from_str("", FaceId::new(0)),
                 // Narrow child: 200px / 8px = 25 cols — independent of the parent.
                 pixel_bounds: Rect::new(0.0, 0.0, 200.0, 3.0 * char_h),
                 selected: false,
@@ -14136,8 +14137,8 @@ fn child_frame_resolves_faces_and_width_independently_from_parent() {
         menu_bar: None,
         minibuffer: Some(MockWindowContent {
             window_id: 999,
-            lines: vec![MockStyledLine::from_str("", 0)],
-            mode_line: MockStyledLine::from_str("", 0),
+            lines: vec![MockStyledLine::from_str("", FaceId::new(0))],
+            mode_line: MockStyledLine::from_str("", FaceId::new(0)),
             pixel_bounds: Rect::new(0.0, 15.0 * char_h, 800.0, char_h),
             selected: false,
             truncated_lines: false,
@@ -14720,7 +14721,7 @@ fn cursor_only_reused_body_face_ids_are_registered_in_frame_faces() {
         .iter()
         .find(|e| e.window_id == win.0)
         .expect("window");
-    let mut missing: Vec<u32> = Vec::new();
+    let mut missing: Vec<FaceId> = Vec::new();
     for row in entry.matrix.rows.iter().filter(|r| r.enabled) {
         for area in row.glyphs.iter() {
             for g in area.iter() {
@@ -14737,7 +14738,7 @@ fn cursor_only_reused_body_face_ids_are_registered_in_frame_faces() {
         "cursor-only reused body uses face_ids NOT in the frame faces table: {missing:?} \
          (faces table has ids {:?})",
         {
-            let mut ks: Vec<u32> = faces.keys().copied().collect();
+            let mut ks: Vec<FaceId> = faces.keys().copied().collect();
             ks.sort_unstable();
             ks
         }
@@ -14787,7 +14788,7 @@ fn cursor_only_reused_multiface_body_face_ids_are_registered_in_frame_faces() {
         .iter()
         .find(|e| e.window_id == win.0)
         .expect("window");
-    let mut missing: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+    let mut missing: std::collections::BTreeSet<FaceId> = std::collections::BTreeSet::new();
     let mut total = 0usize;
     for row in entry
         .matrix
@@ -14802,7 +14803,7 @@ fn cursor_only_reused_multiface_body_face_ids_are_registered_in_frame_faces() {
             }
         }
     }
-    let mut keys: Vec<u32> = faces.keys().copied().collect();
+    let mut keys: Vec<FaceId> = faces.keys().copied().collect();
     keys.sort_unstable();
     assert!(
         missing.is_empty(),

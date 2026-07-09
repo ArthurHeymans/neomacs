@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use crate::composition::{
     base_width_cols, continues_cluster, continues_complex_run, last_text_cluster_tail_in_glyphs,
 };
@@ -226,7 +227,7 @@ pub(crate) struct DisplayRowTextNaturalAdvanceRequest {
     kind: DisplayRowTextNaturalAdvanceKind,
     position: DisplayRowPosition,
     ch: char,
-    face_id: u32,
+    face_id: FaceId,
 }
 
 impl DisplayRowTextNaturalAdvanceRequest {
@@ -234,7 +235,7 @@ impl DisplayRowTextNaturalAdvanceRequest {
         kind: DisplayRowTextNaturalAdvanceKind,
         position: DisplayRowPosition,
         ch: char,
-        face_id: u32,
+        face_id: FaceId,
     ) -> Self {
         Self {
             kind,
@@ -262,7 +263,7 @@ impl DisplayRowTextNaturalAdvancePolicy {
     pub(crate) fn resolve_with(
         &self,
         request: DisplayRowTextNaturalAdvanceRequest,
-        mut glyph_advance_px: impl FnMut(char, u32, usize) -> f32,
+        mut glyph_advance_px: impl FnMut(char, FaceId, usize) -> f32,
     ) -> f32 {
         match request.kind {
             DisplayRowTextNaturalAdvanceKind::Tab => {
@@ -310,7 +311,7 @@ impl DisplayRowTextCharState {
     pub(crate) fn natural_advance_request(
         self,
         position: DisplayRowPosition,
-        face_id: u32,
+        face_id: FaceId,
     ) -> DisplayRowTextNaturalAdvanceRequest {
         DisplayRowTextNaturalAdvanceRequest::new(self.kind, position, self.ch, face_id)
     }
@@ -644,7 +645,7 @@ impl DisplayRowAppendFrame {
     pub(crate) fn source_append_render_request<'face>(
         &self,
         position: DisplayRowPosition,
-        face_id: u32,
+        face_id: FaceId,
         base_face: &'face ResolvedFace,
         kind: DisplayRowAppendKind,
     ) -> DisplayRowAppendSourceRenderRequest<'face> {
@@ -657,7 +658,7 @@ impl DisplayRowAppendFrame {
     pub(crate) fn source_append_measure_request<'face>(
         &self,
         position: DisplayRowPosition,
-        face_id: u32,
+        face_id: FaceId,
         base_face: &'face ResolvedFace,
         kind: DisplayRowAppendKind,
     ) -> DisplayRowSourceRenderRequest<'face> {
@@ -668,7 +669,7 @@ impl DisplayRowAppendFrame {
     fn source_render_request<'face>(
         &self,
         position: DisplayRowPosition,
-        face_id: u32,
+        face_id: FaceId,
         base_face: &'face ResolvedFace,
         kind: DisplayRowAppendKind,
     ) -> DisplayRowSourceRenderRequest<'face> {

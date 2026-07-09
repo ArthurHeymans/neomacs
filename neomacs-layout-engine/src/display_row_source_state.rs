@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_item::DisplayItem;
 use crate::display_source::DisplayItemSource;
@@ -44,7 +45,7 @@ impl DisplayRowSourceState {
         std::mem::take(&mut self.pending_fringes)
     }
 
-    pub(crate) fn resolved_face(&self, face_id: u32) -> Option<&ResolvedFace> {
+    pub(crate) fn resolved_face(&self, face_id: FaceId) -> Option<&ResolvedFace> {
         self.resolve_state.resolved_face(face_id)
     }
 

@@ -1,5 +1,6 @@
 //! Shared mutable state for buffer text visible-loop rendering.
 
+use neomacs_display_protocol::types::FaceId;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_row_append_context::DisplayRowAppendSurface;
@@ -22,7 +23,7 @@ pub(crate) struct BufferSourceLoopMutableState<'rows, 'emit, 'surface> {
     pub(crate) invisible_text_checkpoint: &'emit mut InvisibleTextScanCheckpoint,
     pub(crate) progress: DisplaySourceProgressState<'emit>,
     pub(crate) source_render: TextRowSourceRenderState<'emit>,
-    pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+    pub(crate) row_extend: &'emit mut DisplayRowScopedValue<(Color, FaceId)>,
     pub(crate) box_face: &'emit mut BoxFaceRowState,
     pub(crate) line_numbers: &'emit mut LineNumberRenderState,
     pub(crate) row_geometry: &'emit mut DisplayRowGeometryState,
@@ -47,7 +48,7 @@ impl<'rows, 'emit, 'surface> BufferSourceLoopMutableState<'rows, 'emit, 'surface
         invisible_text_checkpoint: &'emit mut InvisibleTextScanCheckpoint,
         progress: DisplaySourceProgressState<'emit>,
         source_render: TextRowSourceRenderState<'emit>,
-        row_extend: &'emit mut DisplayRowScopedValue<(Color, u32)>,
+        row_extend: &'emit mut DisplayRowScopedValue<(Color, FaceId)>,
         box_face: &'emit mut BoxFaceRowState,
         line_numbers: &'emit mut LineNumberRenderState,
         row_geometry: &'emit mut DisplayRowGeometryState,

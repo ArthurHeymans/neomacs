@@ -6,6 +6,7 @@
 //! Every stack is an ordered display list of `draw_effect!`/`draw_stateful!`
 //! invocations; the order is the z-order and must not be reordered.
 
+use neomacs_display_protocol::types::FaceId;
 use std::collections::HashMap;
 
 use neomacs_display_protocol::face::Face;
@@ -74,7 +75,7 @@ impl WgpuRenderer {
         &mut self,
         render_pass: &mut wgpu::RenderPass<'_>,
         ctx: &super::effect_common::EffectCtx<'_>,
-        faces: &HashMap<u32, Face>,
+        faces: &HashMap<FaceId, Face>,
         box_spans: &[BoxSpan],
     ) {
         // === Step 1a: Background pattern (dots/grid/crosshatch) ===
@@ -1097,7 +1098,7 @@ impl WgpuRenderer {
         &mut self,
         render_pass: &mut wgpu::RenderPass<'_>,
         ctx: &super::effect_common::EffectCtx<'_>,
-        faces: &HashMap<u32, Face>,
+        faces: &HashMap<FaceId, Face>,
     ) {
         self.draw_post_window_chrome_effects(render_pass, ctx);
         self.draw_post_focus_and_dimming_effects(render_pass, ctx);
@@ -1228,7 +1229,7 @@ impl WgpuRenderer {
         &mut self,
         render_pass: &mut wgpu::RenderPass<'_>,
         ctx: &super::effect_common::EffectCtx<'_>,
-        faces: &HashMap<u32, Face>,
+        faces: &HashMap<FaceId, Face>,
     ) {
         // === Zen mode: draw margin overlays for centered content ===
         draw_effect!(

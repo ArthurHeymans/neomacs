@@ -20,7 +20,7 @@ fn glyph_type_kind_codes_match_gnu_glyph_type() {
 
     assert_eq!(GlyphTypeKind::from_gnu_code(6), None);
     assert_eq!(
-        Glyph::char('x', 0, 0).glyph_type.gnu_kind(),
+        Glyph::char('x', FaceId::new(0), 0).glyph_type.gnu_kind(),
         GlyphTypeKind::Char
     );
     assert_eq!(
@@ -36,7 +36,7 @@ fn glyph_type_kind_codes_match_gnu_glyph_type() {
         GlyphTypeKind::Image
     );
     assert_eq!(
-        Glyph::stretch(2, 0).glyph_type.gnu_kind(),
+        Glyph::stretch(2, FaceId::new(0)).glyph_type.gnu_kind(),
         GlyphTypeKind::Stretch
     );
 }
@@ -68,7 +68,7 @@ fn empty_row_has_zero_hash() {
 fn row_hash_changes_with_content() {
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     let hash_empty = row.compute_hash();
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0));
     let hash_a = row.compute_hash();
     assert_ne!(hash_empty, hash_a);
 }
@@ -76,10 +76,10 @@ fn row_hash_changes_with_content() {
 #[test]
 fn row_hash_differs_for_different_chars() {
     let mut row_a = GlyphRow::new(GlyphRowRole::Text);
-    row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0));
+    row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0));
 
     let mut row_b = GlyphRow::new(GlyphRowRole::Text);
-    row_b.glyphs[GlyphArea::Text as usize].push(Glyph::char('b', 0, 0));
+    row_b.glyphs[GlyphArea::Text as usize].push(Glyph::char('b', FaceId::new(0), 0));
 
     assert_ne!(row_a.compute_hash(), row_b.compute_hash());
 }
@@ -87,10 +87,10 @@ fn row_hash_differs_for_different_chars() {
 #[test]
 fn row_hash_differs_for_different_faces() {
     let mut row_a = GlyphRow::new(GlyphRowRole::Text);
-    row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0));
+    row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0));
 
     let mut row_b = GlyphRow::new(GlyphRowRole::Text);
-    row_b.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 1, 0));
+    row_b.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(1), 0));
 
     assert_ne!(row_a.compute_hash(), row_b.compute_hash());
 }
@@ -98,10 +98,10 @@ fn row_hash_differs_for_different_faces() {
 #[test]
 fn row_hash_differs_for_different_pixel_widths() {
     let mut row_a = GlyphRow::new(GlyphRowRole::Text);
-    row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0).with_pixel_width(8.0));
+    row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0).with_pixel_width(8.0));
 
     let mut row_b = GlyphRow::new(GlyphRowRole::Text);
-    row_b.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0).with_pixel_width(13.0));
+    row_b.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0).with_pixel_width(13.0));
 
     assert_ne!(row_a.compute_hash(), row_b.compute_hash());
 }
@@ -109,10 +109,10 @@ fn row_hash_differs_for_different_pixel_widths() {
 #[test]
 fn row_hash_differs_for_different_vertical_offsets() {
     let mut row_a = GlyphRow::new(GlyphRowRole::Text);
-    row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0).with_vertical_offset(-4.0));
+    row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0).with_vertical_offset(-4.0));
 
     let mut row_b = GlyphRow::new(GlyphRowRole::Text);
-    row_b.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0));
+    row_b.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0));
 
     assert_ne!(row_a.compute_hash(), row_b.compute_hash());
 }
@@ -120,10 +120,10 @@ fn row_hash_differs_for_different_vertical_offsets() {
 #[test]
 fn identical_rows_have_same_hash() {
     let mut row_a = GlyphRow::new(GlyphRowRole::Text);
-    row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('x', 5, 100));
+    row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('x', FaceId::new(5), 100));
 
     let mut row_b = GlyphRow::new(GlyphRowRole::Text);
-    row_b.glyphs[GlyphArea::Text as usize].push(Glyph::char('x', 5, 100));
+    row_b.glyphs[GlyphArea::Text as usize].push(Glyph::char('x', FaceId::new(5), 100));
 
     assert_eq!(row_a.compute_hash(), row_b.compute_hash());
 }
@@ -131,11 +131,11 @@ fn identical_rows_have_same_hash() {
 #[test]
 fn row_equal_uses_hash_fast_path() {
     let mut row_a = GlyphRow::new(GlyphRowRole::Text);
-    row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0));
+    row_a.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0));
     row_a.hash = row_a.compute_hash();
 
     let mut row_b = GlyphRow::new(GlyphRowRole::Text);
-    row_b.glyphs[GlyphArea::Text as usize].push(Glyph::char('b', 0, 0));
+    row_b.glyphs[GlyphArea::Text as usize].push(Glyph::char('b', FaceId::new(0), 0));
     row_b.hash = row_b.compute_hash();
 
     // Different hashes → rows are not equal (fast path, no cell comparison)
@@ -181,7 +181,7 @@ fn matrix_rows_are_disabled_by_default() {
 #[test]
 fn matrix_clear_resets_all_rows() {
     let mut matrix = GlyphMatrix::new(2, 10);
-    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('x', 0, 0));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('x', FaceId::new(0), 0));
     matrix.rows[0].hash = 12345;
     matrix.rows[0].cursor_col = Some(5);
 
@@ -249,12 +249,12 @@ fn state_with_text(text: &str) -> FrameDisplayState {
     let mut state = FrameDisplayState::new(cols, rows, char_w, char_h);
 
     // Insert a default face (id 0)
-    state.faces.insert(0, Face::new(0));
+    state.faces.insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(1, cols);
     matrix.rows[0].enabled = true;
     for (i, ch) in text.chars().enumerate() {
-        matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, 0, i));
+        matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), i));
     }
 
     state.window_matrices.push(WindowMatrixEntry {
@@ -292,19 +292,19 @@ fn materialize_emits_tab_line_row_at_window_top() {
     let text_area = Rect::new(10.0, 20.0 + char_h, cols as f32 * char_w, char_h);
 
     let mut state = FrameDisplayState::new(cols, 2, char_w, char_h);
-    state.faces.insert(0, Face::new(0));
+    state.faces.insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(2, cols);
     matrix.rows[0].role = GlyphRowRole::TabLine;
     matrix.rows[0].enabled = true;
     matrix.rows[0].height_px = char_h;
     matrix.rows[0].pixel_y = 0.0;
-    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('T', 0, 0));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('T', FaceId::new(0), 0));
     matrix.rows[1].role = GlyphRowRole::Text;
     matrix.rows[1].enabled = true;
     matrix.rows[1].height_px = char_h;
     matrix.rows[1].pixel_y = 0.0;
-    matrix.rows[1].glyphs[GlyphArea::Text as usize].push(Glyph::char('B', 0, 0));
+    matrix.rows[1].glyphs[GlyphArea::Text as usize].push(Glyph::char('B', FaceId::new(0), 0));
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
@@ -370,13 +370,13 @@ fn materialize_right_aligns_reversed_row() {
     let char_h = 16.0f32;
     let cols = 10; // 80px-wide text area
     let mut state = FrameDisplayState::new(cols, 1, char_w, char_h);
-    state.faces.insert(0, Face::new(0));
+    state.faces.insert(FaceId::new(0), Face::new(FaceId::new(0)));
     let mut matrix = GlyphMatrix::new(1, cols);
     matrix.rows[0].enabled = true;
     matrix.rows[0].reversed_p = true;
     // Two cells, no recorded pixel width -> one column (8px) each => 16px used.
-    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('\u{05d0}', 0, 0));
-    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('\u{05d1}', 0, 1));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('\u{05d0}', FaceId::new(0), 0));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('\u{05d1}', FaceId::new(0), 1));
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
@@ -549,7 +549,7 @@ fn for_each_glyph_matches_materialize_glyphs() {
     let char_h = 16.0f32;
     let cols = 4;
     let mut state = FrameDisplayState::new(cols, 1, char_w, char_h);
-    state.faces.insert(0, Face::new(0));
+    state.faces.insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     // One background (emits FrameGlyph::Background).
     state.backgrounds.push(BackgroundItem {
@@ -561,9 +561,9 @@ fn for_each_glyph_matches_materialize_glyphs() {
     // (emits FrameGlyph::Char x2 and FrameGlyph::Stretch).
     let mut matrix = GlyphMatrix::new(1, cols);
     matrix.rows[0].enabled = true;
-    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('A', 0, 0));
-    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('B', 0, 1));
-    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::stretch(2, 0));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('A', FaceId::new(0), 0));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('B', FaceId::new(0), 1));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::stretch(2, FaceId::new(0)));
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
         matrix,
@@ -629,16 +629,16 @@ fn materialize_pixel_positions_from_grid() {
     let cols = 3;
     let rows = 2;
     let mut state = FrameDisplayState::new(cols, rows, char_w, char_h);
-    state.faces.insert(0, Face::new(0));
+    state.faces.insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(2, cols);
     matrix.rows[0].enabled = true;
     matrix.rows[1].enabled = true;
     // Row 0: "AB"
-    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('A', 0, 0));
-    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('B', 0, 1));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('A', FaceId::new(0), 0));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('B', FaceId::new(0), 1));
     // Row 1: "C"
-    matrix.rows[1].glyphs[GlyphArea::Text as usize].push(Glyph::char('C', 0, 2));
+    matrix.rows[1].glyphs[GlyphArea::Text as usize].push(Glyph::char('C', FaceId::new(0), 2));
 
     let win_x = 5.0f32;
     let win_y = 3.0f32;
@@ -697,11 +697,11 @@ fn materialize_pixel_positions_from_grid() {
 #[test]
 fn materialize_preserves_char_bidi_level() {
     let mut state = FrameDisplayState::new(1, 1, 8.0, 16.0);
-    state.faces.insert(0, Face::new(0));
+    state.faces.insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(1, 1);
     matrix.rows[0].enabled = true;
-    let mut glyph = Glyph::char('א', 0, 1);
+    let mut glyph = Glyph::char('א', FaceId::new(0), 1);
     glyph.bidi_level = 1;
     matrix.rows[0].glyphs[GlyphArea::Text as usize].push(glyph);
 
@@ -732,11 +732,11 @@ fn materialize_preserves_char_bidi_level() {
 #[test]
 fn materialize_preserves_stretch_bidi_level() {
     let mut state = FrameDisplayState::new(4, 1, 8.0, 16.0);
-    state.faces.insert(0, Face::new(0));
+    state.faces.insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(1, 4);
     matrix.rows[0].enabled = true;
-    let mut glyph = Glyph::stretch(3, 0);
+    let mut glyph = Glyph::stretch(3, FaceId::new(0));
     glyph.bidi_level = 1;
     matrix.rows[0].glyphs[GlyphArea::Text as usize].push(glyph);
 
@@ -765,16 +765,16 @@ fn materialize_preserves_stretch_bidi_level() {
 #[test]
 fn materialize_uses_explicit_row_metrics() {
     let mut state = FrameDisplayState::new(2, 1, 10.0, 20.0);
-    let mut face = Face::new(0);
+    let mut face = Face::new(FaceId::new(0));
     face.font_ascent = 14;
-    state.faces.insert(0, face);
+    state.faces.insert(FaceId::new(0), face);
 
     let mut matrix = GlyphMatrix::new(1, 2);
     matrix.rows[0].enabled = true;
     matrix.rows[0].pixel_y = 7.0;
     matrix.rows[0].height_px = 18.0;
     matrix.rows[0].ascent_px = 13.0;
-    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('A', 0, 0));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('A', FaceId::new(0), 0));
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
@@ -816,7 +816,7 @@ fn materialize_applies_glyph_vertical_offset_to_char_baseline() {
     matrix.rows[0].height_px = 20.0;
     matrix.rows[0].ascent_px = 15.0;
     matrix.rows[0].glyphs[GlyphArea::Text as usize]
-        .push(Glyph::char('A', 0, 0).with_vertical_offset(-4.0));
+        .push(Glyph::char('A', FaceId::new(0), 0).with_vertical_offset(-4.0));
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
@@ -847,9 +847,9 @@ fn materialize_copies_metadata() {
     state.z_order = 5;
     state.background = Color::BLUE;
 
-    let mut face = Face::new(1);
+    let mut face = Face::new(FaceId::new(1));
     face.foreground = Color::RED;
-    state.faces.insert(1, face);
+    state.faces.insert(FaceId::new(1), face);
 
     let buf = state.materialize();
     assert_eq!(buf.frame_id.get(), 123);
@@ -858,20 +858,20 @@ fn materialize_copies_metadata() {
     assert_eq!(buf.parent_y, 20.0);
     assert_eq!(buf.z_order, 5);
     assert_eq!(buf.background, Color::BLUE);
-    assert!(buf.faces.contains_key(&1));
-    assert_eq!(buf.faces[&1].foreground, Color::RED);
+    assert!(buf.faces.contains_key(&FaceId::new(1)));
+    assert_eq!(buf.faces[&FaceId::new(1)].foreground, Color::RED);
 }
 
 #[test]
 fn materialize_disabled_rows_are_skipped() {
     let mut state = FrameDisplayState::new(3, 2, 8.0, 16.0);
-    state.faces.insert(0, Face::new(0));
+    state.faces.insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(2, 3);
     matrix.rows[0].enabled = true;
-    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('A', 0, 0));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('A', FaceId::new(0), 0));
     // Row 1 stays disabled (default), so its glyph is filtered out.
-    matrix.rows[1].glyphs[GlyphArea::Text as usize].push(Glyph::char('B', 0, 1));
+    matrix.rows[1].glyphs[GlyphArea::Text as usize].push(Glyph::char('B', FaceId::new(0), 1));
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
@@ -894,16 +894,16 @@ fn materialize_disabled_rows_are_skipped() {
 #[test]
 fn materialize_padding_glyphs_are_skipped() {
     let mut state = FrameDisplayState::new(4, 1, 8.0, 16.0);
-    state.faces.insert(0, Face::new(0));
+    state.faces.insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(1, 4);
     matrix.rows[0].enabled = true;
     // Wide char 'W' followed by padding
-    let mut wide_glyph = Glyph::char('W', 0, 0);
+    let mut wide_glyph = Glyph::char('W', FaceId::new(0), 0);
     wide_glyph.wide = true;
     matrix.rows[0].glyphs[GlyphArea::Text as usize].push(wide_glyph);
-    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::padding_for(0, 0));
-    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('x', 0, 1));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::padding_for(FaceId::new(0), 0));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('x', FaceId::new(0), 1));
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
@@ -939,14 +939,14 @@ fn materialize_padding_glyphs_are_skipped() {
 #[test]
 fn materialize_uses_realized_pixel_width_for_text_positions() {
     let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
-    state.faces.insert(0, Face::new(0));
+    state.faces.insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(1, 10);
     matrix.rows[0].enabled = true;
     matrix.rows[0].glyphs[GlyphArea::Text as usize]
-        .push(Glyph::char('N', 0, 0).with_pixel_width(13.0));
+        .push(Glyph::char('N', FaceId::new(0), 0).with_pixel_width(13.0));
     matrix.rows[0].glyphs[GlyphArea::Text as usize]
-        .push(Glyph::char('E', 0, 1).with_pixel_width(12.0));
+        .push(Glyph::char('E', FaceId::new(0), 1).with_pixel_width(12.0));
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
@@ -987,14 +987,14 @@ fn materialize_uses_realized_pixel_width_for_text_positions() {
 #[test]
 fn materialize_clips_overlong_window_rows_to_pixel_bounds() {
     let mut state = FrameDisplayState::new(6, 1, 8.0, 16.0);
-    state.faces.insert(0, Face::new(0));
+    state.faces.insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(1, 3);
     matrix.rows[0].enabled = true;
     matrix.rows[0].role = GlyphRowRole::ModeLine;
     matrix.rows[0].mode_line = true;
     for (idx, ch) in "abcdef".chars().enumerate() {
-        matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, 0, idx));
+        matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), idx));
     }
 
     state.window_matrices.push(WindowMatrixEntry {
@@ -1039,11 +1039,11 @@ fn materialize_text_rows_from_text_area_but_chrome_from_window_area() {
 
     matrix.rows[0].enabled = true;
     matrix.rows[0].role = GlyphRowRole::Text;
-    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('t', 0, 0));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('t', FaceId::new(0), 0));
 
     matrix.rows[1].enabled = true;
     matrix.rows[1].role = GlyphRowRole::ModeLine;
-    matrix.rows[1].glyphs[GlyphArea::Text as usize].push(Glyph::char('m', 0, 1));
+    matrix.rows[1].glyphs[GlyphArea::Text as usize].push(Glyph::char('m', FaceId::new(0), 1));
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
@@ -1153,25 +1153,25 @@ fn materialize_clips_vscrolled_text_row_to_text_band() {
     // the renderer's per-glyph vertical clip hides the overflow instead of
     // letting it bleed over the header/mode-line chrome.
     let mut state = FrameDisplayState::new(32, 100, 8.0, 20.0);
-    state.faces.insert(0, Face::new(0));
+    state.faces.insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(3, 4);
     matrix.rows[0].enabled = true;
     matrix.rows[0].role = GlyphRowRole::HeaderLine;
     matrix.rows[0].pixel_y = 0.0;
     matrix.rows[0].height_px = 20.0;
-    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('h', 0, 0));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::char('h', FaceId::new(0), 0));
     // vscroll'd buffer row: top at y=15, inside the header band (0..20).
     matrix.rows[1].enabled = true;
     matrix.rows[1].role = GlyphRowRole::Text;
     matrix.rows[1].pixel_y = 15.0;
     matrix.rows[1].height_px = 20.0;
-    matrix.rows[1].glyphs[GlyphArea::Text as usize].push(Glyph::char('x', 0, 0));
+    matrix.rows[1].glyphs[GlyphArea::Text as usize].push(Glyph::char('x', FaceId::new(0), 0));
     matrix.rows[2].enabled = true;
     matrix.rows[2].role = GlyphRowRole::ModeLine;
     matrix.rows[2].pixel_y = 80.0;
     matrix.rows[2].height_px = 20.0;
-    matrix.rows[2].glyphs[GlyphArea::Text as usize].push(Glyph::char('m', 0, 0));
+    matrix.rows[2].glyphs[GlyphArea::Text as usize].push(Glyph::char('m', FaceId::new(0), 0));
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
@@ -1227,11 +1227,11 @@ fn materialize_clips_vscrolled_text_row_to_text_band() {
 #[test]
 fn materialize_stretch_glyph() {
     let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
-    state.faces.insert(0, Face::new(0));
+    state.faces.insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(1, 10);
     matrix.rows[0].enabled = true;
-    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::stretch(4, 0));
+    matrix.rows[0].glyphs[GlyphArea::Text as usize].push(Glyph::stretch(4, FaceId::new(0)));
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
@@ -1256,14 +1256,14 @@ fn materialize_stretch_glyph() {
 #[test]
 fn materialize_uses_explicit_stretch_geometry() {
     let mut state = FrameDisplayState::new(10, 1, 8.0, 16.0);
-    state.faces.insert(0, Face::new(0));
+    state.faces.insert(FaceId::new(0), Face::new(FaceId::new(0)));
 
     let mut matrix = GlyphMatrix::new(1, 10);
     matrix.rows[0].enabled = true;
     matrix.rows[0].height_px = 30.0;
     matrix.rows[0].ascent_px = 20.0;
     matrix.rows[0].glyphs[GlyphArea::Text as usize]
-        .push(Glyph::stretch(4, 0).with_pixel_geometry(24.0, 12.0, 5.0));
+        .push(Glyph::stretch(4, FaceId::new(0)).with_pixel_geometry(24.0, 12.0, 5.0));
 
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
@@ -1352,8 +1352,8 @@ fn materialize_emits_left_fringe_bitmap_glyph_from_row() {
     let text_area = Rect::new(10.0 + left_fringe, 20.0, cols as f32 * char_w, char_h);
 
     let mut state = FrameDisplayState::new(cols, 1, char_w, char_h);
-    state.faces.insert(0, Face::new(0));
-    state.faces.insert(7, Face::new(7));
+    state.faces.insert(FaceId::new(0), Face::new(FaceId::new(0)));
+    state.faces.insert(FaceId::new(7), Face::new(FaceId::new(7)));
 
     // Register the bitmap bits once per frame.
     state.fringe_bitmaps.insert(
@@ -1373,7 +1373,7 @@ fn materialize_emits_left_fringe_bitmap_glyph_from_row() {
     matrix.rows[0].pixel_y = 0.0;
     matrix.rows[0].left_fringe_bitmap = Some(FringeBitmapInfo {
         bitmap_index: 25,
-        face_id: 7,
+        face_id: FaceId::new(7),
     });
 
     state.window_matrices.push(WindowMatrixEntry {
@@ -1404,7 +1404,7 @@ fn materialize_emits_left_fringe_bitmap_glyph_from_row() {
             ..
         } => {
             assert_eq!(*bitmap_index, 25);
-            assert_eq!(*face_id, 7);
+            assert_eq!(*face_id, FaceId::new(7));
             assert_eq!(*side, FringeSide::Left);
             // Fringe column: from window left edge to text area left edge.
             assert_eq!(*x, 10.0);
@@ -1445,13 +1445,13 @@ fn frame_display_state_serde_round_trip() {
 #[test]
 fn frame_display_state_integer_map_keys_round_trip() {
     let mut state = state_with_text("k");
-    state.faces.insert(42, Face::new(42));
+    state.faces.insert(FaceId::new(42), Face::new(FaceId::new(42)));
     state
         .cursor_effects_by_window
         .insert(crate::types::DisplayWindowId::new(7), Default::default());
     let json = serde_json::to_string(&state).expect("serialize");
     let back: FrameDisplayState = serde_json::from_str(&json).expect("deserialize");
-    assert!(back.faces.contains_key(&42));
+    assert!(back.faces.contains_key(&FaceId::new(42)));
     assert!(
         back.cursor_effects_by_window
             .contains_key(&crate::types::DisplayWindowId::new(7))
@@ -1470,9 +1470,9 @@ fn resolved_fonts_survive_materialize_and_round_trip() {
 
     let mut state = state_with_text("f");
     let font_id = ResolvedFontId(3);
-    let mut face = Face::new(0);
+    let mut face = Face::new(FaceId::new(0));
     face.default_resolved_font_id = Some(font_id);
-    state.faces.insert(0, face);
+    state.faces.insert(FaceId::new(0), face);
     state.fonts.insert(
         font_id,
         ResolvedFont {
@@ -1495,7 +1495,7 @@ fn resolved_fonts_survive_materialize_and_round_trip() {
     let buf = state.materialize();
     assert_eq!(buf.fonts.get(&font_id), state.fonts.get(&font_id));
     assert_eq!(
-        buf.faces.get(&0).unwrap().default_resolved_font_id,
+        buf.faces.get(&FaceId::new(0)).unwrap().default_resolved_font_id,
         Some(font_id)
     );
 
@@ -1508,7 +1508,7 @@ fn resolved_fonts_survive_materialize_and_round_trip() {
     let parsed: FrameDisplayState = serde_json::from_str(&json).expect("deserialize");
     assert_eq!(parsed.fonts.get(&font_id), state.fonts.get(&font_id));
     assert_eq!(
-        parsed.faces.get(&0).unwrap().default_resolved_font_id,
+        parsed.faces.get(&FaceId::new(0)).unwrap().default_resolved_font_id,
         Some(font_id)
     );
 }

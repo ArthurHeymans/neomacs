@@ -6,6 +6,7 @@
 //! consumer side; layout no longer treats `FrameGlyphBuffer` as the primary
 //! output contract.
 
+use neomacs_display_protocol::types::FaceId;
 use crate::display_cursor::CursorVisualColumnResolutionContext;
 #[cfg(test)]
 use crate::display_cursor::CursorVisualColumnResolutionRequest;
@@ -363,14 +364,14 @@ impl DisplayOutputBuilder {
     }
 
     #[cfg(test)]
-    pub(crate) fn install_output_face(&mut self, id: u32, face: Face) {
+    pub(crate) fn install_output_face(&mut self, id: FaceId, face: Face) {
         self.install_output_frame_state(OutputFrameStateInstallRequest::face(id, face));
     }
 
     #[cfg(test)]
     pub(crate) fn install_output_resolved_display_row_face(
         &mut self,
-        face_id: u32,
+        face_id: FaceId,
         face: &ResolvedFace,
         metrics: Option<FontMetrics>,
     ) {
@@ -538,7 +539,7 @@ impl DisplayOutputBuilder {
     }
 
     #[cfg(test)]
-    pub(crate) fn faces(&self) -> &HashMap<u32, Face> {
+    pub(crate) fn faces(&self) -> &HashMap<FaceId, Face> {
         self.frame_state.faces()
     }
 

@@ -110,7 +110,7 @@ fn window_layout_with_cursor() {
         style: 0, // filled box
         color: Color::rgb(1.0, 1.0, 1.0),
         char_under: Some('A'),
-        char_face_id: Some(5),
+        char_face_id: Some(FaceId::new(5)),
     };
     let wl = WindowLayout {
         window_id: 1,
@@ -178,13 +178,13 @@ fn layout_row_with_mixed_glyphs() {
         ch: 'H',
         x: 0.0,
         width: 8.0,
-        face_id: 0,
+        face_id: FaceId::new(0),
         charpos: 1,
     };
     let stretch_glyph = LayoutGlyph::Stretch {
         x: 8.0,
         width: 40.0,
-        face_id: 1,
+        face_id: FaceId::new(1),
     };
     let image_glyph = LayoutGlyph::Image {
         image_id: 7,
@@ -210,7 +210,7 @@ fn layout_glyph_char_variant() {
         ch: 'Z',
         x: 120.0,
         width: 9.5,
-        face_id: 3,
+        face_id: FaceId::new(3),
         charpos: 42,
     };
     if let LayoutGlyph::Char {
@@ -224,7 +224,7 @@ fn layout_glyph_char_variant() {
         assert_eq!(ch, 'Z');
         assert_eq!(x, 120.0);
         assert_eq!(width, 9.5);
-        assert_eq!(face_id, 3);
+        assert_eq!(face_id, FaceId::new(3));
         assert_eq!(charpos, 42);
     } else {
         panic!("Expected LayoutGlyph::Char");
@@ -236,12 +236,12 @@ fn layout_glyph_stretch_variant() {
     let g = LayoutGlyph::Stretch {
         x: 200.0,
         width: 50.0,
-        face_id: 10,
+        face_id: FaceId::new(10),
     };
     if let LayoutGlyph::Stretch { x, width, face_id } = g {
         assert_eq!(x, 200.0);
         assert_eq!(width, 50.0);
-        assert_eq!(face_id, 10);
+        assert_eq!(face_id, FaceId::new(10));
     } else {
         panic!("Expected LayoutGlyph::Stretch");
     }
@@ -277,7 +277,7 @@ fn layout_glyph_clone() {
         ch: 'A',
         x: 10.0,
         width: 8.0,
-        face_id: 0,
+        face_id: FaceId::new(0),
         charpos: 1,
     };
     let cloned = g.clone();
@@ -295,7 +295,7 @@ fn layout_glyph_debug() {
         ch: 'X',
         x: 0.0,
         width: 8.0,
-        face_id: 0,
+        face_id: FaceId::new(0),
         charpos: 5,
     };
     let debug_str = format!("{:?}", g);
@@ -332,10 +332,10 @@ fn cursor_layout_with_char_under() {
         style: 0,
         color: Color::new(0.0, 1.0, 0.0, 1.0),
         char_under: Some('W'),
-        char_face_id: Some(7),
+        char_face_id: Some(FaceId::new(7)),
     };
     assert_eq!(cursor.char_under, Some('W'));
-    assert_eq!(cursor.char_face_id, Some(7));
+    assert_eq!(cursor.char_face_id, Some(FaceId::new(7)));
 }
 
 #[test]

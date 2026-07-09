@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
 use crate::display_row_append_context::{
@@ -56,7 +57,7 @@ impl DisplaySourceTextRequest {
         self,
         buffer_id: BufferId,
         buffer: &B,
-        face_id: u32,
+        face_id: FaceId,
     ) -> Option<DisplaySourceRangeItemAppendRequest> {
         buffer_source_text_item_append_request(self.source_item(), buffer_id, buffer, face_id)
     }
@@ -67,7 +68,7 @@ pub(crate) fn buffer_source_text_item_append_request<B: LayoutBufferView + ?Size
     source_item: DisplaySourceTextItemRequest,
     buffer_id: BufferId,
     buffer: &B,
-    face_id: u32,
+    face_id: FaceId,
 ) -> Option<DisplaySourceRangeItemAppendRequest> {
     let append_kind = source_item.append_kind();
     let item = source_item.into_display_item(buffer_id, buffer, RenderFaceRef::FaceId(face_id))?;
@@ -87,12 +88,12 @@ pub(crate) struct BufferSourceRowAppendContext<'source, 'surface, B: LayoutBuffe
 
 #[derive(Clone, Debug)]
 struct BufferSourceResolvedItemFace {
-    face_id: u32,
+    face_id: FaceId,
     face: ResolvedFace,
 }
 
 impl BufferSourceResolvedItemFace {
-    fn new(face_id: u32, face: ResolvedFace) -> Self {
+    fn new(face_id: FaceId, face: ResolvedFace) -> Self {
         Self { face_id, face }
     }
 }
@@ -138,7 +139,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         )
     }
 
-    pub(crate) fn with_resolved_item_face(mut self, face_id: u32, face: ResolvedFace) -> Self {
+    pub(crate) fn with_resolved_item_face(mut self, face_id: FaceId, face: ResolvedFace) -> Self {
         self.resolved_item_face = Some(BufferSourceResolvedItemFace::new(face_id, face));
         self
     }
@@ -171,7 +172,7 @@ impl<'source, 'surface, B: LayoutBufferView + ?Sized>
         )
     }
 
-    fn source_item_face<'a>(&'a self, item: &DisplayItem) -> (&'a ResolvedFace, u32) {
+    fn source_item_face<'a>(&'a self, item: &DisplayItem) -> (&'a ResolvedFace, FaceId) {
         let item_face_id = render_face_ref_id(item.face, self.active_face.face_id());
         if item_face_id == self.active_face.face_id() {
             return (self.active_face.resolved_face(), self.active_face.face_id());
@@ -485,7 +486,7 @@ pub(crate) fn buffer_source_item_append_request<B: LayoutBufferView + ?Sized>(
     source_item: DisplaySourceItemRequest,
     buffer_id: BufferId,
     buffer: &B,
-    face_id: u32,
+    face_id: FaceId,
 ) -> Option<DisplaySourceRangeItemAppendRequest> {
     let append_kind = source_item.append_kind();
     let item = source_item.into_display_item(buffer_id, buffer, RenderFaceRef::FaceId(face_id))?;

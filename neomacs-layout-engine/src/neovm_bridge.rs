@@ -34,7 +34,7 @@ use crate::fontconfig::FontSizing;
 use neomacs_display_protocol::cursor::{CursorBarWidth, CursorKind, CursorSpec};
 use neomacs_display_protocol::cursor_effect_command::{CursorEffectArg, CursorEffectCommand};
 use neomacs_display_protocol::effect_config::EffectsConfig;
-use neomacs_display_protocol::types::Rect;
+use neomacs_display_protocol::types::{FaceId, Rect};
 use strum::{EnumString, IntoStaticStr};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2446,6 +2446,18 @@ impl Default for ResolvedFace {
 }
 
 impl ResolvedFace {
+    /// Typed view of this bridge-side face id. `ResolvedFace.face_id` stays a
+    /// raw u32 (the neovm bridge boundary keeps raw reprs); this is THE
+    /// conversion point where ids leave the bridge as [`FaceId`].
+    pub(crate) fn display_face_id(&self) -> FaceId {
+        FaceId::new(self.face_id)
+    }
+
+    /// Store a typed face id back into the raw bridge-side field.
+    pub(crate) fn set_display_face_id(&mut self, id: FaceId) {
+        self.face_id = id.get();
+    }
+
     pub(crate) fn measured_char_width_px(&self) -> f32 {
         self.font_char_width
     }

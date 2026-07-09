@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::RenderFaceRef;
@@ -65,7 +66,7 @@ impl DisplayRowLispStringSourceId {
 #[derive(Clone)]
 pub(crate) struct DisplayRowSourceFragmentFrame<'face> {
     policy: DisplayRowSourceRequestPolicy,
-    base_face_id: u32,
+    base_face_id: FaceId,
     base_face: &'face ResolvedFace,
 }
 
@@ -73,7 +74,7 @@ impl<'face> DisplayRowSourceFragmentFrame<'face> {
     pub(crate) fn new(
         geometry: DisplayRowGeometry,
         role: GlyphRowRole,
-        base_face_id: u32,
+        base_face_id: FaceId,
         base_face: &'face ResolvedFace,
     ) -> Self {
         Self {
@@ -108,7 +109,7 @@ impl<'face> DisplayRowSourceFragmentFrame<'face> {
         matrix_cols: usize,
         char_width: f32,
         role: GlyphRowRole,
-        base_face_id: u32,
+        base_face_id: FaceId,
         base_face: &'face ResolvedFace,
     ) -> Self {
         let char_width = char_width.max(1.0);
@@ -133,7 +134,7 @@ impl<'face> DisplayRowSourceFragmentFrame<'face> {
         columns: usize,
         char_width: f32,
         role: GlyphRowRole,
-        base_face_id: u32,
+        base_face_id: FaceId,
         base_face: &'face ResolvedFace,
     ) -> Self {
         let char_width = char_width.max(1.0);
@@ -178,7 +179,7 @@ impl<'face> DisplayRowSourceFragmentFrame<'face> {
 pub(crate) struct DisplayRowLispStringSourceSessionRequest {
     source_id: DisplayRowLispStringSourceId,
     value: Value,
-    base_face_id: u32,
+    base_face_id: FaceId,
 }
 
 pub(crate) struct DisplayRowLispStringSourceRenderRequest<'a> {
@@ -238,7 +239,7 @@ impl<'a> DisplayRowLispStringSourceRenderRequest<'a> {
 }
 
 impl DisplayRowLispStringSourceSessionRequest {
-    fn for_base_face_id(value: Value, base_face_id: u32) -> Self {
+    fn for_base_face_id(value: Value, base_face_id: FaceId) -> Self {
         Self {
             source_id: DisplayRowLispStringSourceId::ROOT,
             value,
@@ -351,7 +352,7 @@ impl DisplayRowSourceRequestPolicy {
 
     pub(crate) fn source_request_for_base_face_id<'face>(
         self,
-        base_face_id: u32,
+        base_face_id: FaceId,
         base_face: &'face ResolvedFace,
     ) -> DisplayRowSourceRenderRequest<'face> {
         debug_assert!(self.symbol_values.is_empty());
@@ -363,7 +364,7 @@ struct DisplayRowRenderPlan<'a> {
     geometry: DisplayRowGeometry,
     render_bounds: DisplayRowRenderBounds,
     area: GlyphArea,
-    base_face_id: u32,
+    base_face_id: FaceId,
     base_face: &'a ResolvedFace,
     role: GlyphRowRole,
     chrome_text_area_left_px: f32,
@@ -374,7 +375,7 @@ pub(crate) struct DisplayRowSourceRenderRequest<'a> {
     geometry: DisplayRowGeometry,
     render_bounds: DisplayRowRenderBounds,
     area: GlyphArea,
-    base_face_id: u32,
+    base_face_id: FaceId,
     base_face: &'a ResolvedFace,
     role: GlyphRowRole,
     chrome_text_area_left_px: f32,
@@ -384,7 +385,7 @@ pub(crate) struct DisplayRowSourceRenderRequest<'a> {
 impl<'a> DisplayRowSourceRenderRequest<'a> {
     fn whole_row(
         geometry: DisplayRowGeometry,
-        base_face_id: u32,
+        base_face_id: FaceId,
         base_face: &'a ResolvedFace,
         role: GlyphRowRole,
     ) -> Self {
@@ -409,7 +410,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         symbol_values: std::collections::HashMap<String, Value>,
     ) -> Self {
         let base_face_id = if base_face.face_id != 0 {
-            base_face.face_id
+            base_face.display_face_id()
         } else {
             face_ids.allocate()
         };
@@ -428,7 +429,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
 
     pub(crate) fn from_display_row_geometry_for_base_face_id(
         geometry: DisplayRowGeometry,
-        base_face_id: u32,
+        base_face_id: FaceId,
         base_face: &'a ResolvedFace,
         role: GlyphRowRole,
     ) -> Self {
@@ -490,7 +491,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
         RenderFaceRef::FaceId(self.base_face_id)
     }
 
-    pub(crate) fn base_face_id(&self) -> u32 {
+    pub(crate) fn base_face_id(&self) -> FaceId {
         self.base_face_id
     }
 
@@ -537,7 +538,7 @@ impl<'a> DisplayRowSourceRenderRequest<'a> {
 
     fn from_base_face_id_policy_with_render_bounds(
         policy: DisplayRowSourceRequestPolicy,
-        base_face_id: u32,
+        base_face_id: FaceId,
         base_face: &'a ResolvedFace,
         render_bounds: DisplayRowRenderBounds,
     ) -> Self {
@@ -674,7 +675,7 @@ impl<'a, 'ids> DisplayRowRenderContext<'a, 'ids> {
 
     pub(crate) fn source_resolve_params<'b>(
         &self,
-        base_face_id: u32,
+        base_face_id: FaceId,
         base_face: &'b ResolvedFace,
         fallback: DisplayRowFallbackMetrics,
     ) -> DisplaySourceResolveParams<'b>

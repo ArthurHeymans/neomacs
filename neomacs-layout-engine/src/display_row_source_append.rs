@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{DisplayItem, DisplayItemKind, RenderFaceRef};
@@ -42,7 +43,7 @@ pub(crate) struct SyntheticTextAppendRequest {
 enum SyntheticTextAppendFace {
     ActiveFace,
     TextRowMetrics {
-        face_id: u32,
+        face_id: FaceId,
         base_face: ResolvedFace,
         metrics: DisplayRowFallbackMetrics,
     },
@@ -50,7 +51,7 @@ enum SyntheticTextAppendFace {
 
 #[derive(Clone)]
 struct SyntheticTextAppendContext<'a> {
-    face_id: u32,
+    face_id: FaceId,
     base_face: &'a ResolvedFace,
     frame: DisplayRowAppendFrame,
 }
@@ -77,13 +78,13 @@ pub(crate) struct BufferSyntheticTextRenderContext<'a> {
 
 struct PreparedSingleDisplayItemSourceAppend {
     item: DisplayItem,
-    face_id: u32,
+    face_id: FaceId,
     kind: DisplayRowAppendKind,
     position: DisplayRowPosition,
 }
 
 impl PreparedSingleDisplayItemSourceAppend {
-    fn into_parts(self) -> (DisplayItem, u32, DisplayRowAppendKind, DisplayRowPosition) {
+    fn into_parts(self) -> (DisplayItem, FaceId, DisplayRowAppendKind, DisplayRowPosition) {
         (self.item, self.face_id, self.kind, self.position)
     }
 }
@@ -91,7 +92,7 @@ impl PreparedSingleDisplayItemSourceAppend {
 #[derive(Clone)]
 pub(crate) struct SingleDisplayItemAppendContext<'face> {
     base_face: &'face ResolvedFace,
-    face_id: u32,
+    face_id: FaceId,
     frame: DisplayRowAppendFrame,
 }
 
@@ -134,7 +135,7 @@ impl SyntheticTextSource {
         }
     }
 
-    fn into_item_source(self, face_id: u32) -> SyntheticTextItemSource {
+    fn into_item_source(self, face_id: FaceId) -> SyntheticTextItemSource {
         SyntheticTextItemSource::new(self.source_id, self.text, RenderFaceRef::FaceId(face_id), 0)
     }
 }
@@ -178,7 +179,7 @@ impl SyntheticTextAppendRequest {
     pub(crate) fn text_row_metrics_source(
         position: DisplayRowPosition,
         source: SyntheticTextSource,
-        face_id: u32,
+        face_id: FaceId,
         base_face: &ResolvedFace,
         metrics: DisplayRowFallbackMetrics,
     ) -> Self {
@@ -197,7 +198,7 @@ impl SyntheticTextAppendRequest {
     pub(crate) fn text_row_metrics_marker(
         position: DisplayRowPosition,
         marker: SyntheticTextMarker,
-        face_id: u32,
+        face_id: FaceId,
         base_face: &ResolvedFace,
         metrics: DisplayRowFallbackMetrics,
     ) -> Self {
@@ -224,7 +225,7 @@ impl SyntheticTextAppendRequest {
 }
 
 impl<'a> SyntheticTextAppendContext<'a> {
-    fn new(face_id: u32, base_face: &'a ResolvedFace, frame: DisplayRowAppendFrame) -> Self {
+    fn new(face_id: FaceId, base_face: &'a ResolvedFace, frame: DisplayRowAppendFrame) -> Self {
         Self {
             face_id,
             base_face,
@@ -287,7 +288,7 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
 
     fn active_face(
         self,
-        face_id: u32,
+        face_id: FaceId,
         base_face: &'a ResolvedFace,
     ) -> SyntheticTextAppendContext<'a> {
         SyntheticTextAppendContext::new(
@@ -299,7 +300,7 @@ impl<'a> SyntheticTextRowAppendContext<'a> {
 
     fn text_row<'face>(
         self,
-        face_id: u32,
+        face_id: FaceId,
         base_face: &'face ResolvedFace,
         height_px: f32,
         ascent_px: f32,
@@ -430,7 +431,7 @@ impl<'a> BufferSyntheticTextRenderContext<'a> {
 impl<'face> SingleDisplayItemAppendContext<'face> {
     pub(crate) fn new(
         base_face: &'face ResolvedFace,
-        face_id: u32,
+        face_id: FaceId,
         frame: DisplayRowAppendFrame,
     ) -> Self {
         Self {
@@ -440,7 +441,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         }
     }
 
-    pub(crate) fn face_id(&self) -> u32 {
+    pub(crate) fn face_id(&self) -> FaceId {
         self.face_id
     }
 
@@ -459,7 +460,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         position: DisplayRowPosition,
         kind: DisplayRowAppendKind,
         render_policy: &mut P,
-        face_id: u32,
+        face_id: FaceId,
     ) -> Option<CurrentTextRowRenderOutcome>
     where
         S: DisplayItemSource,
@@ -496,7 +497,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
         position: DisplayRowPosition,
         kind: DisplayRowAppendKind,
         render_policy: &mut P,
-        face_id: u32,
+        face_id: FaceId,
     ) -> Option<CurrentTextRowRenderOutcome>
     where
         S: DisplayItemSource,
@@ -533,7 +534,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
     ) -> Option<DisplayRowAppendProgress> {
         let prepared = self.prepare_item(item, position, kind);
         let (item, face_id, kind, position) = prepared.into_parts();
-        let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
+        let mut face_ids = FrameFaceIdAllocator::new(face_id.get().saturating_add(1));
         let mut source = DisplayItemOnceSource::new(item);
         let mut source_state = DisplayRowSourceState::default();
         let outcome = self.render_source_with_policy(
@@ -570,7 +571,7 @@ impl<'face> SingleDisplayItemAppendContext<'face> {
     ) -> Option<f32> {
         let prepared = self.prepare_item(item, position, kind);
         let (item, face_id, kind, position) = prepared.into_parts();
-        let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
+        let mut face_ids = FrameFaceIdAllocator::new(face_id.get().saturating_add(1));
         let mut source = DisplayItemOnceSource::new(item);
         let mut source_state = DisplayRowSourceState::default();
         let outcome = self.measure_source_with_policy(
@@ -617,12 +618,12 @@ fn append_synthetic_text_to_display_row(
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
     source: SyntheticTextSource,
-    face_id: u32,
+    face_id: FaceId,
 ) -> Option<DisplayRowAppendProgress> {
     let mut source = source.into_item_source(face_id);
     let mut render_policy = NaturalDisplayRowAppendRenderPolicy;
     let start = position;
-    let mut face_ids = FrameFaceIdAllocator::new(face_id.saturating_add(1));
+    let mut face_ids = FrameFaceIdAllocator::new(face_id.get().saturating_add(1));
     let context = SingleDisplayItemAppendContext::new(base_face, face_id, frame);
     let mut source_state = DisplayRowSourceState::default();
     let outcome = context.render_source_with_policy(
@@ -640,7 +641,7 @@ fn append_synthetic_text_to_display_row(
 
 fn prepare_single_display_item_source_append(
     item: DisplayItem,
-    fallback_face_id: u32,
+    fallback_face_id: FaceId,
     position: DisplayRowPosition,
     fallback_kind: DisplayRowAppendKind,
 ) -> PreparedSingleDisplayItemSourceAppend {

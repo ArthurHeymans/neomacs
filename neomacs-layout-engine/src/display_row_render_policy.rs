@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use crate::display_item::DisplayItem;
 use crate::display_row_builder::DisplayRowItemMeasurement;
 use crate::font_metrics::FontMetricsService;
@@ -17,7 +18,7 @@ pub(crate) trait DisplayRowRenderPolicy {
     fn measurement_for(
         &mut self,
         _item: &DisplayItem,
-        _face_id: u32,
+        _face_id: FaceId,
         _font_metrics: &mut Option<FontMetricsService>,
     ) -> DisplayRowItemMeasurement {
         DisplayRowItemMeasurement::Default

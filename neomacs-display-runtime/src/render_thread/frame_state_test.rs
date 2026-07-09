@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use super::*;
 use crate::core::face::Face;
 use crate::core::frame_glyphs::{CursorStyle, FrameGlyphBuffer, GlyphRowRole, PhysCursor};
@@ -40,7 +41,7 @@ fn make_test_device() -> Option<wgpu::Device> {
     Some(device)
 }
 
-fn face(id: u32) -> Face {
+fn face(id: FaceId) -> Face {
     Face {
         id,
         ..Face::default()
@@ -112,10 +113,10 @@ fn refresh_faces_rebuilds_from_primary_fallback_frames() {
     if let Some(window_state) = app.frame_windows.primary_window_mut() {
         window_state.render = __render;
     }
-    app.faces.insert(99, face(99));
+    app.faces.insert(FaceId::new(99), face(FaceId::new(99)));
 
     let mut root = FrameGlyphBuffer::with_size(80.0, 32.0);
-    root.faces.insert(7, face(7));
+    root.faces.insert(FaceId::new(7), face(FaceId::new(7)));
     if let Some(ws) = app.frame_windows.primary_window_mut() {
         ws.render.set_current_frame(Some(root), None)
     };
@@ -123,7 +124,7 @@ fn refresh_faces_rebuilds_from_primary_fallback_frames() {
     let mut child = FrameGlyphBuffer::with_size(40.0, 16.0);
     child.frame_id = neomacs_display_protocol::types::DisplayFrameId::new(0x2000);
     child.parent_id = neomacs_display_protocol::types::DisplayFrameId::new(0);
-    child.faces.insert(8, face(8));
+    child.faces.insert(FaceId::new(8), face(FaceId::new(8)));
     app.frame_windows
         .primary_window_mut()
         .expect("primary child frames mut")
@@ -134,7 +135,7 @@ fn refresh_faces_rebuilds_from_primary_fallback_frames() {
 
     app.refresh_faces_from_frames();
 
-    assert!(app.faces.contains_key(&7));
-    assert!(app.faces.contains_key(&8));
-    assert!(!app.faces.contains_key(&99));
+    assert!(app.faces.contains_key(&FaceId::new(7)));
+    assert!(app.faces.contains_key(&FaceId::new(8)));
+    assert!(!app.faces.contains_key(&FaceId::new(99)));
 }

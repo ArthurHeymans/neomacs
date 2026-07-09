@@ -4,6 +4,7 @@
 //! source cursor driving, pending face installation, and source-position
 //! updates used by row lifecycle renderers.
 
+use neomacs_display_protocol::types::FaceId;
 use crate::display_buffer_source_consumption::{
     BufferSourceConsumedItem, BufferSourceConsumptionState,
 };
@@ -96,7 +97,7 @@ impl BufferSourceWalkConsumption {
         // applied; the bitmap draws in the fringe column). The fallback face is
         // only used when neither a `set-fringe-bitmap-face` override nor the
         // spec's FACE resolves (magit always supplies a FACE).
-        let fallback_face_id = u32::from(neomacs_display_protocol::face::BasicFaceId::Default);
+        let fallback_face_id = FaceId::from(neomacs_display_protocol::face::BasicFaceId::Default);
         for layout in &pending_fringes {
             source_render.record_fringe_bitmap_layout(layout, face_ids, fallback_face_id);
         }
@@ -129,7 +130,7 @@ impl<'request, B: LayoutBufferView> BufferSourceWalk<'request, B> {
         &mut self.append_state
     }
 
-    pub(crate) fn resolved_source_face(&self, face_id: u32) -> Option<&ResolvedFace> {
+    pub(crate) fn resolved_source_face(&self, face_id: FaceId) -> Option<&ResolvedFace> {
         self.source_resolve_state.resolved_face(face_id)
     }
 

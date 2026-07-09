@@ -1,4 +1,5 @@
 use crate::display_property::DisplayPropertyClassification;
+use neomacs_display_protocol::types::FaceId;
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
 use neovm_core::emacs_core::Value;
 
@@ -125,7 +126,7 @@ impl SourceSpan {
 pub(crate) enum RenderFaceRef {
     #[allow(dead_code)]
     Inherit,
-    FaceId(u32),
+    FaceId(FaceId),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -229,11 +230,11 @@ impl BufferDisplayReplacementSource {
         )
     }
 
-    fn item(self, face_id: u32, kind: DisplayItemKind) -> DisplayItem {
+    fn item(self, face_id: FaceId, kind: DisplayItemKind) -> DisplayItem {
         self.item_with_face(RenderFaceRef::FaceId(face_id), kind)
     }
 
-    pub(crate) fn display_item(self, face_id: u32, kind: DisplayItemKind) -> DisplayItem {
+    pub(crate) fn display_item(self, face_id: FaceId, kind: DisplayItemKind) -> DisplayItem {
         self.item(face_id, kind)
     }
 

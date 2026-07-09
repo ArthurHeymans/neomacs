@@ -6,6 +6,7 @@
 //! helpers in `display_row_append.rs`, so that the append module does not
 //! need to own the render-state facade.
 
+use neomacs_display_protocol::types::FaceId;
 use crate::display_current_row_output::{DisplayCurrentRowMutation, DisplayRowCurrentRowOutput};
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_policy::BaseFacePolicy;
@@ -130,7 +131,7 @@ struct DisplayRowNaturalSourceFragmentMutation<'a, 'request, 'metrics, 'face, 'h
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct RowExtendFill {
     bg: Color,
-    face_id: u32,
+    face_id: FaceId,
     width_px: f32,
     height_px: f32,
     ascent_px: f32,
@@ -140,7 +141,7 @@ pub(crate) struct RowExtendFill {
 impl RowExtendFill {
     pub(crate) fn new(
         bg: Color,
-        face_id: u32,
+        face_id: FaceId,
         width_px: f32,
         height_px: f32,
         ascent_px: f32,
@@ -504,7 +505,7 @@ impl<'a> TextRowOutputRenderState<'a> {
         install_text_window_row_decoration_request(self.output, request);
     }
 
-    fn insert_resolved_face(&mut self, face_id: u32, face: &ResolvedFace) {
+    fn insert_resolved_face(&mut self, face_id: FaceId, face: &ResolvedFace) {
         self.output.install_resolved_face(face_id, face, None);
     }
 
@@ -677,7 +678,7 @@ impl<'a> TextRowSourceRenderState<'a> {
             .measure_state(self.font_metrics, self.window_system, self.face_resolver)
     }
 
-    pub(crate) fn insert_resolved_face(&mut self, face_id: u32, face: &ResolvedFace) {
+    pub(crate) fn insert_resolved_face(&mut self, face_id: FaceId, face: &ResolvedFace) {
         self.output_render.insert_resolved_face(face_id, face);
     }
 
@@ -690,7 +691,7 @@ impl<'a> TextRowSourceRenderState<'a> {
     fn resolved_measured_face(
         &mut self,
         measurement_policy: DisplayRowMeasurementPolicy,
-        face_id: u32,
+        face_id: FaceId,
         face: ResolvedFace,
         window_system: bool,
         fallback_char_width: f32,
@@ -721,7 +722,7 @@ impl<'a> TextRowSourceRenderState<'a> {
     pub(crate) fn resolve_and_install_measured_face(
         &mut self,
         measurement_policy: DisplayRowMeasurementPolicy,
-        face_id: u32,
+        face_id: FaceId,
         face: ResolvedFace,
         window_system: bool,
         fallback_char_width: f32,
@@ -858,7 +859,7 @@ impl<'a> TextRowSourceRenderState<'a> {
         cols: usize,
         char_width: f32,
         role: neomacs_display_protocol::frame_glyphs::GlyphRowRole,
-        face_id: u32,
+        face_id: FaceId,
         base_face: &ResolvedFace,
         start_col: usize,
         max_col: usize,
@@ -918,7 +919,7 @@ impl<'a> TextRowSourceRenderState<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn extend_face_to_end_of_line(
         &mut self,
-        row_extend: &DisplayRowScopedValue<(Color, u32)>,
+        row_extend: &DisplayRowScopedValue<(Color, FaceId)>,
         row_geometry: &DisplayRowGeometryState,
         current_x: f32,
         right_edge: f32,
@@ -1003,7 +1004,7 @@ impl<'a> TextRowSourceRenderState<'a> {
         &mut self,
         layout: &crate::display_spec::DisplayFringeLayout,
         face_ids: &mut FrameFaceIdAllocator,
-        fallback_face_id: u32,
+        fallback_face_id: FaceId,
     ) {
         let layout = *layout;
 
@@ -1050,8 +1051,8 @@ impl<'a> TextRowSourceRenderState<'a> {
         override_name: Option<&str>,
         spec_face: Option<Value>,
         face_ids: &mut FrameFaceIdAllocator,
-        fallback_face_id: u32,
-    ) -> u32 {
+        fallback_face_id: FaceId,
+    ) -> FaceId {
         if let Some(name) = override_name {
             let resolved = self.face_resolver.resolve_named_face(name);
             let face_id = face_ids.allocate();

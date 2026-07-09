@@ -1,5 +1,6 @@
 //! Right-edge truncation/continuation markers and the right window border — GNU's special glyphs (`produce_special_glyphs`, xdisp.c; `IT_TRUNCATION`/`IT_CONTINUATION`). Relocated out of display_row_append.rs (pure move, no behavior change).
 
+use neomacs_display_protocol::types::FaceId;
 use crate::display_item::{
     DisplayItem, DisplayItemKind, DisplayTextRun, RenderFaceRef, SourceSpan,
 };
@@ -33,14 +34,14 @@ pub(crate) struct TextWindowRightEdgeMarkers<'a> {
     pub(crate) output_cols: usize,
     pub(crate) column: TextWindowRightEdgeMarkerColumn,
     pub(crate) row_flags: &'a DisplayRowFlags,
-    pub(crate) face_id: u32,
+    pub(crate) face_id: FaceId,
     pub(crate) char_width: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct TextWindowRightBorder {
     pub(crate) ch: char,
-    pub(crate) face_id: u32,
+    pub(crate) face_id: FaceId,
     pub(crate) char_width: f32,
 }
 
@@ -67,7 +68,7 @@ impl<'a> TextWindowRightEdgeMarkers<'a> {
         display_text_row_base: usize,
         output_cols: usize,
         row_flags: &'a DisplayRowFlags,
-        face_id: u32,
+        face_id: FaceId,
         char_width: f32,
     ) -> Option<Self> {
         reserve_right_special_col.then_some(Self {
@@ -99,7 +100,7 @@ fn prepare_special_glyph_row(
 
 fn right_border_text_source(
     text: impl Into<Box<str>>,
-    face_id: u32,
+    face_id: FaceId,
     start_offset: usize,
 ) -> SyntheticTextItemSource {
     SyntheticTextItemSource::new(
@@ -115,7 +116,7 @@ struct RightEdgeMarkerItemSource {
 }
 
 impl RightEdgeMarkerItemSource {
-    fn new(padding_cols: usize, marker: char, face_id: u32) -> Self {
+    fn new(padding_cols: usize, marker: char, face_id: FaceId) -> Self {
         let mut source_offset = 0usize;
         let mut items = Vec::with_capacity(usize::from(padding_cols > 0) + 1);
         if padding_cols > 0 {
@@ -148,7 +149,7 @@ impl DisplayItemSource for RightEdgeMarkerItemSource {
 fn synthetic_special_glyph_text_item(
     source_id: u64,
     text: impl Into<Box<str>>,
-    face_id: u32,
+    face_id: FaceId,
     start_offset: usize,
 ) -> DisplayItem {
     let text = text.into();
@@ -164,7 +165,7 @@ fn render_right_edge_marker_source(
     row: &mut GlyphRow,
     render_services: &mut ChromeRowRenderServices<'_, '_>,
     source: &mut RightEdgeMarkerItemSource,
-    face_id: u32,
+    face_id: FaceId,
     base_face: &ResolvedFace,
     char_width: f32,
     matrix_cols: usize,
@@ -190,7 +191,7 @@ fn install_right_edge_marker_from_source_request(
     row: &mut GlyphRow,
     target_col: usize,
     marker: char,
-    face_id: u32,
+    face_id: FaceId,
     base_face: &ResolvedFace,
     char_width: f32,
     matrix_cols: usize,
@@ -255,7 +256,7 @@ pub(crate) fn text_window_right_edge_marker_decorations(
 
 struct TextWindowRightEdgeMarkerMutation<'base, 'services, 'emit, 'face> {
     decoration: TextWindowRightEdgeMarkerDecoration,
-    face_id: u32,
+    face_id: FaceId,
     char_width: f32,
     base_face: &'base ResolvedFace,
     render_services: &'services mut ChromeRowRenderServices<'emit, 'face>,
@@ -281,7 +282,7 @@ impl DisplayWindowRowMutation for TextWindowRightEdgeMarkerMutation<'_, '_, '_, 
 struct RightBorderTextRenderRequest<'face> {
     text: String,
     area: GlyphArea,
-    face_id: u32,
+    face_id: FaceId,
     base_face: &'face ResolvedFace,
     char_width: f32,
     matrix_cols: usize,
@@ -333,7 +334,7 @@ fn install_right_border_from_source_request(
     trim_display_row_text_to_total_glyph_count(row, before_final_cols);
 
     let mut source_offset = 0usize;
-    let padding_face_id = u32::from(BasicFaceId::Default);
+    let padding_face_id = FaceId::from(BasicFaceId::Default);
     let leading_padding = before_final_cols.saturating_sub(display_row_total_glyph_count(row));
     if leading_padding > 0 {
         render_right_border_text(
@@ -467,7 +468,7 @@ pub(crate) fn install_text_window_terminal_right_border(
     output_builder: &mut DisplayOutputBuilder,
     request: TextWindowTerminalRightBorder,
     mut render_services: ChromeRowRenderServices<'_, '_>,
-) -> u32 {
+) -> FaceId {
     let padding_face = render_services.face_resolver().default_face().clone();
     let border_face = render_services
         .face_resolver()

@@ -2,6 +2,7 @@
 //! building, batched text draws, text decorations, and box borders, run once
 //! for buffer text and once for overlay (mode-line/echo) text.
 
+use neomacs_display_protocol::types::FaceId;
 use std::collections::HashSet;
 
 use cosmic_text::SubpixelBin;
@@ -179,7 +180,7 @@ struct LiveRowTessellator<'r, 'p> {
     enable_subpixel: bool,
     seen_single_keys: &'r mut HashSet<GlyphKey>,
     seen_composed_keys: &'r mut HashSet<ComposedGlyphKey>,
-    glyph_face_cache: Option<(u32, MaterializedFaceData)>,
+    glyph_face_cache: Option<(FaceId, MaterializedFaceData)>,
 }
 
 impl row_reuse::RowTessellator for LiveRowTessellator<'_, '_> {
@@ -872,7 +873,7 @@ impl WgpuRenderer {
         {
             let mut decoration_vertices: Vec<RectVertex> = Vec::new();
 
-            let mut deco_face_cache: Option<(u32, MaterializedFaceData)> = None;
+            let mut deco_face_cache: Option<(FaceId, MaterializedFaceData)> = None;
             for glyph in &frame_glyphs.glyphs {
                 if let FrameGlyph::Char {
                     x,

@@ -8,6 +8,7 @@
 //! tessellation of the same frame, and any defensive-key mismatch bails to
 //! fresh tessellation.
 
+use neomacs_display_protocol::types::FaceId;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
 
@@ -48,7 +49,7 @@ fn ch(window: i64, row: u32, col: u16, c: char, x: f32, y: f32) -> FrameGlyph {
         width: 8.0,
         height: 14.0,
         ascent: 10.0,
-        face_id: 3 + (c as u32 % 5),
+        face_id: FaceId::new(3 + (c as u32 % 5)),
     }
 }
 
@@ -176,7 +177,7 @@ fn fake_glyph_quad(c: char, x: f32, y: f32, color: [f32; 4]) -> [GlyphVertex; 6]
 #[derive(Default, Clone)]
 struct FakeConfig {
     fail_revalidate: bool,
-    gradient_faces: std::collections::HashSet<u32>,
+    gradient_faces: std::collections::HashSet<FaceId>,
     clip_band: Option<(f32, f32)>,
 }
 
@@ -234,7 +235,7 @@ impl RowTessellator for FakeTessellator<'_> {
                 }
             }
             let entry = fake_entry(*c);
-            let fg = [*face_id as f32 / 255.0, 0.25, 0.5, 1.0];
+            let fg = [face_id.get() as f32 / 255.0, 0.25, 0.5, 1.0];
             match entry {
                 AnyAtlasEntry::Subpixel(_) => {
                     let quad = fake_glyph_quad(*c, *x, *y, fg);
@@ -869,7 +870,7 @@ fn gradient_face_rows_never_splice_shifted_but_splice_verbatim() {
     let origins = origins();
     // Every synthetic face id (3..8) is gradient-bearing.
     let config = FakeConfig {
-        gradient_faces: (3..8).collect(),
+        gradient_faces: (3..8).map(FaceId::new).collect(),
         ..FakeConfig::default()
     };
     let cache = warm_cache_with(&glyphs_a, &origins, &config);

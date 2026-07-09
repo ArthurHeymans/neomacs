@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use super::*;
 use crate::display_current_row_output::DisplayRowCurrentRowOutput;
 use crate::display_item::{DisplayItem, DisplayItemKind, DisplayMediaReplacement, SourceSpan};
@@ -64,7 +65,7 @@ fn display_row_request_from_base_face<'a>(
 
 fn display_row_request_for_face<'a>(
     geometry: DisplayRowGeometry,
-    base_face_id: u32,
+    base_face_id: FaceId,
     base_face: &'a crate::neovm_bridge::ResolvedFace,
     role: GlyphRowRole,
 ) -> DisplayRowSourceRenderRequest<'a> {
@@ -175,9 +176,9 @@ fn display_row_face_realizer_realizes_face_without_layout_engine() {
     face.font_ascent = 0.0;
     face.font_line_height = 0.0;
 
-    let rendered = realizer.realize_face(7, &face, 8.0, 12.0, 16.0);
+    let rendered = realizer.realize_face(FaceId::new(7), &face, 8.0, 12.0, 16.0);
 
-    assert_eq!(rendered.face_id, 7);
+    assert_eq!(rendered.face_id, FaceId::new(7));
     assert_eq!(rendered.metrics.char_width_px(8.0), 8.0);
     assert_eq!(rendered.metrics.ascent_px(), 12.0);
     assert_eq!(rendered.metrics.descent_px(), 4);
@@ -192,13 +193,13 @@ fn display_row_render_item_lowers_media_replacement_to_row_stretch() {
     });
     let source = DisplayItem::new(
         SourceSpan::synthetic(1, 0, 1),
-        RenderFaceRef::FaceId(7),
+        RenderFaceRef::FaceId(FaceId::new(7)),
         DisplayItemKind::MediaReplacement(media),
     );
     let render_item = DisplayRowRenderItem::from_source_item(source.clone());
 
     assert_eq!(render_item.source_item(), &source);
-    assert_eq!(render_item.row_face(), RenderFaceRef::FaceId(7));
+    assert_eq!(render_item.row_face(), RenderFaceRef::FaceId(FaceId::new(7)));
     let DisplayItemKind::Stretch(stretch) = &render_item.row_item().kind else {
         panic!("media replacement should lower to a row stretch item");
     };
@@ -249,7 +250,7 @@ fn current_display_row_cluster_tail_reports_live_text_row_tail() {
 
     builder
         .edit_current_row_for_test(|row| {
-            crate::glyph_row_writer::push_wide_char_to_row(row, '\u{1F1EF}', 3, 100, 0.0);
+            crate::glyph_row_writer::push_wide_char_to_row(row, '\u{1F1EF}', FaceId::new(3), 100, 0.0);
         })
         .expect("current row");
     assert_eq!(
@@ -260,7 +261,7 @@ fn current_display_row_cluster_tail_reports_live_text_row_tail() {
 
     builder
         .edit_current_row_for_test(|row| {
-            crate::glyph_row_writer::push_cluster_continuation_to_row(row, '\u{1F1F5}', 3, 101);
+            crate::glyph_row_writer::push_cluster_continuation_to_row(row, '\u{1F1F5}', FaceId::new(3), 101);
         })
         .expect("current row");
     assert_eq!(
@@ -276,7 +277,7 @@ fn insert_resolved_display_row_face_applies_metric_overrides() {
     let face = base_face();
 
     builder.install_output_resolved_display_row_face(
-        9,
+        FaceId::new(9),
         &face,
         Some(FontMetrics {
             ascent: 10.0,
@@ -286,8 +287,8 @@ fn insert_resolved_display_row_face_applies_metric_overrides() {
         }),
     );
 
-    let rendered = builder.faces().get(&9).expect("inserted face");
-    assert_eq!(rendered.id, 9);
+    let rendered = builder.faces().get(&FaceId::new(9)).expect("inserted face");
+    assert_eq!(rendered.id, FaceId::new(9));
     assert_eq!(rendered.font_ascent, 10);
     assert_eq!(rendered.font_descent, 3);
 }
@@ -313,7 +314,7 @@ fn display_row_source_geometry_allocates_dynamic_base_face_id_through_allocator(
         std::collections::HashMap::new(),
     );
 
-    assert_eq!(request.base_face_id(), 42);
+    assert_eq!(request.base_face_id(), FaceId::new(42));
     assert_eq!(face_ids.finish(), 43);
 }
 
@@ -330,14 +331,14 @@ fn display_row_source_geometry_builds_whole_row_request() {
     };
 
     let request =
-        display_row_request_for_face(geometry.clone(), 17, &face, GlyphRowRole::Minibuffer);
+        display_row_request_for_face(geometry.clone(), FaceId::new(17), &face, GlyphRowRole::Minibuffer);
 
     assert_eq!(request.geometry(), &geometry);
     assert_eq!(
         request.render_bounds(),
         DisplayRowRenderBounds::whole_row(96.0)
     );
-    assert_eq!(request.base_face_id(), 17);
+    assert_eq!(request.base_face_id(), FaceId::new(17));
     assert!(std::ptr::eq(request.base_face(), &face));
     assert_eq!(request.role(), GlyphRowRole::Minibuffer);
     assert!(request.symbol_values().is_empty());
@@ -372,7 +373,7 @@ fn display_row_source_geometry_allocates_base_face_id() {
         request.render_bounds(),
         DisplayRowRenderBounds::whole_row(120.0)
     );
-    assert_eq!(request.base_face_id(), 24);
+    assert_eq!(request.base_face_id(), FaceId::new(24));
     assert_eq!(face_ids.finish(), 25);
     assert_eq!(request.role(), GlyphRowRole::HeaderLine);
     assert_eq!(request.symbol_values(), &symbol_values);
@@ -414,7 +415,7 @@ fn display_row_source_request_policy_builds_chrome_request() {
         request.render_bounds(),
         DisplayRowRenderBounds::whole_row(144.0)
     );
-    assert_eq!(request.base_face_id(), 31);
+    assert_eq!(request.base_face_id(), FaceId::new(31));
     assert_eq!(face_ids.finish(), 32);
     assert_eq!(request.role(), GlyphRowRole::TabBar);
     assert_eq!(request.symbol_values(), &symbol_values);
@@ -436,11 +437,11 @@ fn display_row_source_geometry_request_overrides_render_bounds() {
         DisplayRowMaxX::Bounded(40.0),
     );
 
-    let request = display_row_request_for_face(geometry, 7, &face, GlyphRowRole::Text)
+    let request = display_row_request_for_face(geometry, FaceId::new(7), &face, GlyphRowRole::Text)
         .with_render_bounds(bounds);
 
     assert_eq!(request.render_bounds(), bounds);
-    assert_eq!(request.base_face_id(), 7);
+    assert_eq!(request.base_face_id(), FaceId::new(7));
     assert_eq!(request.role(), GlyphRowRole::Text);
 }
 
@@ -457,7 +458,7 @@ fn display_row_source_fragment_frame_builds_column_bounds_from_glyph_row() {
         12,
         7.5,
         GlyphRowRole::Text,
-        9,
+        FaceId::new(9),
         &face,
     )
     .render_request_from_column_for_area(3, 12, GlyphArea::RightMargin);
@@ -493,7 +494,7 @@ fn display_row_source_fragment_frame_builds_column_bounds_from_row_geometry() {
         5,
         9.0,
         GlyphRowRole::Text,
-        17,
+        FaceId::new(17),
         &face,
     )
     .render_request_from_column_for_area(0, 5, GlyphArea::LeftMargin);
@@ -530,9 +531,9 @@ fn display_row_render_context_builds_source_resolve_params() {
         8.0, 16.0, 12.0,
     );
 
-    let params = context.source_resolve_params(7, base_face, fallback);
+    let params = context.source_resolve_params(FaceId::new(7), base_face, fallback);
 
-    assert_eq!(params.face_basis().base_face_id(), 7);
+    assert_eq!(params.face_basis().base_face_id(), FaceId::new(7));
     assert_eq!(params.face_basis().fallback_metrics(), fallback);
     assert!(std::ptr::eq(params.face_basis().base_face(), base_face));
     assert!(std::ptr::eq(
@@ -549,7 +550,7 @@ fn display_row_resolved_measured_face_installs_render_and_measurement_identity()
     let face = base_face();
 
     let realized = policy.resolved_measured_face(
-        12,
+        FaceId::new(12),
         face,
         Some(FontMetrics {
             ascent: 11.0,
@@ -572,9 +573,9 @@ fn display_row_resolved_measured_face_installs_render_and_measurement_identity()
         realized.font_metrics(),
     );
 
-    let rendered = builder.faces().get(&12).expect("installed face");
-    assert_eq!(realized.face_id(), 12);
-    assert_eq!(rendered.id, 12);
+    let rendered = builder.faces().get(&FaceId::new(12)).expect("installed face");
+    assert_eq!(realized.face_id(), FaceId::new(12));
+    assert_eq!(rendered.id, FaceId::new(12));
     assert_eq!(rendered.font_ascent, 11);
     assert_eq!(rendered.font_descent, 4);
 }
@@ -587,7 +588,7 @@ fn display_row_resolved_measured_face_builds_active_face_state_directly() {
 
     let active = policy
         .resolved_measured_face(
-            12,
+            FaceId::new(12),
             face.clone(),
             Some(FontMetrics {
                 ascent: 11.0,
@@ -605,7 +606,7 @@ fn display_row_resolved_measured_face_builds_active_face_state_directly() {
         )
         .into_active_face_state();
 
-    assert_eq!(active.face_id(), 12);
+    assert_eq!(active.face_id(), FaceId::new(12));
     assert_eq!(active.resolved_face().fg, face.fg);
     assert_eq!(active.metrics().row_height(), 15.0);
 }
@@ -620,7 +621,7 @@ fn display_row_active_face_groups_resolved_measurement_metrics_and_colors() {
 
     let active = policy
         .resolved_measured_face(
-            14,
+            FaceId::new(14),
             face.clone(),
             None,
             7.0,
@@ -633,7 +634,7 @@ fn display_row_active_face_groups_resolved_measurement_metrics_and_colors() {
         )
         .into_active_face_state();
 
-    assert_eq!(active.face_id(), 14);
+    assert_eq!(active.face_id(), FaceId::new(14));
     assert_eq!(active.metrics().char_width(), 7.0);
     assert_eq!(active.metrics().row_height(), 15.0);
     assert_eq!(active.metrics().ascent(), 10.0);
@@ -652,7 +653,7 @@ fn display_row_active_face_state_exposes_render_and_measurement_accessors() {
 
     let active = policy
         .resolved_measured_face(
-            14,
+            FaceId::new(14),
             face.clone(),
             None,
             7.0,
@@ -665,7 +666,7 @@ fn display_row_active_face_state_exposes_render_and_measurement_accessors() {
         )
         .into_active_face_state();
 
-    assert_eq!(active.face_id(), 14);
+    assert_eq!(active.face_id(), FaceId::new(14));
     assert_eq!(active.background(), Color::from_pixel(face.bg));
     assert_eq!(active.resolved_face().fg, face.fg);
     assert_eq!(active.metrics().char_width(), 7.0);
@@ -679,7 +680,7 @@ fn display_row_active_face_state_constructs_from_resolved_and_measured_face() {
     face.fg = 0x00112233;
     face.bg = 0x00445566;
     let measured = policy.measured_face(
-        14,
+        FaceId::new(14),
         &face,
         None,
         7.0,
@@ -693,7 +694,7 @@ fn display_row_active_face_state_constructs_from_resolved_and_measured_face() {
 
     let active = DisplayRowActiveFaceState::new(face.clone(), measured);
 
-    assert_eq!(active.face_id(), 14);
+    assert_eq!(active.face_id(), FaceId::new(14));
     assert_eq!(active.background(), Color::from_pixel(face.bg));
     assert_eq!(active.resolved_face().fg, face.fg);
     assert_eq!(active.metrics().char_width(), 7.0);
@@ -816,7 +817,7 @@ fn display_row_source_state_reuses_face_cache_across_items() {
         ],
     );
     let mut source =
-        crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(0))
+        crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(FaceId::new(0)))
             .expect("string source");
     let mut state = DisplayRowSourceState::default();
     let mut face_ids = FrameFaceIdAllocator::new(20);
@@ -827,7 +828,7 @@ fn display_row_source_state_reuses_face_cache_across_items() {
                 crate::display_source_resolver::DisplaySourceResolveParams::new(
                     crate::display_source_resolver::DisplaySourceFaceBasis::new(
                         &face_resolver,
-                        0,
+                        FaceId::new(0),
                         base_face,
                         crate::display_row_metrics::DisplayRowFallbackMetrics::from_default_face_extents(
                             8.0, 16.0, 12.0,
@@ -846,17 +847,17 @@ fn display_row_source_state_reuses_face_cache_across_items() {
     let (third_item, third_pending_faces) = third.into_parts();
     assert_eq!(
         first_item.expect("first source item").face,
-        RenderFaceRef::FaceId(20)
+        RenderFaceRef::FaceId(FaceId::new(20))
     );
     assert_eq!(first_pending_faces.len(), 1);
     assert_eq!(
         second_item.expect("second source item").face,
-        RenderFaceRef::FaceId(0)
+        RenderFaceRef::FaceId(FaceId::new(0))
     );
     assert!(second_pending_faces.is_empty());
     assert_eq!(
         third_item.expect("third source item").face,
-        RenderFaceRef::FaceId(20)
+        RenderFaceRef::FaceId(FaceId::new(20))
     );
     assert!(third_pending_faces.is_empty());
     assert_eq!(face_ids.finish(), 21);
@@ -1018,7 +1019,7 @@ fn display_row_renderer_continues_source_mapped_text_after_clip() {
     let mut test_base_face = resolver.default_face().clone();
     test_base_face.set_measured_char_width_px(8.0);
     test_base_face.font_ascent = 12.0;
-    let base_face_id = 1;
+    let base_face_id = FaceId::new(1);
     let mut face_ids = FrameFaceIdAllocator::new(2);
     let mut source = OnceSource {
         item: Some(crate::display_item::DisplayItem::new(
@@ -1088,7 +1089,7 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
         fn measurement_for(
             &mut self,
             _item: &crate::display_item::DisplayItem,
-            _face_id: u32,
+            _face_id: FaceId,
             _font_metrics: &mut Option<FontMetricsService>,
         ) -> DisplayRowItemMeasurement {
             DisplayRowItemMeasurement::TextRun(
@@ -1104,7 +1105,7 @@ fn display_row_renderer_accepts_direct_text_run_measurement_policy() {
     let table = FaceTable::new();
     let resolver = FaceResolver::new(&table, 0x00FFFFFF, 0x00000000, 14.0, None);
     let base_face = resolver.default_face();
-    let base_face_id = 1;
+    let base_face_id = FaceId::new(1);
     let mut face_ids = FrameFaceIdAllocator::new(2);
     let mut source = OnceSource {
         item: Some(crate::display_item::DisplayItem::new(
@@ -1171,7 +1172,7 @@ fn row_text_glyph_types(row: &GlyphRow) -> Vec<GlyphType> {
         .collect()
 }
 
-fn row_text_face_ids(row: &GlyphRow) -> Vec<u32> {
+fn row_text_face_ids(row: &GlyphRow) -> Vec<FaceId> {
     row.glyphs[1]
         .iter()
         .filter(|glyph| !glyph.padding)
@@ -1196,7 +1197,7 @@ fn display_row_geometry_builds_row_layout() {
         GlyphRowRole::Text,
         9.0,
         12.0,
-        RenderFaceRef::FaceId(42),
+        RenderFaceRef::FaceId(FaceId::new(42)),
         crate::display_pixel_calc::PixelCalcContext::for_chrome_row(
             120.0,
             9.0,
@@ -1212,7 +1213,7 @@ fn display_row_geometry_builds_row_layout() {
     assert_eq!(layout.ascent_px, 12.0);
     assert_eq!(layout.char_width_px, 9.0);
     assert_eq!(layout.tab_policy, tab_policy);
-    assert_eq!(layout.base_face, RenderFaceRef::FaceId(42));
+    assert_eq!(layout.base_face, RenderFaceRef::FaceId(FaceId::new(42)));
 }
 
 fn render_lisp_display_row(rendered: Value, role: GlyphRowRole) -> GlyphRow {
@@ -1376,7 +1377,7 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
         buffer,
         neovm_core::buffer::CharPos0::new(0),
         buffer.layout_point_max_char_pos(),
-        RenderFaceRef::FaceId(1),
+        RenderFaceRef::FaceId(FaceId::new(1)),
     );
 
     let rendered = display_row_request_for_face(
@@ -1388,7 +1389,7 @@ fn render_display_item_source_row_accepts_buffer_text_source() {
             ascent: 12.0,
             tab_policy: crate::display_row_builder::DisplayTabPolicy::every(8),
         },
-        1,
+        FaceId::new(1),
         resolver.default_face(),
         GlyphRowRole::TabLine,
     )
@@ -1928,7 +1929,7 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
         buffer,
         neovm_core::buffer::CharPos0::new(0),
         buffer.layout_point_max_char_pos(),
-        RenderFaceRef::FaceId(1),
+        RenderFaceRef::FaceId(FaceId::new(1)),
     );
 
     let rendered = display_row_request_for_face(
@@ -1944,7 +1945,7 @@ fn render_display_item_source_row_uses_spec_tab_policy() {
                 &[2],
             ),
         },
-        1,
+        FaceId::new(1),
         resolver.default_face(),
         GlyphRowRole::TabLine,
     )
@@ -2007,30 +2008,30 @@ fn display_row_glyph_measurer_uses_face_specific_widths() {
     let mut wide = base.clone();
     wide.set_measured_char_width_px(9.0);
     let faces = vec![
-        DisplayRowFace::from_resolved(1, &base),
-        DisplayRowFace::from_resolved(2, &wide),
+        DisplayRowFace::from_resolved(FaceId::new(1), &base),
+        DisplayRowFace::from_resolved(FaceId::new(2), &wide),
     ];
     let mut measurer = DisplayRowGlyphMeasurer::new(&faces, None, 5.0);
 
-    assert_eq!(measurer.glyph_advance_px('a', 1, 1, 5.0), Some(5.0));
-    assert_eq!(measurer.glyph_advance_px('中', 2, 2, 10.0), Some(18.0));
+    assert_eq!(measurer.glyph_advance_px('a', FaceId::new(1), 1, 5.0), Some(5.0));
+    assert_eq!(measurer.glyph_advance_px('中', FaceId::new(2), 2, 10.0), Some(18.0));
 }
 
 #[test]
 fn display_row_glyph_measurer_preserves_fractional_gui_advances() {
     let mut base = base_face();
     base.set_measured_char_width_px(7.2);
-    let faces = vec![DisplayRowFace::from_resolved(1, &base)];
+    let faces = vec![DisplayRowFace::from_resolved(FaceId::new(1), &base)];
     let mut measurer = DisplayRowGlyphMeasurer::new(&faces, None, 7.2);
 
-    assert_eq!(measurer.glyph_advance_px('x', 1, 1, 7.2), Some(7.2));
+    assert_eq!(measurer.glyph_advance_px('x', FaceId::new(1), 1, 7.2), Some(7.2));
 }
 
 #[test]
 fn display_row_glyph_measurer_can_snap_terminal_advances() {
     let mut base = base_face();
     base.set_measured_char_width_px(7.2);
-    let faces = vec![DisplayRowFace::from_resolved(1, &base)];
+    let faces = vec![DisplayRowFace::from_resolved(FaceId::new(1), &base)];
     let mut measurer = DisplayRowGlyphMeasurer::with_quantization(
         &faces,
         None,
@@ -2038,14 +2039,14 @@ fn display_row_glyph_measurer_can_snap_terminal_advances() {
         GlyphAdvanceQuantization::SnapToIntegerPixels,
     );
 
-    assert_eq!(measurer.glyph_advance_px('x', 1, 1, 7.2), Some(7.0));
+    assert_eq!(measurer.glyph_advance_px('x', FaceId::new(1), 1, 7.2), Some(7.0));
 }
 
 #[test]
 fn display_row_glyph_measurement_face_measures_single_char_columns() {
     let mut base = base_face();
     base.set_measured_char_width_px(7.2);
-    let face = DisplayRowFace::from_resolved(8, &base);
+    let face = DisplayRowFace::from_resolved(FaceId::new(8), &base);
     let measurement_face = DisplayRowGlyphMeasurementFace::with_mode(
         face,
         DisplayRowMeasurementMode::FallbackMetrics,
@@ -2069,7 +2070,7 @@ fn display_row_glyph_measurement_face_constructs_from_resolved_face_policy() {
     let mut base = base_face();
     base.set_measured_char_width_px(7.2);
     let measurement_face =
-        DisplayRowMeasurementPolicy::for_frame(false).measurement_face(8, &base, None, 7.2);
+        DisplayRowMeasurementPolicy::for_frame(false).measurement_face(FaceId::new(8), &base, None, 7.2);
     let mut font_metrics = None;
 
     assert_eq!(
@@ -2086,8 +2087,8 @@ fn display_row_measurement_policy_builds_faces_from_frame_mode() {
     let gui_policy = DisplayRowMeasurementPolicy::for_frame(true);
     let mut font_metrics = None;
 
-    let tty_face = tty_policy.measurement_face(8, &base, None, 7.2);
-    let gui_face = gui_policy.measurement_face(8, &base, None, 7.2);
+    let tty_face = tty_policy.measurement_face(FaceId::new(8), &base, None, 7.2);
+    let gui_face = gui_policy.measurement_face(FaceId::new(8), &base, None, 7.2);
 
     assert_eq!(tty_face.advance_for_char(&mut font_metrics, '.', 7.2), 7.0);
     assert_eq!(gui_face.advance_for_char(&mut font_metrics, '.', 7.2), 7.2);
@@ -2101,7 +2102,7 @@ fn display_row_gui_measurement_preserves_narrow_proportional_glyph_advance() {
     base.font_weight = 400;
     base.set_measured_char_width_px(7.2);
     let gui_face =
-        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(8, &base, None, 7.2);
+        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(FaceId::new(8), &base, None, 7.2);
     let mut font_metrics = Some(FontMetricsService::new());
 
     let width = gui_face.advance_for_char(&mut font_metrics, '.', 7.2);
@@ -2165,7 +2166,7 @@ fn display_row_gui_measurement_preserves_narrow_proportional_text_run_advances()
     base.font_weight = 400;
     base.set_measured_char_width_px(7.2);
     let gui_face =
-        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(8, &base, None, 7.2);
+        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(FaceId::new(8), &base, None, 7.2);
     let mut font_metrics = Some(FontMetricsService::new());
 
     let measurement = gui_face.text_run_measurement(&mut font_metrics, ".agent-sh");
@@ -2206,7 +2207,7 @@ fn display_row_measurement_policy_builds_measured_face_with_space_width() {
     let active = DisplayRowActiveFaceState::new(
         base.clone(),
         policy.measured_face(
-            8,
+            FaceId::new(8),
             &base,
             None,
             7.2,
@@ -2252,7 +2253,7 @@ fn display_row_measurement_policy_builds_measured_face_with_line_metrics() {
     let mut font_metrics = None;
 
     let measured = policy.measured_face(
-        8,
+        FaceId::new(8),
         &base,
         Some(metrics),
         7.2,
@@ -2277,7 +2278,7 @@ fn display_row_measured_face_exposes_face_identity() {
     let mut font_metrics = None;
 
     let measured = policy.measured_face(
-        42,
+        FaceId::new(42),
         &base,
         None,
         7.2,
@@ -2290,7 +2291,7 @@ fn display_row_measured_face_exposes_face_identity() {
     );
 
     let active = DisplayRowActiveFaceState::new(base, measured);
-    assert_eq!(active.face_id(), 42);
+    assert_eq!(active.face_id(), FaceId::new(42));
 }
 
 #[test]
@@ -2300,7 +2301,7 @@ fn display_row_measured_face_exposes_metrics_as_single_value() {
     let mut font_metrics = None;
 
     let measured = policy.measured_face(
-        42,
+        FaceId::new(42),
         &base,
         None,
         7.2,
@@ -2327,7 +2328,7 @@ fn display_row_glyph_measurement_face_shapes_text_runs_as_measurement_plans() {
     base.font_size = 14.0;
     base.set_measured_char_width_px(8.0);
     let measurement_face =
-        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(8, &base, None, 8.0);
+        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(FaceId::new(8), &base, None, 8.0);
     let mut font_metrics = Some(FontMetricsService::new());
 
     let measurement = measurement_face.text_run_measurement(&mut font_metrics, "سلام");
@@ -2391,11 +2392,11 @@ fn display_row_glyph_measurer_builds_measured_text_run_plan() {
     base.font_family = "monospace".to_string();
     base.font_size = 14.0;
     base.set_measured_char_width_px(8.0);
-    let faces = vec![DisplayRowFace::from_resolved(8, &base)];
+    let faces = vec![DisplayRowFace::from_resolved(FaceId::new(8), &base)];
     let mut font_metrics = FontMetricsService::new();
     let mut measurer = DisplayRowGlyphMeasurer::new(&faces, Some(&mut font_metrics), 8.0);
 
-    let measurement = measurer.text_run_advances_px("abc", 8, 8.0);
+    let measurement = measurer.text_run_advances_px("abc", FaceId::new(8), 8.0);
 
     let crate::display_text_run_measurement::DisplayTextRunMeasurement::Measured(advances) =
         measurement
@@ -2422,7 +2423,7 @@ fn display_row_glyph_measurement_face_builds_text_run_measurement_plan() {
     base.font_size = 14.0;
     base.set_measured_char_width_px(8.0);
     let measurement_face =
-        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(8, &base, None, 8.0);
+        DisplayRowMeasurementPolicy::for_frame(true).measurement_face(FaceId::new(8), &base, None, 8.0);
     let mut font_metrics = Some(FontMetricsService::new());
 
     let measurement = measurement_face.text_run_measurement(&mut font_metrics, "abc");
@@ -2446,7 +2447,7 @@ fn display_row_glyph_measurement_face_builds_fallback_text_run_measurement_plan(
     let mut base = base_face();
     base.set_measured_char_width_px(7.2);
     let measurement_face =
-        DisplayRowMeasurementPolicy::for_frame(false).measurement_face(8, &base, None, 7.2);
+        DisplayRowMeasurementPolicy::for_frame(false).measurement_face(FaceId::new(8), &base, None, 7.2);
     let mut font_metrics = None;
 
     let measurement = measurement_face.text_run_measurement(&mut font_metrics, "a中");
@@ -3265,7 +3266,7 @@ fn mock_current_row_output_install_preserves_row_metadata() {
     row.ascent_px = 13.0;
     row.start_charpos = 7;
     row.end_charpos = 8;
-    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('M', 3, 7));
+    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('M', FaceId::new(3), 7));
 
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 2, 10, Rect::new(0.0, 16.0, 80.0, 40.0), true);
@@ -3290,7 +3291,7 @@ fn mock_current_row_output_install_preserves_row_metadata() {
 fn rendered_display_row_materializes_output_row_with_geometry_and_finalization() {
     let mut row = GlyphRow::new(GlyphRowRole::TabLine);
     row.enabled = true;
-    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('T', 0, 0));
+    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('T', FaceId::new(0), 0));
 
     let rendered = RenderedDisplayRow::new(
         row,
@@ -3362,8 +3363,8 @@ fn frame_chrome_rtl_row_reorders_to_visual_order_at_install() {
     row.enabled = true;
     row.height_px = 18.0;
     row.ascent_px = 13.0;
-    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('א', 5, 0));
-    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('ב', 5, 1));
+    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('א', FaceId::new(5), 0));
+    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('ב', FaceId::new(5), 1));
     crate::glyph_row_writer::normalize_external_row(&mut row);
     // Sanity: the rendered row is still in LOGICAL order pre-install.
     assert!(!row.reversed_p);
@@ -3505,7 +3506,7 @@ fn measured_display_row_content_policy_ignores_allocated_row_height() {
     row.height_px = 120.0;
     row.ascent_px = 13.0;
     let mut face = neomacs_display_protocol::face::Face::default();
-    face.id = 8;
+    face.id = FaceId::new(8);
     face.font_ascent = 13;
     face.font_descent = 4;
     let measured = MeasuredDisplayRow::new(

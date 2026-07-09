@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use super::*;
 use crate::display_source::{DisplayItemSource, DisplaySourceContext};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos};
@@ -22,12 +23,12 @@ fn display_item_text_run_keeps_source_span_and_face_ref() {
     let span = buffer_span(BufferId(7), 3, 6);
     let item = DisplayItem::new(
         span.clone(),
-        RenderFaceRef::FaceId(12),
+        RenderFaceRef::FaceId(FaceId::new(12)),
         DisplayItemKind::TextRun(DisplayTextRun::new("abc")),
     );
 
     assert_eq!(item.span, span);
-    assert_eq!(item.face, RenderFaceRef::FaceId(12));
+    assert_eq!(item.face, RenderFaceRef::FaceId(FaceId::new(12)));
     assert_eq!(
         item.kind,
         DisplayItemKind::TextRun(DisplayTextRun::new("abc"))
@@ -153,7 +154,7 @@ impl DisplayItemSource for StaticItemSource {
 fn display_item_source_trait_exposes_items() {
     let expected = DisplayItem::new(
         SourceSpan::synthetic(9, 0, 1),
-        RenderFaceRef::FaceId(1),
+        RenderFaceRef::FaceId(FaceId::new(1)),
         DisplayItemKind::TextRun(DisplayTextRun::new("x")),
     );
     let mut source = StaticItemSource {

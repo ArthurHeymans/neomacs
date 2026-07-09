@@ -401,7 +401,7 @@ fn display_row_face_preserves_gnu_box_type_codes() {
 
     for (code, box_type) in boxes {
         resolved.box_type = code;
-        let row_face = DisplayRowFace::from_resolved(1, &resolved);
+        let row_face = DisplayRowFace::from_resolved(FaceId::new(1), &resolved);
         assert_eq!(row_face.box_type, box_type);
         assert_eq!(row_face.render_face().box_type, box_type);
     }

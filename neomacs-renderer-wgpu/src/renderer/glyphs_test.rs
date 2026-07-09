@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use super::{
     RenderedCharBounds, char_overlap, cursor_glyph_slot_rect, frame_default_glyph_metrics,
 };
@@ -49,7 +50,7 @@ fn rtl_bar_cursor_uses_right_edge_of_char_slot() {
 fn rtl_hbar_cursor_uses_right_edge_of_stretch_slot() {
     let mut frame = FrameGlyphBuffer::new();
     frame.set_draw_context(DisplayWindowId::new(2), GlyphRowRole::Text, None);
-    frame.add_stretch(30.0, 40.0, 24.0, 16.0, Color::BLACK, 0, false);
+    frame.add_stretch(30.0, 40.0, 24.0, 16.0, Color::BLACK, FaceId::new(0), false);
     let slot_id = frame.glyphs[0].slot_id().expect("slot id");
     if let FrameGlyph::Stretch { bidi_level, .. } = &mut frame.glyphs[0] {
         *bidi_level = 1;
@@ -110,7 +111,7 @@ fn char_bounds(label: &str, x: f32, y: f32, width: f32, height: f32) -> Rendered
             col: 0,
         },
         label: label.to_string(),
-        face_id: 0,
+        face_id: FaceId::new(0),
         font_size: 14.0,
         cell_x: x,
         cell_y: y,

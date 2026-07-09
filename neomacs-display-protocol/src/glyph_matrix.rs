@@ -15,7 +15,9 @@ use super::frame_glyphs::{
     FringeSide, GlyphRowRole, MaterializedFaceData, PhysCursor, StipplePattern, WindowCursor,
     WindowEffectHint, WindowInfo, WindowTransitionHint,
 };
-use super::types::{Color, DisplayFrameId, DisplayWindowId, ImageId, Rect, VideoId, XwidgetId};
+use super::types::{
+    Color, DisplayFrameId, DisplayWindowId, FaceId, ImageId, Rect, VideoId, XwidgetId,
+};
 use super::ui_types::{MenuBarItem, ToolBarItem};
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::collections::HashMap;
@@ -114,7 +116,7 @@ pub struct Glyph {
     /// What this glyph displays.
     pub glyph_type: GlyphType,
     /// Face ID for looking up colors, font, and decoration.
-    pub face_id: u32,
+    pub face_id: FaceId,
     /// Buffer position this glyph maps to (for cursor placement, mouse clicks).
     pub charpos: usize,
     /// Bidirectional resolved level (0 = LTR base, 1 = RTL, etc.).
@@ -147,7 +149,7 @@ pub struct Glyph {
 
 impl Glyph {
     /// Create a simple character glyph with default attributes.
-    pub fn char(ch: char, face_id: u32, charpos: usize) -> Self {
+    pub fn char(ch: char, face_id: FaceId, charpos: usize) -> Self {
         Self {
             glyph_type: GlyphType::Char { ch },
             face_id,
@@ -163,7 +165,7 @@ impl Glyph {
     }
 
     /// Create a stretch (whitespace) glyph.
-    pub fn stretch(width_cols: u16, face_id: u32) -> Self {
+    pub fn stretch(width_cols: u16, face_id: FaceId) -> Self {
         Self {
             glyph_type: GlyphType::Stretch { width_cols },
             face_id,
@@ -179,7 +181,7 @@ impl Glyph {
     }
 
     /// Create a padding glyph (second cell of a wide character).
-    pub fn padding_for(face_id: u32, charpos: usize) -> Self {
+    pub fn padding_for(face_id: FaceId, charpos: usize) -> Self {
         Self {
             glyph_type: GlyphType::Char { ch: ' ' },
             face_id,
@@ -304,7 +306,7 @@ pub struct GlyphRow {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct FringeBitmapInfo {
     pub bitmap_index: u16,
-    pub face_id: u32,
+    pub face_id: FaceId,
 }
 
 impl GlyphRow {
@@ -361,7 +363,7 @@ impl GlyphRow {
                 };
                 hash ^= ch_val;
                 hash = hash.wrapping_mul(FNV_PRIME);
-                hash ^= glyph.face_id as u64;
+                hash ^= glyph.face_id.get() as u64;
                 hash = hash.wrapping_mul(FNV_PRIME);
                 hash ^= glyph.pixel_width.to_bits() as u64;
                 hash = hash.wrapping_mul(FNV_PRIME);
@@ -588,7 +590,7 @@ pub struct FaceFillItem {
     pub row_role: GlyphRowRole,
     pub clip_rect: Option<Rect>,
     pub bounds: Rect,
-    pub face_id: u32,
+    pub face_id: FaceId,
 }
 
 /// A window border/divider rectangle.
@@ -692,7 +694,7 @@ pub struct FrameDisplayState {
     pub char_height: f32,
     pub font_pixel_size: f32,
     pub background: Color,
-    pub faces: HashMap<u32, Face>,
+    pub faces: HashMap<FaceId, Face>,
     /// Resolved font table for this frame. `Face::default_resolved_font_id`
     /// and (eventually) shaped glyph runs reference entries here; the render
     /// thread rasterizes these exact fonts instead of re-selecting by
@@ -1451,7 +1453,7 @@ impl FrameDisplayState {
     ///
     /// Returns a helper struct with the resolved colors, font properties, and
     /// decoration flags needed by `FrameGlyph::Char` and `FrameGlyph::Stretch`.
-    fn resolve_face_for_materialize(&self, face_id: u32) -> MaterializedFaceData {
+    fn resolve_face_for_materialize(&self, face_id: FaceId) -> MaterializedFaceData {
         if let Some(face) = self.faces.get(&face_id) {
             let underline = face.underline_style.gnu_code();
             MaterializedFaceData {
@@ -1767,7 +1769,7 @@ impl FrameDisplayState {
                 .flat_map(|area| area.iter().rev())
                 .find(|g| !g.padding)
                 .map(|g| g.face_id)
-                .unwrap_or(0);
+                .unwrap_or(FaceId::new(0));
             let face_data = self.resolve_face_for_materialize(last_face_id);
             push(FrameGlyph::Stretch {
                 window_id,

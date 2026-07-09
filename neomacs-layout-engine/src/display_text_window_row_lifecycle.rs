@@ -4,6 +4,7 @@
 //! reservation policy into a generic `DisplayRowAppendSurface`, then install
 //! rendered rows, cursor effects, retry metadata, and final window snapshots.
 
+use neomacs_display_protocol::types::FaceId;
 use crate::display_row_append_context::{DisplayRowAppendArea, DisplayRowAppendSurface};
 use crate::display_row_builder::DisplayTabPolicy;
 use crate::display_row_geometry::{
@@ -155,7 +156,7 @@ impl TextWindowTerminalRightBorderRequest {
         self,
         mut output: TextWindowOutputTarget<'_>,
         render_services: ChromeRowRenderServices<'_, '_>,
-    ) -> u32 {
+    ) -> FaceId {
         install_text_window_terminal_right_border(
             output.builder(),
             TextWindowTerminalRightBorder {
@@ -229,7 +230,7 @@ pub(crate) struct TextWindowBodyInstallRenderContext<'a> {
     display_text_row_base: usize,
     output_cols: usize,
     row_flags: &'a DisplayRowFlags,
-    right_edge_face_id: u32,
+    right_edge_face_id: FaceId,
     char_w: f32,
 }
 
@@ -640,7 +641,7 @@ impl<'a> TextWindowBodyInstallRenderContext<'a> {
         display_text_row_base: usize,
         output_cols: usize,
         row_flags: &'a DisplayRowFlags,
-        right_edge_face_id: u32,
+        right_edge_face_id: FaceId,
         char_w: f32,
     ) -> Self {
         Self {

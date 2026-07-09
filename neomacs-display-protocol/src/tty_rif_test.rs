@@ -60,7 +60,7 @@ fn resize_clears_grids() {
 #[test]
 fn resolve_attrs_uses_face_table() {
     let mut rif = TtyRif::new(80, 24);
-    let mut face = Face::new(1);
+    let mut face = Face::new(FaceId::new(1));
     face.foreground = Color::rgb(1.0, 0.0, 0.0);
     face.background = Color::rgb(0.0, 1.0, 0.0);
     face.font_weight = 700;
@@ -69,10 +69,10 @@ fn resolve_attrs_uses_face_table() {
     face.attributes |= FaceAttributes::STRIKE_THROUGH;
 
     let mut faces = HashMap::new();
-    faces.insert(1, face);
+    faces.insert(FaceId::new(1), face);
     rif.set_faces(faces);
 
-    let attrs = rif.resolve_attrs(1);
+    let attrs = rif.resolve_attrs(FaceId::new(1));
     assert_eq!(attrs.fg, Some((255, 0, 0)));
     assert_eq!(attrs.bg, Some((0, 255, 0)));
     assert!(attrs.bold);
@@ -84,7 +84,7 @@ fn resolve_attrs_uses_face_table() {
 #[test]
 fn resolve_attrs_falls_back_to_defaults_for_unknown_face() {
     let rif = TtyRif::new(80, 24);
-    let attrs = rif.resolve_attrs(999);
+    let attrs = rif.resolve_attrs(FaceId::new(999));
     // Should get default fg/bg.
     assert_eq!(attrs.fg, None);
     assert_eq!(attrs.bg, None);
@@ -95,17 +95,17 @@ fn resolve_attrs_falls_back_to_defaults_for_unknown_face() {
 #[test]
 fn resolve_attrs_preserves_terminal_default_face_colors() {
     let mut rif = TtyRif::new(80, 24);
-    let mut face = Face::new(0);
+    let mut face = Face::new(FaceId::new(0));
     face.foreground = Color::rgb(0.0, 0.0, 0.0);
     face.background = Color::rgb(1.0, 1.0, 1.0);
     face.use_default_foreground = true;
     face.use_default_background = true;
 
     let mut faces = HashMap::new();
-    faces.insert(0, face);
+    faces.insert(FaceId::new(0), face);
     rif.set_faces(faces);
 
-    let attrs = rif.resolve_attrs(0);
+    let attrs = rif.resolve_attrs(FaceId::new(0));
     assert_eq!(attrs.fg, None);
     assert_eq!(attrs.bg, None);
 }
@@ -116,7 +116,7 @@ fn resolve_attrs_preserves_terminal_default_face_colors() {
 
 #[test]
 fn glyph_to_char_returns_char_for_char_glyph() {
-    let g = Glyph::char('Z', 0, 0);
+    let g = Glyph::char('Z', FaceId::new(0), 0);
     assert_eq!(glyph_to_char(&g), 'Z');
 }
 
@@ -124,7 +124,7 @@ fn glyph_to_char_returns_char_for_char_glyph() {
 fn glyph_to_char_returns_first_char_for_composite() {
     let g = Glyph {
         glyph_type: GlyphType::Composite { text: "ab".into() },
-        face_id: 0,
+        face_id: FaceId::new(0),
         charpos: 0,
         bidi_level: 0,
         wide: false,
@@ -139,7 +139,7 @@ fn glyph_to_char_returns_first_char_for_composite() {
 
 #[test]
 fn glyph_to_char_returns_space_for_stretch() {
-    let g = Glyph::stretch(4, 0);
+    let g = Glyph::stretch(4, FaceId::new(0));
     assert_eq!(glyph_to_char(&g), ' ');
 }
 
@@ -206,7 +206,7 @@ fn make_simple_state(text: &str) -> FrameDisplayState {
     let mut matrix = GlyphMatrix::new(5, cols);
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     for (i, ch) in text.chars().enumerate() {
-        row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, 0, i));
+        row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), i));
     }
     matrix.rows[0] = row;
 
@@ -240,7 +240,7 @@ fn make_grid_state(
     let mut matrix = GlyphMatrix::new(rows, cols);
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     for (i, ch) in text.chars().take(cols).enumerate() {
-        row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, 0, i));
+        row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), i));
     }
     if rows > 0 {
         matrix.rows[0] = row;
@@ -285,7 +285,7 @@ fn rasterize_respects_matrix_position() {
     matrix.matrix_x = 5;
     matrix.matrix_y = 2;
     let mut row = GlyphRow::new(GlyphRowRole::Text);
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('A', 0, 0));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('A', FaceId::new(0), 0));
     matrix.rows[0] = row;
 
     state.window_matrices.push(WindowMatrixEntry {
@@ -311,23 +311,23 @@ fn rasterize_respects_matrix_position() {
 fn rasterize_face_fill_paints_blank_cells_before_glyphs() {
     let mut state = FrameDisplayState::new(8, 2, 1.0, 1.0);
     state.background = Color::from_pixel(0x000000);
-    let mut fill_face = Face::new(7);
+    let mut fill_face = Face::new(FaceId::new(7));
     fill_face.background = Color::from_pixel(0x112233);
-    let mut glyph_face = Face::new(8);
+    let mut glyph_face = Face::new(FaceId::new(8));
     glyph_face.background = Color::from_pixel(0x445566);
-    state.faces.insert(7, fill_face);
-    state.faces.insert(8, glyph_face);
+    state.faces.insert(FaceId::new(7), fill_face);
+    state.faces.insert(FaceId::new(8), glyph_face);
     state.face_fills.push(FaceFillItem {
         window_id: DisplayWindowId::new(1),
         row_role: GlyphRowRole::Text,
         clip_rect: Some(Rect::new(0.0, 0.0, 8.0, 2.0)),
         bounds: Rect::new(0.0, 0.0, 8.0, 1.0),
-        face_id: 7,
+        face_id: FaceId::new(7),
     });
 
     let mut matrix = GlyphMatrix::new(1, 6);
     let mut row = GlyphRow::new(GlyphRowRole::Text);
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('X', 8, 0));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('X', FaceId::new(8), 0));
     matrix.rows[0] = row;
     state.window_matrices.push(WindowMatrixEntry {
         window_id: 1,
@@ -361,7 +361,7 @@ fn rasterize_uses_grid_rows_not_pixel_row_metrics() {
         row.pixel_y = row_idx as f32 * 13.0;
         row.height_px = 13.0;
         row.ascent_px = 10.0;
-        row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, 0, row_idx));
+        row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), row_idx));
         matrix.rows[row_idx] = row;
     }
 
@@ -390,11 +390,11 @@ fn rasterize_text_rows_use_text_pixel_bounds_but_chrome_rows_do_not() {
     let mut matrix = GlyphMatrix::new(2, 9);
 
     let mut text_row = GlyphRow::new(GlyphRowRole::Text);
-    text_row.glyphs[GlyphArea::Text as usize].push(Glyph::char('T', 0, 0));
+    text_row.glyphs[GlyphArea::Text as usize].push(Glyph::char('T', FaceId::new(0), 0));
     matrix.rows[0] = text_row;
 
     let mut mode_line_row = GlyphRow::new(GlyphRowRole::ModeLine);
-    mode_line_row.glyphs[GlyphArea::Text as usize].push(Glyph::char('M', 0, 0));
+    mode_line_row.glyphs[GlyphArea::Text as usize].push(Glyph::char('M', FaceId::new(0), 0));
     matrix.rows[1] = mode_line_row;
 
     state.window_matrices.push(WindowMatrixEntry {
@@ -465,7 +465,7 @@ fn rasterize_disabled_rows_are_skipped() {
 
     let mut matrix = GlyphMatrix::new(5, 10);
     let mut row = GlyphRow::new(GlyphRowRole::Text);
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('X', 0, 0));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('X', FaceId::new(0), 0));
     row.enabled = false;
     matrix.rows[0] = row;
 
@@ -497,11 +497,11 @@ fn rasterize_wide_char_creates_padding() {
     let mut matrix = GlyphMatrix::new(5, 10);
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     // CJK character, wide=true.
-    let mut g = Glyph::char('\u{4e16}', 0, 0); // Unicode: "world" in Chinese
+    let mut g = Glyph::char('\u{4e16}', FaceId::new(0), 0); // Unicode: "world" in Chinese
     g.wide = true;
     row.glyphs[GlyphArea::Text as usize].push(g);
     // Followed by a normal char.
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('!', 0, 1));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('!', FaceId::new(0), 1));
     matrix.rows[0] = row;
 
     state.window_matrices.push(WindowMatrixEntry {
@@ -533,11 +533,11 @@ fn rasterize_explicit_padding_glyph_is_not_duplicated() {
 
     let mut matrix = GlyphMatrix::new(5, 10);
     let mut row = GlyphRow::new(GlyphRowRole::Text);
-    let mut wide = Glyph::char('\u{4f60}', 0, 0);
+    let mut wide = Glyph::char('\u{4f60}', FaceId::new(0), 0);
     wide.wide = true;
     row.glyphs[GlyphArea::Text as usize].push(wide);
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::padding_for(0, 0));
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('!', 0, 1));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::padding_for(FaceId::new(0), 0));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('!', FaceId::new(0), 1));
     matrix.rows[0] = row;
 
     state.window_matrices.push(WindowMatrixEntry {
@@ -565,9 +565,9 @@ fn rasterize_stretch_glyph_uses_declared_width() {
 
     let mut matrix = GlyphMatrix::new(5, 10);
     let mut row = GlyphRow::new(GlyphRowRole::Text);
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('A', 0, 0));
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::stretch(4, 0));
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('B', 0, 1));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('A', FaceId::new(0), 0));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::stretch(4, FaceId::new(0)));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('B', FaceId::new(0), 1));
     matrix.rows[0] = row;
 
     state.window_matrices.push(WindowMatrixEntry {
@@ -603,8 +603,8 @@ fn rasterize_tracks_phys_cursor_position() {
     matrix.matrix_x = 0;
     matrix.matrix_y = 0;
     let mut row = GlyphRow::new(GlyphRowRole::Text);
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0));
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('b', 0, 1));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('b', FaceId::new(0), 1));
     matrix.rows[0] = row;
 
     state.window_matrices.push(WindowMatrixEntry {
@@ -651,13 +651,13 @@ fn rasterize_prefers_phys_cursor_over_matrix_cursor_columns() {
 
     let mut matrix = GlyphMatrix::new(5, 10);
     let mut row0 = GlyphRow::new(GlyphRowRole::Text);
-    row0.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0));
+    row0.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0));
     row0.cursor_col = Some(1);
     row0.cursor_type = Some(CursorStyle::FilledBox);
     matrix.rows[0] = row0;
 
     let mut row1 = GlyphRow::new(GlyphRowRole::Text);
-    row1.glyphs[GlyphArea::Text as usize].push(Glyph::char('b', 0, 1));
+    row1.glyphs[GlyphArea::Text as usize].push(Glyph::char('b', FaceId::new(0), 1));
     matrix.rows[1] = row1;
 
     state.window_matrices.push(WindowMatrixEntry {
@@ -707,8 +707,8 @@ fn rasterize_frame_chrome_rows_outside_window_matrices() {
     row.displays_text = true;
     row.height_px = 1.0;
     row.ascent_px = 1.0;
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('T', 0, 0));
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('B', 0, 1));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('T', FaceId::new(0), 0));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('B', FaceId::new(0), 1));
 
     state.frame_chrome_rows.push(FrameChromeRow {
         row_index: 0,
@@ -730,7 +730,7 @@ fn rasterize_ignores_matrix_cursor_columns_without_phys_cursor() {
 
     let mut matrix = GlyphMatrix::new(5, 10);
     let mut row = GlyphRow::new(GlyphRowRole::Text);
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0));
     row.cursor_col = Some(1);
     row.cursor_type = Some(CursorStyle::FilledBox);
     matrix.rows[0] = row;
@@ -754,15 +754,15 @@ fn rasterize_ignores_matrix_cursor_columns_without_phys_cursor() {
 fn rasterize_keeps_phys_filled_box_cursor_out_of_cell_attrs() {
     let mut state = FrameDisplayState::new(10, 5, 8.0, 16.0);
     state.background = Color::BLACK;
-    let mut default_face = Face::new(0);
+    let mut default_face = Face::new(FaceId::new(0));
     default_face.use_default_foreground = true;
     default_face.use_default_background = true;
-    state.faces.insert(0, default_face);
+    state.faces.insert(FaceId::new(0), default_face);
 
     let mut matrix = GlyphMatrix::new(5, 10);
     let mut row = GlyphRow::new(GlyphRowRole::Text);
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0));
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('b', 0, 1));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('b', FaceId::new(0), 1));
     matrix.rows[0] = row;
 
     state.window_matrices.push(WindowMatrixEntry {
@@ -812,8 +812,8 @@ fn rasterize_ignores_nonselected_hollow_cursor_visual_on_tty() {
 
     let mut matrix = GlyphMatrix::new(2, 10);
     let mut row = GlyphRow::new(GlyphRowRole::Text);
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('x', 0, 0));
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('y', 0, 1));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('x', FaceId::new(0), 0));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('y', FaceId::new(0), 1));
     row.cursor_col = Some(1);
     row.cursor_type = Some(CursorStyle::Hollow);
     matrix.rows[0] = row;
@@ -844,7 +844,7 @@ fn rasterize_uses_hardware_bar_shape_for_phys_bar_cursor() {
 
     let mut matrix = GlyphMatrix::new(5, 10);
     let mut row = GlyphRow::new(GlyphRowRole::Text);
-    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', 0, 0));
+    row.glyphs[GlyphArea::Text as usize].push(Glyph::char('a', FaceId::new(0), 0));
     matrix.rows[0] = row;
 
     state.window_matrices.push(WindowMatrixEntry {
@@ -923,7 +923,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_only() {
     let mut top_matrix = GlyphMatrix::new(2, 10);
     let mut top_row = GlyphRow::new(GlyphRowRole::Text);
     for (i, ch) in "TOP-BUFFER".chars().enumerate() {
-        top_row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, 0, i));
+        top_row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), i));
     }
     top_row.cursor_col = Some(3);
     top_row.cursor_type = Some(CursorStyle::FilledBox);
@@ -941,7 +941,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_only() {
     let mut bot_matrix = GlyphMatrix::new(2, 10);
     let mut bot_row = GlyphRow::new(GlyphRowRole::Text);
     for (i, ch) in "BOT-BUFFER".chars().enumerate() {
-        bot_row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, 0, i));
+        bot_row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), i));
     }
     // Non-selected window still marks a hollow cursor column via
     // the same `cursor_col` slot, reflecting the `Hollow` style
@@ -1015,7 +1015,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_regardless_of_order() {
     let mut w1_matrix = GlyphMatrix::new(2, 10);
     let mut w1_row = GlyphRow::new(GlyphRowRole::Text);
     for (i, ch) in "FIRST-WIN".chars().enumerate() {
-        w1_row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, 0, i));
+        w1_row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), i));
     }
     w1_row.cursor_col = Some(9);
     w1_row.cursor_type = Some(CursorStyle::Hollow);
@@ -1034,7 +1034,7 @@ fn rasterize_terminal_cursor_comes_from_selected_window_regardless_of_order() {
     let mut w2_matrix = GlyphMatrix::new(2, 10);
     let mut w2_row = GlyphRow::new(GlyphRowRole::Text);
     for (i, ch) in "SECND-WIN".chars().enumerate() {
-        w2_row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, 0, i));
+        w2_row.glyphs[GlyphArea::Text as usize].push(Glyph::char(ch, FaceId::new(0), i));
     }
     w2_row.cursor_col = Some(2);
     w2_row.cursor_type = Some(CursorStyle::FilledBox);
@@ -1473,7 +1473,7 @@ fn state_with_text_glyphs(cols: usize, glyphs: Vec<Glyph>) -> FrameDisplayState 
 fn run_composite(text: &str, bidi_level: u8) -> Glyph {
     Glyph {
         glyph_type: GlyphType::Composite { text: text.into() },
-        face_id: 0,
+        face_id: FaceId::new(0),
         charpos: 0,
         bidi_level,
         wide: false,
@@ -1486,7 +1486,7 @@ fn run_composite(text: &str, bidi_level: u8) -> Glyph {
 }
 
 fn run_member_padding(ch: char, charpos: usize) -> Glyph {
-    let mut g = Glyph::char(ch, 0, charpos);
+    let mut g = Glyph::char(ch, FaceId::new(0), charpos);
     g.padding = true;
     g
 }
@@ -1539,7 +1539,7 @@ fn rtl_run_keeps_combining_mark_on_its_letter() {
 fn run_member_padding_cluster(text: &str, charpos: usize) -> Glyph {
     let mut g = Glyph {
         glyph_type: GlyphType::Composite { text: text.into() },
-        face_id: 0,
+        face_id: FaceId::new(0),
         charpos,
         bidi_level: 1,
         wide: false,

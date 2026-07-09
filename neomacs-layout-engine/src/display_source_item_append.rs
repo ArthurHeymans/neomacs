@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use crate::display_cursor::{
     CapturedCursorInfo, CapturedCursorPlacement, CapturedCursorSlotWidth, CursorCaptureState,
     capture_cursor_info, update_cursor_info_for_main_char,
@@ -92,7 +93,7 @@ impl DisplaySourceNaturalMeasurementRequest {
         self,
         state: &mut TextRowSourceMeasureState<'_>,
         base_face: &ResolvedFace,
-        face_id: u32,
+        face_id: FaceId,
         frame: DisplayRowAppendFrame,
         position: DisplayRowPosition,
         source_item: &DisplayItem,
@@ -734,7 +735,7 @@ pub(crate) struct DisplaySourceItemAppendContext<'a> {
 
 impl<'a> DisplaySourceItemAppendContext<'a> {
     pub(crate) fn new(
-        face_id: u32,
+        face_id: FaceId,
         base_face: &'a ResolvedFace,
         frame: DisplayRowAppendFrame,
     ) -> Self {
@@ -744,7 +745,7 @@ impl<'a> DisplaySourceItemAppendContext<'a> {
     }
 
     #[cfg(test)]
-    pub(crate) fn face_id(&self) -> u32 {
+    pub(crate) fn face_id(&self) -> FaceId {
         self.single_item.face_id()
     }
 

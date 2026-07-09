@@ -1,5 +1,6 @@
 //! Buffer source post-loop tail rendering and install context.
 
+use neomacs_display_protocol::types::FaceId;
 use crate::display_buffer_source_loop_context::BufferSourceLoopRequestContext;
 use crate::display_cursor::CursorCaptureState;
 use crate::display_face_id::FrameFaceIdAllocator;
@@ -100,7 +101,7 @@ impl BufferSourceBodyInstallContext {
             self.display_text_row_base,
             self.output_cols,
             row_flags,
-            0,
+            FaceId::new(0),
             char_width,
         ))
     }

@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use crate::display_face_id::FrameFaceIdAllocator;
 #[cfg(test)]
 use crate::display_face_policy::BaseFacePolicy;
@@ -112,7 +113,7 @@ fn render_lisp_string_source_append_to_text_row_and_emit(
     source: &mut LispStringSourceCursor,
     source_state: &mut DisplayRowSourceState,
     base_face: &ResolvedFace,
-    base_face_id: u32,
+    base_face_id: FaceId,
     face_ids: &mut FrameFaceIdAllocator,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,
@@ -151,7 +152,7 @@ impl LispStringSourceAppendRequest {
         }
     }
 
-    fn into_source(self, base_face_id: u32) -> Option<LispStringSourceCursor> {
+    fn into_source(self, base_face_id: FaceId) -> Option<LispStringSourceCursor> {
         LispStringSourceCursor::new(
             self.source_id.raw(),
             self.value,
@@ -162,14 +163,14 @@ impl LispStringSourceAppendRequest {
 
 pub(crate) struct LispStringSourceAppendSessionRequest<'a> {
     append_request: LispStringSourceAppendRequest,
-    base_face_id: u32,
+    base_face_id: FaceId,
     base_face: &'a ResolvedFace,
 }
 
 impl<'a> LispStringSourceAppendSessionRequest<'a> {
     pub(crate) fn new(
         append_request: LispStringSourceAppendRequest,
-        base_face_id: u32,
+        base_face_id: FaceId,
         base_face: &'a ResolvedFace,
     ) -> Self {
         Self {
@@ -187,7 +188,7 @@ impl<'a> LispStringSourceAppendSessionRequest<'a> {
 pub(crate) struct LispStringSourceAppendSession<'a> {
     source: LispStringSourceCursor,
     source_state: DisplayRowSourceState,
-    base_face_id: u32,
+    base_face_id: FaceId,
     base_face: &'a ResolvedFace,
 }
 
@@ -633,7 +634,7 @@ pub(crate) fn append_lisp_string_to_text_row(
     text_value: Value,
     source_id: u64,
     base_face: &ResolvedFace,
-    base_face_id: u32,
+    base_face_id: FaceId,
     face_ids: &mut FrameFaceIdAllocator,
     frame: DisplayRowAppendFrame,
     position: DisplayRowPosition,

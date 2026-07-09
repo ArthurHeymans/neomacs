@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use crate::composition::base_width_cols;
 use crate::display_face_ref::render_face_ref_id;
 use crate::display_item::{
@@ -108,7 +109,7 @@ pub(crate) struct DisplayTabAdvance {
 #[derive(Clone, Copy, Debug)]
 struct DisplayRowTextCharAdvanceRequest<'a> {
     char_state: DisplayRowTextCharState,
-    face_id: u32,
+    face_id: FaceId,
     position: DisplayRowPosition,
     char_offset: usize,
     byte_offset: usize,
@@ -118,7 +119,7 @@ struct DisplayRowTextCharAdvanceRequest<'a> {
 impl<'a> DisplayRowTextCharAdvanceRequest<'a> {
     fn new(
         char_state: DisplayRowTextCharState,
-        face_id: u32,
+        face_id: FaceId,
         position: DisplayRowPosition,
         char_offset: usize,
         byte_offset: usize,
@@ -136,7 +137,7 @@ impl<'a> DisplayRowTextCharAdvanceRequest<'a> {
 
     fn per_char(
         char_state: DisplayRowTextCharState,
-        face_id: u32,
+        face_id: FaceId,
         position: DisplayRowPosition,
         measurement: &'a DisplayTextRunMeasurement,
     ) -> Self {
@@ -164,7 +165,7 @@ impl<'a> DisplayRowTextCharAdvanceRequest<'a> {
     fn resolve_advance_px(
         self,
         policy: &DisplayRowTextNaturalAdvancePolicy,
-        glyph_advance_px: impl FnMut(char, u32, usize) -> f32,
+        glyph_advance_px: impl FnMut(char, FaceId, usize) -> f32,
     ) -> f32 {
         let measured = match self.kind() {
             DisplayRowTextNaturalAdvanceKind::Tab
@@ -258,7 +259,7 @@ pub(crate) trait DisplayGlyphMeasurer {
     fn glyph_advance_px(
         &mut self,
         ch: char,
-        face_id: u32,
+        face_id: FaceId,
         columns: u8,
         fallback_advance_px: f32,
     ) -> Option<f32>;
@@ -266,7 +267,7 @@ pub(crate) trait DisplayGlyphMeasurer {
     fn text_run_advances_px(
         &mut self,
         _text: &str,
-        _face_id: u32,
+        _face_id: FaceId,
         _fallback_char_width_px: f32,
     ) -> DisplayTextRunMeasurement {
         DisplayTextRunMeasurement::PerChar
@@ -281,13 +282,13 @@ pub(crate) enum DisplayRowItemMeasurement {
 #[cfg(test)]
 pub(crate) struct FixedGlyphAdvance {
     ch: char,
-    face_id: u32,
+    face_id: FaceId,
     advance_px: f32,
 }
 
 #[cfg(test)]
 impl FixedGlyphAdvance {
-    pub(crate) fn new(ch: char, face_id: u32, advance_px: f32) -> Self {
+    pub(crate) fn new(ch: char, face_id: FaceId, advance_px: f32) -> Self {
         Self {
             ch,
             face_id,
@@ -301,7 +302,7 @@ impl DisplayGlyphMeasurer for FixedGlyphAdvance {
     fn glyph_advance_px(
         &mut self,
         ch: char,
-        face_id: u32,
+        face_id: FaceId,
         _columns: u8,
         _fallback_advance_px: f32,
     ) -> Option<f32> {
@@ -312,7 +313,7 @@ impl DisplayGlyphMeasurer for FixedGlyphAdvance {
 #[cfg(test)]
 #[derive(Default)]
 pub(crate) struct FixedGlyphAdvances {
-    advances: std::collections::HashMap<(char, u32), f32>,
+    advances: std::collections::HashMap<(char, FaceId), f32>,
 }
 
 #[cfg(test)]
@@ -321,7 +322,7 @@ impl FixedGlyphAdvances {
         Self::default()
     }
 
-    pub(crate) fn insert(&mut self, ch: char, face_id: u32, advance_px: f32) {
+    pub(crate) fn insert(&mut self, ch: char, face_id: FaceId, advance_px: f32) {
         self.advances.insert((ch, face_id), advance_px);
     }
 }
@@ -331,7 +332,7 @@ impl DisplayGlyphMeasurer for FixedGlyphAdvances {
     fn glyph_advance_px(
         &mut self,
         ch: char,
-        face_id: u32,
+        face_id: FaceId,
         _columns: u8,
         _fallback_advance_px: f32,
     ) -> Option<f32> {
@@ -1161,7 +1162,7 @@ impl<'layout, 'row, 'measurer> DisplayRowProgressWriter<'layout, 'row, 'measurer
         self.position = self.position.advance_by(metrics);
     }
 
-    fn text_run_measurement(&mut self, text: &str, face_id: u32) -> DisplayTextRunMeasurement {
+    fn text_run_measurement(&mut self, text: &str, face_id: FaceId) -> DisplayTextRunMeasurement {
         self.text_run_measurement
             .clone()
             .unwrap_or_else(|| self.writer.text_run_measurement(text, face_id))
@@ -1269,7 +1270,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     fn push_text_item(
         &mut self,
         text: &str,
-        face_id: u32,
+        face_id: FaceId,
         span: &SourceSpan,
         source_mapping: DisplayTextSourceMapping,
     ) {
@@ -1292,7 +1293,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         }
     }
 
-    fn push_text_char(&mut self, ch: char, face_id: u32, charpos: usize) {
+    fn push_text_char(&mut self, ch: char, face_id: FaceId, charpos: usize) {
         let char_state = self.text_char_state(ch);
         self.push_text_char_state_at_position(
             char_state,
@@ -1305,7 +1306,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     fn push_text_char_with_measurement(
         &mut self,
         char_state: DisplayRowTextCharState,
-        face_id: u32,
+        face_id: FaceId,
         charpos: usize,
         char_offset: usize,
         byte_offset: usize,
@@ -1327,7 +1328,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
     fn push_text_char_state_at_position(
         &mut self,
         char_state: DisplayRowTextCharState,
-        face_id: u32,
+        face_id: FaceId,
         charpos: usize,
         position: DisplayRowPosition,
     ) {
@@ -1407,7 +1408,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         DisplayRowTextCharState::for_glyphs(ch, &self.row.glyphs[self.area_index])
     }
 
-    fn text_run_measurement(&mut self, text: &str, face_id: u32) -> DisplayTextRunMeasurement {
+    fn text_run_measurement(&mut self, text: &str, face_id: FaceId) -> DisplayTextRunMeasurement {
         self.glyph_measurer
             .as_mut()
             .map(|measurer| {
@@ -1416,7 +1417,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             .unwrap_or(DisplayTextRunMeasurement::PerChar)
     }
 
-    fn push_tab_at_position(&mut self, face_id: u32, position: DisplayRowPosition) {
+    fn push_tab_at_position(&mut self, face_id: FaceId, position: DisplayRowPosition) {
         let advance = self
             .layout
             .tab_policy
@@ -1448,7 +1449,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         )
     }
 
-    fn glyph_advance_px(&mut self, ch: char, face_id: u32, columns: usize) -> f32 {
+    fn glyph_advance_px(&mut self, ch: char, face_id: FaceId, columns: usize) -> f32 {
         let fallback = self.layout.char_width_px.max(1.0) * columns.max(1) as f32;
         let measured_columns = columns.min(usize::from(u8::MAX)) as u8;
         self.glyph_measurer
@@ -1458,7 +1459,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
             .unwrap_or(fallback)
     }
 
-    fn push_stretch(&mut self, stretch: DisplayStretch, face_id: u32) {
+    fn push_stretch(&mut self, stretch: DisplayStretch, face_id: FaceId) {
         let Some((width_cols, pixel_width)) = self.stretch_width(&stretch.width) else {
             return;
         };
@@ -1494,7 +1495,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         }
     }
 
-    fn push_control_char(&mut self, ch: char, face_id: u32, charpos: usize) {
+    fn push_control_char(&mut self, ch: char, face_id: FaceId, charpos: usize) {
         let Some(caret_char) = control_char_caret_char(ch) else {
             return;
         };
@@ -1502,7 +1503,7 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         self.push_text_char(caret_char, face_id, charpos);
     }
 
-    fn push_glyphless(&mut self, glyphless: DisplayGlyphless, face_id: u32, charpos: usize) {
+    fn push_glyphless(&mut self, glyphless: DisplayGlyphless, face_id: FaceId, charpos: usize) {
         let Some(pixel_width) = self.glyphless_pixel_width(&glyphless) else {
             return;
         };
@@ -1617,8 +1618,8 @@ impl<'layout, 'row, 'measurer> DisplayRowWriter<'layout, 'row, 'measurer> {
         .filter(|pixels| pixels.is_finite() && *pixels >= 0.0)
     }
 
-    fn face_id(&self, face: RenderFaceRef) -> u32 {
-        render_face_ref_id(face, render_face_ref_id(self.layout.base_face, 0))
+    fn face_id(&self, face: RenderFaceRef) -> FaceId {
+        render_face_ref_id(face, render_face_ref_id(self.layout.base_face, FaceId::new(0)))
     }
 }
 

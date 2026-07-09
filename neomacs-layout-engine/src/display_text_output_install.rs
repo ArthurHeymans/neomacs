@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_output_install_request::OutputFrameStateInstallRequest;
 use crate::display_output_row_request::OutputRowLifecycleRequest;
@@ -162,7 +163,7 @@ pub(crate) fn install_display_row(
 
 pub(crate) fn install_output_resolved_face(
     builder: &mut DisplayOutputBuilder,
-    face_id: u32,
+    face_id: FaceId,
     face: &ResolvedFace,
     metrics: Option<FontMetrics>,
 ) {

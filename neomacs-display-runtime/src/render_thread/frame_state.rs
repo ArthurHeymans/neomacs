@@ -30,7 +30,8 @@ impl RenderApp {
     }
 
     fn refresh_faces_from_frames(&mut self) {
-        let old_face_ids: std::collections::HashSet<u32> = self.faces.keys().copied().collect();
+        let old_face_ids: std::collections::HashSet<crate::core::types::FaceId> =
+            self.faces.keys().copied().collect();
 
         let mut faces = std::collections::HashMap::new();
         self.frame_windows

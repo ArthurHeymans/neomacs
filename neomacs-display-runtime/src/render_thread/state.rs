@@ -304,7 +304,7 @@ pub(super) struct RenderApp {
     pub(super) gpu: Option<RenderGpuContext>,
     pub(super) renderer: Option<WgpuRenderer>,
 
-    pub(super) faces: HashMap<u32, Face>,
+    pub(super) faces: HashMap<neomacs_display_protocol::types::FaceId, Face>,
 
     pub(super) modifiers: u32,
 

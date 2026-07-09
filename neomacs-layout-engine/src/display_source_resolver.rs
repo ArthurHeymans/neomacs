@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_policy::BaseFacePolicy;
@@ -35,7 +36,7 @@ use std::collections::HashMap;
 #[derive(Clone, Copy)]
 pub(crate) struct DisplaySourceFaceBasis<'a> {
     face_resolver: &'a FaceResolver,
-    base_face_id: u32,
+    base_face_id: FaceId,
     base_face: &'a ResolvedFace,
     canonical_face: &'a ResolvedFace,
     fallback_metrics: DisplayRowFallbackMetrics,
@@ -44,7 +45,7 @@ pub(crate) struct DisplaySourceFaceBasis<'a> {
 impl<'a> DisplaySourceFaceBasis<'a> {
     pub(crate) fn new(
         face_resolver: &'a FaceResolver,
-        base_face_id: u32,
+        base_face_id: FaceId,
         base_face: &'a ResolvedFace,
         fallback_metrics: DisplayRowFallbackMetrics,
     ) -> Self {
@@ -61,7 +62,7 @@ impl<'a> DisplaySourceFaceBasis<'a> {
         self.face_resolver
     }
 
-    pub(crate) fn base_face_id(self) -> u32 {
+    pub(crate) fn base_face_id(self) -> FaceId {
         self.base_face_id
     }
 
@@ -114,21 +115,21 @@ impl<'a> DisplaySourceResolveParams<'a> {
 
 #[derive(Default)]
 pub(crate) struct DisplaySourceResolveState {
-    face_cache: HashMap<DisplayFaceCacheKey, u32>,
-    height_face_cache: HashMap<DisplayHeightFaceKey, u32>,
-    resolved_faces: HashMap<u32, ResolvedFace>,
+    face_cache: HashMap<DisplayFaceCacheKey, FaceId>,
+    height_face_cache: HashMap<DisplayHeightFaceKey, FaceId>,
+    resolved_faces: HashMap<FaceId, ResolvedFace>,
 }
 
 impl DisplaySourceResolveState {
-    pub(crate) fn remember_face(&mut self, face_id: u32, face: &ResolvedFace) {
+    pub(crate) fn remember_face(&mut self, face_id: FaceId, face: &ResolvedFace) {
         self.resolved_faces.insert(face_id, face.clone());
     }
 
-    pub(crate) fn resolved_face(&self, face_id: u32) -> Option<&ResolvedFace> {
+    pub(crate) fn resolved_face(&self, face_id: FaceId) -> Option<&ResolvedFace> {
         self.resolved_faces.get(&face_id)
     }
 
-    fn cached_face(&self, base_face_id: u32, face_value: &Value) -> Option<RenderFaceRef> {
+    fn cached_face(&self, base_face_id: FaceId, face_value: &Value) -> Option<RenderFaceRef> {
         self.face_cache
             .get(&DisplayFaceCacheKey {
                 base_face_id,
@@ -140,9 +141,9 @@ impl DisplaySourceResolveState {
 
     fn cache_face(
         &mut self,
-        base_face_id: u32,
+        base_face_id: FaceId,
         face_value: Value,
-        face_id: u32,
+        face_id: FaceId,
         resolved: &ResolvedFace,
     ) {
         self.face_cache.insert(
@@ -168,22 +169,22 @@ impl DisplaySourceResolveState {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct DisplayHeightFaceKey {
-    base_face_id: u32,
+    base_face_id: FaceId,
     factor_bits: u32,
 }
 
 #[derive(Clone, Debug)]
 pub(crate) struct PendingDisplaySourceFace {
-    face_id: u32,
+    face_id: FaceId,
     resolved: ResolvedFace,
 }
 
 impl PendingDisplaySourceFace {
-    pub(crate) fn new(face_id: u32, resolved: ResolvedFace) -> Self {
+    pub(crate) fn new(face_id: FaceId, resolved: ResolvedFace) -> Self {
         Self { face_id, resolved }
     }
 
-    pub(crate) fn face_id(&self) -> u32 {
+    pub(crate) fn face_id(&self) -> FaceId {
         self.face_id
     }
 
@@ -191,14 +192,14 @@ impl PendingDisplaySourceFace {
         &self.resolved
     }
 
-    pub(crate) fn into_parts(self) -> (u32, ResolvedFace) {
+    pub(crate) fn into_parts(self) -> (FaceId, ResolvedFace) {
         (self.face_id, self.resolved)
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct DisplayFaceCacheKey {
-    base_face_id: u32,
+    base_face_id: FaceId,
     face_value: Value,
 }
 
@@ -210,12 +211,12 @@ pub(crate) enum DisplayDefaultFaceInstallPolicy {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ActiveDisplayStringBaseFace<'a> {
-    face_id: u32,
+    face_id: FaceId,
     resolved: &'a ResolvedFace,
 }
 
 impl<'a> ActiveDisplayStringBaseFace<'a> {
-    pub(crate) fn new(face_id: u32, resolved: &'a ResolvedFace) -> Self {
+    pub(crate) fn new(face_id: FaceId, resolved: &'a ResolvedFace) -> Self {
         Self { face_id, resolved }
     }
 }
@@ -223,7 +224,7 @@ impl<'a> ActiveDisplayStringBaseFace<'a> {
 #[derive(Clone, Debug)]
 pub(crate) struct DisplayStringBaseFace {
     face: ResolvedFace,
-    face_id: u32,
+    face_id: FaceId,
     pending_face: Option<PendingDisplaySourceFace>,
 }
 
@@ -232,7 +233,7 @@ impl DisplayStringBaseFace {
         &self.face
     }
 
-    pub(crate) fn face_id(&self) -> u32 {
+    pub(crate) fn face_id(&self) -> FaceId {
         self.face_id
     }
 
@@ -258,7 +259,7 @@ pub(crate) fn resolve_display_string_base_face<B: LayoutBufferView>(
     {
         (active_base_face.face_id, None)
     } else if same_resolved_face(&face, face_resolver.default_face()) {
-        let face_id = u32::from(BasicFaceId::Default);
+        let face_id = FaceId::from(BasicFaceId::Default);
         let pending_face = match default_install_policy {
             DisplayDefaultFaceInstallPolicy::InstallDefaultFace => {
                 Some(PendingDisplaySourceFace::new(face_id, face.clone()))
@@ -873,7 +874,7 @@ mod tests {
         FaceResolver::new(table, 0x00ffffff, 0x000000, 14.0, None)
     }
 
-    fn face_id(face: RenderFaceRef) -> u32 {
+    fn face_id(face: RenderFaceRef) -> FaceId {
         match face {
             RenderFaceRef::FaceId(face_id) => face_id,
             RenderFaceRef::Inherit => panic!("expected concrete face id"),
@@ -910,7 +911,7 @@ mod tests {
         let params = DisplaySourceResolveParams::new(
             DisplaySourceFaceBasis::new(
                 &face_resolver,
-                0,
+                FaceId::new(0),
                 base_face,
                 DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
             ),
@@ -956,7 +957,7 @@ mod tests {
         let params = DisplaySourceResolveParams::new(
             DisplaySourceFaceBasis::new(
                 &face_resolver,
-                0,
+                FaceId::new(0),
                 base_face,
                 DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
             ),
@@ -1050,7 +1051,7 @@ mod tests {
         let params = DisplaySourceResolveParams::new(
             DisplaySourceFaceBasis::new(
                 &face_resolver,
-                0,
+                FaceId::new(0),
                 base_face,
                 DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
             ),
@@ -1153,14 +1154,14 @@ mod tests {
             },
             BaseFacePolicy::DefaultFace,
             Some(ActiveDisplayStringBaseFace::new(
-                500,
+                FaceId::new(500),
                 resolver.default_face(),
             )),
             DisplayDefaultFaceInstallPolicy::InstallDefaultFace,
             &mut face_ids,
         );
 
-        assert_eq!(base_face.face_id(), 500);
+        assert_eq!(base_face.face_id(), FaceId::new(500));
         assert!(base_face.pending_face().is_none());
         assert!(same_resolved_face(
             base_face.face(),
@@ -1199,9 +1200,9 @@ mod tests {
             &mut reuse_face_ids,
         );
 
-        assert_eq!(installed.face_id(), u32::from(BasicFaceId::Default));
+        assert_eq!(installed.face_id(), FaceId::from(BasicFaceId::Default));
         assert!(installed.pending_face().is_some());
-        assert_eq!(reused.face_id(), u32::from(BasicFaceId::Default));
+        assert_eq!(reused.face_id(), FaceId::from(BasicFaceId::Default));
         assert!(reused.pending_face().is_none());
     }
 
@@ -1222,9 +1223,9 @@ mod tests {
             &mut face_ids,
         );
 
-        assert_eq!(base_face.face_id(), 500);
+        assert_eq!(base_face.face_id(), FaceId::new(500));
         let pending_face = base_face.pending_face().expect("pending face");
-        assert_eq!(pending_face.face_id(), 500);
+        assert_eq!(pending_face.face_id(), FaceId::new(500));
         assert!(same_resolved_face(
             pending_face.resolved(),
             base_face.face()

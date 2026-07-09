@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use super::*;
 use neomacs_display_protocol::frame_glyphs::{CursorStyle, DisplaySlotId, GlyphRowRole};
 use neomacs_display_protocol::glyph_matrix::{GlyphArea, GlyphRow, GlyphType};
@@ -5,7 +6,7 @@ use neomacs_display_protocol::types::{Color, Rect};
 
 fn push_text(row: &mut neomacs_display_protocol::glyph_matrix::GlyphRow, text: &str) {
     for (idx, ch) in text.chars().enumerate() {
-        crate::glyph_row_writer::push_char_to_row(row, ch, 0, idx, 0.0);
+        crate::glyph_row_writer::push_char_to_row(row, ch, FaceId::new(0), idx, 0.0);
     }
 }
 

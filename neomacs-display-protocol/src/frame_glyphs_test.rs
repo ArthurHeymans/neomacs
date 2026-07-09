@@ -95,7 +95,7 @@ fn clear_all_resets_glyphs_and_metadata() {
 
     // Populate some data
     buf.add_char('A', 0.0, 0.0, 8.0, 16.0, 12.0, false);
-    buf.add_stretch(0.0, 0.0, 100.0, 16.0, Color::RED, 0, false);
+    buf.add_stretch(0.0, 0.0, 100.0, 16.0, Color::RED, FaceId::new(0), false);
     buf.add_cursor(
         DisplayWindowId::new(1),
         10.0,
@@ -213,7 +213,7 @@ fn set_face_with_font_registers_baseline_render_face() {
     let ul = Color::rgb(0.9, 0.1, 0.2);
 
     buf.set_face_with_font(
-        42,
+        FaceId::new(42),
         fg,
         Some(bg),
         "DejaVu Sans",
@@ -229,8 +229,8 @@ fn set_face_with_font_registers_baseline_render_face() {
         false,
     );
 
-    let face = buf.faces.get(&42).expect("face entry should exist");
-    assert_eq!(face.id, 42);
+    let face = buf.faces.get(&FaceId::new(42)).expect("face entry should exist");
+    assert_eq!(face.id, FaceId::new(42));
     assert_eq!(face.font_family, "DejaVu Sans");
     assert_eq!(face.font_size, 18.0);
     assert_eq!(face.font_weight, 700);
@@ -249,18 +249,18 @@ fn render_face_treats_face_ids_as_frame_local() {
     let mut root = FrameGlyphBuffer::new();
     let mut child = FrameGlyphBuffer::new();
 
-    let mut root_face = Face::new(7);
+    let mut root_face = Face::new(FaceId::new(7));
     root_face.font_family = "Root Mono".to_string();
     root_face.font_size = 11.0;
-    root.faces.insert(7, root_face);
+    root.faces.insert(FaceId::new(7), root_face);
 
-    let mut child_face = Face::new(7);
+    let mut child_face = Face::new(FaceId::new(7));
     child_face.font_family = "Child Mono".to_string();
     child_face.font_size = 23.0;
-    child.faces.insert(7, child_face);
+    child.faces.insert(FaceId::new(7), child_face);
 
-    let root_render_face = root.render_face(7).expect("root face");
-    let child_render_face = child.render_face(7).expect("child face");
+    let root_render_face = root.render_face(FaceId::new(7)).expect("root face");
+    let child_render_face = child.render_face(FaceId::new(7)).expect("child face");
 
     assert_eq!(root_render_face.font_family, "Root Mono");
     assert_eq!(root_render_face.font_size, 11.0);
@@ -274,11 +274,11 @@ fn set_face_uses_current_font_context_for_face_entry() {
     let fg = Color::rgb(0.4, 0.5, 0.6);
 
     buf.set_face_with_font(
-        1, fg, None, "Iosevka", 400, false, 15.0, 0, None, 0, None, 0, None, false,
+        FaceId::new(1), fg, None, "Iosevka", 400, false, 15.0, 0, None, 0, None, 0, None, false,
     );
-    buf.set_face(2, fg, None, 600, true, 0, None, 0, None, 1, None);
+    buf.set_face(FaceId::new(2), fg, None, 600, true, 0, None, 0, None, 1, None);
 
-    let face = buf.faces.get(&2).expect("face entry should exist");
+    let face = buf.faces.get(&FaceId::new(2)).expect("face entry should exist");
     assert_eq!(face.font_family, "Iosevka");
     assert_eq!(face.font_size, 15.0);
     assert_eq!(face.font_weight, 600);
@@ -464,7 +464,7 @@ fn add_char_uses_current_face_attributes() {
     let fg = Color::rgb(1.0, 0.0, 0.0);
     let bg = Color::rgb(0.0, 0.0, 1.0);
     buf.set_face(
-        42,
+        FaceId::new(42),
         fg,
         Some(bg),
         700,
@@ -481,7 +481,7 @@ fn add_char_uses_current_face_attributes() {
 
     match &buf.glyphs[0] {
         FrameGlyph::Char { face_id, .. } => {
-            assert_eq!(*face_id, 42);
+            assert_eq!(*face_id, FaceId::new(42));
             // The face-derived attributes are resolved from the face table.
             let rf = buf.resolved_face(*face_id);
             assert_color_eq(&rf.fg, &fg);
@@ -572,12 +572,12 @@ fn add_composed_char_stores_text_and_base() {
 fn add_composed_char_uses_current_face() {
     let mut buf = FrameGlyphBuffer::new();
     let fg = Color::rgb(0.5, 0.5, 0.5);
-    buf.set_face(10, fg, None, 400, false, 0, None, 0, None, 0, None);
+    buf.set_face(FaceId::new(10), fg, None, 400, false, 0, None, 0, None, 0, None);
     buf.add_composed_char("e\u{0301}", 'e', 0.0, 0.0, 8.0, 16.0, 12.0, false);
 
     match &buf.glyphs[0] {
         FrameGlyph::Char { face_id, .. } => {
-            assert_eq!(*face_id, 10);
+            assert_eq!(*face_id, FaceId::new(10));
             // Colors resolve from the face; a `None` background synthesizes a
             // transparent face background.
             let rf = buf.resolved_face(*face_id);
@@ -704,7 +704,7 @@ fn cursor_visual_is_not_counted_as_overlay_glyph() {
 fn add_stretch_appends_stretch_glyph() {
     let mut buf = FrameGlyphBuffer::new();
     let bg = Color::rgb(0.2, 0.2, 0.2);
-    buf.add_stretch(0.0, 100.0, 800.0, 16.0, bg, 5, false);
+    buf.add_stretch(0.0, 100.0, 800.0, 16.0, bg, FaceId::new(5), false);
 
     assert_eq!(buf.len(), 1);
     match &buf.glyphs[0] {
@@ -724,7 +724,7 @@ fn add_stretch_appends_stretch_glyph() {
             assert_eq!(*width, 800.0);
             assert_eq!(*height, 16.0);
             assert_color_eq(stretch_bg, &bg);
-            assert_eq!(*face_id, 5);
+            assert_eq!(*face_id, FaceId::new(5));
             assert!(!buf.glyphs[0].is_overlay());
             assert_eq!(*stipple_id, 0);
             assert!(stipple_fg.is_none());
@@ -737,7 +737,7 @@ fn add_stretch_appends_stretch_glyph() {
 fn add_stretch_overlay() {
     let mut buf = FrameGlyphBuffer::new();
     buf.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::ModeLine, None);
-    buf.add_stretch(0.0, 0.0, 800.0, 20.0, Color::BLUE, 0, true);
+    buf.add_stretch(0.0, 0.0, 800.0, 20.0, Color::BLUE, FaceId::new(0), true);
     assert!(buf.glyphs[0].is_overlay());
 }
 
@@ -746,7 +746,7 @@ fn add_stretch_stipple_stores_pattern_info() {
     let mut buf = FrameGlyphBuffer::new();
     let bg = Color::BLACK;
     let fg = Color::WHITE;
-    buf.add_stretch_stipple(0.0, 0.0, 100.0, 100.0, bg, fg, 3, false, 7);
+    buf.add_stretch_stipple(0.0, 0.0, 100.0, 100.0, bg, fg, FaceId::new(3), false, 7);
 
     assert_eq!(buf.len(), 1);
     match &buf.glyphs[0] {
@@ -766,7 +766,7 @@ fn add_stretch_stipple_stores_pattern_info() {
 fn slot_glyph_returns_matching_stretch() {
     let mut buf = FrameGlyphBuffer::new();
     buf.set_draw_context(DisplayWindowId::new(3), GlyphRowRole::Text, None);
-    buf.add_stretch(8.0, 16.0, 24.0, 16.0, Color::BLACK, 7, false);
+    buf.add_stretch(8.0, 16.0, 24.0, 16.0, Color::BLACK, FaceId::new(7), false);
 
     let slot_id = buf.glyphs[0].slot_id().expect("stretch slot id");
     let glyph = buf.slot_glyph(slot_id).expect("slot glyph");
@@ -780,7 +780,7 @@ fn slot_glyph_returns_matching_stretch() {
         } => {
             assert_eq!(*bidi_level, 0);
             assert_eq!(*width, 24.0);
-            assert_eq!(*face_id, 7);
+            assert_eq!(*face_id, FaceId::new(7));
             assert_eq!(glyph.bidi_level(), Some(0));
         }
         other => panic!("Expected Stretch glyph, got {:?}", other),
@@ -966,13 +966,13 @@ fn set_face_affects_subsequent_chars() {
 
     // Change face
     let red = Color::rgb(1.0, 0.0, 0.0);
-    buf.set_face(5, red, None, 700, true, 0, None, 0, None, 0, None);
+    buf.set_face(FaceId::new(5), red, None, 700, true, 0, None, 0, None, 0, None);
     buf.add_char('B', 8.0, 0.0, 8.0, 16.0, 12.0, false);
 
     // First char uses default face
     match &buf.glyphs[0] {
         FrameGlyph::Char { face_id, .. } => {
-            assert_eq!(*face_id, 0);
+            assert_eq!(*face_id, FaceId::new(0));
             let rf = buf.resolved_face(*face_id);
             assert_eq!(rf.font_weight, 400);
             assert!(!rf.italic);
@@ -983,7 +983,7 @@ fn set_face_affects_subsequent_chars() {
     // Second char uses newly set face
     match &buf.glyphs[1] {
         FrameGlyph::Char { face_id, .. } => {
-            assert_eq!(*face_id, 5);
+            assert_eq!(*face_id, FaceId::new(5));
             let rf = buf.resolved_face(*face_id);
             assert_eq!(rf.font_weight, 700);
             assert!(rf.italic);
@@ -998,7 +998,7 @@ fn set_face_with_font_stores_font_family() {
     let mut buf = FrameGlyphBuffer::new();
     let fg = Color::WHITE;
     buf.set_face_with_font(
-        7,
+        FaceId::new(7),
         fg,
         None,
         "Fira Code",
@@ -1018,14 +1018,14 @@ fn set_face_with_font_stores_font_family() {
     assert_eq!(buf.get_current_font_family(), "Fira Code");
 
     // set_face_with_font now keeps the face table coherent as well.
-    assert_eq!(buf.get_face_font(7), "Fira Code");
+    assert_eq!(buf.get_face_font(FaceId::new(7)), "Fira Code");
 }
 
 #[test]
 fn set_face_with_font_updates_font_size() {
     let mut buf = FrameGlyphBuffer::new();
     buf.set_face_with_font(
-        1,
+        FaceId::new(1),
         Color::WHITE,
         None,
         "monospace",
@@ -1055,15 +1055,15 @@ fn get_face_font_reads_from_faces_map() {
     let mut buf = FrameGlyphBuffer::new();
 
     // No face inserted yet — falls back to "monospace"
-    assert_eq!(buf.get_face_font(1), "monospace");
+    assert_eq!(buf.get_face_font(FaceId::new(1)), "monospace");
 
     // Insert faces (as layout engine's apply_face would)
-    let mut face1 = Face::new(1);
+    let mut face1 = Face::new(FaceId::new(1));
     face1.font_family = "JetBrains Mono".to_string();
-    buf.faces.insert(1, face1);
+    buf.faces.insert(FaceId::new(1), face1);
 
-    assert_eq!(buf.get_face_font(1), "JetBrains Mono");
-    assert_eq!(buf.get_face_font(2), "monospace"); // not inserted
+    assert_eq!(buf.get_face_font(FaceId::new(1)), "JetBrains Mono");
+    assert_eq!(buf.get_face_font(FaceId::new(2)), "monospace"); // not inserted
 }
 
 #[test]
@@ -1073,7 +1073,7 @@ fn set_face_with_font_decoration_attributes() {
     let st_color = Color::rgb(1.0, 0.0, 1.0);
     let ol_color = Color::rgb(0.0, 1.0, 1.0);
     buf.set_face_with_font(
-        3,
+        FaceId::new(3),
         Color::WHITE,
         None,
         "monospace",
@@ -1111,7 +1111,7 @@ fn get_current_bg_returns_current_face_bg() {
 
     let bg = Color::rgb(0.1, 0.2, 0.3);
     buf.set_face(
-        1,
+        FaceId::new(1),
         Color::WHITE,
         Some(bg),
         400,
@@ -1191,7 +1191,7 @@ fn set_phys_cursor_normalizes_text_slot_geometry() {
     let mut buf = FrameGlyphBuffer::new();
     buf.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::Text, None);
     buf.add_char('2', 8.0, 70.0, 8.108109, 18.0, 14.0, false);
-    buf.add_stretch(16.108109, 70.0, 8.108109, 18.0, Color::WHITE, 0, false);
+    buf.add_stretch(16.108109, 70.0, 8.108109, 18.0, Color::WHITE, FaceId::new(0), false);
     buf.add_char('d', 24.216217, 70.0, 8.0, 18.0, 14.0, false);
     let text_slot = buf.glyphs[2].slot_id().expect("text slot");
 
@@ -1272,7 +1272,7 @@ fn font_size_accessors() {
 
     // The current font size flows into the face synthesized by set_face, and
     // a char added afterwards resolves its size from that face.
-    buf.set_face(1, Color::WHITE, None, 400, false, 0, None, 0, None, 0, None);
+    buf.set_face(FaceId::new(1), Color::WHITE, None, 400, false, 0, None, 0, None, 0, None);
     buf.add_char('X', 0.0, 0.0, 10.0, 20.0, 15.0, false);
     match &buf.glyphs[0] {
         FrameGlyph::Char { face_id, .. } => {
@@ -1547,7 +1547,7 @@ fn full_frame_simulation() {
     // Window 1: some text
     let text_fg = Color::rgb(0.87, 0.87, 0.87);
     buf.set_face_with_font(
-        0, text_fg, None, "Iosevka", 400, false, 14.0, 0, None, 0, None, 0, None, false,
+        FaceId::new(0), text_fg, None, "Iosevka", 400, false, 14.0, 0, None, 0, None, 0, None, false,
     );
     for (i, ch) in "Hello, Neomacs!".chars().enumerate() {
         buf.add_char(ch, i as f32 * 8.0, 0.0, 8.0, 16.0, 12.0, false);
@@ -1594,7 +1594,7 @@ fn full_frame_simulation() {
     // Mode-line (overlay)
     let ml_bg = Color::rgb(0.2, 0.2, 0.3);
     buf.set_face(
-        10,
+        FaceId::new(10),
         Color::WHITE,
         Some(ml_bg),
         700,
@@ -1607,7 +1607,7 @@ fn full_frame_simulation() {
         None,
     );
     buf.set_draw_context(DisplayWindowId::new(1), GlyphRowRole::ModeLine, None);
-    buf.add_stretch(0.0, 1060.0, 1920.0, 20.0, ml_bg, 10, true);
+    buf.add_stretch(0.0, 1060.0, 1920.0, 20.0, ml_bg, FaceId::new(10), true);
 
     // Window infos
     buf.add_window_info(

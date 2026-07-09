@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use super::*;
 use crate::display_buffer_display_property_render::{
     BufferDisplayPropertyTextReplacementRenderOutcome,
@@ -161,7 +162,7 @@ fn text_row_source_measure_state<'a>(
 fn write_char_to_current_row_with_width(
     builder: &mut crate::display_output_builder::DisplayOutputBuilder,
     ch: char,
-    face_id: u32,
+    face_id: FaceId,
     charpos: usize,
     pixel_width: f32,
 ) {
@@ -346,7 +347,7 @@ fn buffer_line_number_margin_render_request_renders_and_consumes_pending_margin(
     assert!(
         margin
             .iter()
-            .all(|glyph| glyph.face_id == BasicFaceId::SENTINEL)
+            .all(|glyph| glyph.face_id == FaceId::new(BasicFaceId::SENTINEL))
     );
     assert_eq!(face_scan, FaceScanCheckpoint::initial());
     assert!(!line_numbers.should_render());
@@ -403,7 +404,7 @@ fn buffer_line_number_margin_render_request_renders_blank_gutter_on_continuation
     assert!(
         margin
             .iter()
-            .all(|glyph| glyph.face_id == BasicFaceId::SENTINEL)
+            .all(|glyph| glyph.face_id == FaceId::new(BasicFaceId::SENTINEL))
     );
     assert!(!line_numbers.should_render());
 }
@@ -464,7 +465,7 @@ fn display_row_append_metrics_builds_from_active_face_state() {
     let base = resolver.default_face().clone();
     let mut font_metrics = None;
     let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
-        7,
+        FaceId::new(7),
         &base,
         None,
         7.5,
@@ -501,7 +502,7 @@ fn display_row_append_metrics_builds_display_box_from_active_face_state() {
     let base = resolver.default_face().clone();
     let mut font_metrics = None;
     let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
-        7,
+        FaceId::new(7),
         &base,
         None,
         7.5,
@@ -548,7 +549,7 @@ fn buffer_current_face_resolution_context_skips_before_checkpoint() {
     let mut font_metrics = None;
     let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
     let measured = measurement_policy.measured_face(
-        7,
+        FaceId::new(7),
         &default_face,
         None,
         8.0,
@@ -605,8 +606,8 @@ fn buffer_current_face_resolution_context_skips_before_checkpoint() {
     );
 
     assert!(!resolved);
-    assert_eq!(active_face.face_id(), 7);
-    assert_eq!(face_ids.allocate(), 20);
+    assert_eq!(active_face.face_id(), FaceId::new(7));
+    assert_eq!(face_ids.allocate(), FaceId::new(20));
 }
 
 #[test]
@@ -624,7 +625,7 @@ fn buffer_current_face_resolution_context_resolves_due_face() {
     let mut font_metrics = None;
     let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
     let measured = measurement_policy.measured_face(
-        7,
+        FaceId::new(7),
         &default_face,
         None,
         8.0,
@@ -680,7 +681,7 @@ fn buffer_current_face_resolution_context_resolves_due_face() {
     );
 
     assert!(resolved);
-    assert_eq!(active_face.face_id(), 20);
+    assert_eq!(active_face.face_id(), FaceId::new(20));
     assert_eq!(active_face.metrics().row_height(), 16.0);
     assert_eq!(row_geometry.height(), 16.0);
 }
@@ -1168,7 +1169,7 @@ fn buffer_hscroll_skip_render_request_appends_left_truncation_marker() {
     let mut context = RowTransitionTestContext::new("hscroll-render-request-marker");
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
@@ -1283,7 +1284,7 @@ fn buffer_hscroll_skip_action_applies_line_break_transition_state() {
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         geometry.current_row_marker(),
-        (Color::from_pixel(0x112233), 17),
+        (Color::from_pixel(0x112233), FaceId::new(17)),
     );
     let mut x = 80.0;
 
@@ -1309,7 +1310,7 @@ fn buffer_hscroll_skip_action_applies_line_break_transition_state() {
 
 #[test]
 fn buffer_hscroll_skip_action_captures_line_break_cursor() {
-    let active_face = test_active_face_state(9, 8.0);
+    let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let action = BufferSourceHscrollSkipAction::LineBreak {
         ch_start_byte_idx: 3,
@@ -1336,7 +1337,7 @@ fn buffer_hscroll_skip_action_captures_line_break_cursor() {
 
 #[test]
 fn buffer_hscroll_skip_action_applies_after_line_break_transition() {
-    let active_face = test_active_face_state(9, 8.0);
+    let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let action = BufferSourceHscrollSkipAction::LineBreak {
         ch_start_byte_idx: 3,
@@ -1361,7 +1362,7 @@ fn buffer_hscroll_skip_action_applies_after_line_break_transition() {
 
 #[test]
 fn buffer_hscroll_skip_action_skips_after_state_when_transition_exhausted() {
-    let active_face = test_active_face_state(9, 8.0);
+    let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let action = BufferSourceHscrollSkipAction::LineBreak {
         ch_start_byte_idx: 3,
@@ -1386,7 +1387,7 @@ fn buffer_hscroll_skip_action_skips_after_state_when_transition_exhausted() {
 
 #[test]
 fn buffer_hscroll_skip_action_captures_text_cursor() {
-    let active_face = test_active_face_state(9, 8.0);
+    let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let action = BufferSourceHscrollSkipAction::Text {
         ch_start_byte_idx: 5,
@@ -1427,7 +1428,7 @@ fn buffer_hscroll_skip_action_appends_left_truncation_marker_and_marks_row() {
 
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
@@ -1723,7 +1724,7 @@ fn invisible_text_skip_advances_line_numbers_by_hidden_newlines() {
 
 #[test]
 fn buffer_invisible_text_skip_captures_cursor_at_hidden_span_start() {
-    let active_face = test_active_face_state(9, 8.0);
+    let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(2, 24.0, 0.0, 16.0, 12.0);
     let hidden = BufferSourceInvisibleTextSkip::new(5, 8, 14, 14, true, false, 0);
     let mut cursor = CursorCaptureState::new();
@@ -1741,7 +1742,7 @@ fn buffer_invisible_text_skip_captures_cursor_at_hidden_span_start() {
 
 #[test]
 fn buffer_invisible_text_skip_keeps_cursor_missing_when_point_is_visible() {
-    let active_face = test_active_face_state(9, 8.0);
+    let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(2, 24.0, 0.0, 16.0, 12.0);
     let hidden = BufferSourceInvisibleTextSkip::new(5, 8, 14, 14, false, false, 0);
     let mut cursor = CursorCaptureState::new();
@@ -1811,7 +1812,7 @@ fn buffer_invisible_text_render_request_appends_ellipsis_and_captures_cursor() {
     let snapshot = current_buffer_snapshot(&context.eval, buf_id);
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
@@ -2623,7 +2624,7 @@ fn buffer_text_line_break_source_action_builds_row_end_cursor_info() {
         .expect("current buffer")
         .id();
     let snapshot = current_buffer_snapshot(&eval, buf_id);
-    let active_face = test_active_face_state(9, 8.0);
+    let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
 
     let action = BufferSourceLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
@@ -2645,7 +2646,7 @@ fn buffer_text_line_break_source_action_captures_cursor_when_point_matches() {
         .expect("current buffer")
         .id();
     let snapshot = current_buffer_snapshot(&eval, buf_id);
-    let active_face = test_active_face_state(9, 8.0);
+    let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let action = BufferSourceLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
     let mut cursor = CursorCaptureState::new();
@@ -2668,7 +2669,7 @@ fn buffer_text_line_break_source_action_keeps_cursor_missing_when_point_differs(
         .expect("current buffer")
         .id();
     let snapshot = current_buffer_snapshot(&eval, buf_id);
-    let active_face = test_active_face_state(9, 8.0);
+    let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let action = BufferSourceLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
     let mut cursor = CursorCaptureState::new();
@@ -2695,7 +2696,7 @@ fn buffer_text_line_break_source_action_applies_row_transition_state() {
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         geometry.current_row_marker(),
-        (Color::from_pixel(0x112233), 17),
+        (Color::from_pixel(0x112233), FaceId::new(17)),
     );
     let mut box_face = BoxFaceRowState::inactive();
     box_face.activate(geometry.current_row_marker(), 8.0);
@@ -2753,7 +2754,7 @@ fn buffer_text_line_break_source_action_applies_after_transition() {
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let geometry = DisplayRowGeometryState::new(1, 16.0, 0.0, 16.0, 12.0);
     let action = BufferSourceLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
-    let active_face = test_active_face_state_with_extend(23, 8.0, true);
+    let active_face = test_active_face_state_with_extend(FaceId::new(23), 8.0, true);
     let mut row_extend = DisplayRowScopedValue::inactive();
     let mut box_face = BoxFaceRowState::inactive();
     box_face.activate(geometry.current_row_marker(), 8.0);
@@ -2794,7 +2795,7 @@ fn buffer_text_line_break_source_action_skips_after_state_when_transition_exhaus
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let geometry = DisplayRowGeometryState::new(1, 16.0, 0.0, 16.0, 12.0);
     let action = BufferSourceLineBreakSourceAction::for_newline(&snapshot, 4, 12, 16.0, 0.0);
-    let active_face = test_active_face_state_with_extend(23, 8.0, true);
+    let active_face = test_active_face_state_with_extend(FaceId::new(23), 8.0, true);
     let mut row_extend = DisplayRowScopedValue::inactive();
     let mut box_face = BoxFaceRowState::inactive();
     let mut position = DisplaySourceTextPosition::new(2, 9);
@@ -2833,7 +2834,7 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     }
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let mut context = RowTransitionTestContext::new("line-break-render-request");
-    let active_face = test_active_face_state(9, 8.0);
+    let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let text = b"\nnext";
     let mut byte_idx = 1;
     let source_char = DisplaySourceStepChar::new('\n', 0, 0);
@@ -2844,7 +2845,7 @@ fn buffer_text_line_break_render_request_emits_row_transition_and_syncs_position
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         context.geometry.current_row_marker(),
-        (Color::from_pixel(0x112233), 17),
+        (Color::from_pixel(0x112233), FaceId::new(17)),
     );
     let mut box_face = BoxFaceRowState::inactive();
     box_face.activate(context.geometry.current_row_marker(), 8.0);
@@ -3005,7 +3006,7 @@ fn buffer_selective_display_tail_render_request_appends_marker_and_transitions_r
     let snapshot = current_buffer_snapshot(&context.eval, buf_id);
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
@@ -3177,7 +3178,7 @@ fn buffer_text_truncation_skip_action_applies_transition_state() {
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         geometry.current_row_marker(),
-        (Color::from_pixel(0x112233), 17),
+        (Color::from_pixel(0x112233), FaceId::new(17)),
     );
     let mut x = 80.0;
 
@@ -3295,7 +3296,7 @@ fn buffer_text_word_wrap_source_action_applies_transition_state() {
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         geometry.current_row_marker(),
-        (Color::from_pixel(0x112233), 17),
+        (Color::from_pixel(0x112233), FaceId::new(17)),
     );
 
     action.apply_before_row_transition(
@@ -3387,7 +3388,7 @@ fn word_wrap_break_glyph_checkpoint_rolls_partial_word_off_first_row() {
 
     // Draw the first full word and its trailing space onto the row.
     for (offset, ch) in "word09 ".chars().enumerate() {
-        write_char_to_current_row_with_width(&mut context.builder, ch, 0, offset, 8.0);
+        write_char_to_current_row_with_width(&mut context.builder, ch, FaceId::new(0), offset, 8.0);
     }
 
     // At the word boundary (start of the next word `word10`), word-wrap records
@@ -3418,7 +3419,7 @@ fn word_wrap_break_glyph_checkpoint_rolls_partial_word_off_first_row() {
     // Now the partial next word (`wo` of `word10`) fits and gets drawn before the
     // overflow is detected.
     for (offset, ch) in "wo".chars().enumerate() {
-        write_char_to_current_row_with_width(&mut context.builder, ch, 0, 7 + offset, 8.0);
+        write_char_to_current_row_with_width(&mut context.builder, ch, FaceId::new(0), 7 + offset, 8.0);
     }
     {
         let row = context.builder.current_row_for_test().expect("current row");
@@ -3467,7 +3468,7 @@ fn buffer_text_special_wrap_source_action_applies_transition_state() {
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         geometry.current_row_marker(),
-        (Color::from_pixel(0x445566), 21),
+        (Color::from_pixel(0x445566), FaceId::new(21)),
     );
     let mut x = 88.0;
 
@@ -3536,7 +3537,7 @@ fn buffer_text_special_overflow_render_request_wraps_then_keeps_prepared_append(
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         context.geometry.current_row_marker(),
-        (Color::from_pixel(0x445566), 21),
+        (Color::from_pixel(0x445566), FaceId::new(21)),
     );
     let mut x = 80.0;
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
@@ -3667,7 +3668,7 @@ fn buffer_text_character_wrap_source_action_applies_transition_state() {
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         geometry.current_row_marker(),
-        (Color::from_pixel(0x445566), 21),
+        (Color::from_pixel(0x445566), FaceId::new(21)),
     );
     let mut x = 88.0;
 
@@ -3781,7 +3782,7 @@ fn buffer_text_overflow_render_request_handles_character_wrap_transition() {
     let mut row_extend = DisplayRowScopedValue::inactive();
     row_extend.activate(
         context.geometry.current_row_marker(),
-        (Color::from_pixel(0x445566), 21),
+        (Color::from_pixel(0x445566), FaceId::new(21)),
     );
     let mut x = 80.0;
     let mut line_numbers = LineNumberRenderState::new(false, 0, 0);
@@ -3998,12 +3999,12 @@ fn display_row_overflow_transition_request_marks_visual_wrap_rows_and_emits_boun
     assert_eq!(ctx.row_y_positions.recorded(), &[0.0, 16.0]);
 }
 
-fn test_active_face_state(face_id: u32, char_width: f32) -> DisplayRowActiveFaceState {
+fn test_active_face_state(face_id: FaceId, char_width: f32) -> DisplayRowActiveFaceState {
     test_active_face_state_with_extend(face_id, char_width, false)
 }
 
 fn test_active_face_state_with_extend(
-    face_id: u32,
+    face_id: FaceId,
     char_width: f32,
     extend: bool,
 ) -> DisplayRowActiveFaceState {
@@ -4071,7 +4072,7 @@ fn test_advance_resolution_surface() -> DisplayRowAppendSurface {
 
 #[test]
 fn fallback_display_source_natural_measurement_uses_frame_tab_policy() {
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(4));
     let mut font_metrics = None;
 
@@ -4091,7 +4092,7 @@ fn fallback_display_source_natural_measurement_uses_frame_tab_policy() {
 
 #[test]
 fn fallback_display_source_natural_measurement_zeroes_cluster_continuation() {
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
 
@@ -4111,7 +4112,7 @@ fn fallback_display_source_natural_measurement_zeroes_cluster_continuation() {
 
 #[test]
 fn fallback_display_source_natural_measurement_uses_face_columns() {
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let mut font_metrics = None;
 
@@ -4228,12 +4229,12 @@ fn buffer_text_source_range_append_requests_preserve_source_and_kind() {
         ),
         buf_id,
         &snapshot,
-        7,
+        FaceId::new(7),
     )
     .expect("tab append request");
     assert_eq!(tab_request.append_kind(), DisplayRowAppendKind::Tab);
     let tab_item = tab_request.into_item();
-    assert_eq!(tab_item.face, RenderFaceRef::FaceId(7));
+    assert_eq!(tab_item.face, RenderFaceRef::FaceId(FaceId::new(7)));
     assert_eq!(
         tab_item.span.start,
         DisplaySourcePosition::buffer(buf_id, CharPos0::new(0), EmacsBytePos::new(0))
@@ -4250,7 +4251,7 @@ fn buffer_text_source_range_append_requests_preserve_source_and_kind() {
         ),
         buf_id,
         &snapshot,
-        9,
+        FaceId::new(9),
     )
     .expect("mapped append request");
     assert_eq!(
@@ -4258,7 +4259,7 @@ fn buffer_text_source_range_append_requests_preserve_source_and_kind() {
         DisplayRowAppendKind::SourceMappedText
     );
     let mapped_item = mapped_request.into_item();
-    assert_eq!(mapped_item.face, RenderFaceRef::FaceId(9));
+    assert_eq!(mapped_item.face, RenderFaceRef::FaceId(FaceId::new(9)));
     assert_eq!(
         mapped_item.span.start,
         DisplaySourcePosition::buffer(buf_id, CharPos0::new(1), EmacsBytePos::new(1))
@@ -4288,7 +4289,7 @@ fn buffer_text_source_text_request_uses_source_step_char_payload() {
         'z',
         DisplaySourceAppendRenderPlan::natural(8.0),
     )
-    .append_request(buf_id, &snapshot, 7)
+    .append_request(buf_id, &snapshot, FaceId::new(7))
     .expect("append request");
 
     assert_eq!(request.append_kind(), DisplayRowAppendKind::SourceText);
@@ -4314,7 +4315,7 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = test_advance_resolution_surface();
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
@@ -4329,7 +4330,7 @@ fn buffer_text_source_append_context_resolves_natural_measurement_for_ascii() {
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     );
     let source_item =
-        buffer_source_mapped_display_item(buf_id, 0, 1, "x", RenderFaceRef::FaceId(7));
+        buffer_source_mapped_display_item(buf_id, 0, 1, "x", RenderFaceRef::FaceId(FaceId::new(7)));
 
     let resolved = append_context.resolve_source_render_plan_to_text_row(
         &geometry,
@@ -4365,7 +4366,7 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = test_advance_resolution_surface();
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
@@ -4380,7 +4381,7 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     );
     let source_item =
-        buffer_source_mapped_display_item(buf_id, 0, 1, "\u{0633}", RenderFaceRef::FaceId(7));
+        buffer_source_mapped_display_item(buf_id, 0, 1, "\u{0633}", RenderFaceRef::FaceId(FaceId::new(7)));
 
     let resolved = append_context.resolve_source_render_plan_to_text_row(
         &geometry,
@@ -4411,12 +4412,12 @@ fn buffer_text_source_append_context_resolves_complex_text_measurement() {
 #[test]
 fn synthetic_display_text_item_builds_synthetic_text_run() {
     let mut source =
-        crate::display_source::SyntheticTextItemSource::new(9, "...", RenderFaceRef::FaceId(7), 0);
+        crate::display_source::SyntheticTextItemSource::new(9, "...", RenderFaceRef::FaceId(FaceId::new(7)), 0);
     let item = source
         .next_item(&mut crate::display_source::DisplaySourceContext::empty())
         .expect("synthetic item");
 
-    assert_eq!(item.face, RenderFaceRef::FaceId(7));
+    assert_eq!(item.face, RenderFaceRef::FaceId(FaceId::new(7)));
     assert_eq!(item.span.start, DisplaySourcePosition::synthetic(9, 0));
     assert_eq!(item.span.end, DisplaySourcePosition::synthetic(9, 3));
     match item.kind {
@@ -4479,7 +4480,7 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
     let table = neovm_core::face::FaceTable::new();
     let face_resolver =
         crate::neovm_bridge::FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
 
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
@@ -4526,7 +4527,7 @@ fn synthetic_text_append_context_renders_fragment_and_emits_slots() {
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 3);
-            assert!(text.iter().all(|glyph| glyph.face_id == 7));
+            assert!(text.iter().all(|glyph| glyph.face_id == FaceId::new(7)));
             assert!(
                 text.iter()
                     .all(|glyph| matches!(glyph.glyph_type, GlyphType::Char { ch: '.' }))
@@ -4568,7 +4569,7 @@ fn buffer_synthetic_text_render_context_renders_active_marker() {
 
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
@@ -4604,7 +4605,7 @@ fn buffer_synthetic_text_render_context_renders_active_marker() {
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[GlyphArea::Text.index()];
             assert_eq!(text.len(), 3);
-            assert!(text.iter().all(|glyph| glyph.face_id == 7));
+            assert!(text.iter().all(|glyph| glyph.face_id == FaceId::new(7)));
         })
         .expect("current row");
 }
@@ -4632,7 +4633,7 @@ fn buffer_synthetic_text_render_context_renders_hscroll_marker() {
 
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
@@ -4668,7 +4669,7 @@ fn buffer_synthetic_text_render_context_renders_hscroll_marker() {
             let text = &row.glyphs[GlyphArea::Text.index()];
             assert_eq!(text.len(), 1);
             assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: '$' }));
-            assert_eq!(text[0].face_id, 0);
+            assert_eq!(text[0].face_id, FaceId::new(0));
         })
         .expect("current row");
 }
@@ -4716,7 +4717,7 @@ fn buffer_line_prefix_render_context_renders_default_prefix_and_clears_request()
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
     let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
@@ -4761,8 +4762,8 @@ fn buffer_line_prefix_render_context_renders_default_prefix_and_clears_request()
             assert_eq!(text.len(), 2);
             assert!(matches!(text[0].glyph_type, GlyphType::Char { ch: '=' }));
             assert!(matches!(text[1].glyph_type, GlyphType::Char { ch: '>' }));
-            assert_eq!(text[0].face_id, 0);
-            assert_eq!(text[1].face_id, 0);
+            assert_eq!(text[0].face_id, FaceId::new(0));
+            assert_eq!(text[1].face_id, FaceId::new(0));
         })
         .expect("current row");
 }
@@ -4795,7 +4796,7 @@ fn buffer_line_prefix_render_request_applies_rendered_position() {
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
     let mut face_ids = FrameFaceIdAllocator::new(20);
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
@@ -4881,10 +4882,10 @@ fn synthetic_text_append_context_composes_with_current_row_tail() {
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    write_char_to_current_row_with_width(&mut builder, 'e', 7, 0, 8.0);
+    write_char_to_current_row_with_width(&mut builder, 'e', FaceId::new(7), 0, 8.0);
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
 
-    let append_context = SyntheticTextAppendContext::new(7, base_face, frame);
+    let append_context = SyntheticTextAppendContext::new(FaceId::new(7), base_face, frame);
     let progress = append_context
         .append_to_text_row_and_emit(
             &mut text_row_source_render_state(
@@ -5061,7 +5062,7 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
     let mut source = crate::display_source::LispStringSourceCursor::new(
         101,
         Value::string("\u{301}"),
-        RenderFaceRef::FaceId(7),
+        RenderFaceRef::FaceId(FaceId::new(7)),
     )
     .expect("lisp string source");
     let mut source_state = DisplayRowSourceState::default();
@@ -5071,13 +5072,13 @@ fn render_natural_display_item_source_into_current_text_row_and_emit_uses_curren
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    write_char_to_current_row_with_width(&mut builder, 'e', 7, 0, 8.0);
+    write_char_to_current_row_with_width(&mut builder, 'e', FaceId::new(7), 0, 8.0);
 
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let position = DisplayRowPosition::new(8.0, 1);
     let request = frame.source_append_render_request(
         position,
-        7,
+        FaceId::new(7),
         &base_face,
         DisplayRowAppendKind::SourceText,
     );
@@ -5142,7 +5143,7 @@ fn render_natural_display_item_source_into_current_text_row_stamps_slots_at_curr
     let mut source = crate::display_source::LispStringSourceCursor::new(
         101,
         Value::string("x"),
-        RenderFaceRef::FaceId(7),
+        RenderFaceRef::FaceId(FaceId::new(7)),
     )
     .expect("lisp string source");
     let mut source_state = DisplayRowSourceState::default();
@@ -5152,14 +5153,14 @@ fn render_natural_display_item_source_into_current_text_row_stamps_slots_at_curr
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    write_char_to_current_row_with_width(&mut builder, 'a', 7, 0, 8.0);
-    write_char_to_current_row_with_width(&mut builder, 'b', 7, 1, 8.0);
+    write_char_to_current_row_with_width(&mut builder, 'a', FaceId::new(7), 0, 8.0);
+    write_char_to_current_row_with_width(&mut builder, 'b', FaceId::new(7), 1, 8.0);
 
     let frame = test_append_frame(8.0, 8.0, DisplayTabPolicy::every(8));
     let position = DisplayRowPosition::new(0.0, 0);
     let request = frame.source_append_render_request(
         position,
-        7,
+        FaceId::new(7),
         &base_face,
         DisplayRowAppendKind::SourceText,
     );
@@ -5197,8 +5198,8 @@ fn render_natural_display_item_source_into_current_text_row_stamps_slots_at_curr
 
 #[test]
 fn render_face_ref_id_uses_fallback_for_inherit() {
-    assert_eq!(render_face_ref_id(RenderFaceRef::FaceId(12), 7), 12);
-    assert_eq!(render_face_ref_id(RenderFaceRef::Inherit, 7), 7);
+    assert_eq!(render_face_ref_id(RenderFaceRef::FaceId(FaceId::new(12)), FaceId::new(7)), FaceId::new(12));
+    assert_eq!(render_face_ref_id(RenderFaceRef::Inherit, FaceId::new(7)), FaceId::new(7));
 }
 
 #[test]
@@ -5269,14 +5270,14 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
             buffer,
             CharPos0::new(0),
             CharPos0::new(2),
-            RenderFaceRef::FaceId(7),
+            RenderFaceRef::FaceId(FaceId::new(7)),
         );
         let mut renderer = DisplayRowRenderer::new(&mut font_metrics);
         let mut source_state = DisplayRowSourceState::default();
         DisplayRowSourceFragmentFrame::new(
             DisplayRowGeometry::new(0.0, 160.0, 16.0, 8.0, 12.0, DisplayTabPolicy::every(8)),
             GlyphRowRole::Text,
-            7,
+            FaceId::new(7),
             &base_face,
         )
         .render_request(DisplayRowRenderBounds::new(
@@ -5301,8 +5302,8 @@ fn append_rendered_display_row_fragment_to_text_row_and_emit_appends_glyphs_and_
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    write_char_to_current_row_with_width(&mut builder, 'X', 7, 0, 8.0);
-    write_char_to_current_row_with_width(&mut builder, 'Y', 7, 0, 8.0);
+    write_char_to_current_row_with_width(&mut builder, 'X', FaceId::new(7), 0, 8.0);
+    write_char_to_current_row_with_width(&mut builder, 'Y', FaceId::new(7), 0, 8.0);
 
     let end = append_rendered_display_row_fragment_to_text_row_and_emit(
         &mut builder,
@@ -5364,7 +5365,7 @@ fn display_row_append_surface_builds_positioned_source_requests() {
     let position = DisplayRowPosition::new(18.0, 2);
     let request = frame.source_append_render_request(
         position,
-        42,
+        FaceId::new(42),
         base_face,
         DisplayRowAppendKind::SourceText,
     );
@@ -5377,7 +5378,7 @@ fn display_row_append_surface_builds_positioned_source_requests() {
         DisplayRowMaxX::Bounded(128.0)
     );
     assert_eq!(request.role(), GlyphRowRole::Text);
-    assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(42));
+    assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(FaceId::new(42)));
     assert_eq!(
         *request.geometry(),
         DisplayRowGeometry::new(20.0, 120.0, 16.0, 9.0, 11.0, tab_policy)
@@ -5412,7 +5413,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
 
     let ordinary = frame.source_append_render_request(
         position,
-        42,
+        FaceId::new(42),
         base_face,
         DisplayRowAppendKind::SourceText,
     );
@@ -5433,7 +5434,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
     assert_eq!(ordinary_output.height(), 16.0);
 
     let tab =
-        frame.source_append_render_request(position, 42, base_face, DisplayRowAppendKind::Tab);
+        frame.source_append_render_request(position, FaceId::new(42), base_face, DisplayRowAppendKind::Tab);
     let tab_output = tab.output();
     let tab = tab.row_request();
     assert_eq!(tab.render_bounds().max_x(), DisplayRowMaxX::Unbounded);
@@ -5442,7 +5443,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
 
     let control = frame.source_append_render_request(
         position,
-        42,
+        FaceId::new(42),
         base_face,
         DisplayRowAppendKind::ControlChar,
     );
@@ -5457,7 +5458,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
 
     let mapped = frame.source_append_render_request(
         position,
-        42,
+        FaceId::new(42),
         base_face,
         DisplayRowAppendKind::SourceMappedText,
     );
@@ -5471,7 +5472,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
 
     let glyphless = frame.source_append_render_request(
         position,
-        42,
+        FaceId::new(42),
         base_face,
         DisplayRowAppendKind::Glyphless,
     );
@@ -5485,7 +5486,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
 
     let replacement = frame.source_append_render_request(
         position,
-        42,
+        FaceId::new(42),
         base_face,
         DisplayRowAppendKind::DisplayReplacement,
     );
@@ -5500,7 +5501,7 @@ fn display_row_append_frame_derives_layout_output_and_bounds() {
 
     let replacement_string = frame.source_append_render_request(
         position,
-        42,
+        FaceId::new(42),
         base_face,
         DisplayRowAppendKind::DisplayReplacementString,
     );
@@ -5583,7 +5584,7 @@ fn display_row_append_frame_builds_positioned_source_append_render_request() {
     let position = DisplayRowPosition::new(18.0, 2);
     let request = frame.source_append_render_request(
         position,
-        42,
+        FaceId::new(42),
         base_face,
         DisplayRowAppendKind::SourceText,
     );
@@ -5595,7 +5596,7 @@ fn display_row_append_frame_builds_positioned_source_append_render_request() {
         request.render_bounds().max_x(),
         DisplayRowMaxX::Bounded(128.0)
     );
-    assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(42));
+    assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(FaceId::new(42)));
     assert_eq!(request.role(), GlyphRowRole::Text);
     assert_eq!(request.geometry().y(), 20.0);
     assert_eq!(request.geometry().char_width(), 9.0);
@@ -5627,7 +5628,7 @@ fn display_row_append_frame_exposes_source_row_request_through_append_request() 
     let request = frame
         .source_append_render_request(
             DisplayRowPosition::new(18.0, 2),
-            42,
+            FaceId::new(42),
             base_face,
             DisplayRowAppendKind::SourceText,
         )
@@ -5637,7 +5638,7 @@ fn display_row_append_frame_exposes_source_row_request_through_append_request() 
         request.render_bounds().max_x(),
         DisplayRowMaxX::Bounded(128.0)
     );
-    assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(42));
+    assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(FaceId::new(42)));
     assert_eq!(request.role(), GlyphRowRole::Text);
     assert_eq!(request.geometry().y(), 20.0);
     assert_eq!(request.geometry().char_width(), 9.0);
@@ -5666,14 +5667,14 @@ fn display_row_append_frame_builds_source_measure_request() {
 
     let request = frame.source_append_measure_request(
         position,
-        42,
+        FaceId::new(42),
         base_face,
         DisplayRowAppendKind::SourceText,
     );
 
     assert_eq!(request.render_bounds().start(), position);
     assert_eq!(request.render_bounds().max_x(), DisplayRowMaxX::Unbounded);
-    assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(42));
+    assert_eq!(request.base_face_ref(), RenderFaceRef::FaceId(FaceId::new(42)));
     assert_eq!(request.role(), GlyphRowRole::Text);
     assert_eq!(request.geometry().char_width(), 9.0);
 }
@@ -5702,14 +5703,14 @@ fn display_row_source_append_render_request_uses_frame_policy() {
     let position = DisplayRowPosition::new(18.0, 2);
     let request = frame.source_append_render_request(
         position,
-        42,
+        FaceId::new(42),
         base_face,
         DisplayRowAppendKind::ControlChar,
     );
     let output = request.output();
     let request = request.row_request();
 
-    assert_eq!(request.base_face_id(), 42);
+    assert_eq!(request.base_face_id(), FaceId::new(42));
     assert_eq!(request.render_bounds().start(), position);
     assert_eq!(
         request.render_bounds().max_x(),
@@ -5742,20 +5743,20 @@ fn display_row_append_frame_builds_control_char_source_append_render_request() {
     let position = DisplayRowPosition::new(18.0, 2);
     let request = frame.source_append_render_request(
         position,
-        42,
+        FaceId::new(42),
         base_face,
         DisplayRowAppendKind::ControlChar,
     );
     let output = request.output();
     let request = request.row_request();
 
-    assert_eq!(request.base_face_id(), 42);
+    assert_eq!(request.base_face_id(), FaceId::new(42));
     assert_eq!(request.render_bounds().start(), position);
     assert_eq!(
         request.render_bounds().max_x(),
         DisplayRowMaxX::Bounded(148.0)
     );
-    assert_eq!(request.base_face_id(), 42);
+    assert_eq!(request.base_face_id(), FaceId::new(42));
     assert_eq!(output.row(), 3);
     assert_eq!(output.height(), 14.0);
 }
@@ -5835,7 +5836,7 @@ fn display_row_append_surface_builds_frame_from_active_face_state() {
     let base = resolver.default_face().clone();
     let mut font_metrics = None;
     let measured = DisplayRowMeasurementPolicy::for_frame(false).measured_face(
-        7,
+        FaceId::new(7),
         &base,
         None,
         7.5,
@@ -5925,7 +5926,7 @@ fn layout_display_source_face_resolver_records_pending_faces_without_builder() {
     let params = crate::display_source_resolver::DisplaySourceResolveParams::new(
         crate::display_source_resolver::DisplaySourceFaceBasis::new(
             &face_resolver,
-            0,
+            FaceId::new(0),
             base_face,
             crate::display_row_metrics::DisplayRowFallbackMetrics::from_default_face_extents(
                 8.0, 16.0, 12.0,
@@ -5943,14 +5944,14 @@ fn layout_display_source_face_resolver_records_pending_faces_without_builder() {
 
     let face = crate::display_source::DisplayItemFaceResolver::resolve_face_ref(
         &mut resolver,
-        RenderFaceRef::FaceId(0),
+        RenderFaceRef::FaceId(FaceId::new(0)),
         face_value,
     );
 
-    assert_eq!(face, RenderFaceRef::FaceId(20));
+    assert_eq!(face, RenderFaceRef::FaceId(FaceId::new(20)));
     assert_eq!(face_ids.finish(), 21);
     assert_eq!(pending_faces.len(), 1);
-    assert_eq!(pending_faces[0].face_id(), 20);
+    assert_eq!(pending_faces[0].face_id(), FaceId::new(20));
     assert_eq!(pending_faces[0].resolved().fg, 0x00ff0000);
 }
 
@@ -5965,14 +5966,14 @@ fn display_source_resolve_params_are_built_from_typed_face_basis() {
     );
     let basis = crate::display_source_resolver::DisplaySourceFaceBasis::new(
         &face_resolver,
-        7,
+        FaceId::new(7),
         base_face,
         fallback,
     );
 
     let params = crate::display_source_resolver::DisplaySourceResolveParams::new(basis, None);
 
-    assert_eq!(params.face_basis().base_face_id(), 7);
+    assert_eq!(params.face_basis().base_face_id(), FaceId::new(7));
     assert_eq!(params.face_basis().fallback_metrics(), fallback);
     assert!(std::ptr::eq(params.face_basis().base_face(), base_face));
     assert!(std::ptr::eq(
@@ -6002,7 +6003,7 @@ fn resolve_next_display_source_item_returns_item_and_pending_faces() {
         }],
     );
     let mut source =
-        crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(0))
+        crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(FaceId::new(0)))
             .expect("string source");
 
     let resolved = crate::display_source_resolver::resolve_next_display_source_item(
@@ -6010,7 +6011,7 @@ fn resolve_next_display_source_item_returns_item_and_pending_faces() {
         crate::display_source_resolver::DisplaySourceResolveParams::new(
             crate::display_source_resolver::DisplaySourceFaceBasis::new(
                 &face_resolver,
-                0,
+                FaceId::new(0),
                 base_face,
                 crate::display_row_metrics::DisplayRowFallbackMetrics::from_default_face_extents(
                     8.0, 16.0, 12.0,
@@ -6024,9 +6025,9 @@ fn resolve_next_display_source_item_returns_item_and_pending_faces() {
 
     let (item, pending_faces) = resolved.into_parts();
     let item = item.expect("source item");
-    assert_eq!(item.face, RenderFaceRef::FaceId(20));
+    assert_eq!(item.face, RenderFaceRef::FaceId(FaceId::new(20)));
     assert_eq!(pending_faces.len(), 1);
-    assert_eq!(pending_faces[0].face_id(), 20);
+    assert_eq!(pending_faces[0].face_id(), FaceId::new(20));
     assert_eq!(pending_faces[0].resolved().fg, 0x00ff0000);
 }
 
@@ -6051,7 +6052,7 @@ fn resolve_next_display_source_item_resolves_height_modifier_to_pending_face() {
         }],
     );
     let mut source =
-        crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(0))
+        crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(FaceId::new(0)))
             .expect("string source");
 
     let resolved = crate::display_source_resolver::resolve_next_display_source_item(
@@ -6059,7 +6060,7 @@ fn resolve_next_display_source_item_resolves_height_modifier_to_pending_face() {
         crate::display_source_resolver::DisplaySourceResolveParams::new(
             crate::display_source_resolver::DisplaySourceFaceBasis::new(
                 &face_resolver,
-                0,
+                FaceId::new(0),
                 base_face,
                 crate::display_row_metrics::DisplayRowFallbackMetrics::from_default_face_extents(
                     8.0, 16.0, 12.0,
@@ -6073,9 +6074,9 @@ fn resolve_next_display_source_item_resolves_height_modifier_to_pending_face() {
 
     let (item, pending_faces) = resolved.into_parts();
     let item = item.expect("source item");
-    assert_eq!(item.face, RenderFaceRef::FaceId(20));
+    assert_eq!(item.face, RenderFaceRef::FaceId(FaceId::new(20)));
     assert_eq!(pending_faces.len(), 1);
-    assert_eq!(pending_faces[0].face_id(), 20);
+    assert_eq!(pending_faces[0].face_id(), FaceId::new(20));
     assert_eq!(pending_faces[0].resolved().font_size, 28.0);
     assert_eq!(pending_faces[0].resolved().font_line_height, 32.0);
     assert_eq!(pending_faces[0].resolved().font_ascent, 24.0);
@@ -6110,7 +6111,7 @@ fn display_row_source_walker_reuses_face_cache_across_items() {
         ],
     );
     let source =
-        crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(0))
+        crate::display_source::LispStringSourceCursor::new(1, value, RenderFaceRef::FaceId(FaceId::new(0)))
             .expect("string source");
     let mut source = DisplayRowSourceWalker::new(source);
     let (first, second, third) = {
@@ -6119,7 +6120,7 @@ fn display_row_source_walker_reuses_face_cache_across_items() {
                 .next_step(
                     &face_resolver,
                     base_face,
-                    0,
+                    FaceId::new(0),
                     &mut face_ids,
                     None,
                     8.0,
@@ -6134,12 +6135,12 @@ fn display_row_source_walker_reuses_face_cache_across_items() {
         (next_item("first"), next_item("second"), next_item("third"))
     };
 
-    assert_eq!(first.face, RenderFaceRef::FaceId(20));
-    assert_eq!(second.face, RenderFaceRef::FaceId(0));
-    assert_eq!(third.face, RenderFaceRef::FaceId(20));
+    assert_eq!(first.face, RenderFaceRef::FaceId(FaceId::new(20)));
+    assert_eq!(second.face, RenderFaceRef::FaceId(FaceId::new(0)));
+    assert_eq!(third.face, RenderFaceRef::FaceId(FaceId::new(20)));
     assert_eq!(face_ids.finish(), 21);
     assert_eq!(
-        builder.faces().get(&20).map(|face| face.foreground),
+        builder.faces().get(&FaceId::new(20)).map(|face| face.foreground),
         Some(Color::from_pixel(0x00ff0000))
     );
 }
@@ -6199,7 +6200,7 @@ fn append_lisp_string_to_text_row_appends_propertized_string_items() {
             value,
             1,
             base_face,
-            0,
+            FaceId::new(0),
             &mut face_ids,
             frame,
             DisplayRowPosition::new(0.0, 0),
@@ -6209,14 +6210,14 @@ fn append_lisp_string_to_text_row_appends_propertized_string_items() {
     assert_eq!(end, DisplayRowPosition::new(16.0, 2));
     assert_eq!(face_ids.finish(), 21);
     assert_eq!(
-        builder.faces().get(&20).map(|face| face.foreground),
+        builder.faces().get(&FaceId::new(20)).map(|face| face.foreground),
         Some(Color::from_pixel(0x00ff0000))
     );
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
-            assert_eq!(text[0].face_id, 0);
-            assert_eq!(text[1].face_id, 20);
+            assert_eq!(text[0].face_id, FaceId::new(0));
+            assert_eq!(text[1].face_id, FaceId::new(20));
         })
         .expect("current row");
 }
@@ -6251,7 +6252,7 @@ fn lisp_string_append_context_appends_fragment_items() {
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    let active_face = test_active_face_state(0, 8.0);
+    let active_face = test_active_face_state(FaceId::new(0), 8.0);
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
@@ -6270,7 +6271,7 @@ fn lisp_string_append_context_appends_fragment_items() {
         LispStringSourceId::PREFIX,
         Value::string("=>"),
     );
-    let session_request = LispStringSourceAppendSessionRequest::new(request, 0, base_face);
+    let session_request = LispStringSourceAppendSessionRequest::new(request, FaceId::new(0), base_face);
     let end = append_context.render_active_face_source_request_to_text_row_and_emit(
         &mut text_row_source_render_state(
             &mut builder,
@@ -6325,7 +6326,7 @@ fn buffer_text_source_append_context_appends_source_char() {
     };
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
@@ -6346,7 +6347,7 @@ fn buffer_text_source_append_context_appends_source_char() {
     );
     let source_char = DisplaySourceTextChar::new('a', CharPos0::new(0), 2);
     let source_item =
-        buffer_source_mapped_display_item(buf_id, 0, 1, "a", RenderFaceRef::FaceId(7));
+        buffer_source_mapped_display_item(buf_id, 0, 1, "a", RenderFaceRef::FaceId(FaceId::new(7)));
     let mut append_state = DisplaySourceRowAppendState::default();
     let prepared_append = append_context
         .prepare_source_item_char_at(
@@ -6496,7 +6497,7 @@ fn buffer_text_source_append_context_appends_source_char() {
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 1);
-            assert_eq!(text[0].face_id, 7);
+            assert_eq!(text[0].face_id, FaceId::new(7));
             assert!(matches!(
                 text[0].glyph_type,
                 neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: 'a' }
@@ -6527,7 +6528,7 @@ fn buffer_text_source_render_request_appends_plain_text_run_with_cursor_inside()
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let default_face = face_resolver.default_face().clone();
     let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
@@ -6667,7 +6668,7 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_trailing_enabled
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let default_face = face_resolver.default_face().clone();
     let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
@@ -6818,7 +6819,7 @@ fn buffer_text_source_render_request_keeps_space_run_whole_when_word_wrap_enable
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let default_face = face_resolver.default_face().clone();
     let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
@@ -6969,7 +6970,7 @@ fn buffer_text_source_render_request_renders_fit_prefix_before_overflow() {
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let default_face = face_resolver.default_face().clone();
     let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea::new(0.0, 32.0, 32.0, 0.0),
         DisplayTabPolicy::every(8),
@@ -7115,7 +7116,7 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
     };
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
@@ -7137,7 +7138,7 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
     );
     let source_char = DisplaySourceTextChar::new('a', CharPos0::new(0), 2);
     let source_item =
-        buffer_source_mapped_display_item(buf_id, 0, 1, "a", RenderFaceRef::FaceId(7));
+        buffer_source_mapped_display_item(buf_id, 0, 1, "a", RenderFaceRef::FaceId(FaceId::new(7)));
     let mut append_state = DisplaySourceRowAppendState::default();
     let mut source_render = text_row_source_render_state(
         &mut builder,
@@ -7174,7 +7175,7 @@ fn buffer_text_source_append_context_prepares_current_text_row_source_char() {
 
 #[test]
 fn buffer_end_of_buffer_cursor_action_captures_visible_eob_cursor() {
-    let active_face = test_active_face_state(9, 8.0);
+    let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(2, 32.0, 0.0, 16.0, 12.0);
     let action = BufferSourceEndOfBufferCursorAction::new(5, 9, 9, 9);
     let mut cursor = CursorCaptureState::new();
@@ -7193,7 +7194,7 @@ fn buffer_end_of_buffer_cursor_action_captures_visible_eob_cursor() {
 
 #[test]
 fn buffer_end_of_buffer_cursor_action_keeps_cursor_missing_when_point_differs() {
-    let active_face = test_active_face_state(9, 8.0);
+    let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(2, 32.0, 0.0, 16.0, 12.0);
     let action = BufferSourceEndOfBufferCursorAction::new(5, 9, 12, 10);
     let mut cursor = CursorCaptureState::new();
@@ -7205,7 +7206,7 @@ fn buffer_end_of_buffer_cursor_action_keeps_cursor_missing_when_point_differs() 
 
 #[test]
 fn buffer_end_of_buffer_tail_action_reports_cursor_state() {
-    let active_face = test_active_face_state(9, 8.0);
+    let active_face = test_active_face_state(FaceId::new(9), 8.0);
     let geometry = DisplayRowGeometryState::new(2, 32.0, 0.0, 16.0, 12.0);
     let action = BufferSourceEndOfBufferTailAction::new(5, 9, 9, 9);
     let mut cursor = CursorCaptureState::new();
@@ -7287,7 +7288,7 @@ fn buffer_end_of_buffer_tail_render_request_captures_cursor_and_renders_overlay(
     let snapshot = current_buffer_snapshot(&context.eval, buf_id);
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
@@ -7519,7 +7520,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
         },
     );
     output_emitter.note_display_buffer_pos(LispCharPos1::new(7));
-    write_char_to_current_row_with_width(&mut builder, 'x', 7, 0, 8.0);
+    write_char_to_current_row_with_width(&mut builder, 'x', FaceId::new(7), 0, 8.0);
     crate::window_output::finish_text_window_row(
         TextWindowOutputTarget::from_builder(&mut builder),
         &mut output_emitter,
@@ -7537,7 +7538,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
     let mut face_ids = FrameFaceIdAllocator::new(10);
     let mut font_metrics = None;
     let positions = TextWindowBodyInstallRequest::new(TextWindowBodyInstallRenderContext::new(
-        41, 3, 100, 4, true, false, 0, 5, &row_flags, 9, 8.0,
+        41, 3, 100, 4, true, false, 0, 5, &row_flags, FaceId::new(9), 8.0,
     ))
     .install_and_apply(TextWindowBodyInstallState::new(
         TextWindowOutputTarget::from_builder(&mut builder),
@@ -7561,7 +7562,7 @@ fn buffer_text_window_body_install_request_records_positions_and_edge_markers() 
     assert_eq!(row.ascent_px, 15.0);
     let text = &row.glyphs[GlyphArea::Text.index()];
     assert!(matches!(text[4].glyph_type, GlyphType::Char { ch: '$' }));
-    assert_eq!(text[4].face_id, 9);
+    assert_eq!(text[4].face_id, FaceId::new(9));
 }
 
 #[test]
@@ -7676,7 +7677,7 @@ fn buffer_text_window_terminal_right_border_request_installs_face_and_border() {
     builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     for ch in "abcd".chars() {
-        write_char_to_current_row_with_width(&mut builder, ch, 0, 0, 8.0);
+        write_char_to_current_row_with_width(&mut builder, ch, FaceId::new(0), 0, 8.0);
     }
     builder.end_row();
     builder.end_window();
@@ -7718,7 +7719,7 @@ fn terminal_right_border_face_id_comes_from_the_shared_frame_allocator() {
     builder.begin_window(1, 1, 5, Rect::new(0.0, 0.0, 40.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     for ch in "abcd".chars() {
-        write_char_to_current_row_with_width(&mut builder, ch, 0, 0, 8.0);
+        write_char_to_current_row_with_width(&mut builder, ch, FaceId::new(0), 0, 8.0);
     }
     builder.end_row();
     builder.end_window();
@@ -7743,7 +7744,7 @@ fn terminal_right_border_face_id_comes_from_the_shared_frame_allocator() {
     );
     assert_eq!(
         border_face_id,
-        content_face_id + 1,
+        FaceId::new(content_face_id.get() + 1),
         "border face id must be the next id from the shared frame allocator"
     );
 }
@@ -7756,11 +7757,11 @@ fn buffer_text_window_terminal_right_border_request_pads_blank_rows_and_preserve
     builder.begin_window(1, 3, 5, Rect::new(0.0, 0.0, 40.0, 48.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
     for ch in "ABCD$".chars() {
-        write_char_to_current_row_with_width(&mut builder, ch, 0, 0, 8.0);
+        write_char_to_current_row_with_width(&mut builder, ch, FaceId::new(0), 0, 8.0);
     }
     builder.end_row();
     builder.begin_row(2, GlyphRowRole::Text);
-    write_char_to_current_row_with_width(&mut builder, 'Z', 0, 0, 8.0);
+    write_char_to_current_row_with_width(&mut builder, 'Z', FaceId::new(0), 0, 8.0);
     builder.end_row();
     builder.end_window();
 
@@ -7790,17 +7791,17 @@ fn buffer_text_window_terminal_right_border_request_pads_blank_rows_and_preserve
     assert_eq!(row_text(0), "ABC$");
     assert_eq!(row_text(1), "    ");
     assert_eq!(row_text(2), "Z   ");
-    assert_eq!(matrix.rows[0].glyphs[GlyphArea::Text.index()][3].face_id, 0);
+    assert_eq!(matrix.rows[0].glyphs[GlyphArea::Text.index()][3].face_id, FaceId::new(0));
     assert!(
         matrix.rows[1].glyphs[GlyphArea::Text.index()]
             .iter()
-            .all(|glyph| glyph.face_id == 0),
+            .all(|glyph| glyph.face_id == FaceId::new(0)),
         "right-border padding on blank text rows must keep the default face"
     );
     assert!(
         matrix.rows[2].glyphs[GlyphArea::Text.index()][1..]
             .iter()
-            .all(|glyph| glyph.face_id == 0),
+            .all(|glyph| glyph.face_id == FaceId::new(0)),
         "right-border padding after text must keep the default face"
     );
     assert!(!matrix.rows[1].displays_text);
@@ -8017,18 +8018,18 @@ fn measure_buffer_text_source_range_append_uses_shared_renderer_without_mutating
     };
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = test_advance_resolution_surface();
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    write_char_to_current_row_with_width(&mut builder, 'x', 7, 0, 8.0);
+    write_char_to_current_row_with_width(&mut builder, 'x', FaceId::new(7), 0, 8.0);
     let position = DisplayRowPosition::new(8.0, 1);
     let source_range = DisplaySourceTextRange::new(CharPos0::new(1), CharPos0::new(2));
     let source_item =
-        buffer_source_mapped_display_item(buf_id, 1, 2, "b", RenderFaceRef::FaceId(7));
+        buffer_source_mapped_display_item(buf_id, 1, 2, "b", RenderFaceRef::FaceId(FaceId::new(7)));
 
     let append_context = BufferSourceRowAppendContext::new(
         &snapshot,
@@ -8123,7 +8124,7 @@ fn buffer_text_source_append_context_uses_resolved_render_plan() {
     };
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = test_advance_resolution_surface();
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
@@ -8198,7 +8199,7 @@ fn buffer_text_source_append_context_uses_resolved_item_face_for_fragment_base()
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut item_face = active_face.resolved_face().clone();
     item_face.fg = 0x0051afef;
     item_face.bg = 0x00282c34;
@@ -8218,12 +8219,12 @@ fn buffer_text_source_append_context_uses_resolved_item_face_for_fragment_base()
         0.0,
         DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
     )
-    .with_resolved_item_face(32, item_face);
+    .with_resolved_item_face(FaceId::new(32), item_face);
     let item = buffer_display_item(
         buf_id,
         0,
         1,
-        RenderFaceRef::FaceId(32),
+        RenderFaceRef::FaceId(FaceId::new(32)),
         DisplayItemKind::TextRun(crate::display_item::DisplayTextRun::new("a")),
     );
     let mut render_policy = DisplaySourceAppendRenderPolicy::natural();
@@ -8249,10 +8250,10 @@ fn buffer_text_source_append_context_uses_resolved_item_face_for_fragment_base()
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[GlyphArea::Text.index()];
             assert_eq!(text.len(), 1);
-            assert_eq!(text[0].face_id, 32);
+            assert_eq!(text[0].face_id, FaceId::new(32));
         })
         .expect("current row");
-    let face = builder.faces().get(&32).expect("item face installed");
+    let face = builder.faces().get(&FaceId::new(32)).expect("item face installed");
     assert_eq!(face.foreground, Color::from_pixel(0x0051afef));
     assert_eq!(face.background, Color::from_pixel(0x00282c34));
     assert!(!face.use_default_background);
@@ -8289,14 +8290,14 @@ fn buffer_text_source_append_context_composes_with_current_row_tail() {
     };
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = test_advance_resolution_surface();
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    write_char_to_current_row_with_width(&mut builder, 'e', 7, 0, 8.0);
+    write_char_to_current_row_with_width(&mut builder, 'e', FaceId::new(7), 0, 8.0);
 
     let append_context = BufferSourceRowAppendContext::new(
         &snapshot,
@@ -8385,7 +8386,7 @@ fn buffer_text_item_append_context_builds_control_char_item() {
     );
 
     let append_context =
-        BufferSourceRequestAppendContext::new(&snapshot, buf_id, 7, base_face, frame);
+        BufferSourceRequestAppendContext::new(&snapshot, buf_id, FaceId::new(7), base_face, frame);
     let measured_width = append_context
         .try_measure_source_request_width_to_text_row(
             &mut text_row_source_measure_state(
@@ -8738,7 +8739,7 @@ fn buffer_text_item_append_context_builds_mapped_item() {
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
@@ -8863,7 +8864,7 @@ fn buffer_text_special_source_append_preserves_direct_control_item() {
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = test_advance_resolution_surface();
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut font_metrics = None;
@@ -8947,7 +8948,7 @@ fn buffer_text_item_append_context_builds_glyphless_item() {
     let snapshot = current_buffer_snapshot(&eval, buf_id);
     let table = FaceTable::new();
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
     let mut builder = crate::display_output_builder::DisplayOutputBuilder::new();
     builder.begin_window(1, 1, 20, Rect::new(0.0, 0.0, 160.0, 16.0), true);
@@ -9084,7 +9085,7 @@ fn append_lisp_string_to_text_row_stops_at_row_break() {
             Value::string("a\nb"),
             1,
             base_face,
-            7,
+            FaceId::new(7),
             &mut face_ids,
             frame,
             DisplayRowPosition::new(0.0, 0),
@@ -9146,7 +9147,7 @@ fn lisp_string_source_append_context_preserves_source_after_row_break() {
         LispStringSourceId::OVERLAY_STRING,
         Value::string("a\nb"),
     );
-    let session_request = LispStringSourceAppendSessionRequest::new(request, 7, base_face);
+    let session_request = LispStringSourceAppendSessionRequest::new(request, FaceId::new(7), base_face);
     let row_session_request = LispStringSourceRowAppendSessionRequest::new(
         session_request,
         &surface,
@@ -9302,7 +9303,7 @@ fn append_lisp_string_to_text_row_resolves_image_display_property_through_displa
             value,
             1,
             base_face,
-            7,
+            FaceId::new(7),
             &mut face_ids,
             frame,
             DisplayRowPosition::new(16.0, 2),
@@ -9340,13 +9341,13 @@ impl DisplayRowRenderPolicy for SourceMappedTextWidthByFace {
     fn measurement_for(
         &mut self,
         item: &crate::display_item::DisplayItem,
-        face_id: u32,
+        face_id: FaceId,
         _font_metrics: &mut Option<FontMetricsService>,
     ) -> DisplayRowItemMeasurement {
         let DisplayItemKind::SourceMappedText(text) = &item.kind else {
             return DisplayRowItemMeasurement::Default;
         };
-        let advance_px = if face_id == 20 { 13.0 } else { 11.0 };
+        let advance_px = if face_id == FaceId::new(20) { 13.0 } else { 11.0 };
         let advances = text
             .text
             .char_indices()
@@ -9410,7 +9411,7 @@ fn display_replacement_string_append_item_names_cursor_and_source_policy() {
 #[test]
 fn display_replacement_string_append_item_measures_source_text_from_active_face() {
     let _eval = Context::new();
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let item = DisplayReplacementStringSourceItem::display_property_string(
         Value::string("abc"),
         CharPos0::new(0),
@@ -9422,12 +9423,12 @@ fn display_replacement_string_append_item_measures_source_text_from_active_face(
     let mut font_metrics = Some(crate::font_metrics::FontMetricsService::new());
     let source_item = crate::display_item::DisplayItem::new(
         crate::display_item::SourceSpan::synthetic(11, 0, 3),
-        RenderFaceRef::FaceId(7),
+        RenderFaceRef::FaceId(FaceId::new(7)),
         DisplayItemKind::SourceMappedText(DisplaySourceMappedText::new("abc")),
     );
 
     let measurement =
-        item.measurement_from_active_face(&active_face, &source_item, 7, &mut font_metrics);
+        item.measurement_from_active_face(&active_face, &source_item, FaceId::new(7), &mut font_metrics);
 
     let DisplayRowItemMeasurement::TextRun(measurement) = measurement else {
         panic!("replacement string text should use a direct text-run measurement");
@@ -9468,7 +9469,7 @@ fn test_display_property_replacement_resolve_context<'a>(
 #[test]
 fn display_property_replacement_append_item_resolves_string_replacement() {
     let _eval = Context::new();
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
     let value = Value::string("ab");
     let classification = classify_display_property(value);
@@ -9494,7 +9495,7 @@ fn display_property_replacement_append_item_resolves_string_replacement() {
 #[test]
 fn display_property_replacement_append_item_resolves_stretch_replacement() {
     let _eval = Context::new();
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
     let value = Value::list(vec![
         Value::symbol("space"),
@@ -9526,7 +9527,7 @@ fn display_property_replacement_append_item_resolves_stretch_replacement() {
 #[test]
 fn display_property_replacement_append_item_resolves_media_replacement() {
     let _eval = Context::new();
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
     let media = DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
         xwidget_id: 17,
@@ -9564,7 +9565,7 @@ fn display_property_replacement_append_item_resolves_media_replacement() {
 #[test]
 fn display_property_replacement_append_item_names_cursor_policy() {
     let _eval = Context::new();
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
     let value = Value::string("ab");
     let classification = classify_display_property(value);
@@ -9671,7 +9672,7 @@ fn display_property_replacement_row_render_request_builds_append_plan() {
         .expect("current buffer")
         .id();
     let buffer = current_buffer_snapshot(&eval, buf_id);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
     let value = Value::string("ab");
     let classification = classify_display_property(value);
@@ -9764,7 +9765,7 @@ fn buffer_display_property_replacement_outcome_applies_walk_state_and_cursor() {
     let mut charpos = 1;
     let mut x = 4.0;
     let mut col = 1;
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
     let mut cursor_info = CursorCaptureState::new();
     {
@@ -9830,7 +9831,7 @@ fn display_property_replacement_resolve_request_appends_and_reports_outcome() {
         DisplayTabPolicy::every(8),
     );
     let mut geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let value = Value::list(vec![
         Value::symbol("space"),
         Value::keyword("relative-width"),
@@ -9938,7 +9939,7 @@ fn buffer_display_property_replacement_render_outcome_updates_progress() {
         DisplayTabPolicy::every(8),
     );
     let mut geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 16.0, 12.0);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let value = Value::list(vec![
         Value::symbol("space"),
         Value::keyword("relative-width"),
@@ -10227,7 +10228,7 @@ fn display_replacement_space_ascent_policy_names_ascent_sources() {
 #[test]
 fn display_replacement_stretch_append_item_resolves_display_space_property() {
     let _eval = Context::new();
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let mut font_metrics = None;
     let spec = Value::list(vec![
         Value::symbol("space"),
@@ -10260,7 +10261,7 @@ fn display_replacement_stretch_append_item_resolves_display_space_property() {
 
 #[test]
 fn display_replacement_media_append_item_names_display_and_cursor_extents() {
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let media = DisplayMediaReplacement::image(DisplayImageItem {
         image_id: 42,
         width: 64.0,
@@ -10291,7 +10292,7 @@ fn display_replacement_media_append_item_names_display_and_cursor_extents() {
 
 #[test]
 fn display_replacement_media_append_item_resolves_direct_media_property() {
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let media = DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
         xwidget_id: 17,
         width: 42.0,
@@ -10322,7 +10323,7 @@ fn display_replacement_media_append_item_resolves_direct_media_property() {
 
 #[test]
 fn display_replacement_media_append_item_resolves_placeholder_item_without_host() {
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
 
     let resolved = DisplayReplacementMediaSourceItem::resolve_display_property(
         Value::NIL,
@@ -10343,7 +10344,7 @@ fn display_replacement_media_append_item_resolves_placeholder_item_without_host(
 
 #[test]
 fn display_replacement_media_append_item_names_row_extent_policy() {
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let item = DisplayReplacementMediaSourceItem::new(
         DisplayMediaReplacement::image(DisplayImageItem {
             image_id: 42,
@@ -10430,7 +10431,7 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
     let mut font_metrics = None;
     let mut measurer = SourceMappedTextWidthByFace::new();
 
-    let append_context = DisplayReplacementAppendContext::new(7, base_face, frame);
+    let append_context = DisplayReplacementAppendContext::new(FaceId::new(7), base_face, frame);
     let end = append_context.append_replacement_string_source_to_text_row_and_emit(
         &mut text_row_source_render_state(
             &mut builder,
@@ -10450,16 +10451,16 @@ fn display_replacement_append_context_walks_string_faces_and_measurements() {
     assert_eq!(end, DisplayRowPosition::new(24.0, 2));
     assert_eq!(face_ids.finish(), 21);
     assert_eq!(
-        builder.faces().get(&20).map(|face| face.foreground),
+        builder.faces().get(&FaceId::new(20)).map(|face| face.foreground),
         Some(Color::from_pixel(0x00ff0000))
     );
     builder
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 2);
-            assert_eq!(text[0].face_id, 7);
+            assert_eq!(text[0].face_id, FaceId::new(7));
             assert_eq!(text[0].pixel_width, 11.0);
-            assert_eq!(text[1].face_id, 20);
+            assert_eq!(text[1].face_id, FaceId::new(20));
             assert_eq!(text[1].pixel_width, 13.0);
         })
         .expect("current row");
@@ -10500,7 +10501,7 @@ fn display_replacement_append_context_uses_face_fallback() {
         CharPos0::new(0),
         EmacsBytePos::new(0),
     );
-    let append_context = DisplayReplacementAppendContext::new(7, base_face, frame);
+    let append_context = DisplayReplacementAppendContext::new(FaceId::new(7), base_face, frame);
 
     let mut face_ids = FrameFaceIdAllocator::new(8);
     let progress = append_context
@@ -10530,7 +10531,7 @@ fn display_replacement_append_context_uses_face_fallback() {
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 1);
-            assert_eq!(text[0].face_id, 7);
+            assert_eq!(text[0].face_id, FaceId::new(7));
             assert_eq!(text[0].pixel_width, 13.0);
             assert!(matches!(
                 text[0].glyph_type,
@@ -10578,7 +10579,7 @@ fn display_replacement_append_context_advances_stretch_output() {
         CharPos0::new(0),
         EmacsBytePos::new(0),
     );
-    let active_face = test_active_face_state(3, 8.0);
+    let active_face = test_active_face_state(FaceId::new(3), 8.0);
 
     let append_context = DisplayReplacementRowAppendContext::new(
         replacement_source,
@@ -10661,7 +10662,7 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
         CharPos0::new(0),
         EmacsBytePos::new(0),
     );
-    let active_face = test_active_face_state(3, 8.0);
+    let active_face = test_active_face_state(FaceId::new(3), 8.0);
 
     let append_context = DisplayReplacementRowAppendContext::new(
         replacement_source,
@@ -10693,7 +10694,7 @@ fn display_replacement_append_context_advances_source_mapped_text_output() {
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 2);
-            assert_eq!(text[0].face_id, 3);
+            assert_eq!(text[0].face_id, FaceId::new(3));
             assert!(matches!(
                 text[0].glyph_type,
                 neomacs_display_protocol::glyph_matrix::GlyphType::Char { ch: '?' }
@@ -10739,7 +10740,7 @@ fn synthetic_text_append_context_uses_source_append_render_request() {
         DisplayRowAppendArea::new(0.0, 80.0, 80.0, 0.0),
         DisplayTabPolicy::every(8),
     );
-    let active_face = test_active_face_state(3, 8.0);
+    let active_face = test_active_face_state(FaceId::new(3), 8.0);
     let geometry = DisplayRowGeometryState::new(0, 0.0, 0.0, 18.0, 13.0);
 
     let append_context = SyntheticTextRowAppendContext::new(
@@ -10761,7 +10762,7 @@ fn synthetic_text_append_context_uses_source_append_render_request() {
             SyntheticTextAppendRequest::text_row_metrics_source(
                 DisplayRowPosition::new(0.0, 0),
                 SyntheticTextSource::new(9, "x"),
-                7,
+                FaceId::new(7),
                 base_face,
                 DisplayRowFallbackMetrics::from_default_face_extents(8.0, 16.0, 12.0),
             ),
@@ -10774,7 +10775,7 @@ fn synthetic_text_append_context_uses_source_append_render_request() {
         .edit_current_row_for_test(|row| {
             let text = &row.glyphs[1];
             assert_eq!(text.len(), 1);
-            assert_eq!(text[0].face_id, 7);
+            assert_eq!(text[0].face_id, FaceId::new(7));
         })
         .expect("current row");
 }
@@ -10826,7 +10827,7 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
         EmacsBytePos::new(0),
     );
 
-    let active_face = test_active_face_state(3, 8.0);
+    let active_face = test_active_face_state(FaceId::new(3), 8.0);
     let media_item = DisplayReplacementMediaSourceItem::new(
         DisplayMediaReplacement::xwidget(DisplayXwidgetItem {
             xwidget_id: 1234,
@@ -10868,7 +10869,7 @@ fn display_replacement_append_context_installs_xwidget_replacements() {
     builder
         .edit_current_row_for_test(|row| {
             let glyph = &row.glyphs[1][0];
-            assert_eq!(glyph.face_id, 3);
+            assert_eq!(glyph.face_id, FaceId::new(3));
             assert_eq!(glyph.pixel_width, 96.0);
             assert_eq!(glyph.pixel_height, 54.0);
             assert_eq!(glyph.pixel_ascent, 54.0);
@@ -10958,7 +10959,7 @@ fn display_replacement_append_context_installs_image_replacements() {
         EmacsBytePos::new(0),
     );
 
-    let active_face = test_active_face_state(3, 8.0);
+    let active_face = test_active_face_state(FaceId::new(3), 8.0);
     let media_item = DisplayReplacementMediaSourceItem::new(
         DisplayMediaReplacement::image(DisplayImageItem {
             image_id: 42,
@@ -10969,7 +10970,7 @@ fn display_replacement_append_context_installs_image_replacements() {
         active_face.metrics().ascent(),
         false,
     );
-    let append_context = DisplayReplacementAppendContext::new(3, base_face, frame);
+    let append_context = DisplayReplacementAppendContext::new(FaceId::new(3), base_face, frame);
     let mut face_ids = FrameFaceIdAllocator::new(4);
     let progress = append_context
         .append_replacement_item_kind_to_text_row_and_emit(
@@ -10994,7 +10995,7 @@ fn display_replacement_append_context_installs_image_replacements() {
     builder
         .edit_current_row_for_test(|row| {
             let glyph = &row.glyphs[1][0];
-            assert_eq!(glyph.face_id, 3);
+            assert_eq!(glyph.face_id, FaceId::new(3));
             assert_eq!(glyph.pixel_width, 64.0);
             assert_eq!(glyph.pixel_height, 32.0);
             assert_eq!(glyph.pixel_ascent, 32.0);
@@ -11084,7 +11085,7 @@ fn display_replacement_append_context_installs_video_replacements() {
         EmacsBytePos::new(0),
     );
 
-    let active_face = test_active_face_state(3, 8.0);
+    let active_face = test_active_face_state(FaceId::new(3), 8.0);
     let media_item = DisplayReplacementMediaSourceItem::new(
         DisplayMediaReplacement::video(DisplayVideoItem {
             video_id: 88,
@@ -11097,7 +11098,7 @@ fn display_replacement_append_context_installs_video_replacements() {
         active_face.metrics().ascent(),
         false,
     );
-    let append_context = DisplayReplacementAppendContext::new(3, base_face, frame);
+    let append_context = DisplayReplacementAppendContext::new(FaceId::new(3), base_face, frame);
     let mut face_ids = FrameFaceIdAllocator::new(4);
     let progress = append_context
         .append_replacement_item_kind_to_text_row_and_emit(
@@ -11122,7 +11123,7 @@ fn display_replacement_append_context_installs_video_replacements() {
     builder
         .edit_current_row_for_test(|row| {
             let glyph = &row.glyphs[1][0];
-            assert_eq!(glyph.face_id, 3);
+            assert_eq!(glyph.face_id, FaceId::new(3));
             assert_eq!(glyph.pixel_width, 80.0);
             assert_eq!(glyph.pixel_height, 45.0);
             assert_eq!(glyph.pixel_ascent, 45.0);
@@ -11192,7 +11193,7 @@ impl<S: crate::display_source::DisplayItemSource> DisplayRowSourceWalker<S> {
         &mut self,
         face_resolver: &FaceResolver,
         base_face: &crate::neovm_bridge::ResolvedFace,
-        base_face_id: u32,
+        base_face_id: FaceId,
         face_ids: &mut FrameFaceIdAllocator,
         display_host: Option<&dyn DisplayHost>,
         fallback_char_width: f32,
@@ -11237,7 +11238,7 @@ impl<'a, B: crate::neovm_bridge::LayoutBufferView + ?Sized>
     fn new(
         buffer: &'a B,
         buffer_id: BufferId,
-        face_id: u32,
+        face_id: FaceId,
         base_face: &'a crate::neovm_bridge::ResolvedFace,
         frame: DisplayRowAppendFrame,
     ) -> Self {
@@ -11320,7 +11321,7 @@ impl<'a, B: crate::neovm_bridge::LayoutBufferView + ?Sized>
 #[derive(Clone, Debug, PartialEq)]
 struct DisplayPropertyLiveRenderGlyph {
     glyph_type: GlyphType,
-    face_id: u32,
+    face_id: FaceId,
 }
 
 #[derive(Debug, PartialEq)]
@@ -11370,7 +11371,7 @@ fn display_property_live_render_outcome(
     let face_resolver = FaceResolver::new(&table, 0x00ffffff, 0x000000, 14.0, None);
     let default_face = face_resolver.default_face().clone();
     let measurement_policy = DisplayRowMeasurementPolicy::for_frame(false);
-    let active_face = test_active_face_state(7, 8.0);
+    let active_face = test_active_face_state(FaceId::new(7), 8.0);
     let surface = DisplayRowAppendSurface::new(
         DisplayRowAppendArea::new(0.0, 800.0, 800.0, 0.0),
         DisplayTabPolicy::every(8),
@@ -11560,7 +11561,7 @@ fn insta_like_snapshot_string_replacement(outcome: &DisplayPropertyLiveRenderOut
         Some((1, 1, 8.0, Some(8.0), false)),
         "string replacement cursor capture"
     );
-    let faces: Vec<u32> = outcome.text_glyphs.iter().map(|g| g.face_id).collect();
+    let faces: Vec<FaceId> = outcome.text_glyphs.iter().map(|g| g.face_id).collect();
     assert_eq!(faces.len(), 4, "string replacement glyph count");
 }
 

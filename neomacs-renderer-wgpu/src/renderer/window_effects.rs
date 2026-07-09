@@ -57,6 +57,7 @@
 //!
 //! Offending sites are tagged `FIXME(chrome-insets)` below.
 
+use neomacs_display_protocol::types::FaceId;
 use super::super::vertex::RectVertex;
 use super::effect_common::{EffectCtx, push_rect};
 use super::{
@@ -1438,7 +1439,7 @@ pub(super) fn emit_search_highlight(
     ctx: &EffectCtx,
     search_pulse_start: std::time::Instant,
 ) -> (Vec<RectVertex>, bool) {
-    if !ctx.effects.search_pulse.enabled || ctx.effects.search_pulse.face_id == 0 {
+    if !ctx.effects.search_pulse.enabled || ctx.effects.search_pulse.face_id == FaceId::new(0) {
         return (Vec::new(), false);
     }
     let target_face = ctx.effects.search_pulse.face_id;
@@ -1503,8 +1504,8 @@ pub(super) fn emit_search_highlight(
 }
 
 /// Selection region glow highlight.
-pub(super) fn emit_selection_glow(ctx: &EffectCtx, faces: &HashMap<u32, Face>) -> Vec<RectVertex> {
-    if !ctx.effects.region_glow.enabled || ctx.effects.region_glow.face_id == 0 {
+pub(super) fn emit_selection_glow(ctx: &EffectCtx, faces: &HashMap<FaceId, Face>) -> Vec<RectVertex> {
+    if !ctx.effects.region_glow.enabled || ctx.effects.region_glow.face_id == FaceId::new(0) {
         return Vec::new();
     }
     let target_face = ctx.effects.region_glow.face_id;
@@ -1670,7 +1671,7 @@ pub(super) fn emit_minimap(ctx: &EffectCtx) -> Vec<RectVertex> {
         let bg_color = Color::new(0.0, 0.0, 0.0, 0.15);
         push_rect(&mut all_verts, map_x, map_y, minimap_w, map_h, &bg_color);
 
-        let mut mini_face_cache: Option<(u32, MaterializedFaceData)> = None;
+        let mut mini_face_cache: Option<(FaceId, MaterializedFaceData)> = None;
         for glyph in &ctx.frame_glyphs.glyphs {
             if let FrameGlyph::Char {
                 x,

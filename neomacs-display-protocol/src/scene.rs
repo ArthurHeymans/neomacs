@@ -1,7 +1,7 @@
 //! Scene graph for display rendering.
 
 use crate::face::Face;
-use crate::types::{Color, DisplayWindowId, ImageId, Rect, Transform, VideoId, WebKitId};
+use crate::types::{Color, DisplayWindowId, FaceId, ImageId, Rect, Transform, VideoId, WebKitId};
 use std::collections::HashMap;
 
 /// Scene graph node types
@@ -13,7 +13,7 @@ pub enum NodeKind {
     /// Text run with shaped glyphs
     TextRun {
         text: String,
-        face_id: u32,
+        face_id: FaceId,
         x: f32,
         y: f32,
     },
@@ -107,7 +107,7 @@ impl Node {
     }
 
     /// Create a text run node
-    pub fn text_run(text: String, face_id: u32, x: f32, y: f32, bounds: Rect) -> Self {
+    pub fn text_run(text: String, face_id: FaceId, x: f32, y: f32, bounds: Rect) -> Self {
         Self {
             kind: NodeKind::TextRun {
                 text,
@@ -241,7 +241,7 @@ pub struct Scene {
     pub dirty: Option<Rect>,
 
     /// Faces used in this scene (face_id -> Face)
-    pub faces: HashMap<u32, Face>,
+    pub faces: HashMap<FaceId, Face>,
 
     /// Floating videos at screen positions
     pub floating_videos: Vec<FloatingVideo>,
@@ -352,7 +352,7 @@ impl Scene {
     }
 
     /// Get a face by ID
-    pub fn get_face(&self, id: u32) -> Option<&Face> {
+    pub fn get_face(&self, id: FaceId) -> Option<&Face> {
         self.faces.get(&id)
     }
 

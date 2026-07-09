@@ -3,7 +3,7 @@
 
 use neomacs_display_protocol::face::BoxType;
 use neomacs_display_protocol::frame_glyphs::{FrameGlyph, MaterializedFaceData};
-use neomacs_display_protocol::types::Color;
+use neomacs_display_protocol::types::{Color, FaceId};
 
 use super::super::vertex::{RectVertex, RoundedRectVertex};
 use super::WgpuRenderer;
@@ -241,7 +241,7 @@ impl WgpuRenderer {
             }
         }
         // Non-overlay char backgrounds (skip boxed chars — they get rounded bg instead)
-        let mut bg_face_cache: Option<(u32, MaterializedFaceData)> = None;
+        let mut bg_face_cache: Option<(FaceId, MaterializedFaceData)> = None;
         for glyph in &frame_glyphs.glyphs {
             if let FrameGlyph::Char {
                 x,
@@ -593,7 +593,7 @@ impl WgpuRenderer {
             }
         }
         // Overlay char backgrounds (skip those inside a box span)
-        let mut overlay_bg_face_cache: Option<(u32, MaterializedFaceData)> = None;
+        let mut overlay_bg_face_cache: Option<(FaceId, MaterializedFaceData)> = None;
         for glyph in &frame_glyphs.glyphs {
             if let FrameGlyph::Char {
                 x,

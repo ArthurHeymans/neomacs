@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use crate::display_item::{DisplayItem, DisplayItemKind};
 use crate::display_row_append_context::DisplayRowAppendFrame;
 use crate::display_row_builder::DisplayRowItemMeasurement;
@@ -31,7 +32,7 @@ impl DisplayRowRenderPolicy for ResolvedSourceAdvanceRenderPolicy {
     fn measurement_for(
         &mut self,
         item: &DisplayItem,
-        _face_id: u32,
+        _face_id: FaceId,
         _font_metrics: &mut Option<FontMetricsService>,
     ) -> DisplayRowItemMeasurement {
         match &item.kind {
@@ -62,7 +63,7 @@ impl DisplayRowRenderPolicy for DisplaySourceAppendRenderPolicy {
     fn measurement_for(
         &mut self,
         item: &DisplayItem,
-        face_id: u32,
+        face_id: FaceId,
         font_metrics: &mut Option<FontMetricsService>,
     ) -> DisplayRowItemMeasurement {
         match self {

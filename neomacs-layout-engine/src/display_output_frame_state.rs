@@ -1,5 +1,6 @@
 //! Mutable non-row frame output state owned while layout builds a frame snapshot.
 
+use neomacs_display_protocol::types::FaceId;
 use crate::display_output_install_request::{
     OutputCursorInstallRequest, OutputFrameArtifactInstallRequest, OutputFrameStateInstallRequest,
     OutputMediaInstallKind, OutputMediaInstallRequest, OutputWindowMetadataInstallRequest,
@@ -27,7 +28,7 @@ pub(crate) struct OutputFrameBuildState {
     scroll_bars: Vec<ScrollBarItem>,
     phys_cursor: Option<PhysCursor>,
     cursor_effects_by_window: HashMap<DisplayWindowId, EffectsConfig>,
-    faces: HashMap<u32, Face>,
+    faces: HashMap<FaceId, Face>,
     window_infos: Vec<WindowInfo>,
     transition_hints: Vec<WindowTransitionHint>,
     effect_hints: Vec<WindowEffectHint>,
@@ -276,7 +277,7 @@ impl OutputFrameBuildState {
     }
 
     #[cfg(test)]
-    pub(crate) fn faces(&self) -> &HashMap<u32, Face> {
+    pub(crate) fn faces(&self) -> &HashMap<FaceId, Face> {
         &self.faces
     }
 

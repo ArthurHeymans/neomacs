@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use crate::display_item::{
     BufferDisplayReplacementSource, DisplayGlyphless, DisplayItem, DisplayItemKind,
     DisplayItemLayout, DisplayLength, DisplayMediaReplacement, DisplayRowBreak,
@@ -2049,7 +2050,7 @@ impl BufferDisplayReplacementStringRequest {
 
     pub(crate) fn into_source(
         self,
-        fallback_face_id: u32,
+        fallback_face_id: FaceId,
     ) -> Option<BufferDisplayReplacementStringSource<LispStringSourceCursor>> {
         let string_source = LispStringSourceCursor::new(
             self.source_id,

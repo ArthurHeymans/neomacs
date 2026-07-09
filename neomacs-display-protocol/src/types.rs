@@ -44,6 +44,11 @@ display_id_type!(ImageId, u32);
 display_id_type!(VideoId, u32);
 display_id_type!(WebKitId, u32);
 display_id_type!(XwidgetId, u32);
+// Realized face id, scoped to the owning frame's face table. Basic faces
+// occupy 0..BasicFaceId::SENTINEL; dynamic faces are allocated above that.
+// Raw u32 face ids remain only at the FFI edge (`FaceDataFFI`) and the
+// neovm bridge boundary, which wrap into `FaceId` immediately.
+display_id_type!(FaceId, u32);
 
 /// RGBA color with f32 components (0.0 - 1.0)
 #[repr(C)]

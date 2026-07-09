@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use crate::display_output_builder::DisplayOutputBuilder;
 use crate::display_status_line::{
     ChromeRowRenderServices, FrameChromeOutputTarget, FrameTabBarDisplayRowRender,
@@ -236,7 +237,7 @@ impl<'a> FrameOutputTarget<'a> {
 
     fn install_resolved_face(
         &mut self,
-        face_id: u32,
+        face_id: FaceId,
         face: &ResolvedFace,
         metrics: Option<FontMetrics>,
     ) {
@@ -388,7 +389,7 @@ impl<'a> FrameOutputStateRenderRequest<'a> {
         }
         state.set_background_color(self.background_color);
         state.set_font_pixel_size(self.font_pixel_size);
-        state.install_resolved_face(0, self.default_face, self.default_metrics);
+        state.install_resolved_face(FaceId::new(0), self.default_face, self.default_metrics);
     }
 }
 

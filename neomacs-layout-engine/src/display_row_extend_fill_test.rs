@@ -7,12 +7,13 @@
 //! space glyph then the stretch; a reversed (R2L) row is a documented no-op.
 
 use super::{RowExtendFill, RowExtendFillMutation};
+use neomacs_display_protocol::types::FaceId;
 use crate::display_output_row_request::DisplayCurrentRowMutation;
 use neomacs_display_protocol::frame_glyphs::GlyphRowRole;
 use neomacs_display_protocol::glyph_matrix::{Glyph, GlyphArea, GlyphRow, GlyphType};
 use neomacs_display_protocol::types::Color;
 
-const EXTEND_FACE_ID: u32 = 17;
+const EXTEND_FACE_ID: FaceId = FaceId::new(17);
 
 fn extend_bg() -> Color {
     Color::from_pixel(0x00112233)
@@ -31,8 +32,8 @@ fn text_glyphs(row: &GlyphRow) -> &[Glyph] {
 fn non_empty_row_gets_only_trailing_stretch() {
     let mut row = GlyphRow::new(GlyphRowRole::Text);
     // Pre-existing text "ab" so the row is non-empty.
-    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('a', 1, 0).with_pixel_width(8.0));
-    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('b', 1, 1).with_pixel_width(8.0));
+    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('a', FaceId::new(1), 0).with_pixel_width(8.0));
+    row.glyphs[GlyphArea::Text.index()].push(Glyph::char('b', FaceId::new(1), 1).with_pixel_width(8.0));
 
     let applied = RowExtendFillMutation { fill: fill() }.apply(&mut row);
     assert!(applied, "fill should apply to a non-empty LTR row");

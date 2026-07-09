@@ -1,6 +1,6 @@
 //! Face (text styling) types.
 
-use crate::types::Color;
+use crate::types::{Color, FaceId};
 use bitflags::bitflags;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::ffi::CStr;
@@ -176,12 +176,19 @@ impl BasicFaceId {
     }
 }
 
+/// Basic faces occupy their fixed cache slot in every frame's face table.
+impl From<BasicFaceId> for FaceId {
+    fn from(basic: BasicFaceId) -> Self {
+        FaceId::new(basic.gnu_code())
+    }
+}
+
 /// A face defines text styling (colors, font, decorations)
 #[repr(C)]
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Face {
     /// Face ID
-    pub id: u32,
+    pub id: FaceId,
 
     /// Foreground color
     pub foreground: Color,
@@ -279,7 +286,7 @@ pub struct Face {
 impl Default for Face {
     fn default() -> Self {
         Self {
-            id: 0,
+            id: FaceId::new(0),
             foreground: Color::WHITE,
             background: Color::BLACK,
             use_default_foreground: false,
@@ -313,7 +320,7 @@ impl Default for Face {
 
 impl Face {
     /// Create a new face with default values
-    pub fn new(id: u32) -> Self {
+    pub fn new(id: FaceId) -> Self {
         Self {
             id,
             ..Default::default()
@@ -495,7 +502,8 @@ impl FaceDataFFI {
         }
 
         Face {
-            id: self.face_id,
+            // FFI edge: wrap the raw C-side face id into the typed FaceId here.
+            id: FaceId::new(self.face_id),
             foreground: Color::from_pixel(self.fg),
             background: Color::from_pixel(self.bg),
             use_default_foreground: false,
@@ -540,12 +548,12 @@ impl FaceCache {
     }
 
     /// Get face by ID
-    pub fn get(&self, id: u32) -> Option<&Face> {
+    pub fn get(&self, id: FaceId) -> Option<&Face> {
         self.faces.iter().find(|f| f.id == id)
     }
 
     /// Get or create a face by ID
-    pub fn get_or_create(&mut self, id: u32) -> &Face {
+    pub fn get_or_create(&mut self, id: FaceId) -> &Face {
         // Check if exists
         if self.get(id).is_some() {
             return self.get(id).unwrap();
@@ -557,7 +565,7 @@ impl FaceCache {
     }
 
     /// Add or update a face, returns the face ID
-    pub fn insert(&mut self, face: Face) -> u32 {
+    pub fn insert(&mut self, face: Face) -> FaceId {
         let id = face.id;
         if let Some(existing) = self.faces.iter_mut().find(|f| f.id == face.id) {
             *existing = face;
@@ -569,7 +577,7 @@ impl FaceCache {
 
     /// Get default face (ID 0)
     pub fn default_face(&self) -> Option<&Face> {
-        self.get(0)
+        self.get(FaceId::new(0))
     }
 }
 

@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use super::ChromeRowOutput;
 use super::ChromeRowProgress;
 use super::DisplayProgressSink;
@@ -48,7 +49,7 @@ use neomacs_display_protocol::{Glyph, GlyphArea, GlyphType};
 use neovm_core::buffer::{BufferId, CharPos0, EmacsBytePos, LispCharPos1};
 use neovm_core::emacs_core::Context;
 
-fn assert_char_glyph(glyph: &Glyph, ch: char, face_id: u32) {
+fn assert_char_glyph(glyph: &Glyph, ch: char, face_id: FaceId) {
     assert_eq!(glyph.glyph_type, GlyphType::Char { ch });
     assert_eq!(glyph.face_id, face_id);
 }
@@ -56,7 +57,7 @@ fn assert_char_glyph(glyph: &Glyph, ch: char, face_id: u32) {
 fn write_char_to_current_row(
     builder: &mut DisplayOutputBuilder,
     ch: char,
-    face_id: u32,
+    face_id: FaceId,
     charpos: usize,
 ) {
     builder
@@ -69,7 +70,7 @@ fn write_char_to_current_row(
 fn write_left_margin_char_to_current_row(
     builder: &mut DisplayOutputBuilder,
     ch: char,
-    face_id: u32,
+    face_id: FaceId,
 ) {
     builder
         .edit_current_row_for_test(|row| {
@@ -81,7 +82,7 @@ fn write_left_margin_char_to_current_row(
 fn write_left_margin_stretch_to_current_row(
     builder: &mut DisplayOutputBuilder,
     width_cols: u16,
-    face_id: u32,
+    face_id: FaceId,
 ) {
     builder
         .edit_current_row_for_test(|row| {
@@ -693,9 +694,9 @@ fn publish_text_window_cursor_installs_selected_phys_cursor_without_window_curso
     let mut builder = DisplayOutputBuilder::new();
     builder.begin_window(window_id.0, 1, 10, Rect::new(0.0, 0.0, 80.0, 16.0), true);
     builder.begin_row(0, GlyphRowRole::Text);
-    write_left_margin_char_to_current_row(&mut builder, '1', 7);
-    write_left_margin_stretch_to_current_row(&mut builder, 1, 7);
-    write_char_to_current_row(&mut builder, 'H', 3, 100);
+    write_left_margin_char_to_current_row(&mut builder, '1', FaceId::new(7));
+    write_left_margin_stretch_to_current_row(&mut builder, 1, FaceId::new(7));
+    write_char_to_current_row(&mut builder, 'H', FaceId::new(3), 100);
 
     let mut emitter = WindowOutputEmitter::new(frame_id, window_id, 0, 16.0, 8.0);
     let outcome = publish_text_window_cursor(
@@ -1032,7 +1033,7 @@ fn install_text_window_output_installs_row_metrics() {
             x: 0.0,
         },
     );
-    write_char_to_current_row(&mut builder, 'x', 7, 0);
+    write_char_to_current_row(&mut builder, 'x', FaceId::new(7), 0);
     finish_text_window_row(
         TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
@@ -1051,7 +1052,7 @@ fn install_text_window_output_installs_row_metrics() {
 
     assert_eq!(row.height_px, 20.0);
     assert_eq!(row.ascent_px, 15.0);
-    assert_char_glyph(&row.glyphs[GlyphArea::Text.index()][0], 'x', 7);
+    assert_char_glyph(&row.glyphs[GlyphArea::Text.index()][0], 'x', FaceId::new(7));
 }
 
 #[test]
@@ -1089,7 +1090,7 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
         },
     );
     emitter.note_display_buffer_pos(LispCharPos1::new(7));
-    write_char_to_current_row(&mut builder, 'x', 7, 0);
+    write_char_to_current_row(&mut builder, 'x', FaceId::new(7), 0);
     finish_text_window_row(
         TextWindowOutputTarget::from_builder(&mut builder),
         &mut emitter,
@@ -1126,7 +1127,7 @@ fn install_text_window_body_output_records_redisplay_and_installs_rows() {
     let row = &state.window_matrices[0].matrix.rows[0];
     assert_eq!(row.height_px, 20.0);
     assert_eq!(row.ascent_px, 15.0);
-    assert_char_glyph(&row.glyphs[GlyphArea::Text.index()][0], 'x', 7);
+    assert_char_glyph(&row.glyphs[GlyphArea::Text.index()][0], 'x', FaceId::new(7));
 }
 
 #[test]

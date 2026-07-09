@@ -12,6 +12,7 @@
 //! stages; [`FramePassCtx`] bundles the active render pass with those
 //! params for the draw phases.
 
+use neomacs_display_protocol::types::FaceId;
 use std::collections::HashMap;
 
 use neomacs_display_protocol::face::Face;
@@ -23,7 +24,7 @@ use super::super::vertex::RectVertex;
 /// Immutable per-frame inputs shared by every render phase.
 pub(super) struct FrameParams<'a> {
     pub(super) frame_glyphs: &'a FrameGlyphBuffer,
-    pub(super) faces: &'a HashMap<u32, Face>,
+    pub(super) faces: &'a HashMap<FaceId, Face>,
     pub(super) cursor_visible: bool,
     pub(super) animated_cursor: &'a Option<AnimatedCursor>,
     pub(super) mouse_pos: (f32, f32),
@@ -53,7 +54,7 @@ pub(super) struct BoxSpan {
     pub(super) y: f32,
     pub(super) width: f32,
     pub(super) height: f32,
-    pub(super) face_id: u32,
+    pub(super) face_id: FaceId,
     pub(super) row_role: GlyphRowRole,
     pub(super) bg: Option<Color>,
 }

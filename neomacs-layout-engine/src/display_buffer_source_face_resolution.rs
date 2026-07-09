@@ -3,6 +3,7 @@
 //! This module resolves buffer source faces at scan checkpoints and prepares
 //! display source items whose layout changes require derived measured faces.
 
+use neomacs_display_protocol::types::FaceId;
 use crate::display_face_id::FrameFaceIdAllocator;
 use crate::display_face_layout::{DisplayHeightFaceBasis, height_adjusted_face};
 use crate::display_face_ref::render_face_ref_id;
@@ -163,7 +164,7 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
         DisplaySourceResolveParams::new(
             DisplaySourceFaceBasis::new(
                 self.face_resolver,
-                u32::from(BasicFaceId::Default),
+                FaceId::from(BasicFaceId::Default),
                 self.default_resolved,
                 self.default_face_metrics,
             ),
@@ -200,7 +201,7 @@ impl<'a, B: LayoutBufferView> BufferSourceFaceResolutionContext<'a, B> {
         face_ids: &mut FrameFaceIdAllocator,
         active_face_state: &mut DisplayRowActiveFaceState,
         row_geometry: &mut DisplayRowGeometryState,
-        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
         box_face: &mut BoxFaceRowState,
         x: f32,
         charpos: i64,
@@ -398,7 +399,7 @@ pub(crate) struct BufferSourceFaceResolutionState<'a, 'source> {
     face_ids: &'a mut FrameFaceIdAllocator,
     active_face_state: &'a mut DisplayRowActiveFaceState,
     row_geometry: &'a mut DisplayRowGeometryState,
-    row_extend: &'a mut DisplayRowScopedValue<(Color, u32)>,
+    row_extend: &'a mut DisplayRowScopedValue<(Color, FaceId)>,
     box_face: &'a mut BoxFaceRowState,
     x: f32,
 }
@@ -411,7 +412,7 @@ impl<'a, 'source> BufferSourceFaceResolutionState<'a, 'source> {
         face_ids: &'a mut FrameFaceIdAllocator,
         active_face_state: &'a mut DisplayRowActiveFaceState,
         row_geometry: &'a mut DisplayRowGeometryState,
-        row_extend: &'a mut DisplayRowScopedValue<(Color, u32)>,
+        row_extend: &'a mut DisplayRowScopedValue<(Color, FaceId)>,
         box_face: &'a mut BoxFaceRowState,
         x: f32,
     ) -> Self {

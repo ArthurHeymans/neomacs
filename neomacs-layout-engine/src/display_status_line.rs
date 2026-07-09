@@ -12,6 +12,7 @@
 //! display-engine unification plan merged it into the backend
 //! trait and renamed the file to reflect its new role.
 
+use neomacs_display_protocol::types::FaceId;
 use super::neovm_bridge::{FaceResolver, LayoutBufferView, ResolvedFace, buffer_local_value};
 use super::window_output::{
     ChromeRowOutput, ChromeRowProgress, DisplayProgressSink, TextWindowOutputTarget,
@@ -207,7 +208,7 @@ impl<'emit, 'face> ChromeRowRenderServices<'emit, 'face> {
         matrix_cols: usize,
         char_width: f32,
         role: neomacs_display_protocol::frame_glyphs::GlyphRowRole,
-        face_id: u32,
+        face_id: FaceId,
         base_face: &ResolvedFace,
         start_col: usize,
         max_col: usize,

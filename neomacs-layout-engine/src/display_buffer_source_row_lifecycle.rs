@@ -4,6 +4,7 @@
 //! source walking and generic row/source append rendering: hscroll skip,
 //! selective display, invisible text, line breaks, and end-of-buffer tails.
 
+use neomacs_display_protocol::types::FaceId;
 use crate::display_buffer_source_loop_state::BufferSourceLoopMutableState;
 use crate::display_buffer_source_walk::BufferSourceWalk;
 use crate::display_cursor::{
@@ -63,7 +64,7 @@ impl BufferSourceEndOfBufferTailRenderOutcome {
 }
 
 fn sync_row_extend_to_active_face(
-    row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+    row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
     row_geometry: &DisplayRowGeometryState,
     active_face_state: &DisplayRowActiveFaceState,
 ) {
@@ -121,7 +122,7 @@ impl BufferSourceHscrollSkipAction {
 
     pub(crate) fn apply_line_break_before_row_transition(
         self,
-        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
         output_emitter: &mut WindowOutputEmitter,
         x: &mut f32,
         content_x: f32,
@@ -1244,7 +1245,7 @@ impl BufferSourceSelectiveDisplayLineTailAction {
     pub(crate) fn apply_hidden_line_break_row_state(
         self,
         row_geometry: &DisplayRowGeometryState,
-        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
         box_face: &mut BoxFaceRowState,
         content_x: f32,
         x: &mut f32,
@@ -1708,7 +1709,7 @@ impl BufferSourceLineBreakSourceAction {
         self,
         row_geometry: &DisplayRowGeometryState,
         trailing_whitespace: &mut TrailingWhitespaceRenderState,
-        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
         box_face: &mut BoxFaceRowState,
         output_emitter: &mut WindowOutputEmitter,
         content_x: f32,
@@ -1738,7 +1739,7 @@ impl BufferSourceLineBreakSourceAction {
         position: &mut DisplaySourceTextPosition,
         hit_row_range: &mut HitRowRangeTracker,
         row_geometry: &DisplayRowGeometryState,
-        row_extend: &mut DisplayRowScopedValue<(Color, u32)>,
+        row_extend: &mut DisplayRowScopedValue<(Color, FaceId)>,
         active_face_state: &DisplayRowActiveFaceState,
         box_face: &mut BoxFaceRowState,
         content_x: f32,

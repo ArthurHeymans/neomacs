@@ -5,6 +5,7 @@
 //! while simultaneously recording immutable row snapshots for renderer
 //! handoff.
 
+use neomacs_display_protocol::types::FaceId;
 use super::display_status_line::{
     ChromeRowRenderServices, DisplayRowOutputProgress, WindowChromeMeasuredHeights,
     WindowChromeRowsRenderRequest, WindowChromeRowsRenderState,
@@ -273,7 +274,7 @@ impl<'a> TextWindowOutputTarget<'a> {
 
     pub(crate) fn install_resolved_face(
         &mut self,
-        face_id: u32,
+        face_id: FaceId,
         face: &ResolvedFace,
         metrics: Option<crate::font_metrics::FontMetrics>,
     ) {

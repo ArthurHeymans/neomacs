@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use super::{
     FontconfigSubpixelOrder, GlyphAtlasError, GlyphKey, RasterizeResult, SubpixelBin,
     WgpuGlyphAtlas, effective_font_size, glyph_font_identity, key_uses_default_font_metrics,
@@ -20,7 +21,7 @@ fn normalize_subpixel_mask_swaps_bgr_order() {
 fn default_metrics_ignore_nondefault_face_zero_font_size() {
     let key = GlyphKey {
         charcode: 'F' as u32,
-        face_id: 0,
+        face_id: FaceId::new(0),
         font_size_bits: 27.0_f32.to_bits(),
         font_identity: 0,
         x_bin: SubpixelBin::Zero,
@@ -34,7 +35,7 @@ fn default_metrics_ignore_nondefault_face_zero_font_size() {
 fn default_metrics_accept_unspecified_default_font_size() {
     let key = GlyphKey {
         charcode: 'F' as u32,
-        face_id: 0,
+        face_id: FaceId::new(0),
         font_size_bits: 0.0_f32.to_bits(),
         font_identity: 0,
         x_bin: SubpixelBin::Zero,
@@ -48,7 +49,7 @@ fn default_metrics_accept_unspecified_default_font_size() {
 fn default_metrics_accept_explicit_default_font_size() {
     let key = GlyphKey {
         charcode: 'F' as u32,
-        face_id: 0,
+        face_id: FaceId::new(0),
         font_size_bits: 13.05_f32.to_bits(),
         font_identity: 0,
         x_bin: SubpixelBin::Zero,
@@ -122,7 +123,7 @@ fn glyph_font_identity_discriminates_resolved_font_id() {
     use neomacs_display_protocol::face::Face;
     use neomacs_display_protocol::font::ResolvedFontId;
 
-    let mut a = Face::new(5);
+    let mut a = Face::new(FaceId::new(5));
     a.font_family = "Mono".to_string();
     let mut b = a.clone();
 

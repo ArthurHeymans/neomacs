@@ -1,5 +1,6 @@
 //! Typed output install requests consumed by `DisplayOutputBuilder`.
 
+use neomacs_display_protocol::types::FaceId;
 use neomacs_display_protocol::effect_config::EffectsConfig;
 use neomacs_display_protocol::face::Face;
 use neomacs_display_protocol::frame_glyphs::{
@@ -239,7 +240,7 @@ pub(crate) enum OutputFrameStateInstallRequest {
     BackgroundColor(Color),
     FontPixelSize(f32),
     Face {
-        id: u32,
+        id: FaceId,
         face: Face,
     },
     CursorEffects {
@@ -249,7 +250,7 @@ pub(crate) enum OutputFrameStateInstallRequest {
 }
 
 impl OutputFrameStateInstallRequest {
-    pub(crate) fn face(id: u32, face: Face) -> Self {
+    pub(crate) fn face(id: FaceId, face: Face) -> Self {
         Self::Face { id, face }
     }
 

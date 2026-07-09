@@ -1,3 +1,4 @@
+use neomacs_display_protocol::types::FaceId;
 use crate::display_cursor::{CapturedCursorInfo, display_property_replacement_cursor_info};
 use crate::display_face_id::FrameFaceIdAllocator;
 #[cfg(test)]
@@ -50,7 +51,7 @@ impl DisplayRowRenderPolicy for DisplayReplacementStringItemMeasurer {
     fn measurement_for(
         &mut self,
         item: &DisplayItem,
-        _face_id: u32,
+        _face_id: FaceId,
         font_metrics: &mut Option<FontMetricsService>,
     ) -> DisplayRowItemMeasurement {
         let DisplayItemKind::SourceMappedText(text) = &item.kind else {
@@ -77,7 +78,7 @@ impl<M: DisplayRowRenderPolicy> DisplayRowRenderPolicy
     fn measurement_for(
         &mut self,
         item: &DisplayItem,
-        face_id: u32,
+        face_id: FaceId,
         font_metrics: &mut Option<FontMetricsService>,
     ) -> DisplayRowItemMeasurement {
         self.item_policy
@@ -306,7 +307,7 @@ impl DisplayReplacementStringSourceItem {
         &self,
         active_face_state: &DisplayRowActiveFaceState,
         item: &DisplayItem,
-        face_id: u32,
+        face_id: FaceId,
         font_metrics: &mut Option<FontMetricsService>,
     ) -> DisplayRowItemMeasurement {
         let mut measurer = DisplayReplacementStringItemMeasurer {
@@ -380,7 +381,7 @@ impl DisplayReplacementItemAppendRequest {
     fn into_plan(
         self,
         replacement_source: BufferDisplayReplacementSource,
-        face_id: u32,
+        face_id: FaceId,
     ) -> DisplayReplacementItemAppendPlan {
         DisplayReplacementItemAppendPlan {
             item: replacement_source.display_item(face_id, self.kind),
@@ -994,7 +995,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
 
     fn active_face(
         self,
-        face_id: u32,
+        face_id: FaceId,
         base_face: &'a ResolvedFace,
     ) -> DisplayReplacementAppendContext<'a> {
         DisplayReplacementAppendContext::new(face_id, base_face, self.active_face_frame())
@@ -1002,7 +1003,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
 
     fn full_text_width_active_face(
         self,
-        face_id: u32,
+        face_id: FaceId,
         base_face: &'a ResolvedFace,
     ) -> DisplayReplacementAppendContext<'a> {
         DisplayReplacementAppendContext::new(
@@ -1014,7 +1015,7 @@ impl<'a> DisplayReplacementRowAppendContext<'a> {
 
     fn display_box(
         self,
-        face_id: u32,
+        face_id: FaceId,
         base_face: &'a ResolvedFace,
         height_px: f32,
         ascent_px: f32,
@@ -1101,7 +1102,7 @@ pub(crate) struct DisplayReplacementAppendContext<'a> {
 
 impl<'a> DisplayReplacementAppendContext<'a> {
     pub(crate) fn new(
-        face_id: u32,
+        face_id: FaceId,
         base_face: &'a ResolvedFace,
         frame: DisplayRowAppendFrame,
     ) -> Self {

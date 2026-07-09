@@ -6,7 +6,7 @@ use crate::core::face::{BoxType, Face, FaceAttributes, UnderlineStyle};
 #[cfg(feature = "neo-term")]
 use crate::core::frame_glyphs::{DisplaySlotId, FrameGlyph, FrameGlyphBuffer, GlyphRowRole};
 #[cfg(feature = "neo-term")]
-use crate::core::types::Color;
+use crate::core::types::{Color, FaceId};
 #[cfg(feature = "neo-term")]
 use crate::core::types::DisplayWindowId;
 #[cfg(any(
@@ -29,7 +29,7 @@ impl RenderApp {
     fn expanded_terminal_glyphs_for_frame(
         frame: &FrameGlyphBuffer,
         terminal_contents: &HashMap<crate::terminal::TerminalId, crate::terminal::TerminalContent>,
-    ) -> (Vec<FrameGlyph>, HashMap<u32, Face>) {
+    ) -> (Vec<FrameGlyph>, HashMap<FaceId, Face>) {
         let cell_w = frame.char_width;
         let cell_h = frame.char_height;
         let font_size = frame.font_pixel_size;
@@ -69,7 +69,7 @@ impl RenderApp {
                 width: *width,
                 height: *height,
                 bg: content.default_bg,
-                face_id: 0,
+                face_id: FaceId::new(0),
                 stipple_id: 0,
                 stipple_fg: None,
             });
@@ -496,7 +496,7 @@ impl RenderApp {
                         width,
                         height,
                         bg: content.default_bg,
-                        face_id: 0,
+                        face_id: FaceId::new(0),
                         stipple_id: 0,
                         stipple_fg: None,
                     });
@@ -559,7 +559,7 @@ impl RenderApp {
                         width,
                         height,
                         bg,
-                        face_id: 0,
+                        face_id: FaceId::new(0),
                         stipple_id: 0,
                         stipple_fg: None,
                     });
@@ -612,7 +612,7 @@ impl RenderApp {
         is_overlay: bool,
         opacity: f32,
         out: &mut Vec<FrameGlyph>,
-        faces: &mut HashMap<u32, Face>,
+        faces: &mut HashMap<FaceId, Face>,
     ) {
         use alacritty_terminal::term::cell::Flags as CellFlags;
         let row_role = if is_overlay {
@@ -645,7 +645,7 @@ impl RenderApp {
                     width: cell_w,
                     height: cell_h,
                     bg,
-                    face_id: 0,
+                    face_id: FaceId::new(0),
                     stipple_id: 0,
                     stipple_fg: None,
                 });
@@ -725,12 +725,12 @@ fn terminal_cell_face_id(
     italic: bool,
     underline: bool,
     strike: bool,
-) -> u32 {
+) -> FaceId {
     let to_u8 = |c: f32| (c.clamp(0.0, 1.0) * 255.0).round() as u32;
     let rgb = (to_u8(fg.r) << 16) | (to_u8(fg.g) << 8) | to_u8(fg.b);
     let flags =
         (bold as u32) | ((italic as u32) << 1) | ((underline as u32) << 2) | ((strike as u32) << 3);
-    TERMINAL_FACE_ID_BASE | ((rgb << 4) | flags)
+    FaceId::new(TERMINAL_FACE_ID_BASE | ((rgb << 4) | flags))
 }
 
 /// Synthesize the `Face` for a terminal cell so that
@@ -740,7 +740,7 @@ fn terminal_cell_face_id(
 /// italic/underline/strike-through via attributes.
 #[cfg(feature = "neo-term")]
 fn terminal_cell_face(
-    face_id: u32,
+    face_id: FaceId,
     fg: Color,
     bold: bool,
     italic: bool,
@@ -803,7 +803,7 @@ fn terminal_cell_face(
 mod tests {
     use super::*;
     use crate::core::frame_glyphs::FrameGlyphBuffer;
-    use crate::core::types::Color;
+    use crate::core::types::{Color, FaceId};
     use crate::terminal::content::{RenderCell, RenderCursor, TerminalContent};
     use alacritty_terminal::term::cell::Flags as CellFlags;
 

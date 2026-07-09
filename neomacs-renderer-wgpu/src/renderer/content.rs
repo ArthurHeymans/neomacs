@@ -8,6 +8,7 @@
 //! Background, Border, Cursor (all styles with animation), ScrollBar (with rounded
 //! thumbs), Image, Video, WebKit.
 
+use neomacs_display_protocol::types::FaceId;
 use super::super::glyph_atlas::{
     AnyAtlasEntry, ComposedGlyphKey, GlyphKey, SubpixelRequest, WgpuGlyphAtlas, glyph_font_identity,
 };
@@ -398,7 +399,7 @@ impl WgpuRenderer {
         let mut color_data: Vec<(AnyAtlasEntry, [GlyphVertex; 6])> = Vec::new();
         let enable_subpixel = glyph_atlas.subpixel_enabled();
 
-        let mut text_face_cache: Option<(u32, MaterializedFaceData)> = None;
+        let mut text_face_cache: Option<(FaceId, MaterializedFaceData)> = None;
         for glyph in &frame.glyphs {
             if let FrameGlyph::Char {
                 char: ch,
@@ -653,7 +654,7 @@ impl WgpuRenderer {
 
         // --- Step 3: Collect decorations (underline, overline, strikethrough) ---
         let mut decoration_vertices: Vec<RectVertex> = Vec::new();
-        let mut deco_face_cache: Option<(u32, MaterializedFaceData)> = None;
+        let mut deco_face_cache: Option<(FaceId, MaterializedFaceData)> = None;
         for glyph in &frame.glyphs {
             if let FrameGlyph::Char {
                 x,
@@ -1565,6 +1566,6 @@ struct BoxSpan {
     y: f32,
     width: f32,
     height: f32,
-    face_id: u32,
+    face_id: FaceId,
     bg: Option<Color>,
 }

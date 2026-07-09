@@ -3,6 +3,7 @@
 //! Each visual effect has its own config struct with all its parameters.
 //! All configs are grouped in `EffectsConfig` which is shared between
 //! `RenderApp` and `WgpuRenderer`.
+use crate::types::FaceId;
 
 /// Macro for defining effect config structs with Default implementations.
 ///
@@ -1210,7 +1211,7 @@ effect_config!(
     /// Configuration for the region glow effect.
     RegionGlowConfig {
         enabled: bool = false,
-        face_id: u32 = 0,
+        face_id: FaceId = FaceId::new(0),
         radius: f32 = 6.0,
         opacity: f32 = 0.3,
     }
@@ -1297,7 +1298,7 @@ effect_config!(
     /// Configuration for the search pulse effect.
     SearchPulseConfig {
         enabled: bool = false,
-        face_id: u32 = 0,
+        face_id: FaceId = FaceId::new(0),
     }
 );
 

@@ -90,14 +90,14 @@ fn basic_face_id_rejects_fringe_area_symbols() {
 
 #[test]
 fn test_face_creation() {
-    let face = Face::new(1);
-    assert_eq!(face.id, 1);
+    let face = Face::new(FaceId::new(1));
+    assert_eq!(face.id, FaceId::new(1));
     assert!(!face.is_bold());
 }
 
 #[test]
 fn test_pango_font_desc() {
-    let mut face = Face::new(0);
+    let mut face = Face::new(FaceId::new(0));
     face.font_family = "DejaVu Sans Mono".to_string();
     face.font_size = 14.0;
     face.attributes = FaceAttributes::BOLD | FaceAttributes::ITALIC;
@@ -112,7 +112,7 @@ fn test_pango_font_desc() {
 #[test]
 fn test_default_face_values() {
     let face = Face::default();
-    assert_eq!(face.id, 0);
+    assert_eq!(face.id, FaceId::new(0));
     assert_eq!(face.foreground, Color::WHITE);
     assert_eq!(face.background, Color::BLACK);
     assert_eq!(face.font_family, "monospace");
@@ -136,7 +136,7 @@ fn test_default_face_values() {
 
 #[test]
 fn test_face_foreground_background_colors() {
-    let mut face = Face::new(1);
+    let mut face = Face::new(FaceId::new(1));
     let red = Color::rgb(1.0, 0.0, 0.0);
     let blue = Color::rgb(0.0, 0.0, 1.0);
     face.foreground = red;
@@ -147,7 +147,7 @@ fn test_face_foreground_background_colors() {
 
 #[test]
 fn test_bold_via_attribute_flag() {
-    let mut face = Face::new(2);
+    let mut face = Face::new(FaceId::new(2));
     assert!(!face.is_bold());
     face.attributes |= FaceAttributes::BOLD;
     assert!(face.is_bold());
@@ -157,7 +157,7 @@ fn test_bold_via_attribute_flag() {
 
 #[test]
 fn test_bold_via_font_weight() {
-    let mut face = Face::new(3);
+    let mut face = Face::new(FaceId::new(3));
     assert!(!face.is_bold());
     // Bold via high font_weight without the BOLD attribute flag
     face.font_weight = 700;
@@ -175,7 +175,7 @@ fn test_bold_via_font_weight() {
 
 #[test]
 fn test_italic_attribute() {
-    let mut face = Face::new(4);
+    let mut face = Face::new(FaceId::new(4));
     assert!(!face.is_italic());
     face.attributes |= FaceAttributes::ITALIC;
     assert!(face.is_italic());
@@ -183,42 +183,42 @@ fn test_italic_attribute() {
 
 #[test]
 fn test_underline_style_none() {
-    let face = Face::new(5);
+    let face = Face::new(FaceId::new(5));
     assert!(!face.has_underline());
     assert_eq!(face.underline_style, UnderlineStyle::None);
 }
 
 #[test]
 fn test_underline_style_line() {
-    let mut face = Face::new(6);
+    let mut face = Face::new(FaceId::new(6));
     face.underline_style = UnderlineStyle::Line;
     assert!(face.has_underline());
 }
 
 #[test]
 fn test_underline_style_wave() {
-    let mut face = Face::new(7);
+    let mut face = Face::new(FaceId::new(7));
     face.underline_style = UnderlineStyle::Wave;
     assert!(face.has_underline());
 }
 
 #[test]
 fn test_underline_style_double() {
-    let mut face = Face::new(8);
+    let mut face = Face::new(FaceId::new(8));
     face.underline_style = UnderlineStyle::Double;
     assert!(face.has_underline());
 }
 
 #[test]
 fn test_underline_style_dotted() {
-    let mut face = Face::new(9);
+    let mut face = Face::new(FaceId::new(9));
     face.underline_style = UnderlineStyle::Dotted;
     assert!(face.has_underline());
 }
 
 #[test]
 fn test_underline_style_dashed() {
-    let mut face = Face::new(10);
+    let mut face = Face::new(FaceId::new(10));
     face.underline_style = UnderlineStyle::Dashed;
     assert!(face.has_underline());
 }
@@ -234,7 +234,7 @@ fn test_all_underline_styles_detected() {
         UnderlineStyle::Dashed,
     ];
     for style in &styles {
-        let mut face = Face::new(0);
+        let mut face = Face::new(FaceId::new(0));
         face.underline_style = *style;
         assert!(
             face.has_underline(),
@@ -243,14 +243,14 @@ fn test_all_underline_styles_detected() {
         );
     }
     // None should NOT be detected
-    let mut face = Face::new(0);
+    let mut face = Face::new(FaceId::new(0));
     face.underline_style = UnderlineStyle::None;
     assert!(!face.has_underline());
 }
 
 #[test]
 fn test_underline_color_fallback_to_foreground() {
-    let mut face = Face::new(11);
+    let mut face = Face::new(FaceId::new(11));
     face.foreground = Color::RED;
     face.underline_color = None;
     // When no explicit underline color, get_underline_color returns foreground
@@ -259,7 +259,7 @@ fn test_underline_color_fallback_to_foreground() {
 
 #[test]
 fn test_underline_color_explicit() {
-    let mut face = Face::new(12);
+    let mut face = Face::new(FaceId::new(12));
     face.foreground = Color::RED;
     face.underline_color = Some(Color::BLUE);
     // When explicit underline color is set, it takes precedence
@@ -268,7 +268,7 @@ fn test_underline_color_explicit() {
 
 #[test]
 fn test_strike_through_attribute() {
-    let mut face = Face::new(13);
+    let mut face = Face::new(FaceId::new(13));
     assert!(!face.attributes.contains(FaceAttributes::STRIKE_THROUGH));
     face.attributes |= FaceAttributes::STRIKE_THROUGH;
     assert!(face.attributes.contains(FaceAttributes::STRIKE_THROUGH));
@@ -276,7 +276,7 @@ fn test_strike_through_attribute() {
 
 #[test]
 fn test_overline_attribute() {
-    let mut face = Face::new(14);
+    let mut face = Face::new(FaceId::new(14));
     assert!(!face.attributes.contains(FaceAttributes::OVERLINE));
     face.attributes |= FaceAttributes::OVERLINE;
     assert!(face.attributes.contains(FaceAttributes::OVERLINE));
@@ -284,7 +284,7 @@ fn test_overline_attribute() {
 
 #[test]
 fn test_inverse_attribute() {
-    let mut face = Face::new(15);
+    let mut face = Face::new(FaceId::new(15));
     assert!(!face.attributes.contains(FaceAttributes::INVERSE));
     face.attributes |= FaceAttributes::INVERSE;
     assert!(face.attributes.contains(FaceAttributes::INVERSE));
@@ -292,7 +292,7 @@ fn test_inverse_attribute() {
 
 #[test]
 fn test_strike_through_and_overline_colors() {
-    let mut face = Face::new(16);
+    let mut face = Face::new(FaceId::new(16));
     assert!(face.strike_through_color.is_none());
     assert!(face.overline_color.is_none());
     face.strike_through_color = Some(Color::GREEN);
@@ -303,7 +303,7 @@ fn test_strike_through_and_overline_colors() {
 
 #[test]
 fn test_box_attribute_and_types() {
-    let mut face = Face::new(17);
+    let mut face = Face::new(FaceId::new(17));
     assert_eq!(face.box_type, BoxType::None);
     assert!(!face.attributes.contains(FaceAttributes::BOX));
 
@@ -350,7 +350,7 @@ fn ffi_face_data_preserves_gnu_box_type_codes() {
 
 #[test]
 fn test_combined_attributes() {
-    let mut face = Face::new(18);
+    let mut face = Face::new(FaceId::new(18));
     face.attributes = FaceAttributes::BOLD
         | FaceAttributes::ITALIC
         | FaceAttributes::UNDERLINE
@@ -370,7 +370,7 @@ fn test_combined_attributes() {
 #[test]
 fn test_pango_font_desc_plain() {
     // No bold, no italic — should just be family + size
-    let mut face = Face::new(0);
+    let mut face = Face::new(FaceId::new(0));
     face.font_family = "Fira Code".to_string();
     face.font_size = 16.0;
     let desc = face.to_pango_font_description();
@@ -379,7 +379,7 @@ fn test_pango_font_desc_plain() {
 
 #[test]
 fn test_pango_font_desc_bold_only() {
-    let mut face = Face::new(0);
+    let mut face = Face::new(FaceId::new(0));
     face.font_family = "monospace".to_string();
     face.font_size = 10.0;
     face.attributes = FaceAttributes::BOLD;
@@ -389,7 +389,7 @@ fn test_pango_font_desc_bold_only() {
 
 #[test]
 fn test_pango_font_desc_italic_only() {
-    let mut face = Face::new(0);
+    let mut face = Face::new(FaceId::new(0));
     face.font_family = "monospace".to_string();
     face.font_size = 10.0;
     face.attributes = FaceAttributes::ITALIC;
@@ -400,7 +400,7 @@ fn test_pango_font_desc_italic_only() {
 #[test]
 fn test_pango_font_desc_bold_via_weight() {
     // Bold should appear in description when font_weight >= 700 even without BOLD attribute
-    let mut face = Face::new(0);
+    let mut face = Face::new(FaceId::new(0));
     face.font_family = "serif".to_string();
     face.font_size = 12.0;
     face.font_weight = 700;
@@ -412,7 +412,7 @@ fn test_pango_font_desc_bold_via_weight() {
 #[test]
 fn test_pango_font_desc_truncates_size() {
     // font_size 13.7 should be truncated to 13 (cast as i32)
-    let mut face = Face::new(0);
+    let mut face = Face::new(FaceId::new(0));
     face.font_family = "monospace".to_string();
     face.font_size = 13.7;
     let desc = face.to_pango_font_description();
@@ -421,7 +421,7 @@ fn test_pango_font_desc_truncates_size() {
 
 #[test]
 fn test_font_weight_and_slant_values() {
-    let mut face = Face::new(19);
+    let mut face = Face::new(FaceId::new(19));
     // Test various CSS font weight values
     face.font_weight = 100; // Thin
     assert!(!face.is_bold());
@@ -443,7 +443,7 @@ fn test_font_weight_and_slant_values() {
 
 #[test]
 fn test_font_metrics() {
-    let mut face = Face::new(20);
+    let mut face = Face::new(FaceId::new(20));
     face.font_ascent = 14;
     face.font_descent = 4;
     face.underline_position = 2;
@@ -459,36 +459,36 @@ fn test_font_metrics() {
 #[test]
 fn test_face_cache_new_empty() {
     let cache = FaceCache::new();
-    assert!(cache.get(0).is_none());
-    assert!(cache.get(1).is_none());
+    assert!(cache.get(FaceId::new(0)).is_none());
+    assert!(cache.get(FaceId::new(1)).is_none());
     assert!(cache.default_face().is_none());
 }
 
 #[test]
 fn test_face_cache_insert_and_get() {
     let mut cache = FaceCache::new();
-    let mut face = Face::new(5);
+    let mut face = Face::new(FaceId::new(5));
     face.foreground = Color::GREEN;
     cache.insert(face);
 
-    let retrieved = cache.get(5).unwrap();
-    assert_eq!(retrieved.id, 5);
+    let retrieved = cache.get(FaceId::new(5)).unwrap();
+    assert_eq!(retrieved.id, FaceId::new(5));
     assert_eq!(retrieved.foreground, Color::GREEN);
 }
 
 #[test]
 fn test_face_cache_insert_updates_existing() {
     let mut cache = FaceCache::new();
-    let mut face = Face::new(5);
+    let mut face = Face::new(FaceId::new(5));
     face.foreground = Color::GREEN;
     cache.insert(face);
 
     // Insert again with same ID but different color
-    let mut face2 = Face::new(5);
+    let mut face2 = Face::new(FaceId::new(5));
     face2.foreground = Color::RED;
     cache.insert(face2);
 
-    let retrieved = cache.get(5).unwrap();
+    let retrieved = cache.get(FaceId::new(5)).unwrap();
     assert_eq!(retrieved.foreground, Color::RED);
 }
 
@@ -496,23 +496,23 @@ fn test_face_cache_insert_updates_existing() {
 fn test_face_cache_get_or_create() {
     let mut cache = FaceCache::new();
     // Should not exist yet
-    assert!(cache.get(42).is_none());
+    assert!(cache.get(FaceId::new(42)).is_none());
     // get_or_create should create it
-    let face = cache.get_or_create(42);
-    assert_eq!(face.id, 42);
+    let face = cache.get_or_create(FaceId::new(42));
+    assert_eq!(face.id, FaceId::new(42));
     // Now it should exist
-    assert!(cache.get(42).is_some());
+    assert!(cache.get(FaceId::new(42)).is_some());
 }
 
 #[test]
 fn test_face_cache_get_or_create_returns_existing() {
     let mut cache = FaceCache::new();
-    let mut face = Face::new(7);
+    let mut face = Face::new(FaceId::new(7));
     face.font_size = 24.0;
     cache.insert(face);
 
     // get_or_create should return the existing face, not overwrite
-    let retrieved = cache.get_or_create(7);
+    let retrieved = cache.get_or_create(FaceId::new(7));
     assert_eq!(retrieved.font_size, 24.0);
 }
 
@@ -521,26 +521,26 @@ fn test_face_cache_default_face() {
     let mut cache = FaceCache::new();
     assert!(cache.default_face().is_none());
 
-    let default = Face::new(0);
+    let default = Face::new(FaceId::new(0));
     cache.insert(default);
     assert!(cache.default_face().is_some());
-    assert_eq!(cache.default_face().unwrap().id, 0);
+    assert_eq!(cache.default_face().unwrap().id, FaceId::new(0));
 }
 
 #[test]
 fn test_face_cache_multiple_faces() {
     let mut cache = FaceCache::new();
     for i in 0..10 {
-        let mut face = Face::new(i);
+        let mut face = Face::new(FaceId::new(i));
         face.font_size = 10.0 + i as f32;
         cache.insert(face);
     }
     for i in 0..10 {
-        let face = cache.get(i).unwrap();
-        assert_eq!(face.id, i);
+        let face = cache.get(FaceId::new(i)).unwrap();
+        assert_eq!(face.id, FaceId::new(i));
         assert_eq!(face.font_size, 10.0 + i as f32);
     }
-    assert!(cache.get(10).is_none());
+    assert!(cache.get(FaceId::new(10)).is_none());
 }
 
 // --- Enum default tests ---

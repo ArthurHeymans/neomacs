@@ -1,5 +1,6 @@
 //! Buffer source render plan construction and completion.
 
+use neomacs_display_protocol::types::FaceId;
 use crate::display_buffer_empty_line_fringe::EmptyLineFringeFillRequest;
 use crate::display_buffer_fringe_arrows::TruncationContinuationFringeRequest;
 use crate::display_buffer_source_body_render::BufferSourceWalkSetup;
@@ -552,7 +553,7 @@ impl BufferSourceOutputSetup {
             // `face_ids`, reset to SENTINEL) allocates NON-colliding ids. Must run
             // before `face_ids` is borrowed by the chrome render services below.
             // (Face-id collision audit fix.)
-            let mut max_reused_face_id: Option<u32> = None;
+            let mut max_reused_face_id: Option<FaceId> = None;
             for (id, face) in &replay.faces {
                 output.builder().install_output_frame_state(
                     crate::display_output_install_request::OutputFrameStateInstallRequest::face(
