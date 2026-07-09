@@ -53,7 +53,7 @@ fn div_v8_process_attributes_status_type_tty() {
           (not (null (memq status '(run exit signal))))
           (if (memq status '(exit signal))
               (not (memq proc plist))
-            (memq proc plist)))))
+            (not (null (memq proc plist)))))))
 "##;
     let expect = expect_test::expect![[r#""""#]];
     crate::common::assert_oracle_parity_expect(form, expect);

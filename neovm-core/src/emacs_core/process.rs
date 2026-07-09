@@ -6818,8 +6818,11 @@ impl super::eval::Context {
 
             // No process bytes were read in this pass.  If the status was not
             // already published before a poll-phase read attempt, check it now.
-            if !defer_status_poll_for_readable_pty
-                && (!publish_status_before_readable_output || has_readable_process_io)
+            // GNU's SIGCHLD/status wake is independent of process output: the
+            // shell-through-PTY deferral above preserves output-before-status
+            // ordering only when bytes are actually pending, not for no-output
+            // exits such as `sh -c "exit 7"`.
+            if (!publish_status_before_readable_output || has_readable_process_io)
                 && self.processes.check_child_exit(pid)
             {
                 if self
