@@ -336,9 +336,12 @@ impl WgpuRenderer {
         view_id: u32,
         buffer: super::super::external_buffer::DmaBufBuffer,
     ) -> bool {
-        self.caches
-            .webkit
-            .update_view(view_id, buffer, &self.device, &self.queue)
+        self.caches.webkit.update_view(
+            neomacs_display_protocol::types::WebKitId::new(view_id),
+            buffer,
+            &self.device,
+            &self.queue,
+        )
     }
 
     /// Update a webkit view in the cache from pixel data.
@@ -352,7 +355,7 @@ impl WgpuRenderer {
         pixels: &[u8],
     ) -> bool {
         self.caches.webkit.update_view_from_pixels(
-            view_id,
+            neomacs_display_protocol::types::WebKitId::new(view_id),
             width,
             height,
             pixels,
@@ -364,7 +367,9 @@ impl WgpuRenderer {
     /// Remove a webkit view from the cache.
     #[cfg(feature = "wpe-webkit")]
     pub fn remove_webkit_view(&mut self, view_id: u32) {
-        self.caches.webkit.remove(view_id);
+        self.caches
+            .webkit
+            .remove(neomacs_display_protocol::types::WebKitId::new(view_id));
     }
 
     /// Process pending webkit frames from WPE views.

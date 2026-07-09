@@ -3,6 +3,8 @@
 use std::collections::HashMap;
 use std::time::Instant;
 
+use neomacs_display_protocol::types::WebKitId;
+
 use crate::external_buffer::DmaBufBuffer;
 
 /// Cached WebKit view texture.
@@ -16,8 +18,15 @@ pub struct CachedWebKitView {
 }
 
 /// Cache of WebKit view textures for wgpu rendering.
+///
+/// Entries correspond 1:1 to LIVE webkit views, so the cache is intentionally
+/// uncapped: evicting a live view would blank its quad until the view's next
+/// damage frame (DMA-BUF views may not push one for a long time). Lifetime is
+/// instead bounded by guaranteed removal — display-runtime's
+/// `AssetCommand::WebKitDestroy` handler calls `remove` for every destroyed
+/// view, and dropping the renderer drops the cache wholesale.
 pub struct WgpuWebKitCache {
-    views: HashMap<u32, CachedWebKitView>,
+    views: HashMap<WebKitId, CachedWebKitView>,
     bind_group_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
 }
@@ -71,7 +80,7 @@ impl WgpuWebKitCache {
     /// Update or create a cached view from DmaBufBuffer.
     pub fn update_view(
         &mut self,
-        view_id: u32,
+        view_id: WebKitId,
         buffer: DmaBufBuffer,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -122,7 +131,7 @@ impl WgpuWebKitCache {
     /// Used when DMA-BUF import fails (e.g., incompatible modifier).
     pub fn update_view_from_pixels(
         &mut self,
-        view_id: u32,
+        view_id: WebKitId,
         width: u32,
         height: u32,
         pixels: &[u8],
@@ -202,17 +211,17 @@ impl WgpuWebKitCache {
     }
 
     /// Get a cached view.
-    pub fn get(&self, view_id: u32) -> Option<&CachedWebKitView> {
+    pub fn get(&self, view_id: WebKitId) -> Option<&CachedWebKitView> {
         self.views.get(&view_id)
     }
 
     /// Get bind group for a view.
-    pub fn get_bind_group(&self, view_id: u32) -> Option<&wgpu::BindGroup> {
+    pub fn get_bind_group(&self, view_id: WebKitId) -> Option<&wgpu::BindGroup> {
         self.views.get(&view_id).map(|v| &v.bind_group)
     }
 
     /// Remove a view.
-    pub fn remove(&mut self, view_id: u32) {
+    pub fn remove(&mut self, view_id: WebKitId) {
         self.views.remove(&view_id);
     }
 

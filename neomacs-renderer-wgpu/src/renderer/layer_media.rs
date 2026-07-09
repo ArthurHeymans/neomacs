@@ -375,8 +375,11 @@ impl WgpuRenderer {
                         continue;
                     }
 
+                    // An inline xwidget's id IS its webkit view id.
+                    let view_id =
+                        neomacs_display_protocol::types::WebKitId::new(xwidget_id.get());
                     // Check if webkit texture is ready
-                    if self.caches.webkit.get(*xwidget_id).is_some() {
+                    if self.caches.webkit.get(view_id).is_some() {
                         tracing::debug!(
                             "Rendering webkit {} at ({}, {}) size {}x{} (clipped to {})",
                             xwidget_id,
@@ -388,7 +391,7 @@ impl WgpuRenderer {
                         );
                         // Create vertices for webkit quad (white color = no tinting)
                         quads.push(MediaQuad {
-                            id: *xwidget_id,
+                            id: view_id,
                             vertices: textured_quad_vertices(
                                 *x,
                                 draw_y,

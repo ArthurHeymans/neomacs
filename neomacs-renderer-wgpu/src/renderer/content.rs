@@ -1389,7 +1389,10 @@ impl WgpuRenderer {
                         ..
                     } = glyph
                     {
-                        if self.caches.webkit.get(*xwidget_id).is_some() {
+                        // An inline xwidget's id IS its webkit view id.
+                        let view_id =
+                            neomacs_display_protocol::types::WebKitId::new(xwidget_id.get());
+                        if self.caches.webkit.get(view_id).is_some() {
                             let wx = *x + offset_x;
                             let wy = *y + offset_y;
                             tracing::debug!(
@@ -1401,7 +1404,7 @@ impl WgpuRenderer {
                                 height,
                             );
                             webkit_quads.push(MediaQuad {
-                                id: *xwidget_id,
+                                id: view_id,
                                 vertices: textured_quad_vertices(wx, wy, *width, *height, 0.0, 1.0),
                             });
                         }
