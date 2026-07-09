@@ -422,7 +422,7 @@ neovm-core/x
 
 # Neomacs exceptions
 !neomacs-display/Makefile
-!neomacs-display/src/core/
+!neomacs-display-runtime/src/core/
 
 # Neomacs build-test runtime artifacts
 /neomacs-build-test/windows/storage/
