@@ -2195,7 +2195,7 @@ fn read_key_sequence_string_result(keys: &[Value]) -> Value {
             break;
         }
     }
-    if chars_only && !keys.is_empty() {
+    if chars_only {
         Value::string(s)
     } else {
         read_key_sequence_vector_result(keys)
@@ -2834,7 +2834,7 @@ pub(crate) fn finish_read_key_sequence_interactive_in_runtime(
             break;
         }
     }
-    if chars_only && !keys.is_empty() {
+    if chars_only {
         return Ok(Value::string(s));
     }
     Ok(Value::vector(keys))

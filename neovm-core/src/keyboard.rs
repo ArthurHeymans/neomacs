@@ -3222,9 +3222,10 @@ impl crate::emacs_core::eval::Context {
                 let read_event = match self.read_char_event_with_timeout_for_key_sequence() {
                     Ok(Some(event)) => event,
                     Ok(None) => {
-                        if self.noninteractive() && self.input_rx.is_none() {
-                            continue;
-                        }
+                        // GNU command_loop_2 treats EOF from command input as
+                        // a nil return from command_loop_1. In a no-receiver
+                        // context, looping here just retries the same EOF
+                        // forever after queued events are exhausted.
                         self.restore_delayed_selection_event(&mut delayed_selection_event);
                         self.restore_key_sequence_current_buffer(&mut saved_current_buffer);
                         self.command_loop
@@ -4036,7 +4037,7 @@ impl crate::emacs_core::eval::Context {
     fn read_char_event_with_timeout_policy(
         &mut self,
         timeout: Option<std::time::Duration>,
-        wait_noninteractive: bool,
+        _wait_noninteractive: bool,
     ) -> Result<Option<ReadCharEvent>, crate::emacs_core::error::Flow> {
         let deadline = timeout.map(|timeout| std::time::Instant::now() + timeout);
 
@@ -4061,7 +4062,10 @@ impl crate::emacs_core::eval::Context {
                 return Err(crate::emacs_core::error::signal("quit", vec![]));
             }
 
-            if self.noninteractive() && self.input_rx.is_none() && !wait_noninteractive {
+            if self.input_rx.is_none() {
+                // No host input channel means this evaluator cannot block for
+                // future keyboard input. Once queued Lisp/keyboard events are
+                // drained, report EOF to the caller.
                 self.timer_stop_idle();
                 return Ok(None);
             }
@@ -4101,14 +4105,6 @@ impl crate::emacs_core::eval::Context {
             }
             if self.shutdown_request.is_some() {
                 return Err(crate::emacs_core::error::signal("quit", vec![]));
-            }
-
-            if self.input_rx.is_none() && !wait_noninteractive {
-                if !self.command_loop.running {
-                    return Err(crate::emacs_core::error::signal("quit", vec![]));
-                }
-                tracing::debug!("read_char: no input_rx (batch mode), returning Nil");
-                return Ok(Some(ReadCharEvent::input_method_candidate(Value::NIL)));
             }
 
             self.timer_start_idle();
