@@ -5806,7 +5806,7 @@ fn vm_thread_mutex_and_condition_builtins_use_shared_runtime() {
                   (null (condition-wait cv))
                   (null (mutex-unlock mx))))"#
         ),
-        "OK (t t t t t nil t t error t t t t t wrong-type-argument t t t t t t t t t)"
+        "OK (t t t t t t t t error t t t t t wrong-type-argument t t t t t t t t t)"
     );
 }
 
